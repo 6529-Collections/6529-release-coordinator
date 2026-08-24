@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Interactive design diagram for the proposed 6529 Release Coordinator."
+    />
+    <title>6529 Release Coordinator — Process Diagram</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --page: #080b11;
+        --surface: #10151e;
+        --surface-strong: #151c27;
+        --surface-soft: #0c1119;
+        --line: #293242;
+        --line-strong: #3a475b;
+        --text: #f3f6fb;
+        --muted: #9aa8ba;
+        --blue: #64a8ff;
+        --blue-soft: rgba(100, 168, 255, 0.12);
+        --green: #58d6a1;
+        --green-soft: rgba(88, 214, 161, 0.12);
+        --orange: #ffad5b;
+        --orange-soft: rgba(255, 173, 91, 0.12);
+        --red: #ff7e87;
+        --red-soft: rgba(255, 126, 135, 0.12);
+        --shadow: 0 22px 70px rgba(0, 0, 0, 0.3);
+        --radius: 16px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        background: var(--page);
+        color: var(--text);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        line-height: 1.55;
+      }
+
+      button,
+      a {
+        font: inherit;
+      }
+
+      a {
+        color: var(--blue);
+      }
+
+      .page-shell {
+        width: min(1480px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 20px 0 40px;
+      }
+
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      .diagram-context {
+        margin: 0 0 14px 2px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+
+      .flow-layout {
+        display: grid;
+        grid-template-columns: minmax(460px, 0.95fr) minmax(430px, 1.05fr);
+        gap: 24px;
+        align-items: start;
+        margin-top: 0;
+      }
+
+      .flow-column,
+      .detail-column {
+        min-width: 0;
+      }
+
+      .steps {
+        display: grid;
+        gap: 0;
+      }
+
+      .step-wrap {
+        position: relative;
+        padding-bottom: 25px;
+      }
+
+      .step-wrap:last-child {
+        padding-bottom: 0;
+      }
+
+      .step-wrap:not(:last-child)::after {
+        position: absolute;
+        bottom: 4px;
+        left: 28px;
+        width: 1px;
+        height: 17px;
+        background: var(--line-strong);
+        content: "";
+      }
+
+      .step-wrap:not(:last-child)::before {
+        position: absolute;
+        bottom: 1px;
+        left: 24px;
+        z-index: 1;
+        width: 9px;
+        height: 9px;
+        border-right: 1px solid var(--line-strong);
+        border-bottom: 1px solid var(--line-strong);
+        transform: rotate(45deg);
+        content: "";
+      }
+
+      .step-button {
+        display: grid;
+        width: 100%;
+        grid-template-columns: 56px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 16px;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        color: var(--text);
+        text-align: left;
+        cursor: pointer;
+        transition:
+          border-color 150ms ease,
+          background 150ms ease,
+          transform 150ms ease;
+      }
+
+      .step-button:hover {
+        border-color: var(--line-strong);
+        background: var(--surface-strong);
+        transform: translateY(-1px);
+      }
+
+      .step-button:focus-visible {
+        outline: 3px solid rgba(100, 168, 255, 0.45);
+        outline-offset: 3px;
+      }
+
+      .step-button.active {
+        border-color: rgba(100, 168, 255, 0.65);
+        background:
+          linear-gradient(90deg, rgba(100, 168, 255, 0.11), transparent 70%),
+          var(--surface-strong);
+      }
+
+      .step-number {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        place-items: center;
+        border: 1px solid var(--line-strong);
+        border-radius: 13px;
+        color: var(--muted);
+        background: var(--surface-soft);
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .active .step-number {
+        border-color: var(--blue);
+        color: #07101d;
+        background: var(--blue);
+      }
+
+      .step-title {
+        display: block;
+        margin-bottom: 3px;
+        font-weight: 730;
+        line-height: 1.3;
+      }
+
+      .step-summary {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.45;
+      }
+
+      .step-phase {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 5px 8px;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+
+      .detail-column {
+        position: sticky;
+        top: 20px;
+        display: grid;
+        gap: 12px;
+      }
+
+      .panel {
+        overflow: hidden;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .main-panel {
+        padding: clamp(22px, 4vw, 34px);
+      }
+
+      .detail-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 16px;
+      }
+
+      .detail-counter,
+      .detail-phase {
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .detail-counter {
+        color: var(--blue);
+      }
+
+      .detail-phase {
+        color: var(--muted);
+      }
+
+      .detail-title {
+        margin-bottom: 12px;
+        font-size: clamp(26px, 3vw, 40px);
+        line-height: 1.08;
+        letter-spacing: -0.04em;
+      }
+
+      .detail-summary {
+        margin-bottom: 24px;
+        color: #c0cad8;
+        font-size: 16px;
+      }
+
+      .detail-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .detail-block {
+        min-width: 0;
+        padding: 16px;
+        border: 1px solid var(--line);
+        border-radius: 13px;
+        background: var(--surface-soft);
+      }
+
+      .detail-block.full {
+        grid-column: 1 / -1;
+      }
+
+      .detail-label {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .detail-value {
+        margin: 0;
+        color: #dce4ef;
+        font-size: 14px;
+      }
+
+      .callout {
+        padding: 19px 20px;
+        border: 1px solid;
+        border-radius: var(--radius);
+      }
+
+      .callout h3 {
+        margin-bottom: 7px;
+        font-size: 14px;
+        letter-spacing: -0.01em;
+      }
+
+      .callout p {
+        margin: 0;
+        font-size: 13px;
+      }
+
+      .failure-panel {
+        border-color: rgba(255, 173, 91, 0.48);
+        background: var(--orange-soft);
+      }
+
+      .failure-panel h3 {
+        color: var(--orange);
+      }
+
+      .failure-panel p {
+        color: #ead0b4;
+      }
+
+      .mobile-detail {
+        display: none;
+      }
+
+      @media (max-width: 1050px) {
+        .flow-layout {
+          grid-template-columns: minmax(390px, 0.9fr) minmax(390px, 1.1fr);
+          gap: 16px;
+        }
+
+        .step-button {
+          grid-template-columns: 48px minmax(0, 1fr);
+        }
+
+        .step-phase {
+          display: none;
+        }
+      }
+
+      @media (max-width: 900px) {
+        .flow-layout {
+          display: block;
+        }
+
+        .detail-column {
+          display: none;
+        }
+
+        .mobile-detail {
+          display: grid;
+          gap: 10px;
+          margin-top: 12px;
+        }
+
+        .mobile-detail .panel {
+          box-shadow: none;
+        }
+
+        .mobile-detail .main-panel {
+          padding: 22px;
+        }
+
+        .mobile-detail .detail-title {
+          font-size: 25px;
+        }
+
+        .mobile-detail .detail-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .mobile-detail .detail-block.full {
+          grid-column: auto;
+        }
+      }
+
+      @media (max-width: 620px) {
+        .page-shell {
+          width: min(100% - 20px, 1480px);
+          padding-top: 10px;
+        }
+
+        .step-button {
+          grid-template-columns: 42px minmax(0, 1fr);
+          gap: 10px;
+          padding: 13px;
+        }
+
+        .step-number {
+          width: 36px;
+          height: 36px;
+          border-radius: 11px;
+        }
+
+        .step-wrap:not(:last-child)::after {
+          left: 25px;
+        }
+
+        .step-wrap:not(:last-child)::before {
+          left: 21px;
+        }
+
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+
+        .step-button {
+          transition: none;
+        }
+      }
+    </style>
+    <style>
+      .story-layout {
+        display: grid;
+        grid-template-columns: minmax(220px, 300px) minmax(0, 760px);
+        justify-content: center;
+        gap: clamp(40px, 7vw, 96px);
+        align-items: start;
+      }
+
+      .story-nav {
+        position: sticky;
+        top: 20px;
+        max-height: calc(100vh - 40px);
+        overflow-y: auto;
+        padding: 8px 24px 8px 0;
+        border-right: 1px solid var(--line);
+        scrollbar-width: thin;
+      }
+
+      .story-nav-title {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .story-nav ol {
+        display: grid;
+        gap: 2px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .story-nav-link {
+        display: grid;
+        grid-template-columns: 28px minmax(0, 1fr);
+        gap: 8px;
+        align-items: baseline;
+        padding: 5px 0;
+        color: #738196;
+        text-decoration: none;
+        transition: color 120ms ease;
+      }
+
+      .story-nav-link:hover {
+        color: #b9c4d3;
+      }
+
+      .story-nav-link:focus-visible {
+        border-radius: 4px;
+        outline: 2px solid rgba(100, 168, 255, 0.6);
+        outline-offset: 3px;
+      }
+
+      .story-nav-link.active {
+        color: var(--text);
+      }
+
+      .story-nav-number {
+        color: #526075;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 800;
+      }
+
+      .story-nav-link.active .story-nav-number {
+        color: var(--blue);
+      }
+
+      .story-nav-text {
+        font-size: 12px;
+        font-weight: 650;
+        line-height: 1.35;
+      }
+
+      .story {
+        min-width: 0;
+        padding-bottom: 32vh;
+      }
+
+      .story-step {
+        padding: 30px 0 42px;
+        scroll-margin-top: 20px;
+      }
+
+      .story-step:first-child {
+        padding-top: 4px;
+      }
+
+      .story-step:last-child {
+        padding-bottom: 30px;
+      }
+
+      .story-step h2 {
+        max-width: 680px;
+        margin: 0 0 10px;
+        font-size: 23px;
+        line-height: 1.3;
+        letter-spacing: -0.02em;
+      }
+
+      .story-prose {
+        max-width: 680px;
+        margin: 0;
+        color: #c5ceda;
+        font-size: 16px;
+        line-height: 1.72;
+      }
+
+      @media (max-width: 820px) {
+        .page-shell {
+          width: min(100% - 24px, 760px);
+        }
+
+        .story-layout {
+          display: block;
+        }
+
+        .story-nav {
+          top: 0;
+          z-index: 10;
+          max-height: none;
+          margin: 0 -12px;
+          padding: 10px 12px;
+          overflow-x: auto;
+          overflow-y: hidden;
+          border-right: 0;
+          border-bottom: 1px solid var(--line);
+          background: rgba(8, 11, 17, 0.96);
+          backdrop-filter: blur(12px);
+        }
+
+        .story-nav-title {
+          display: none;
+        }
+
+        .story-nav ol {
+          display: flex;
+          width: max-content;
+          gap: 16px;
+        }
+
+        .story-nav-link {
+          display: block;
+          padding: 4px 0;
+        }
+
+        .story-nav-text {
+          display: none;
+        }
+
+        .story-nav-number {
+          font-size: 12px;
+        }
+
+        .story-step {
+          scroll-margin-top: 56px;
+        }
+
+        .story-step:first-child {
+          padding-top: 24px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .story-nav-link {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page-shell">
+      <div class="story-layout">
+        <nav class="story-nav" aria-label="Release steps">
+          <p class="story-nav-title">Release steps</p>
+          <ol id="story-nav-list"></ol>
+        </nav>
+
+        <article class="story" id="story" aria-label="Release process"></article>
+      </div>
+    </main>
+
+    <script>
+      const steps = [
+        {
+          phase: "Ready",
+          title: "Make sure every PR is ready to merge",
+          story:
+            "Before submitting a release, the developer or agent must make sure every PR is ready to merge. Required reviews must be complete, all checks must pass, there must be no merge conflicts, and the approved code must not have changed. If a PR is not ready, fix it first. The Coordinator will check again later, but it does not prepare unfinished PRs.",
+          summary: "Keep unfinished work out of the release queue.",
+          owner: "PR author, reviewers, and GitHub",
+          happens:
+            "People review the PR, and the normal GitHub checks run. The Release Coordinator does nothing yet.",
+          proof:
+            "The PR is approved, all checks pass, and the exact code version is known.",
+          gap:
+            "Define the exact required checks, review rules, deploy-unit metadata, and who may declare a PR ready in each repository.",
+          failureLabel: "If not ready",
+          failure:
+            "Fix the PR and try again later."
+        },
+        {
+          phase: "Submit",
+          title: "One release request is sent",
+          story:
+            "When the code is ready, a developer or agent sends one release request through the web app, command line, Codex, or another client. The request names the exact frontend and backend PRs, the order they must follow, any dependencies, and whether production should happen automatically or wait for approval. The Coordinator saves the request and returns an ID. If information is missing or invalid, it rejects the request before anything is merged, built, or deployed.",
+          summary: "One request names exact PRs, order, dependencies, and rollout policy.",
+          owner: "Web UI, CLI, Codex skill, or direct API client",
+          happens:
+            "All clients call the same API. The request contains repository, PR number, exact head SHA, dependency edges, affected deploy units, stable order, and whether production is automatic, approval-gated, or out of scope.",
+          proof:
+            "The client receives a request ID only after the Coordinator has durably accepted the exact structured payload.",
+          gap:
+            "Finalize the API schema, maximum batch size, allowed dependency syntax, production-policy choices, and idempotency key rules.",
+          failure:
+            "A malformed or incomplete request is rejected before queueing. No merge, build, or deployment starts."
+        },
+        {
+          phase: "Submit",
+          title: "The requester is allowed to release",
+          story:
+            "Next, the Coordinator confirms who made the request and what they are allowed to release. It checks their identity, repositories, environments, and production permission, then saves that decision with the request. If the requester is not allowed, the request stops before it enters the queue.",
+          summary: "The system proves who is asking and what they are allowed to release.",
+          owner: "Release Coordinator API",
+          happens:
+            "The API checks human or agent identity, repository scope, environment permission, and production policy. It records the real requester rather than trusting a name supplied inside the request body.",
+          proof:
+            "An auditable identity and authorization decision are attached to the release request.",
+          gap:
+            "Choose the human and agent authentication methods, service identities, role model, secret rotation, and emergency-access process.",
+          failure:
+            "The API rejects the request. Nothing enters the queue and no external workflow is called."
+        },
+        {
+          phase: "Queue",
+          title: "The request is saved",
+          story:
+            "After permission is confirmed, the Coordinator saves the full request in its database. This keeps the release safe if the system restarts and prevents the same request from being added twice. The request enters the queue only after the save succeeds. If the save fails, nothing starts and the caller can safely try again.",
+          summary: "The queue exists in a transactional database, not in a browser or chat.",
+          owner: "Coordinator database",
+          happens:
+            "The system stores release items, dependencies, requester, exact requested SHAs, desired rollout policy, state history, and a stable sequence. The first state is SUBMITTED.",
+          proof:
+            "The full request can be recovered by release ID after an API or worker restart, with no duplicate request for the same idempotency key.",
+          gap:
+            "Choose PostgreSQL or MySQL, hosting, backup, retention, audit, encryption, high availability, and disaster-recovery targets.",
+          failure:
+            "The API does not claim success unless the transaction commits. The caller may safely retry with the same idempotency key."
+        },
+        {
+          phase: "Validate",
+          title: "The PRs are checked again",
+          story:
+            "Before planning the release, the Coordinator asks GitHub for fresh information about every PR. It checks that each PR still contains the exact approved code, is open, targets the correct branch, has passed its reviews and tests, and can be merged. If the code changed or another check fails, the Coordinator never silently releases different code. It stops the release or asks a human for help.",
+          summary: "The queued request must still describe the same approved code.",
+          owner: "Coordinator worker using GitHub",
+          happens:
+            "For every item, the worker compares the current PR head with the submitted SHA and checks open state, base branch, approvals, required CI, mergeability, and repository policy.",
+          proof:
+            "A validation snapshot links every requested item to exact current GitHub evidence.",
+          gap:
+            "Define freshness windows, how review dismissal works after head changes, and how temporarily unknown GitHub mergeability is retried.",
+          failure:
+            "A moved PR head cancels or supersedes this exact request; it never silently substitutes new code. Other blockers move the release to NEEDS_HUMAN with exact evidence."
+        },
+        {
+          phase: "Validate",
+          title: "The release order is planned",
+          story:
+            "Using the accepted request, the Coordinator builds one exact release plan. It places required backend work before the frontend work that depends on it, keeps the requested order for unrelated work, and works out which backend services must move. If a dependency is missing, loops back on itself, or creates an unsafe order, nothing is merged.",
+          summary: "The Coordinator turns the request into one deterministic release plan.",
+          owner: "Release Coordinator planner",
+          happens:
+            "The planner validates the dependency graph, rejects cycles, respects requested tie-break order, places required backend work before dependent frontend work, and calculates the affected backend service graph.",
+          proof:
+            "A saved plan shows the exact merge order, build set, backend deploy DAG, frontend dependency point, and expected environment sequence.",
+          gap:
+            "Decide who owns the canonical backend service DAG, how its version is pinned, and whether a request may override only ordering between independent items.",
+          failure:
+            "A missing dependency, cycle, invalid deploy unit, or impossible order leaves the release unready. No merge starts."
+        },
+        {
+          phase: "Merge",
+          title: "The release waits for its turn",
+          story:
+            "Once the plan is ready, the release joins the merge queue. Earlier accepted releases go first unless an operator deliberately changes the order. Developers can continue working on other PRs while this release waits. The database shows its place in the queue and why it is waiting. A timeout never changes GitHub; the release keeps waiting or asks a human for help.",
+          summary: "Many releases may validate, but final repository mutations are ordered.",
+          owner: "Coordinator queue",
+          happens:
+            "The release enters READY_TO_MERGE. Earlier accepted work keeps priority unless a recorded operator decision cancels, supersedes, or reorders it. PR development and review continue normally while the release waits.",
+          proof:
+            "The database shows one stable queue position and why any earlier release is still ahead.",
+          gap:
+            "Define fair ordering, priority classes, maximum waiting time, cancellation authority, and whether emergency releases may overtake normal work.",
+          failure:
+            "A queue or lease timeout does not mutate GitHub. The release remains waiting or becomes NEEDS_HUMAN with the exact blocking owner."
+        },
+        {
+          phase: "Merge",
+          title: "The repositories are reserved for merging",
+          story:
+            "When its turn arrives, the Coordinator briefly reserves every repository involved in the release. This stops two workers from trying to merge into the same repository at the same time. GitHub still protects the main branch, and only the approved Coordinator app can perform the planned merges. If every repository cannot be reserved, the Coordinator releases any partial reservations and waits without changing code.",
+          summary: "Only one Coordinator worker may perform a repo's final merge operation.",
+          owner: "Coordinator database plus GitHub repository rules",
+          happens:
+            "The worker transactionally claims leases for every affected repository in one canonical order. GitHub keeps main protected at all times; normal users and agents cannot bypass it, and the narrowly permitted Coordinator GitHub App is the normal merge actor.",
+          proof:
+            "There is one active lease owner per repository and one auditable GitHub App identity for every merge.",
+          gap:
+            "Specify lease length, heartbeat and takeover rules, GitHub App permissions, branch protections, and the audited emergency-admin path.",
+          failure:
+            "If all required leases cannot be claimed, the worker releases any partial claims and waits. It performs no repository mutation."
+        },
+        {
+          phase: "Merge",
+          title: "Everything is checked one last time",
+          story:
+            "While the repositories are reserved, the Coordinator runs one final fresh check. It confirms the current main versions, the exact PR versions, reviews, tests, merge status, and dependencies. If anything changed in a way the plan no longer covers, no merge starts. The release goes back for checking, stops, or asks a human for help.",
+          summary: "The last safety check happens immediately before the first merge.",
+          owner: "Coordinator merge worker",
+          happens:
+            "While holding the short leases, the worker refreshes main SHAs and rechecks every exact PR head, CI, review, mergeability, and dependency assumption. The plan is recomputed against the current bases if the policy allows it.",
+          proof:
+            "The release stores the final preflight snapshot and exact pre-merge main SHA for every affected repository.",
+          gap:
+            "Define which base movement can be safely replanned automatically and which change requires a new request or fresh approval.",
+          failure:
+            "If the exact contract no longer holds, no merge starts. The release is cancelled, returned to validation, or marked NEEDS_HUMAN according to the recorded reason."
+        },
+        {
+          phase: "Merge",
+          title: "The backend and frontend PRs are merged",
+          story:
+            "When every final check passes, the Coordinator merges the exact planned PRs. Required backend work goes first, followed by the frontend work that depends on it. GitHub confirms each merge, and the Coordinator records the result one PR at a time because separate repositories cannot change as one single action. If only part of the plan succeeds, the release stops and a human must choose the repair before anything is deployed.",
+          summary: "Exact PRs land in dependency-safe order under protected-main rules.",
+          owner: "Coordinator GitHub App and repository merge controls",
+          happens:
+            "The App merges the planned PRs into their normal main branches. Required backend changes land before frontend changes that depend on them. GitHub cannot make two repositories atomic, so every cross-repo merge is recorded item by item.",
+          proof:
+            "GitHub confirms each merge commit and the Coordinator records the exact success or failure of every planned item.",
+          gap:
+            "Choose merge or squash strategy, merge-queue integration, whether same-repo batches are merged individually, and the repair playbook for cross-repo partial success.",
+          failure:
+            "Before any merge, failure is harmless. After a partial cross-repo merge, the release stops in NEEDS_HUMAN, records which main changed, and deploys nothing until a human chooses an exact repair."
+        },
+        {
+          phase: "Freeze",
+          title: "The exact release is saved",
+          story:
+            "After all planned PRs are merged, the Coordinator reads the new exact frontend and backend versions and saves them in a release record that cannot change. This record also lists the PRs, services, dependencies, and release ID. From this point on, every build, test, and deployment uses these saved versions even if the main branches move again. If the record cannot be saved, nothing is built or deployed and a human must recover the exact release from GitHub.",
+          summary: "The release is now frozen even though main will keep moving.",
+          owner: "Release Coordinator",
+          happens:
+            "After all planned merges succeed, the worker reads the resulting frontend and backend main SHAs and saves them with PRs, deploy units, dependency plan, source evidence, and release ID in an immutable manifest.",
+          proof:
+            "One manifest uniquely identifies the complete source set that later build, runtime proof, E2E, and production must reference.",
+          gap:
+            "Define manifest schema, signing, immutability, storage lifetime, and how repository or service metadata versions are embedded.",
+          failure:
+            "If the manifest cannot be durably saved, no build or deploy begins. Merged code remains on main, and the release requires exact recovery from GitHub evidence."
+        },
+        {
+          phase: "Freeze",
+          title: "Other work can continue merging",
+          story:
+            "As soon as the exact release record is safely stored, the Coordinator removes the short repository reservations. New PRs and later releases may now merge while this saved release continues through building, staging, and production. A newer main branch is normal and does not change the saved release. If a reservation gets stuck, it expires or an operator clears it after confirming that no merge is still running.",
+          summary: "The system stops protecting a merge turn as soon as the release is captured.",
+          owner: "Coordinator queue",
+          happens:
+            "The worker releases repository merge leases immediately after the manifest is durable. Later requests can merge while this saved release builds, waits, deploys, and tests. This is expected behaviour, not a conflict.",
+          proof:
+            "No repository lease remains attached to BUILDING, staging, E2E, approval, or production work.",
+          gap:
+            "Set observability for leaked leases and decide how an operator can safely clear one after proving that no merge call is still active.",
+          failure:
+            "An ordinary newer main SHA does not fail this release. A leaked lease is recovered by expiry or audited takeover without changing the saved manifest."
+        },
+        {
+          phase: "Build",
+          title: "The release is built once",
+          story:
+            "The Coordinator asks the frontend and backend repositories to build from the saved code versions. Every output gets a permanent fingerprint, and its logs and workflow run are linked to the release. The same output moves through later environments; the system never rebuilds from the newest main branch. If a build fails, staging stays unchanged. A temporary infrastructure problem may retry the same release, but a code fix must start a new release.",
+          summary: "Build once from the saved SHAs, then promote the same exact output.",
+          owner: "Product repository workflows and trusted artifact storage",
+          happens:
+            "The Coordinator dispatches canonical frontend and backend builds with the release ID and captured SHAs. Repositories keep their own build logic. Artifact digests, provenance, logs, and workflow run IDs are correlated back to the manifest.",
+          proof:
+            "Every deployable has a trusted immutable artifact digest bound to the saved source SHA. Environment-specific builds, if unavoidable, get separate digests from the same captured source.",
+          gap:
+            "Confirm artifact storage, signing and provenance, reproducibility expectations, workflow callback authentication, retention, and which deployables support build-once promotion.",
+          failure:
+            "The release stops before staging. Main contains the merged code, but environments remain unchanged. A code fix enters a new release request; infrastructure retry uses the same saved manifest."
+        },
+        {
+          phase: "Staging",
+          title: "The release waits for staging",
+          story:
+            "Built releases wait for an exclusive turn in the shared staging environment. Only one release may change and test staging at a time, so different versions cannot become mixed or accidentally move backward. When this release reaches the front of the line, the Coordinator records that it owns staging. Until then, no staging deployment starts.",
+          summary: "Shared staging accepts only one mutating and validating release at a time.",
+          owner: "Coordinator staging lane",
+          happens:
+            "Built releases queue independently from merge turns. A release may claim staging only after required earlier releases are terminal, so staging cannot accidentally move backward or mix two manifests.",
+          proof:
+            "One durable staging lease names the release, current known-good manifest, issued operations, and expiry or heartbeat state.",
+          gap:
+            "Define whether all services share one staging lane, lease recovery, maximum validation time, and the exact supersession rules for obsolete releases.",
+          failure:
+            "The release waits. It does not dispatch deployment while another owner is mutating or validating staging."
+        },
+        {
+          phase: "Staging",
+          title: "The backend is deployed to staging",
+          story:
+            "In staging, the Coordinator deploys only the backend services affected by this release and follows the saved dependency order. A required service must finish and report the correct version before a service that depends on it can start. Independent services may deploy together when that is known to be safe. A temporary infrastructure problem may retry the same built output. A code or health problem stops the remaining services, may restore the last good staging version, and asks a human for help.",
+          summary: "Affected backend units follow a saved DAG; independent units may run together.",
+          owner: "Backend canonical deployment workflows",
+          happens:
+            "The Coordinator dispatches only the affected backend deployables. Prerequisites complete and prove their runtime version before dependent services start. Independent services may deploy concurrently when the product-owned graph says this is safe.",
+          proof:
+            "Each required backend runtime reports the exact expected artifact or source identity, with workflow and health evidence attached to the release.",
+          gap:
+            "Inventory every deployable, dependency edge, runtime identity endpoint, timeout, safe concurrency rule, and restoration procedure.",
+          failure:
+            "A proven infrastructure failure retries the same artifact within budget. A product or health failure stops dependants, restores known-good staging where defined, and moves the release to NEEDS_HUMAN."
+        },
+        {
+          phase: "Staging",
+          title: "The frontend is deployed to staging",
+          story:
+            "After the required backend services are running the correct versions, the Coordinator deploys the saved frontend output to staging. It does not rebuild from the latest main branch or choose newer code. This step finishes only when the frontend reports the expected version and can safely use the backend. A temporary infrastructure problem may retry the same output. A real product problem restores the last good frontend and blocks the release from moving forward.",
+          summary: "The saved frontend artifact moves only after its backend contract is present.",
+          owner: "Frontend canonical deployment workflow",
+          happens:
+            "Once required backend runtimes prove the expected release, the Coordinator dispatches the frontend staging deployment. It does not rebuild from newest main or substitute the newest PR head.",
+          proof:
+            "The staging frontend reports the exact expected artifact digest or captured SHA and can reach the required backend release safely.",
+          gap:
+            "Define the frontend runtime identity contract, CDN/cache invalidation proof, environment configuration handling, and known-good restoration process.",
+          failure:
+            "Retry only proven infrastructure failure with the same artifact. Otherwise restore the last known-good frontend, verify it, and keep the release out of STAGING_VALIDATED."
+        },
+        {
+          phase: "Verify",
+          title: "Staging is checked",
+          story:
+            "With the frontend and backend running in staging, the Coordinator checks the whole system. It asks every part which version is running, compares those answers with the saved release, and then runs tests that follow real user journeys from start to finish. Staging is accepted only when both the exact versions and the user journeys pass. If a check fails, the last good staging release is restored and checked before the process stops for human review.",
+          summary: "Workflow success is not enough; the saved release must be running and working.",
+          owner: "Runtime proof endpoints and manifest-bound E2E",
+          happens:
+            "The Coordinator first compares every required running version with the release manifest, then runs the full staging E2E suite against that exact runtime set. It records STAGING_VALIDATED only when both identity and behaviour agree.",
+          proof:
+            "Runtime identities, E2E results, timestamps, logs, and release ID form one terminal staging evidence bundle.",
+          gap:
+            "Define the complete E2E gate, test-data isolation, flaky-test policy, runtime-proof endpoint trust, and what metrics must remain healthy before promotion.",
+          failure:
+            "The release is not validated. Restore the last known-good staging release and verify the restoration before releasing the lane. Version one does not automatically bisect the PR batch."
+        },
+        {
+          phase: "Production",
+          title: "Production permission is checked",
+          story:
+            "Passing staging does not automatically allow a production release. The Coordinator checks the release rules, the requester's permission, whether the staging proof is still fresh, whether the timing is allowed, and whether a human approval is required. Any approval is tied to this exact saved release. If permission is denied or expires, production does not change and the release waits, stops, or is cancelled according to that decision.",
+          summary: "Staging success permits evaluation; it does not automatically grant production authority.",
+          owner: "Coordinator policy engine and, when required, a human approver",
+          happens:
+            "The system checks risk policy, requester permission, staging evidence freshness, change window, environment protection, and any required independent approval. Approval references the exact manifest and artifacts.",
+          proof:
+            "A durable allow or deny decision names the policy version, approver when applicable, exact release, and evidence considered.",
+          gap:
+            "Define auto-promotion classes, approver roles, separation of duties, approval expiry, release windows, stop authority, and emergency path.",
+          failure:
+            "A denied or expired approval changes no production state. The release remains staging-validated, is cancelled, or becomes terminal according to the explicit decision."
+        },
+        {
+          phase: "Production",
+          title: "The release moves into production",
+          story:
+            "With production permission, the Coordinator takes the production turn and deploys the exact approved outputs in a safe order. When the platform allows it, the release first reaches a small share of users or a second production environment, and more traffic moves over only while the system stays healthy. Every stage records the running version, traffic, and health. If problems appear, the rollout stops before expanding. Any partial production state is recorded exactly and may require a human-led recovery.",
+          summary: "The staging-validated artifacts enter production in a bounded, observable way.",
+          owner: "Product deployment workflows under Coordinator production ownership",
+          happens:
+            "The release claims the separate production lane, deploys the exact approved artifacts in dependency-safe order, and gradually shifts traffic where the platform supports canary or blue-green rollout. Health gates decide each continuation.",
+          proof:
+            "Every rollout increment reports exact artifact identity, traffic state, health metrics, workflow evidence, and the current production truth.",
+          gap:
+            "Confirm canary or blue-green support for each deployable, metric thresholds, observation windows, automated abort capability, and safe rollback compatibility.",
+          failure:
+            "Abort before wider rollout when possible. Retry only proven infrastructure failure. If production is partly updated, record that exact state and require explicit recovery rather than claiming an automatic cross-repo rollback."
+        },
+        {
+          phase: "Done",
+          title: "Production is checked and the release finishes",
+          story:
+            "After the rollout, the Coordinator confirms that the exact saved release is running across production, runs safe tests through the whole system, watches its health for the required time, and saves the proof. Only then does it mark the release done, free production for the next release, and send the final result. If any check fails, production pauses. The system records the real state and uses a safe retry, rollback, or human repair. Success is reported only after that recovery is also checked.",
+          summary: "Exact runtime proof and E2E—not workflow completion—create DONE.",
+          owner: "Coordinator, runtime proof, E2E, and notification integrations",
+          happens:
+            "The system checks every production runtime against the approved manifest, runs the allowed read-only production E2E and final health window, saves the evidence, releases production ownership, and sends a concise terminal notification.",
+          proof:
+            "DONE links the request, exact manifest, artifact digests, runtime versions, tests, metrics, approvals, workflow runs, and complete state history.",
+          gap:
+            "Define production-safe E2E, final observation duration, notification channels, audit retention, and how the Coordinator itself is released without depending on its own path.",
+          failure:
+            "Pause production and preserve exact truth. A safe same-artifact retry, explicit rollback, or human repair must finish and be verified before the lane is released or any success is reported."
+        }
+      ];
+
+      const storyNavRoot = document.querySelector("#story-nav-list");
+      const storyRoot = document.querySelector("#story");
+      const storyNav = document.querySelector(".story-nav");
+      const navLinks = [];
+      const storySections = [];
+      let activeIndex = readInitialStep();
+
+      function readInitialStep() {
+        const rawStep = new URLSearchParams(window.location.search).get("step");
+        const requested = Number.parseInt(rawStep || "1", 10);
+        return Number.isInteger(requested) && requested >= 1 && requested <= steps.length
+          ? requested - 1
+          : 0;
+      }
+
+      function storyMarkup(step, index) {
+        return `
+          <h2 id="story-step-title-${index + 1}">${step.title}</h2>
+          <p class="story-prose">${step.story}</p>
+        `;
+      }
+
+      function setActiveStep(index, options = {}) {
+        const nextIndex = Math.max(0, Math.min(steps.length - 1, index));
+        activeIndex = nextIndex;
+
+        navLinks.forEach((link, linkIndex) => {
+          const active = linkIndex === activeIndex;
+          link.classList.toggle("active", active);
+          if (active) {
+            link.setAttribute("aria-current", "step");
+          } else {
+            link.removeAttribute("aria-current");
+          }
+        });
+
+        if (options.updateUrl !== false) {
+          const url = new URL(window.location.href);
+          url.searchParams.set("step", String(activeIndex + 1));
+          url.hash = "";
+          window.history.replaceState({}, "", url);
+        }
+
+        const activeLink = navLinks[activeIndex];
+        if (window.matchMedia("(max-width: 820px)").matches) {
+          storyNav.scrollTo({
+            left: activeLink.offsetLeft - storyNav.clientWidth / 2 + activeLink.clientWidth / 2,
+            behavior: "smooth"
+          });
+        } else {
+          const linkTop = activeLink.offsetTop;
+          const linkBottom = linkTop + activeLink.offsetHeight;
+          const visibleTop = storyNav.scrollTop;
+          const visibleBottom = visibleTop + storyNav.clientHeight;
+
+          if (linkTop < visibleTop || linkBottom > visibleBottom) {
+            storyNav.scrollTo({
+              top: Math.max(0, linkTop - storyNav.clientHeight / 2),
+              behavior: "smooth"
+            });
+          }
+        }
+      }
+
+      function scrollToStep(index) {
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        storySections[index].scrollIntoView({
+          block: "start",
+          behavior: reducedMotion ? "auto" : "smooth"
+        });
+        setActiveStep(index);
+      }
+
+      steps.forEach((step, index) => {
+        const navItem = document.createElement("li");
+        const navLink = document.createElement("a");
+        navLink.className = "story-nav-link";
+        navLink.href = `#step-${index + 1}`;
+        navLink.innerHTML = `
+          <span class="story-nav-number">${String(index + 1).padStart(2, "0")}</span>
+          <span class="story-nav-text">${step.title}</span>
+        `;
+        navLink.addEventListener("click", (event) => {
+          event.preventDefault();
+          scrollToStep(index);
+        });
+
+        const section = document.createElement("section");
+        section.className = "story-step";
+        section.id = `step-${index + 1}`;
+        section.setAttribute("aria-labelledby", `story-step-title-${index + 1}`);
+        section.innerHTML = storyMarkup(step, index);
+
+        navItem.append(navLink);
+        storyNavRoot.append(navItem);
+        storyRoot.append(section);
+        navLinks.push(navLink);
+        storySections.push(section);
+      });
+
+      function updateActiveStepFromScroll() {
+        const readingLine = Math.min(window.innerHeight * 0.3, 260);
+        let nextIndex = 0;
+
+        storySections.forEach((section, index) => {
+          if (section.getBoundingClientRect().top <= readingLine) {
+            nextIndex = index;
+          }
+        });
+
+        const atPageEnd = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 2;
+        if (atPageEnd) {
+          nextIndex = storySections.length - 1;
+        }
+
+        if (nextIndex !== activeIndex) {
+          setActiveStep(nextIndex);
+        }
+      }
+
+      let scrollFrame = 0;
+      function queueActiveStepUpdate() {
+        if (scrollFrame) {
+          return;
+        }
+
+        scrollFrame = window.requestAnimationFrame(() => {
+          scrollFrame = 0;
+          updateActiveStepFromScroll();
+        });
+      }
+
+      window.addEventListener("scroll", queueActiveStepUpdate, { passive: true });
+      window.addEventListener("resize", queueActiveStepUpdate);
+
+      setActiveStep(activeIndex);
+      if (activeIndex > 0) {
+        window.requestAnimationFrame(() => {
+          storySections[activeIndex].scrollIntoView({ block: "start" });
+        });
+      } else {
+        window.requestAnimationFrame(updateActiveStepFromScroll);
+      }
+    </script>
+  </body>
+</html>
