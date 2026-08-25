@@ -72,9 +72,16 @@
       }
 
       .diagram-context {
-        margin: 0 0 14px 2px;
-        color: var(--muted);
-        font-size: 12px;
+        max-width: none;
+        margin: 0 0 22px;
+        padding: 14px 16px;
+        border-left: 3px solid var(--blue);
+        border-radius: 0 8px 8px 0;
+        background: var(--blue-soft);
+        color: #dcecff;
+        font-size: 17px;
+        font-weight: 600;
+        line-height: 1.55;
       }
 
       .flow-layout {
@@ -424,46 +431,42 @@
     </style>
     <style>
       .story-layout {
-        display: grid;
-        grid-template-columns: minmax(220px, 300px) minmax(0, 1160px);
-        justify-content: center;
-        gap: clamp(40px, 5vw, 80px);
-        align-items: start;
+        max-width: 1500px;
+        margin: 0 auto;
       }
 
       .story-nav {
         position: sticky;
-        top: 20px;
-        max-height: calc(100vh - 40px);
-        overflow-y: auto;
-        padding: 8px 24px 8px 0;
-        border-right: 1px solid var(--line);
+        top: 0;
+        z-index: 10;
+        margin-bottom: 22px;
+        padding: 10px 2px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        border-bottom: 1px solid var(--line);
+        background: rgba(8, 11, 17, 0.96);
+        backdrop-filter: blur(12px);
         scrollbar-width: thin;
       }
 
       .story-nav-title {
-        margin: 0 0 12px;
-        color: var(--muted);
-        font-size: 11px;
-        font-weight: 800;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
+        display: none;
       }
 
       .story-nav ol {
-        display: grid;
-        gap: 2px;
+        display: flex;
+        width: max-content;
+        min-width: 100%;
+        justify-content: space-between;
+        gap: clamp(14px, 1.8vw, 28px);
         margin: 0;
         padding: 0;
         list-style: none;
       }
 
       .story-nav-link {
-        display: grid;
-        grid-template-columns: 28px minmax(0, 1fr);
-        gap: 8px;
-        align-items: baseline;
-        padding: 5px 0;
+        display: block;
+        padding: 4px 0;
         color: #738196;
         text-decoration: none;
         transition: color 120ms ease;
@@ -485,7 +488,7 @@
 
       .story-nav-number {
         color: #526075;
-        font-size: 11px;
+        font-size: 12px;
         font-variant-numeric: tabular-nums;
         font-weight: 800;
       }
@@ -495,9 +498,7 @@
       }
 
       .story-nav-text {
-        font-size: 12px;
-        font-weight: 650;
-        line-height: 1.35;
+        display: none;
       }
 
       .story-content {
@@ -510,8 +511,8 @@
       }
 
       .story-step {
-        padding: 30px 0 42px;
-        scroll-margin-top: 20px;
+        padding: 28px 0 44px;
+        scroll-margin-top: 62px;
       }
 
       .story-step:first-child {
@@ -523,15 +524,46 @@
       }
 
       .story-step h2 {
-        max-width: 1160px;
-        margin: 0 0 10px;
+        margin: 0 0 16px;
         font-size: 23px;
         line-height: 1.3;
         letter-spacing: -0.02em;
       }
 
+      .story-pair {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .story-panel {
+        min-width: 0;
+        padding: 18px 20px 20px;
+        border: 1px dashed rgba(154, 168, 186, 0.34);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.012);
+      }
+
+      .story-panel-why {
+        border-color: rgba(100, 168, 255, 0.42);
+        background: rgba(100, 168, 255, 0.055);
+      }
+
+      .story-panel-label {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .story-panel-why .story-panel-label {
+        color: var(--blue);
+      }
+
       .story-prose {
-        max-width: 1160px;
         margin: 0;
         color: #c5ceda;
         font-size: 16px;
@@ -547,45 +579,9 @@
           width: min(100% - 24px, 760px);
         }
 
-        .story-layout {
-          display: block;
-        }
-
         .story-nav {
-          top: 0;
-          z-index: 10;
-          max-height: none;
-          margin: 0 -12px;
+          margin: 0 -12px 18px;
           padding: 10px 12px;
-          overflow-x: auto;
-          overflow-y: hidden;
-          border-right: 0;
-          border-bottom: 1px solid var(--line);
-          background: rgba(8, 11, 17, 0.96);
-          backdrop-filter: blur(12px);
-        }
-
-        .story-nav-title {
-          display: none;
-        }
-
-        .story-nav ol {
-          display: flex;
-          width: max-content;
-          gap: 16px;
-        }
-
-        .story-nav-link {
-          display: block;
-          padding: 4px 0;
-        }
-
-        .story-nav-text {
-          display: none;
-        }
-
-        .story-nav-number {
-          font-size: 12px;
         }
 
         .story-step {
@@ -594,6 +590,15 @@
 
         .story-step:first-child {
           padding-top: 24px;
+        }
+
+        .story-pair {
+          grid-template-columns: 1fr;
+          gap: 12px;
+        }
+
+        .story-panel {
+          padding: 16px;
         }
       }
 
@@ -628,15 +633,15 @@
           phase: "Submit",
           title: "The release request is submitted",
           story:
-            "The Coordinator receives a release request as a JSON document. The request lists the pull requests that belong together. It states whether the frontend, backend, or both must be deployed. It also records any required order, such as backend before frontend. Pull requests that depend on each other belong in the same request. Separate requests are treated as independent.",
-          summary: "The JSON request describes the PRs, deployment targets, and any required order.",
+            "The Coordinator receives a release request as a JSON document. The request lists the pull requests that belong together. It states whether the frontend, backend, or both must be deployed. It also records any required order, such as backend before frontend. Pull requests that depend on each other belong in the same request. Separate requests are treated as independent. The request declares whether it changes the database.",
+          summary: "The JSON request describes the PRs, deployment targets, required order, and database-change declaration.",
           owner: "Release submission",
           happens:
-            "The JSON request is sent to the Coordinator. It contains the exact PRs, the frontend and backend deployment targets, and any required order.",
+            "The JSON request is sent to the Coordinator. It contains the exact PRs, the frontend and backend deployment targets, any required order, and the requester's database-change declaration.",
           proof:
-            "The Coordinator receives one complete request describing the intended release.",
+            "The Coordinator receives one complete request describing the intended release and its declared database classification.",
           gap:
-            "Finalize the API schema, maximum batch size, allowed dependency syntax, production-policy choices, and idempotency key rules.",
+            "The API schema, database-change declaration values, maximum batch size, allowed dependency syntax, production-policy choices, and idempotency key rules still need to be defined.",
           failure:
             "A malformed or incomplete request is rejected before it is accepted. No merge, build, or deployment starts."
         },
@@ -660,33 +665,33 @@
           phase: "Submit",
           title: "The Coordinator accepts or rejects the request",
           story:
-            "The Coordinator checks every pull request. It confirms that each one is open, approved, has passed the required checks, can be merged, and fits the deployment plan. If everything passes, the Coordinator saves the request and adds it to the waiting list. Accepted means saved and waiting—not merged or deployed. If anything fails, the Coordinator rejects the request.",
-          summary: "Only a valid, fully planned request is accepted and saved.",
+            "The Coordinator checks every pull request. It confirms that each one is open, approved, has passed the required checks, can be merged, and fits the deployment plan. The request says if the database will change. The Coordinator checks the changed files too. If either says yes, the request is marked as a database change. This matters because a database change may make an automatic rollback unsafe. If it is still unclear, a person decides. If everything passes, the Coordinator saves the request and adds it to the waiting list. Accepted means saved and waiting—not merged or deployed. If anything fails, the Coordinator rejects the request.",
+          summary: "Only a valid, fully planned, and classified request is accepted and saved.",
           owner: "Release Coordinator using GitHub and its database",
           happens:
-            "The Coordinator checks current PR heads, open state, target branches, approvals, required CI, mergeability, duplicate use, deployment targets, and required ordering. It saves the accepted request and exact plan in one durable record.",
+            "The Coordinator checks current PR heads, open state, target branches, approvals, required CI, mergeability, duplicate use, deployment targets, and required ordering. It reads the requester's database-change declaration and inspects the exact PR heads for changes under the known migration and schema paths. If either signal indicates a database change, the request is classified as database-changing. If detection is unavailable, incomplete, or otherwise uncertain, the request cannot proceed until an authorized human saves a classification. The accepted request, exact plan, classification, and evidence are saved in one durable record.",
           proof:
-            "An accepted request ID retrieves the exact PR evidence and deployment plan after a restart. A rejected request is never added to the waiting list.",
+            "An accepted request ID retrieves the exact PR evidence, deployment plan, requester declaration, detected migration or schema paths, classifier version, database classification, and any human decision after a restart. An unclassified or rejected request is never added to the waiting list.",
           gap:
-            "Finalize PR readiness rules, valid deployment targets, duplicate handling, request limits, database guarantees, and retry behaviour when GitHub cannot answer.",
+            "The PR readiness rules, migration and schema path inventory, classifier maintenance, authorized human classifiers, valid deployment targets, duplicate handling, request limits, database guarantees, and retry behaviour when GitHub cannot answer still need to be defined.",
           failure:
-            "The request is rejected if any PR or deployment rule is invalid. The Coordinator returns an ID only after the accepted request and its plan are safely saved."
+            "The request is rejected if any PR or deployment rule is invalid. An uncertain database classification fails closed and requires a human decision before acceptance. The Coordinator returns an accepted ID only after the request, plan, classification, and evidence are safely saved."
         },
         {
           phase: "Batch",
           title: "The Coordinator freezes the next release batch",
           story:
-            "Accepted requests wait for the next release batch. When the Coordinator forms that batch, it saves the exact pull request versions, the frontend and backend scope, the required order, and the current main version for every affected repository. The batch is then fixed. Later changes belong to another batch.",
-          summary: "One fixed batch saves the exact plan and starting point for every repository.",
+            "Accepted requests wait for the next release batch. When the Coordinator forms that batch, it saves the exact pull request versions, the frontend and backend scope, the required order, and the current main version for every affected repository. A database-changing request receives its own batch with only its required dependencies. Unrelated requests wait for another batch. The batch is then fixed.",
+          summary: "One fixed batch saves the exact plan, starting points, and database policy.",
           owner: "Release Coordinator using GitHub and its database",
           happens:
-            "The Coordinator selects accepted requests in stable order. It saves their exact PR head SHAs, deployment scope, dependency order, and the current protected main SHA for every affected repository in one durable batch manifest.",
+            "The Coordinator selects accepted requests in stable order. If a selected request is database-changing, it creates a dedicated batch containing that request and only its complete required dependency group; no unrelated accepted request may join. Otherwise it may form a normal non-database batch. It saves every exact PR head SHA, database classification, deployment scope, dependency order, and current protected main SHA in one durable batch manifest.",
           proof:
-            "The immutable batch manifest lists every included request, exact PR head, affected repository, saved main base, deployment target, ordering rule, and batch ID.",
+            "The immutable batch manifest lists every included request, exact PR head, database classification and evidence, dependency edge, affected repository, saved main base, deployment target, ordering rule, and batch ID. A database-changing manifest proves that every included request belongs to the required dependency group.",
           gap:
-            "The batch cutoff, maximum size, fair ordering, emergency priority, manifest format, signing, and retention rules still need to be defined.",
+            "The dependency-group validation, dedicated-batch scheduling, batch cutoff, maximum size, fair ordering, emergency priority, manifest format, signing, and retention rules still need to be defined.",
           failure:
-            "If the exact plan and every saved main base cannot be recorded safely, the batch is not frozen. No release branch, main change, build, or deployment begins."
+            "If the exact plan, database policy, dependency group, or every saved main base cannot be recorded safely, the batch is not frozen. A database-changing request is never mixed with unrelated work. No release branch, main change, build, or deployment begins."
         },
         {
           phase: "Prepare",
@@ -702,13 +707,13 @@
           gap:
             "The release-branch naming, cleanup, merge strategy, changed-PR handling, conflict rules, and branch retention still need to be defined.",
           failure:
-            "If a pull request changed or a planned merge fails, the batch stops with the exact reason. Main remains unchanged, and no artifact or deployment is produced."
+            "If a pull request changed, the batch stops with the exact reason. If the full planned merge fails, a non-database batch may move to the bounded salvage decision. A database-changing batch stops with the exact evidence for human review. Main remains unchanged, and no artifact or deployment is produced."
         },
         {
           phase: "Test",
           title: "The Coordinator tests the combined release",
           story:
-            "The product repositories run the required checks and tests against the combined release branches. The batch continues only when the exact frontend and backend results both pass. If a merge or test fails, the batch stops and main remains unchanged.",
+            "The product repositories run the required checks and tests against the combined release branches. If the exact frontend and backend results both pass, the full batch continues unchanged. If a non-database batch fails, the Coordinator checks whether a safe smaller batch can continue. A database-changing batch stops for human review. Main remains unchanged.",
           summary: "The complete release is tested before any protected main branch changes.",
           owner: "Product repository checks and combined release tests",
           happens:
@@ -718,7 +723,23 @@
           gap:
             "The required branch checks, combined test matrix, callback trust, timeout rules, retry budget, and unclear-result policy still need to be defined.",
           failure:
-            "A failed merge, check, or test records the exact blocker and stops the batch. Main remains unchanged. A proven infrastructure failure may retry the same branch commits; a code fix enters a later request and batch."
+            "A failed or ambiguous check records the exact blocker. A proven infrastructure failure may retry the same branch commits. Otherwise a non-database batch moves to the bounded salvage decision. A database-changing batch cannot use salvage and stops for human review. Main remains unchanged, and no candidate can reach build or deployment from this step."
+        },
+        {
+          phase: "Recover",
+          title: "The Coordinator salvages a failed batch when possible",
+          story:
+            "If the full batch passes, it continues unchanged. Only a non-database batch may use salvage after a failure. The Coordinator may try a limited set of smaller combinations on fresh release branches. Every candidate keeps all required dependencies and ordering. The largest passing combination becomes a new replacement batch and is tested again. Excluded requests stay blocked with their evidence. A database-changing batch or an unsuccessful search stops for human review with main unchanged.",
+          summary: "A failed non-database batch may produce one fully retested, dependency-safe replacement batch.",
+          owner: "Release Coordinator dependency planner and product repository tests",
+          happens:
+            "The Coordinator first verifies that the immutable batch classification is non-database. Database-changing or unclassified batches are ineligible. The original failed batch and all of its evidence remain immutable. The Coordinator orders requests by their original acceptance order and explores dependency-complete candidate sets best-first. Candidates that keep more requests run first. Ties prefer candidates that keep earlier accepted requests. Each child candidate removes one request and every request that depends on it, so the kept set always contains all transitive dependencies. Duplicate sets are skipped. The search uses a configurable candidate-attempt limit defined by policy. For a very small batch, policy may allow every safe combination to be tested. For a larger batch, the Coordinator stops at the configured limit and records that the search was incomplete. Every candidate uses fresh temporary branches from the original saved main bases and exact PR heads, preserves the required frontend and backend order, and runs the complete combined checks. The first passing candidate is the largest dependency-safe candidate under this deterministic ordering. The Coordinator then creates a replacement batch with a new ID linked to the original, recalculates its scope and order, creates fresh branches again, and reruns the complete combined release test under the replacement identity. Only that final passing replacement may continue to main promotion.",
+          proof:
+            "The salvage record links the immutable original batch and non-database classification to every candidate request set, dependency closure, attempt number, branch SHA, merge and test result, remaining budget, selected set, replacement batch ID, final retest, and every excluded request with its exact failure evidence and blocked status.",
+          gap:
+            "The configurable search limit, small-batch exhaustive-search policy, candidate cost limit, dependency-graph validation, ambiguous-result policy, temporary-branch cleanup, and salvage evidence retention still need to be defined.",
+          failure:
+            "A database-changing or unclassified batch never starts salvage. If no eligible candidate passes before the configured limit, the search remains incomplete, the cause remains ambiguous, the dependency graph is invalid, or the replacement fails its final retest, main remains unchanged and no deployment begins. The original batch and all attempts stay saved. Excluded and failing requests remain accepted but blocked for repair or a later batch. The Coordinator stops for human review rather than guessing."
         },
         {
           phase: "Promote",
@@ -750,7 +771,7 @@
           gap:
             "Artifact storage, signing, provenance, reproducibility, callback authentication, retention, and build-once support still need to be defined.",
           failure:
-            "The batch stops before staging and no environment changes. A proven infrastructure failure may retry the same promoted main versions. A code failure requires a safe revert-commit or repair decision, and the release locks remain held until the repository state is verified."
+            "The batch stops before staging and no environment changes. A non-database batch may retry a proven infrastructure failure with the same promoted main versions; a code failure requires a safe revert-commit or repair decision. Any build failure for a database-changing batch preserves the exact application and database state, keeps the release locks, and requires human recovery."
         },
         {
           phase: "Staging",
@@ -772,7 +793,7 @@
           phase: "Staging",
           title: "The Coordinator deploys the backend to staging",
           story:
-            "The Coordinator starts the backend staging deployment with the saved backend version. It waits until staging reports that the exact version is running and its health check passes. A temporary infrastructure problem may retry the same version. If the backend does not work, the Coordinator stops the deployment and restores the last working version when possible.",
+            "The Coordinator starts the backend staging deployment with the saved backend version. It waits until staging reports that the exact version is running and its health check passes. If the backend does not work, the Coordinator stops. Non-database batches may restore the last working version. Database-changing batches wait for human recovery.",
           summary: "The saved backend version is deployed to staging before the frontend.",
           owner: "Backend deployment workflow",
           happens:
@@ -782,13 +803,13 @@
           gap:
             "Define the backend deployment workflow, version check, timeout, retry rules, and restoration process.",
           failure:
-            "A temporary deployment problem retries the same version. If the backend is broken, the deployment stops and restores the last working version when possible."
+            "A non-database batch may retry a proven infrastructure problem with the same version or restore the last known-good staging version under policy. Any backend deployment, runtime, or health failure for a database-changing batch stops automatic recovery. The Coordinator preserves the exact application and database state, keeps the release and staging locks, and requires a human decision."
         },
         {
           phase: "Staging",
           title: "The Coordinator deploys the frontend to staging",
           story:
-            "After the backend is ready, the Coordinator starts the frontend staging deployment with the saved frontend version. It waits until staging reports that the exact version is running and works with the backend. A temporary infrastructure problem may retry the same version. If the frontend does not work, the Coordinator stops the deployment and restores the last working version when possible.",
+            "After the backend is ready, the Coordinator starts the frontend staging deployment with the saved frontend version. It waits until staging reports that the exact version is running and works with the backend. If the frontend does not work, the Coordinator stops. Non-database batches may restore the last working version. Database-changing batches wait for human recovery.",
           summary: "The saved frontend version is deployed after the backend works.",
           owner: "Frontend deployment workflow",
           happens:
@@ -798,13 +819,13 @@
           gap:
             "Define the frontend deployment workflow, version check, cache handling, timeout, retry rules, and restoration process.",
           failure:
-            "A temporary deployment problem retries the same version. If the frontend is broken, the deployment stops and restores the last working version when possible."
+            "A non-database batch may retry a proven infrastructure problem with the same version or restore the last known-good staging version under policy. Any frontend deployment, compatibility, runtime, or health failure for a database-changing batch stops automatic recovery. The Coordinator preserves the exact application and database state, keeps the release and staging locks, and requires a human decision."
         },
         {
           phase: "Verify",
           title: "The Coordinator checks the batch in staging",
           story:
-            "The Coordinator asks the frontend and backend which versions are running in staging. It compares those answers with the saved batch. It then runs tests that follow real user journeys from start to finish. The batch becomes STAGING_VALIDATED only when the exact versions and the user journeys both pass. Workflow success alone is not enough. If either check fails, the Coordinator restores the last good staging batch and verifies the restoration before the process stops for human review.",
+            "The Coordinator asks the frontend and backend which versions are running in staging. It compares those answers with the saved batch. It then runs tests that follow real user journeys from start to finish. The batch becomes STAGING_VALIDATED only when the exact versions and the user journeys both pass. If a check fails, non-database batches may restore the last good staging release. Database-changing batches preserve the exact state and wait for human recovery.",
           summary: "Workflow success is not enough; the saved batch must be running and working.",
           owner: "Runtime proof endpoints and manifest-bound E2E",
           happens:
@@ -814,7 +835,7 @@
           gap:
             "Define the complete E2E gate, test-data isolation, flaky-test policy, runtime-proof endpoint trust, and what metrics must remain healthy before promotion.",
           failure:
-            "The batch is not validated. Restore the last known-good staging batch and verify the restoration before releasing the lane. Version one does not automatically split the batch to find which request caused the problem."
+            "The batch is not validated. A non-database batch restores the last known-good staging batch under policy and verifies it before releasing the lane. A database-changing batch does not restore automatically. The Coordinator preserves the exact application and database state, keeps the release and staging locks, and requires human recovery. Version one does not automatically split a staging failure."
         },
         {
           phase: "Production",
@@ -836,23 +857,23 @@
           phase: "Production",
           title: "The Coordinator saves the rollback point",
           story:
-            "Before production starts, the Coordinator saves the previous known-good frontend and backend artifacts and versions. It also keeps the main versions from before this release. These records provide one exact rollback point if the production release fails.",
-          summary: "A verified rollback point is saved before production changes.",
+            "Before production starts, the Coordinator saves the previous known-good frontend and backend artifacts and versions. It also keeps the main versions from before this release. Non-database batches may use these records for automatic rollback. Database-changing batches keep them only as evidence for human recovery.",
+          summary: "Recovery evidence is saved before production, with automatic rollback limited to non-database batches.",
           owner: "Coordinator, trusted artifact storage, runtime proof, and GitHub",
           happens:
-            "The Coordinator links the previous production artifact digests and runtime identities to the pre-release main SHAs and the newly promoted main SHAs. If a later production gate fails, it stops the rollout and rechecks every rollback guard. Automatic rollback is allowed only when current main still equals the failed release, the previous artifacts are available, new revert commits apply cleanly, and there is no unsafe or irreversible database or data change. When every guard passes, the Coordinator redeploys the previous artifacts, creates new revert commits on current main without resetting or rewriting history, verifies the restored production versions and health, records ROLLED_BACK, and releases the locks. Otherwise it stops for human recovery and keeps the locks.",
+            "The Coordinator links the previous production artifact digests and runtime identities to the pre-release main SHAs, newly promoted main SHAs, and immutable batch database classification. A database-changing batch is marked ineligible for automatic rollback. Version one does not attempt to prove or infer database reversibility. If that batch later fails, the Coordinator preserves the exact application and database state, keeps the locks, and requires human recovery. A non-database batch may use bounded automatic rollback. On failure, the Coordinator stops the rollout and rechecks that current main still equals the failed release, the previous artifacts are available, and new revert commits apply cleanly. When every guard passes, it redeploys the previous artifacts, creates new revert commits on current main without resetting or rewriting history, verifies the restored production versions and health, records ROLLED_BACK, and releases the locks. Otherwise it stops for human recovery and keeps the locks.",
           proof:
-            "The rollback record names every previous production artifact and version, pre-release and failed-release main SHA, eligibility guard, deploy and revert result, restored runtime check, health result, repository outcome, and lock release.",
+            "The recovery record names the database classification and evidence, every previous production artifact and version, pre-release and failed-release main SHA, automatic-rollback eligibility, guard result, deploy and revert result when allowed, restored runtime check, health result, repository outcome, and lock release.",
           gap:
-            "The known-good artifact retention, rollback workflows, data-change safety classification, revert-commit method, restored-health gate, and human recovery authority still need to be defined.",
+            "The known-good artifact retention, non-database rollback workflows, revert-commit method, restored-health gate, database-state evidence contract, and human database-recovery authority still need to be defined.",
           failure:
-            "If the rollback point cannot be saved and verified, production does not begin. A partial cross-repository rollback is never reported as recovered. Deployment stays blocked and the locks remain held until every affected repository and production runtime has a truthful, repaired state."
+            "If the recovery evidence and policy cannot be saved and verified, production does not begin. A database-changing batch never enters automatic rollback. A partial cross-repository rollback is never reported as recovered. Deployment stays blocked and the locks remain held until every affected repository, production runtime, and relevant database state has a truthful, repaired result."
         },
         {
           phase: "Production",
           title: "The Coordinator deploys the batch to production",
           story:
-            "With production permission and a saved rollback point, the Coordinator deploys the batch's exact main-derived artifacts in the required order. When the platform supports it, the rollout starts with a small share of users. More traffic moves to the batch only while the system stays healthy. If deployment fails, the Coordinator stops the rollout and follows the saved rollback path.",
+            "With production permission and saved recovery evidence, the Coordinator deploys the batch's exact main-derived artifacts in the required order. When the platform supports it, the rollout starts with a small share of users. More traffic moves to the batch only while the system stays healthy. If deployment fails, the Coordinator stops and follows the batch's saved recovery policy.",
           summary: "The staging-validated, main-derived artifacts enter production in a bounded way.",
           owner: "Product deployment workflows under Coordinator production ownership",
           happens:
@@ -862,13 +883,13 @@
           gap:
             "Canary or blue-green support, rollout increments, metric limits, observation periods, automated abort capability, and deployment callback trust still need to be defined.",
           failure:
-            "A deployment or rollout failure stops expansion and starts the saved bounded rollback. Automatic rollback proceeds only if every guard still passes. Otherwise the Coordinator records the exact partial state, blocks further deployment, keeps the locks, and asks for human recovery."
+            "A deployment or rollout failure stops expansion. A non-database batch starts the saved bounded rollback only if every guard still passes. A database-changing batch never rolls back automatically: the Coordinator preserves the exact application and database state, blocks further deployment, keeps the locks, and requires human recovery."
         },
         {
           phase: "Verify",
           title: "The Coordinator confirms the production versions",
           story:
-            "After the rollout, the Coordinator asks the frontend and backend which versions are running in production. It compares those answers with the exact approved batch. This step passes only when every required production version matches. If a version is wrong or cannot be confirmed, nothing is marked DONE and the Coordinator follows the saved rollback path.",
+            "After the rollout, the Coordinator asks the frontend and backend which versions are running in production. It compares those answers with the exact approved batch. This step passes only when every required production version matches. If a version is wrong or cannot be confirmed, nothing is marked DONE and the Coordinator follows the batch's saved recovery policy.",
           summary: "Production must match the exact approved frontend and backend versions.",
           owner: "Coordinator and production runtime proof",
           happens:
@@ -878,13 +899,13 @@
           gap:
             "The production runtime identity contracts, trusted proof sources, freshness limit, and required runtime list still need to be defined.",
           failure:
-            "A mismatch or missing answer stops verification and starts the saved bounded rollback. Automatic rollback proceeds only if every guard still passes. Otherwise the exact state remains saved, deployment stays blocked, the locks remain held, and human recovery is required."
+            "A mismatch or missing answer stops verification. A non-database batch starts bounded automatic rollback only if every guard still passes. A database-changing batch preserves the exact application and database state and requires human recovery. Nothing is marked DONE, deployment stays blocked, and the locks remain held until recovery is verified."
         },
         {
           phase: "Verify",
           title: "The Coordinator tests important user journeys in production",
           story:
-            "After the production versions match, the Coordinator runs safe tests of the important user journeys. The tests run against the exact approved batch. This step passes only when every required journey works. If a test fails or the result is unclear, nothing is marked DONE and the Coordinator follows the saved rollback path.",
+            "After the production versions match, the Coordinator runs safe tests of the important user journeys. The tests run against the exact approved batch. This step passes only when every required journey works. If a test fails or the result is unclear, nothing is marked DONE and the Coordinator follows the batch's saved recovery policy.",
           summary: "The exact production batch must pass safe end-to-end tests.",
           owner: "Coordinator and production end-to-end test integration",
           happens:
@@ -894,13 +915,13 @@
           gap:
             "The production-safe journeys, test-data rules, unclear-result policy, and retry rules still need to be defined.",
           failure:
-            "A failed or unclear test stops verification and starts the saved bounded rollback. Automatic rollback proceeds only if every guard still passes. Otherwise the exact state remains saved, deployment stays blocked, the locks remain held, and human recovery is required."
+            "A failed or unclear test stops verification. A non-database batch starts bounded automatic rollback only if every guard still passes. A database-changing batch preserves the exact application and database state and requires human recovery. Nothing is marked DONE, deployment stays blocked, and the locks remain held until recovery is verified."
         },
         {
           phase: "Verify",
           title: "The Coordinator watches production health",
           story:
-            "After the user journeys pass, the Coordinator watches production health for the required observation window. The full window must stay within the approved limits. If a health check fails or the window is incomplete, nothing is marked DONE and the Coordinator follows the saved rollback path.",
+            "After the user journeys pass, the Coordinator watches production health for the required observation window. The full window must stay within the approved limits. If a health check fails or the window is incomplete, nothing is marked DONE and the Coordinator follows the batch's saved recovery policy.",
           summary: "Production must remain healthy for the full observation window.",
           owner: "Coordinator and production monitoring",
           happens:
@@ -910,7 +931,7 @@
           gap:
             "The final health metrics, approved limits, observation duration, and incomplete-data rules still need to be defined.",
           failure:
-            "An unhealthy result, missing evidence, or incomplete window stops verification and starts the saved bounded rollback. Automatic rollback proceeds only if every guard still passes. Otherwise the exact state remains saved, deployment stays blocked, the locks remain held, and human recovery is required."
+            "An unhealthy result, missing evidence, or incomplete window stops verification. A non-database batch starts bounded automatic rollback only if every guard still passes. A database-changing batch preserves the exact application and database state and requires human recovery. Nothing is marked DONE, deployment stays blocked, and the locks remain held until recovery is verified."
         },
         {
           phase: "Done",
@@ -948,7 +969,15 @@
       function storyMarkup(step, index) {
         return `
           <h2 id="story-step-title-${index + 1}">${step.title}</h2>
-          <p class="story-prose">${storySentenceMarkup(step.story)}</p>
+          <div class="story-pair">
+            <div class="story-panel story-panel-what">
+              <p class="story-panel-label">What</p>
+              <p class="story-prose">${storySentenceMarkup(step.story)}</p>
+            </div>
+            <div class="story-panel story-panel-why">
+              <p class="story-panel-label">Why</p>
+            </div>
+          </div>
         `;
       }
 
@@ -981,24 +1010,10 @@
         }
 
         const activeLink = navLinks[activeIndex];
-        if (window.matchMedia("(max-width: 820px)").matches) {
-          storyNav.scrollTo({
-            left: activeLink.offsetLeft - storyNav.clientWidth / 2 + activeLink.clientWidth / 2,
-            behavior: "smooth"
-          });
-        } else {
-          const linkTop = activeLink.offsetTop;
-          const linkBottom = linkTop + activeLink.offsetHeight;
-          const visibleTop = storyNav.scrollTop;
-          const visibleBottom = visibleTop + storyNav.clientHeight;
-
-          if (linkTop < visibleTop || linkBottom > visibleBottom) {
-            storyNav.scrollTo({
-              top: Math.max(0, linkTop - storyNav.clientHeight / 2),
-              behavior: "smooth"
-            });
-          }
-        }
+        storyNav.scrollTo({
+          left: activeLink.offsetLeft - storyNav.clientWidth / 2 + activeLink.clientWidth / 2,
+          behavior: "smooth"
+        });
       }
 
       function scrollToStep(index) {
