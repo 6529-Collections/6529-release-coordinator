@@ -630,472 +630,186 @@
     <script>
       const steps = [
         {
-          phase: "Submit",
           title: "Submit the release request",
           story:
             "Someone sends one JSON request to the Coordinator. It lists the pull requests that must be released together. It says whether the frontend, backend, or both must be deployed. It gives the correct order and says whether the database will change. Pull requests that need each other must be in the same request. Separate requests are handled independently.",
           why:
-            "The Coordinator needs one complete plan before it starts. This keeps related changes together, prevents the wrong deployment order, and shows when automatic rollback may be unsafe.",
-          summary: "The JSON request describes the PRs, deployment targets, required order, and database-change declaration.",
-          owner: "Release submission",
-          happens:
-            "The JSON request is sent to the Coordinator. It contains the exact PRs, the frontend and backend deployment targets, any required order, and the requester's database-change declaration.",
-          proof:
-            "The Coordinator receives one complete request describing the intended release and its declared database classification.",
-          gap:
-            "The request format, database-change values, maximum batch size, dependency format, and duplicate-request rules still need to be defined.",
-          failure:
-            "A malformed or incomplete request is rejected before it is accepted. No merge, build, or deployment starts."
+            "The Coordinator needs one complete plan before it starts. This keeps related changes together, prevents the wrong deployment order, and shows when automatic rollback may be unsafe."
         },
         {
-          phase: "Submit",
           title: "Check who sent it",
           story:
             "The Coordinator checks the identity of the person or tool that sent the request. It checks whether they are allowed to release these pull requests. If yes, the request continues. If not, it is rejected.",
           why:
-            "Only approved people and tools should be able to start a release. This stops someone from deploying changes they are not allowed to control.",
-          summary: "The system proves who is asking and what they are allowed to release.",
-          owner: "Release Coordinator API",
-          happens:
-            "The API checks the requester identity and whether they may release the named pull requests. It records the real requester instead of trusting a name inside the request.",
-          proof:
-            "An auditable identity and authorization decision are attached to the release request.",
-          gap:
-            "Choose the requester authentication methods, service identities, role model, secret rotation, and emergency-access process.",
-          failure:
-            "The API rejects the request. Nothing is added to the waiting list and no external workflow is called."
+            "Only approved people and tools should be able to start a release. This stops someone from deploying changes they are not allowed to control."
         },
         {
-          phase: "Submit",
           title: "Check the pull requests",
           story:
             "The Coordinator checks every pull request. Each one must be open, approved, passing its required checks, ready to merge, and part of the release plan. The saved pull request version must still match. If anything is wrong, the request is rejected.",
           why:
-            "Only ready work should enter the waiting list. This stops an incomplete or changed pull request from blocking a later release.",
-          summary: "Every pull request must be ready and match the release plan.",
-          owner: "Release Coordinator using GitHub",
-          happens:
-            "The Coordinator checks each pull request's exact version, open state, target branch, approval, required checks, merge readiness, deployment target, and place in the release order.",
-          proof:
-            "The request stores the result of every pull request check and the exact version that was checked.",
-          gap:
-            "The exact readiness rules, valid deployment targets, duplicate handling, request limits, and GitHub retry rules still need to be defined.",
-          failure:
-            "If any pull request is not ready or does not match the request, the request is rejected. Nothing enters the waiting list."
+            "Only ready work should enter the waiting list. This stops an incomplete or changed pull request from blocking a later release."
         },
         {
-          phase: "Submit",
           title: "Decide recovery safety",
           story:
             "The request says whether the database will change. The Coordinator checks the changed files too. If either says yes, the request is marked as a database change. If the answer is unclear, a person decides. When the answer is clear, the Coordinator saves the request and adds it to the waiting list. Accepted only means saved and waiting. Nothing has been merged or deployed yet.",
           why:
-            "A database change may make the old application unsafe with the new data. This decision tells the Coordinator whether it may recover automatically or must wait for a person.",
-          summary: "The request gets one clear recovery rule before it enters the waiting list.",
-          owner: "Release Coordinator using its database and the changed files",
-          happens:
-            "The Coordinator compares the request's database answer with known database and schema file paths. A yes from either source means database change. An unclear answer waits for an allowed person. The request and its evidence are saved together.",
-          proof:
-            "The saved request shows the database answer, the files that were checked, the final decision, and any human decision.",
-          gap:
-            "The known database paths, allowed human decision makers, and rules for an unclear answer still need to be defined.",
-          failure:
-            "An unclear request does not enter the waiting list until a person decides. If the request cannot be saved safely, it is not accepted."
+            "A database change may make the old application unsafe with the new data. This decision tells the Coordinator whether it may recover automatically or must wait for a person."
         },
         {
-          phase: "Queue",
           title: "Reserve the release lane",
           story:
             "Accepted requests wait until no other batch is being released. When the lane is free, the Coordinator reserves it for the next batch. Until that batch finishes or recovery is complete, no other batch may freeze versions, change main, use staging, or deploy to production. Developers may continue working on pull requests, but those changes wait for a later batch.",
           why:
-            "One batch needs a clear path from its saved versions to production. This prevents main from changing underneath it, stops different versions from mixing, and keeps recovery safe.",
-          summary: "One active batch owns the full release path until it finishes or recovery is complete.",
-          owner: "Release Coordinator and its durable release-lane record",
-          happens:
-            "The Coordinator atomically reserves one global release lane for the next accepted work. The reservation prevents every other batch from freezing a manifest, changing protected main, using staging, or deploying to production. Request intake, pull-request development, review, and CI may continue outside the lane.",
-          proof:
-            "One durable release-lane record names the active release attempt, reservation owner, acquisition time, heartbeat, current phase, and terminal release or recovery result.",
-          gap:
-            "The lane lease duration, heartbeat, abandoned-owner recovery, fair queue selection, emergency override, and manual-deployment blocking rules still need to be defined.",
-          failure:
-            "If the Coordinator cannot prove that the lane is free and reserve it safely, no batch is frozen and nothing changes in main, staging, or production. If the reservation is later lost or becomes uncertain, all new release actions stop until the lane is recovered or a person resolves it."
+            "One batch needs a clear path from its saved versions to production. This prevents main from changing underneath it, stops different versions from mixing, and keeps recovery safe."
         },
         {
-          phase: "Batch",
           title: "Freeze the release batch",
           story:
             "With the release lane reserved, the Coordinator chooses the accepted requests that will be released together. It saves the exact pull request versions, what must be deployed, the correct order, and the current main version in each repository. A request that changes the database gets its own batch with only the changes it needs. Unrelated requests wait for another batch. After this, the batch cannot change.",
           why:
-            "The Coordinator needs one exact plan for the active release. Freezing the batch makes sure it tests and deploys the same code. Keeping database changes separate also protects unrelated work if recovery is needed.",
-          summary: "One fixed batch saves the exact plan, starting points, and database policy.",
-          owner: "Release Coordinator using GitHub and its database",
-          happens:
-            "The Coordinator selects accepted requests in stable order. If a selected request is database-changing, it creates a dedicated batch containing that request and only its complete required dependency group; no unrelated accepted request may join. Otherwise it may form a normal non-database batch. It saves every exact PR head SHA, database classification, deployment scope, dependency order, and current protected main SHA in one durable batch manifest.",
-          proof:
-            "The immutable batch manifest lists every included request, exact PR head, database classification and evidence, dependency edge, affected repository, saved main base, deployment target, ordering rule, and batch ID. A database-changing manifest proves that every included request belongs to the required dependency group.",
-          gap:
-            "The dependency-group validation, dedicated-batch scheduling, batch cutoff, maximum size, fair ordering, emergency priority, manifest format, signing, and retention rules still need to be defined.",
-          failure:
-            "If the exact plan cannot be saved, the batch is not frozen. Nothing changed, so the Coordinator saves the reason and releases the lane."
+            "The Coordinator needs one exact plan for the active release. Freezing the batch makes sure it tests and deploys the same code. Keeping database changes separate also protects unrelated work if recovery is needed."
         },
         {
-          phase: "Prepare",
           title: "Prepare the release branches",
           story:
             "The Coordinator creates a temporary release branch in every affected repository. Each branch starts from the saved main version. It checks that every pull request still has the saved version. It then adds the planned changes in the correct order. The real main branches do not change yet. If preparation fails, the reason is saved and the lane is released.",
           why:
-            "This gives the Coordinator a safe place to combine and test the batch. If a pull request changed or the changes do not fit together, it can stop without changing main.",
-          summary: "The exact planned changes are combined on temporary branches while main stays unchanged.",
-          owner: "Release Coordinator GitHub App and product repositories",
-          happens:
-            "For each affected repository, the Coordinator creates a release branch at the saved main base. It rechecks every expected PR head SHA and merges only those versions into the branch in the manifest order.",
-          proof:
-            "The batch links each release branch and resulting commit to its saved main base, exact PR heads, merge order, and GitHub results.",
-          gap:
-            "The release-branch naming, cleanup, merge strategy, changed-PR handling, conflict rules, and branch retention still need to be defined.",
-          failure:
-            "If a pull request changed or the planned merge fails, the batch stops with the exact reason. Main remains unchanged, and the Coordinator releases the lane."
+            "This gives the Coordinator a safe place to combine and test the batch. If a pull request changed or the changes do not fit together, it can stop without changing main."
         },
         {
-          phase: "Test",
           title: "Test the full batch",
           story:
             "The frontend and backend run their required checks on the combined release branches. These checks test the whole batch together. If both sides pass, the batch continues unchanged. If a required check fails, the reason is saved and the lane is released. Main still does not change.",
           why:
-            "A pull request can pass on its own but fail when combined with other work. This step finds those problems before anything reaches main or is deployed.",
-          summary: "The complete release is tested before any protected main branch changes.",
-          owner: "Product repository checks and combined release tests",
-          happens:
-            "The Coordinator dispatches the required repository checks and cross-repository tests against the exact release-branch commits. Every result is correlated with the batch manifest and branch SHAs.",
-          proof:
-            "The batch stores the exact release-branch commits, required check names, results, logs, workflow run IDs, and combined-test evidence.",
-          gap:
-            "The required branch checks, combined test matrix, callback trust, timeout rules, retry budget, and unclear-result policy still need to be defined.",
-          failure:
-            "A failed or unclear check saves the exact blocker. A proven service problem may retry the same test. A code failure stops for a person. Main remains unchanged, and the Coordinator releases the lane."
+            "A pull request can pass on its own but fail when combined with other work. This step finds those problems before anything reaches main or is deployed."
         },
         {
-          phase: "Promote",
           title: "Recheck before changing main",
           story:
             "After the full batch passes, the Coordinator checks every pull request again. Each one must still be open, approved, passing its required checks, and using the saved version. It also checks that every main branch still has the saved starting version. If everything matches, the Coordinator immediately continues. If anything changed, the batch stops and the lane is released.",
           why:
-            "The first checks may be old after waiting and testing. This is the last safety check before the Coordinator changes main.",
-          summary: "The tested batch must still be allowed and safe to move to main.",
-          owner: "Release Coordinator using GitHub and the release lane",
-          happens:
-            "While holding the release lane, the Coordinator rechecks the exact pull request versions, open state, approvals, required checks, dependencies, and saved main versions. It moves to the next step without releasing the lane.",
-          proof:
-            "The batch stores fresh GitHub results and the saved main versions checked just before main changes.",
-          gap:
-            "The freshness limit, GitHub retry rules, and emergency-change rules still need to be defined.",
-          failure:
-            "If any result is missing, old, or different, main does not change. The batch stops with the exact reason, and the Coordinator releases the lane."
+            "The first checks may be old after waiting and testing. This is the last safety check before the Coordinator changes main."
         },
         {
-          phase: "Promote",
           title: "Move tested code to main",
           story:
             "With the release lane still reserved, the Coordinator moves each main branch to the exact result that was tested. It checks the saved starting version again while making each change. It saves the old and new versions. The process continues only when the result is known for every affected repository.",
           why:
-            "The release lane stops other batches from changing main. Checking the starting version during the move catches a last-second change. Saving the old and new versions gives a clear recovery record.",
-          summary: "Only the tested release result may move protected main forward.",
-          owner: "Release Coordinator GitHub App, repository rules, and the release lane",
-          happens:
-            "While holding the release lane, the Coordinator rechecks all saved main bases before the first promotion and advances each protected main with expected-base guards. It records every old main SHA, tested release SHA, promotion result, and lane owner. The lane remains reserved until the release closes or rollback or repair is verified.",
-          proof:
-            "The promotion record links every previous main SHA and new main SHA to the tested release branches, batch manifest, GitHub results, and active release-lane reservation.",
-          gap:
-            "The exact protected-main promotion method, lane lifetime, multi-repository repair procedure, emergency access, and abandoned-release recovery still need to be defined.",
-          failure:
-            "If any main branch changed from its saved base, nothing is promoted. If promotion partly succeeds across repositories, no build or deployment begins. The Coordinator records the exact state and keeps the release lane reserved until new revert commits or a deliberate repair leave every affected repository truthful. It never resets or rewrites main."
+            "The release lane stops other batches from changing main. Checking the starting version during the move catches a last-second change. Saving the old and new versions gives a clear recovery record."
         },
         {
-          phase: "Build",
           title: "Build the release",
           story:
             "The Coordinator starts the frontend and backend builds from the exact main versions saved for the batch. These builds create the files that will be deployed. The Coordinator saves them and links them to the batch. Staging and production use these same saved builds. Production never uses a build made from a pull request or temporary branch.",
           why:
-            "Using the same saved build prevents staging from testing one thing while production receives another. Building only from main also gives a clear, trusted record of where the released code came from.",
-          summary: "Immutable deployable artifacts are built only from the promoted main versions.",
-          owner: "Product repository workflows and trusted artifact storage",
-          happens:
-            "The Coordinator dispatches canonical builds from the recorded protected-main SHAs. Artifact digests, provenance, logs, workflow run IDs, and included request IDs are linked to the batch manifest.",
-          proof:
-            "Every deployable has a trusted immutable artifact digest whose provenance names the exact promoted main SHA. No release-branch or pull-request artifact can enter the deployment manifest.",
-          gap:
-            "Artifact storage, signing, provenance, reproducibility, callback authentication, retention, and build-once support still need to be defined.",
-          failure:
-            "The batch stops before staging. A proven service problem may retry the same build. Otherwise the batch moves to recovery because main already changed. The database has not changed yet."
+            "Using the same saved build prevents staging from testing one thing while production receives another. Building only from main also gives a clear, trusted record of where the released code came from."
         },
         {
-          phase: "Staging",
           title: "Update the staging database",
           story:
             "This step runs only when the batch changes the database. The Coordinator applies the saved database change to staging before it deploys the backend. It checks that the change finished and that the database can be used. If the change fails or the result is unclear, the release stops for a person. If the batch has no database change, this step is skipped.",
           why:
-            "The application must be tested with the same database change planned for production. A failed database change may not be safe to undo automatically.",
-          summary: "A database-changing batch updates and checks staging before the backend is deployed.",
-          owner: "Backend database workflow",
-          happens:
-            "The Coordinator starts the saved staging database change and waits for its result. It records the exact change, run, time, and final database state.",
-          proof:
-            "The batch shows which database change ran and whether staging accepted it successfully.",
-          gap:
-            "The database workflow, version proof, timeout, and human recovery steps still need to be defined.",
-          failure:
-            "The backend is not deployed. The Coordinator saves the exact database state, keeps the release lane reserved, and waits for a person."
+            "The application must be tested with the same database change planned for production. A failed database change may not be safe to undo automatically."
         },
         {
-          phase: "Staging",
           title: "Deploy the backend to staging",
           story:
             "The Coordinator deploys the saved backend build to staging. It checks that the correct version is running and working. If a check fails, the release stops. If the database did not change, it may restore the last working version. If the database changed, a person decides how to recover.",
           why:
-            "Staging lets us test the real backend before users receive it. The backend goes first because the frontend may depend on it. The version check makes sure we test the same build that will go to production.",
-          summary: "The saved backend version is deployed to staging before the frontend.",
-          owner: "Backend deployment workflow",
-          happens:
-            "The Coordinator starts the backend staging deployment with the saved backend version. It waits until staging reports that the same version is running.",
-          proof:
-            "The staging backend reports the expected version and passes its health check.",
-          gap:
-            "Define the backend deployment workflow, version check, timeout, retry rules, and restoration process.",
-          failure:
-            "A non-database batch may retry a proven infrastructure problem with the same version or restore the last known-good staging version under policy. Any backend deployment, runtime, or health failure for a database-changing batch stops automatic recovery. The Coordinator preserves the exact application and database state, keeps the release lane reserved, and requires a human decision."
+            "Staging lets us test the real backend before users receive it. The backend goes first because the frontend may depend on it. The version check makes sure we test the same build that will go to production."
         },
         {
-          phase: "Staging",
           title: "Deploy the frontend to staging",
           story:
             "After the backend is ready, the Coordinator deploys the saved frontend build to staging. It checks that the correct version is running and works with the backend. If a check fails, the release stops. If the database did not change, it may restore the last working version. If the database changed, a person decides how to recover.",
           why:
-            "The frontend and backend must work together before users receive them. Testing them together in staging finds problems before production. The version check makes sure we test the same build that will go to production.",
-          summary: "The saved frontend version is deployed after the backend works.",
-          owner: "Frontend deployment workflow",
-          happens:
-            "After the backend passes its staging check, the Coordinator starts the frontend staging deployment with the saved frontend version. It waits until staging reports that the same version is running.",
-          proof:
-            "The staging frontend reports the expected version and works with the backend.",
-          gap:
-            "Define the frontend deployment workflow, version check, cache handling, timeout, retry rules, and restoration process.",
-          failure:
-            "A non-database batch may retry a proven infrastructure problem with the same version or restore the last known-good staging version under policy. Any frontend deployment, compatibility, runtime, or health failure for a database-changing batch stops automatic recovery. The Coordinator preserves the exact application and database state, keeps the release lane reserved, and requires a human decision."
+            "The frontend and backend must work together before users receive them. Testing them together in staging finds problems before production. The version check makes sure we test the same build that will go to production."
         },
         {
-          phase: "Verify",
           title: "Confirm staging versions",
           story:
             "The Coordinator checks which frontend and backend versions are running in staging. It compares them with the saved batch. The step passes only when every version matches. If a version is wrong or cannot be confirmed, the release stops and moves to recovery.",
           why:
-            "A deployment can report success even when staging is running old or mixed code. This check proves that staging has the exact batch we mean to test.",
-          summary: "Staging must run the exact saved frontend and backend versions.",
-          owner: "Coordinator and staging version proof",
-          happens:
-            "The Coordinator asks each required staging application for its running version and compares every answer with the saved batch.",
-          proof:
-            "The batch stores each reported staging version, the expected version, the time, and the result.",
-          gap:
-            "The trusted version source, freshness limit, and required application list still need to be defined.",
-          failure:
-            "A wrong or missing version stops staging checks. The batch moves to recovery, and the release lane stays reserved."
+            "A deployment can report success even when staging is running old or mixed code. This check proves that staging has the exact batch we mean to test."
         },
         {
-          phase: "Verify",
           title: "Test journeys in staging",
           story:
             "After the staging versions match, the Coordinator tests important user journeys from start to finish. The step passes only when every required journey works. If a test fails or the result is unclear, the release stops and moves to recovery.",
           why:
-            "Matching versions prove that the right code is running. These tests prove that the frontend, backend, and database work together before users receive the release.",
-          summary: "The exact staging batch must pass the important user journeys.",
-          owner: "Coordinator and staging journey tests",
-          happens:
-            "The Coordinator runs the agreed staging tests against the confirmed batch and saves every result.",
-          proof:
-            "The evidence links every journey, result, time, and test run to the confirmed staging versions.",
-          gap:
-            "The required journeys, test data, unclear-result rules, and retry rules still need to be defined.",
-          failure:
-            "A failed or unclear journey stops the release. The batch moves to recovery, and the release lane stays reserved."
+            "Matching versions prove that the right code is running. These tests prove that the frontend, backend, and database work together before users receive the release."
         },
         {
-          phase: "Production",
           title: "Save the recovery point",
           story:
             "Before production starts, the Coordinator checks which frontend and backend versions are running now. It saves those last working builds and the main versions from before this release. If any version or build is missing, production does not start. If the database did not change, these records may be used for automatic recovery. If the database changed, a person decides how to recover.",
           why:
-            "If production fails, the Coordinator must know exactly what worked before. Checking the current versions prevents recovery from starting with a wrong guess. A database change may make the old code unsafe, so recovery needs a person.",
-          summary: "Recovery evidence is saved before production, with automatic rollback limited to non-database batches.",
-          owner: "Coordinator, trusted artifact storage, runtime proof, and GitHub",
-          happens:
-            "The Coordinator checks the current production versions. It links the last working builds to the main versions from before this release. It also saves whether automatic recovery is allowed.",
-          proof:
-            "The recovery point names every last working build, running version, earlier main version, database decision, and recovery rule.",
-          gap:
-            "The saved-build lifetime, trusted production version source, and recovery-point lifetime still need to be defined.",
-          failure:
-            "If the recovery point cannot be checked and saved, production does not begin. The release lane stays reserved until the problem is resolved."
+            "If production fails, the Coordinator must know exactly what worked before. Checking the current versions prevents recovery from starting with a wrong guess. A database change may make the old code unsafe, so recovery needs a person."
         },
         {
-          phase: "Production",
           title: "Update the production database",
           story:
             "This step runs only when the batch changes the database. The Coordinator applies the same saved database change that passed in staging. It checks that the change finished and that the production database can be used. If the change fails or the result is unclear, deployment stops and a person decides how to recover. If the batch has no database change, this step is skipped.",
           why:
-            "The production application needs the planned database structure. The change passed in staging first, but production still needs its own clear result.",
-          summary: "A database-changing batch updates and checks production before the backend is deployed.",
-          owner: "Backend database workflow",
-          happens:
-            "The Coordinator starts the saved production database change and waits for its result. It records the exact change, run, time, and final database state.",
-          proof:
-            "The batch shows which database change ran and whether production accepted it successfully.",
-          gap:
-            "The database workflow, version proof, timeout, and human recovery steps still need to be defined.",
-          failure:
-            "The backend is not deployed. The Coordinator saves the exact database state, keeps the release lane reserved, and waits for a person."
+            "The production application needs the planned database structure. The change passed in staging first, but production still needs its own clear result."
         },
         {
-          phase: "Production",
           title: "Deploy the backend to production",
           story:
             "After the recovery point is saved and any database change is complete, the Coordinator deploys the saved backend build to production. It checks that the correct backend version is running and healthy. If the deployment fails or the result is unclear, the release stops and moves to recovery.",
           why:
-            "The backend goes first because the frontend may depend on it. Production receives the same backend build that passed the staging tests.",
-          summary: "The tested backend build is deployed and checked in production first.",
-          owner: "Backend production deployment workflow",
-          happens:
-            "While holding the release lane, the Coordinator deploys only the saved backend build and waits for its version and health result.",
-          proof:
-            "The batch stores the backend build identity, deployment result, running version, health result, and time.",
-          gap:
-            "The backend deployment command, version proof, health check, timeout, and callback trust still need to be defined.",
-          failure:
-            "The frontend is not deployed. The Coordinator saves the exact production state, keeps the release lane reserved, and moves to recovery."
+            "The backend goes first because the frontend may depend on it. Production receives the same backend build that passed the staging tests."
         },
         {
-          phase: "Production",
           title: "Deploy the frontend to production",
           story:
             "After the backend is ready, the Coordinator deploys the saved frontend build to production. It checks that the correct frontend version is running and works with the backend. If the deployment fails or the result is unclear, the release stops and moves to recovery.",
           why:
-            "The frontend goes after the backend it may need. Production receives the same frontend build that passed the staging tests.",
-          summary: "The tested frontend build is deployed after the production backend is ready.",
-          owner: "Frontend production deployment workflow",
-          happens:
-            "While holding the release lane, the Coordinator deploys only the saved frontend build and waits for its version and health result.",
-          proof:
-            "The batch stores the frontend build identity, deployment result, running version, health result, and time.",
-          gap:
-            "The frontend deployment command, version proof, cache handling, timeout, and callback trust still need to be defined.",
-          failure:
-            "The Coordinator stops the rollout, saves the exact production state, keeps the release lane reserved, and moves to recovery."
+            "The frontend goes after the backend it may need. Production receives the same frontend build that passed the staging tests."
         },
         {
-          phase: "Production",
           title: "Release to more users",
           story:
             "When the platform supports a gradual rollout, the Coordinator starts with a small group of users. It gives the release to more users only while the system stays healthy. If the platform cannot do this, the full deployment is already live and this step is skipped. If health becomes worse, the rollout stops and moves to recovery.",
           why:
-            "Starting small limits the number of users affected if something goes wrong. The release reaches everyone only after the early results stay healthy.",
-          summary: "A gradual rollout expands only while its early health checks pass.",
-          owner: "Coordinator and the production deployment platform",
-          happens:
-            "The Coordinator moves traffic through the supported rollout stages and checks the agreed health signals after each change.",
-          proof:
-            "The batch stores each traffic level, time, health result, and decision to continue or stop.",
-          gap:
-            "The supported rollout method, traffic levels, health limits, wait times, and stop command still need to be defined.",
-          failure:
-            "The Coordinator stops adding users, saves the exact production state, keeps the release lane reserved, and moves to recovery."
+            "Starting small limits the number of users affected if something goes wrong. The release reaches everyone only after the early results stay healthy."
         },
         {
-          phase: "Verify",
           title: "Confirm production versions",
           story:
             "After deployment, the Coordinator checks which frontend and backend versions are running in production. It compares them with the exact batch tested in staging. The step passes only when every version matches. If a version is wrong or cannot be confirmed, the release stops and moves to recovery.",
           why:
-            "A deployment can report success even when the wrong version is running. This check proves that users received the same batch that passed the staging tests. It also catches a partial deployment where only the frontend or backend changed.",
-          summary: "Production must match the exact tested frontend and backend versions.",
-          owner: "Coordinator and production runtime proof",
-          happens:
-            "The Coordinator checks every required production runtime against the tested batch manifest. It records each reported version, response, and timestamp.",
-          proof:
-            "The evidence links the tested batch manifest to matching frontend and backend runtime identities at a known time.",
-          gap:
-            "The production runtime identity contracts, trusted proof sources, freshness limit, and required runtime list still need to be defined.",
-          failure:
-            "A wrong or missing version stops the release. The Coordinator saves the exact production state, keeps the release lane reserved, and moves to recovery."
+            "A deployment can report success even when the wrong version is running. This check proves that users received the same batch that passed the staging tests. It also catches a partial deployment where only the frontend or backend changed."
         },
         {
-          phase: "Verify",
           title: "Test key journeys in production",
           story:
             "After the production versions match, the Coordinator runs safe tests of important user journeys. These tests use the exact batch running in production. The step passes only when every required journey works. If a test fails or the result is unclear, the release stops and moves to recovery.",
           why:
-            "The correct version can still fail because production has different data, settings, or services. These tests prove that users can complete the most important actions. They catch problems that may not appear in staging.",
-          summary: "The exact production batch must pass safe end-to-end tests.",
-          owner: "Coordinator and production end-to-end test integration",
-          happens:
-            "The Coordinator runs the allowed read-only production tests after the version check passes. It records every required journey and result against the exact batch.",
-          proof:
-            "The test evidence links each required journey, result, timestamp, and log to the tested batch manifest and confirmed production versions.",
-          gap:
-            "The production-safe journeys, test-data rules, unclear-result policy, and retry rules still need to be defined.",
-          failure:
-            "A failed or unclear test stops the release. The Coordinator saves the exact production state, keeps the release lane reserved, and moves to recovery."
+            "The correct version can still fail because production has different data, settings, or services. These tests prove that users can complete the most important actions. They catch problems that may not appear in staging."
         },
         {
-          phase: "Verify",
           title: "Watch production health",
           story:
             "After the user journey tests pass, the Coordinator watches production for a set amount of time. It checks agreed health signals, such as errors, slow responses, and important alerts. The step passes only when production stays healthy for the full time. If a check fails or information is missing, the release stops and moves to recovery.",
           why:
-            "Some problems appear only after real users start using the release. Others take time to appear. Watching production before closing the release catches these problems while recovery is still ready.",
-          summary: "Production must remain healthy for the full observation window.",
-          owner: "Coordinator and production monitoring",
-          happens:
-            "The Coordinator watches the required production metrics and alerts for the complete post-rollout window. It records their values against the exact batch.",
-          proof:
-            "The health evidence shows the observation start and end, required metrics, required limits, alerts, and the exact production versions.",
-          gap:
-            "The final health metrics, required limits, observation duration, and incomplete-data rules still need to be defined.",
-          failure:
-            "An unhealthy result or missing information stops the release. The Coordinator saves the exact production state, keeps the release lane reserved, and moves to recovery."
+            "Some problems appear only after real users start using the release. Others take time to appear. Watching production before closing the release catches these problems while recovery is still ready."
         },
         {
-          phase: "Recover",
           title: "Recover after a failure",
           story:
             "This step runs only after main, staging, or production changed and a later step failed. The Coordinator stops new release work and saves the exact current state. If the database did not change and every safety check passes, it restores the last working builds and adds new commits to main that undo the failed code. It then checks the restored versions and health. If the database changed or anything is unclear, a person decides what to do. The release lane stays reserved until the system is safe and its exact state is known.",
           why:
-            "A failed release may leave only part of the system changed. The Coordinator must not guess. It either proves that one working version was restored or gives a person the exact facts needed to recover safely.",
-          summary: "A failed release reaches one known safe state or waits for a person.",
-          owner: "Release Coordinator and, when needed, a human operator",
-          happens:
-            "The Coordinator stops new work, records what changed, checks the saved recovery point, and restores the last working builds only when automatic recovery is allowed. It adds new commits that undo the failed code instead of rewriting main history. It checks the restored versions and health before releasing the lane.",
-          proof:
-            "The recovery record shows the failure, exact state before recovery, every recovery action, final running versions, final health, main result, and lane result.",
-          gap:
-            "The restore commands, revert method, health checks, retry limits, and human recovery roles still need to be defined.",
-          failure:
-            "If safe recovery cannot be proved, no more release work starts. The exact state stays saved, the lane stays reserved, and a person must decide."
+            "A failed release may leave only part of the system changed. The Coordinator must not guess. It either proves that one working version was restored or gives a person the exact facts needed to recover safely."
         },
         {
-          phase: "Done",
           title: "Close the release",
           story:
             "After all production checks pass, the Coordinator saves the full release record. It marks the batch and every included request as finished. It releases the release lane so the next batch can start. It also sends the final result. If any required check did not pass, the release is not closed.",
           why:
-            "The saved record proves what was released and which checks passed. Marking everything together prevents a partly finished result. The release lane stays reserved until the release is truly complete or recovery has finished.",
-          summary: "Complete saved proof creates DONE and frees the production path.",
-          owner: "Coordinator database, audit evidence, and notification integrations",
-          happens:
-            "The Coordinator saves one terminal evidence bundle. It records DONE for the batch and every included request, releases the global release lane, and sends a concise terminal notification.",
-          proof:
-            "DONE links the batch, every included request, exact manifest, artifact digests, runtime versions, tests, metrics, workflow runs, and complete state history.",
-          gap:
-            "The atomic close rules, notification channels, notification retry, audit retention, and how the Coordinator itself is released still need to be defined.",
-          failure:
-            "If the proof or final state cannot be saved safely, nothing is marked DONE and the release lane is not released. The exact state remains saved until recovery is completed and verified. A notification failure retries from the saved terminal result without changing the release truth."
+            "The saved record proves what was released and which checks passed. Marking everything together prevents a partly finished result. The release lane stays reserved until the release is truly complete or recovery has finished."
         }
       ];
 
