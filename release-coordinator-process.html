@@ -500,6 +500,10 @@
         line-height: 1.35;
       }
 
+      .story-content {
+        min-width: 0;
+      }
+
       .story {
         min-width: 0;
         padding-bottom: 32vh;
@@ -608,38 +612,27 @@
           <ol id="story-nav-list"></ol>
         </nav>
 
-        <article class="story" id="story" aria-label="Release process"></article>
+        <div class="story-content">
+          <p class="diagram-context">
+            Before the process starts, every pull request is open, approved, has passed the
+            required checks, and has no merge conflicts. Unready pull requests are not included.
+          </p>
+          <article class="story" id="story" aria-label="Release process"></article>
+        </div>
       </div>
     </main>
 
     <script>
       const steps = [
         {
-          phase: "Ready",
-          title: "Make sure every PR is ready to merge",
-          story:
-            "Before sending a release request, make sure every PR is ready to merge. Required reviews must be complete, all checks must pass, and there must be no merge conflicts. Fix anything that is not ready first. The Coordinator checks each PR before accepting the request and checks the exact code again immediately before merging.",
-          summary: "Keep unfinished work out of the Coordinator.",
-          owner: "PR author, reviewers, and GitHub",
-          happens:
-            "People review the PR, and the normal GitHub checks run. The Release Coordinator does nothing yet.",
-          proof:
-            "The PR is approved, all checks pass, and the exact code version is known.",
-          gap:
-            "Define the exact required checks, review rules, deploy-unit metadata, and who may declare a PR ready in each repository.",
-          failureLabel: "If not ready",
-          failure:
-            "Fix the PR and try again later."
-        },
-        {
           phase: "Submit",
-          title: "Send the release request",
+          title: "The release request is submitted",
           story:
-            "When all PRs are ready, send them to the Coordinator as one release request. The request says which PRs belong together, what must be deployed, and whether one deployment must finish before another—for example, backend before frontend. Normal PRs from the same project do not need an order. Sending the request does not accept it yet. After it is accepted and merged, it may be deployed together with other ready requests in one deployment batch.",
-          summary: "One request names the PRs, deployment targets, and any required deployment order.",
+            "The Coordinator receives a release request as a JSON document. The request lists the pull requests that belong together. It states whether the frontend, backend, or both must be deployed. It also records any required order, such as backend before frontend. Pull requests that depend on each other belong in the same request. Separate requests are treated as independent.",
+          summary: "The JSON request describes the PRs, deployment targets, and any required order.",
           owner: "Release submission",
           happens:
-            "The release request is sent to the Coordinator. It contains the exact PRs, which changes must happen first, and the affected services.",
+            "The JSON request is sent to the Coordinator. It contains the exact PRs, the frontend and backend deployment targets, and any required order.",
           proof:
             "The Coordinator receives one complete request describing the intended release.",
           gap:
@@ -649,9 +642,9 @@
         },
         {
           phase: "Submit",
-          title: "Check who sent the request",
+          title: "The Coordinator checks who sent the request",
           story:
-            "The Coordinator checks who sent the request and whether they are allowed to submit it. If they are allowed, the request continues. If not, nothing is merged or deployed.",
+            "The Coordinator confirms the requester's identity and checks what they are allowed to release. If the requester has permission, the request continues. If not, the Coordinator rejects it.",
           summary: "The system proves who is asking and what they are allowed to release.",
           owner: "Release Coordinator API",
           happens:
@@ -665,9 +658,9 @@
         },
         {
           phase: "Submit",
-          title: "The request is accepted or rejected",
+          title: "The Coordinator accepts or rejects the request",
           story:
-            "Before accepting the request, the Coordinator checks that every PR is open, approved, tested, and ready to merge. It also checks that all deployment targets exist and the requested order is possible. If every check passes, it saves the request, gives it an ID, and adds it to the list of requests waiting to merge. Otherwise, it rejects the request.",
+            "The Coordinator checks every pull request. It confirms that each one is open, approved, has passed the required checks, can be merged, and fits the deployment plan. If everything passes, the Coordinator saves the request and adds it to the waiting list. Accepted means saved and waiting—not merged or deployed. If anything fails, the Coordinator rejects the request.",
           summary: "Only a valid, fully planned request is accepted and saved.",
           owner: "Release Coordinator using GitHub and its database",
           happens:
@@ -680,110 +673,94 @@
             "The request is rejected if any PR or deployment rule is invalid. The Coordinator returns an ID only after the accepted request and its plan are safely saved."
         },
         {
-          phase: "Merge",
-          title: "The request waits for its merge turn",
-          story:
-            "Once accepted, the request waits for a short turn to merge its PRs. Earlier accepted requests go first. The Coordinator starts the next request automatically when its turn arrives. This waiting line controls only merging, not building or deployment. Until its turn arrives, the request changes nothing.",
-          summary: "Accepted requests receive short merge turns in order.",
-          owner: "Coordinator queue",
-          happens:
-            "The request enters READY_TO_MERGE. Earlier accepted work keeps priority unless a recorded operator decision cancels, supersedes, or reorders it. PR development and review continue normally while the request waits.",
-          proof:
-            "The database shows one stable waiting position and why any earlier request is still ahead.",
-          gap:
-            "Define fair ordering, priority classes, maximum waiting time, cancellation authority, and whether emergency requests may overtake normal work.",
-          failure:
-            "A waiting or reservation timeout does not change GitHub. The request remains waiting or becomes NEEDS_HUMAN with the exact blocker recorded."
-        },
-        {
-          phase: "Merge",
-          title: "The repositories are reserved for this request",
-          story:
-            "When the request's turn arrives, the Coordinator briefly reserves every repository it needs. This stops two requests from merging into the same repository at the same time. GitHub still protects the main branch, and only the approved Coordinator app can perform these merges. If every required repository cannot be reserved, the Coordinator releases any partial reservations and waits without changing code.",
-          summary: "Only one Coordinator worker may perform a repo's final merge operation.",
-          owner: "Coordinator database plus GitHub repository rules",
-          happens:
-            "The worker transactionally claims leases for every affected repository in one canonical order. GitHub keeps main protected at all times; other actors cannot bypass it, and the narrowly permitted Coordinator GitHub App is the normal merge actor.",
-          proof:
-            "There is one active lease owner per repository and one auditable GitHub App identity for every merge.",
-          gap:
-            "Specify lease length, heartbeat and takeover rules, GitHub App permissions, branch protections, and the audited emergency-admin path.",
-          failure:
-            "If all required leases cannot be claimed, the worker releases any partial claims and waits. It performs no repository mutation."
-        },
-        {
-          phase: "Merge",
-          title: "The request's PRs are checked and merged",
-          story:
-            "While the repositories are reserved, the Coordinator checks the current main branches, the exact PR code, reviews, tests, and merge status. If everything passes, it immediately merges only those checked PR versions in the safe order. GitHub refuses the merge if a PR changes after the check. If a check fails, nothing is merged. If only part of a frontend and backend merge succeeds, the request stops and a human chooses the repair before it can join a deployment batch.",
-          summary: "The checked PR versions are merged immediately, or nothing is merged.",
-          owner: "Coordinator GitHub App and repository merge controls",
-          happens:
-            "While holding every required repository lease, the worker refreshes main and PR state, then calls GitHub's merge API with each expected PR head SHA. Protected main branches and the expected SHA prevent different code from being merged. Cross-repository results are recorded one item at a time.",
-          proof:
-            "The request stores the final checked state and GitHub's exact success or failure result for every planned PR.",
-          gap:
-            "Choose merge or squash strategy, exact GitHub App permissions, whether changed bases require a new request, and the repair process for partial cross-repository success.",
-          failure:
-            "Before the first merge, any failed check changes nothing. After a partial cross-repository merge, the request records exactly what changed and joins no deployment batch until a human chooses the repair."
-        },
-        {
           phase: "Batch",
-          title: "The merged request joins the next deployment batch",
+          title: "The Coordinator freezes the next release batch",
           story:
-            "After every PR in the request is merged, the Coordinator records the result and adds the request to the next open deployment batch. It then releases the repository reservations so another request can take its merge turn and join the same batch. A request with an incomplete merge cannot join a batch.",
-          summary: "Successfully merged requests collect in the next open deployment batch.",
-          owner: "Release Coordinator",
+            "Accepted requests wait for the next release batch. When the Coordinator forms that batch, it saves the exact pull request versions, the frontend and backend scope, the required order, and the current main version for every affected repository. The batch is then fixed. Later changes belong to another batch.",
+          summary: "One fixed batch saves the exact plan and starting point for every repository.",
+          owner: "Release Coordinator using GitHub and its database",
           happens:
-            "The Coordinator records the request ID, exact merge results, affected deployment targets, and required ordering in the open batch. It then releases every repository reservation held by that request.",
+            "The Coordinator selects accepted requests in stable order. It saves their exact PR head SHAs, deployment scope, dependency order, and the current protected main SHA for every affected repository in one durable batch manifest.",
           proof:
-            "The open batch lists every included request and the exact GitHub result for each of its PRs. No repository reservation remains after the request is recorded.",
+            "The immutable batch manifest lists every included request, exact PR head, affected repository, saved main base, deployment target, ordering rule, and batch ID.",
           gap:
-            "Define maximum batch size, maximum collection time, whether urgent requests may force an early cutoff, and safe recovery for a leaked repository reservation.",
+            "The batch cutoff, maximum size, fair ordering, emergency priority, manifest format, signing, and retention rules still need to be defined.",
           failure:
-            "If the merged result cannot be safely recorded, the request does not join a batch and nothing is built or deployed from it. A human recovers the exact result from GitHub."
+            "If the exact plan and every saved main base cannot be recorded safely, the batch is not frozen. No release branch, main change, build, or deployment begins."
         },
         {
-          phase: "Batch",
-          title: "The deployment batch is closed and saved",
+          phase: "Prepare",
+          title: "The Coordinator prepares the release branches",
           story:
-            "While another batch is moving through staging and production, successfully merged requests collect in the next open batch. When the current batch finishes in production, the Coordinator closes the next batch and saves its exact frontend and backend versions. If no deployment is running, the first ready batch can close immediately. A batch may also close early when it reaches its safety limit. Once closed, no more requests can join it. Later requests go into the following batch.",
-          summary: "One fixed batch names every included request and the exact code to deploy.",
-          owner: "Release Coordinator",
+            "The Coordinator creates a temporary release branch from the saved main version in each affected repository. It confirms that every pull request still has the exact saved version. It then merges the planned changes into those branches in the required order. Main does not change during this step.",
+          summary: "The exact planned changes are combined on temporary branches while main stays unchanged.",
+          owner: "Release Coordinator GitHub App and product repositories",
           happens:
-            "The Coordinator atomically closes the open batch, captures the complete frontend and backend main SHAs, includes the union of required deployment targets and ordering rules, and opens a new empty batch for later requests.",
+            "For each affected repository, the Coordinator creates a release branch at the saved main base. It rechecks every expected PR head SHA and merges only those versions into the branch in the manifest order.",
           proof:
-            "One immutable batch manifest lists every included request, exact source version, deployment target, ordering rule, and batch ID.",
+            "The batch links each release branch and resulting commit to its saved main base, exact PR heads, merge order, and GitHub results.",
           gap:
-            "Finalize the exact cutoff trigger, maximum batch size, manifest format, signing, retention, and what happens when the deployment lane is free but another request is still merging.",
+            "The release-branch naming, cleanup, merge strategy, changed-PR handling, conflict rules, and branch retention still need to be defined.",
           failure:
-            "If the batch cannot be durably saved, no build or deployment begins. The merged code remains on main, and the exact batch must be recovered from the recorded request and GitHub evidence."
+            "If a pull request changed or a planned merge fails, the batch stops with the exact reason. Main remains unchanged, and no artifact or deployment is produced."
+        },
+        {
+          phase: "Test",
+          title: "The Coordinator tests the combined release",
+          story:
+            "The product repositories run the required checks and tests against the combined release branches. The batch continues only when the exact frontend and backend results both pass. If a merge or test fails, the batch stops and main remains unchanged.",
+          summary: "The complete release is tested before any protected main branch changes.",
+          owner: "Product repository checks and combined release tests",
+          happens:
+            "The Coordinator dispatches the required repository checks and cross-repository tests against the exact release-branch commits. Every result is correlated with the batch manifest and branch SHAs.",
+          proof:
+            "The batch stores the exact release-branch commits, required check names, results, logs, workflow run IDs, and combined-test evidence.",
+          gap:
+            "The required branch checks, combined test matrix, callback trust, timeout rules, retry budget, and unclear-result policy still need to be defined.",
+          failure:
+            "A failed merge, check, or test records the exact blocker and stops the batch. Main remains unchanged. A proven infrastructure failure may retry the same branch commits; a code fix enters a later request and batch."
+        },
+        {
+          phase: "Promote",
+          title: "The Coordinator promotes the tested release to main",
+          story:
+            "After the release branches pass, the Coordinator locks the affected release path and checks that every protected main branch still matches its saved starting point. Only then does it move each main branch to the tested release result. It records the previous and new main versions. Every affected repository must reach a truthful result before building or deployment can begin.",
+          summary: "Only the tested release result may move protected main forward.",
+          owner: "Release Coordinator GitHub App, repository rules, and Coordinator locks",
+          happens:
+            "The Coordinator claims the required repository release locks, rechecks all saved main bases before the first promotion, and advances each protected main with expected-base guards. It records every old main SHA, tested release SHA, promotion result, and lock owner. The locks remain until the release closes or a rollback or repair is verified.",
+          proof:
+            "The promotion record links every previous main SHA and new main SHA to the tested release branches, batch manifest, GitHub results, and active release locks.",
+          gap:
+            "The exact protected-main promotion method, lock lifetime, multi-repository repair procedure, emergency access, and abandoned-release recovery still need to be defined.",
+          failure:
+            "If any main branch changed from its saved base, nothing is promoted. If promotion partly succeeds across repositories, no build or deployment begins. The Coordinator records the exact state and keeps the release path locked until new revert commits or a deliberate repair leave every affected repository truthful. It never resets or rewrites main."
         },
         {
           phase: "Build",
-          title: "The deployment batch is built once",
+          title: "The Coordinator builds the promoted release",
           story:
-            "The Coordinator asks the frontend and backend repositories to build the exact code saved for the closed batch. Every output is linked to the batch and all requests inside it. The same outputs move through staging and production; the system never rebuilds from the newest main branch. If a build fails, staging stays unchanged. A temporary infrastructure problem may retry the same batch, but a code fix must enter a new request and a later batch.",
-          summary: "Build once from the saved SHAs, then promote the same exact output.",
+            "The Coordinator starts the product repositories' build workflows from the exact promoted main versions. It saves the frontend and backend artifacts that belong to the batch. Staging and production use those same artifacts. Production never uses an artifact built from a pull request or temporary release branch.",
+          summary: "Immutable deployable artifacts are built only from the promoted main versions.",
           owner: "Product repository workflows and trusted artifact storage",
           happens:
-            "The Coordinator dispatches canonical frontend and backend builds with the batch ID and captured SHAs. Repositories keep their own build logic. Artifact digests, provenance, logs, and workflow run IDs are linked to the batch manifest and included request IDs.",
+            "The Coordinator dispatches canonical builds from the recorded protected-main SHAs. Artifact digests, provenance, logs, workflow run IDs, and included request IDs are linked to the batch manifest.",
           proof:
-            "Every deployable has a trusted immutable artifact digest bound to the saved source SHA. Environment-specific builds, if unavoidable, get separate digests from the same captured source.",
+            "Every deployable has a trusted immutable artifact digest whose provenance names the exact promoted main SHA. No release-branch or pull-request artifact can enter the deployment manifest.",
           gap:
-            "Confirm artifact storage, signing and provenance, reproducibility expectations, workflow callback authentication, retention, and which deployables support build-once promotion.",
+            "Artifact storage, signing, provenance, reproducibility, callback authentication, retention, and build-once support still need to be defined.",
           failure:
-            "The batch stops before staging. Main contains the merged code, but environments remain unchanged. A code fix enters a new request and later batch; an infrastructure retry uses the same saved batch manifest."
+            "The batch stops before staging and no environment changes. A proven infrastructure failure may retry the same promoted main versions. A code failure requires a safe revert-commit or repair decision, and the release locks remain held until the repository state is verified."
         },
         {
           phase: "Staging",
-          title: "The deployment batch waits for staging",
+          title: "The batch waits until staging is free",
           story:
-            "Built batches wait for an exclusive turn in the shared staging environment. Only one batch may change and test staging at a time, so different versions cannot become mixed or accidentally move backward. When this batch reaches the front of the line, the Coordinator records that it owns staging. Until then, no staging deployment starts.",
+            "The Coordinator keeps the built batch waiting until shared staging is free. Only one batch can change and check staging at a time. Required earlier batches must finish first. While another batch owns staging, the Coordinator does not start this batch's deployment. This keeps different batches from mixing together or moving staging backward.",
           summary: "Shared staging accepts only one changing and validating batch at a time.",
           owner: "Coordinator staging lane",
           happens:
-            "Built batches wait independently from request merge turns. A batch may claim staging only after required earlier batches are terminal, so staging cannot accidentally move backward or mix two manifests.",
+            "Built batches wait separately from request merging. A batch may use staging only after required earlier batches are finished, so staging cannot accidentally move backward or mix two batches.",
           proof:
             "One durable staging reservation names the batch, current known-good manifest, issued operations, and expiry or heartbeat state.",
           gap:
@@ -793,41 +770,41 @@
         },
         {
           phase: "Staging",
-          title: "The batch's backend changes are deployed to staging",
+          title: "The Coordinator deploys the backend to staging",
           story:
-            "In staging, the Coordinator deploys the combined backend services affected by all requests in the batch and follows the saved order. A required service must finish and report the correct version before a service that depends on it can start. Independent services may deploy together when that is known to be safe. A temporary infrastructure problem may retry the same built output. A code or health problem stops the remaining services, may restore the last good staging version, and asks a human for help.",
-          summary: "Affected backend units follow a saved DAG; independent units may run together.",
-          owner: "Backend canonical deployment workflows",
+            "The Coordinator starts the backend staging deployment with the saved backend version. It waits until staging reports that the exact version is running and its health check passes. A temporary infrastructure problem may retry the same version. If the backend does not work, the Coordinator stops the deployment and restores the last working version when possible.",
+          summary: "The saved backend version is deployed to staging before the frontend.",
+          owner: "Backend deployment workflow",
           happens:
-            "The Coordinator dispatches only the affected backend deployables. Prerequisites complete and prove their runtime version before dependent services start. Independent services may deploy concurrently when the product-owned graph says this is safe.",
+            "The Coordinator starts the backend staging deployment with the saved backend version. It waits until staging reports that the same version is running.",
           proof:
-            "Each required backend runtime reports the exact expected artifact or source identity, with workflow and health evidence attached to the batch.",
+            "The staging backend reports the expected version and passes its health check.",
           gap:
-            "Inventory every deployable, dependency edge, runtime identity endpoint, timeout, safe concurrency rule, and restoration procedure.",
+            "Define the backend deployment workflow, version check, timeout, retry rules, and restoration process.",
           failure:
-            "A proven infrastructure failure retries the same artifact within budget. A product or health failure stops dependants, restores known-good staging where defined, and moves the batch to NEEDS_HUMAN."
+            "A temporary deployment problem retries the same version. If the backend is broken, the deployment stops and restores the last working version when possible."
         },
         {
           phase: "Staging",
-          title: "The batch's frontend changes are deployed to staging",
+          title: "The Coordinator deploys the frontend to staging",
           story:
-            "After the required backend services are running the correct versions, the Coordinator deploys the frontend output saved for the batch. It does not rebuild from the latest main branch or choose newer code. This step finishes only when the frontend reports the expected version and can safely use the backend. A temporary infrastructure problem may retry the same output. A real product problem restores the last good frontend and blocks the batch from moving forward.",
-          summary: "The saved frontend artifact moves only after its backend contract is present.",
-          owner: "Frontend canonical deployment workflow",
+            "After the backend is ready, the Coordinator starts the frontend staging deployment with the saved frontend version. It waits until staging reports that the exact version is running and works with the backend. A temporary infrastructure problem may retry the same version. If the frontend does not work, the Coordinator stops the deployment and restores the last working version when possible.",
+          summary: "The saved frontend version is deployed after the backend works.",
+          owner: "Frontend deployment workflow",
           happens:
-            "Once required backend runtimes prove the expected batch versions, the Coordinator dispatches the frontend staging deployment. It does not rebuild from newest main or substitute a newer PR head.",
+            "After the backend passes its staging check, the Coordinator starts the frontend staging deployment with the saved frontend version. It waits until staging reports that the same version is running.",
           proof:
-            "The staging frontend reports the exact expected artifact digest or captured SHA and can reach the required backend batch versions safely.",
+            "The staging frontend reports the expected version and works with the backend.",
           gap:
-            "Define the frontend runtime identity contract, CDN/cache invalidation proof, environment configuration handling, and known-good restoration process.",
+            "Define the frontend deployment workflow, version check, cache handling, timeout, retry rules, and restoration process.",
           failure:
-            "Retry only proven infrastructure failure with the same artifact. Otherwise restore the last known-good frontend, verify it, and keep the batch out of STAGING_VALIDATED."
+            "A temporary deployment problem retries the same version. If the frontend is broken, the deployment stops and restores the last working version when possible."
         },
         {
           phase: "Verify",
-          title: "The deployment batch is checked in staging",
+          title: "The Coordinator checks the batch in staging",
           story:
-            "With the batch's frontend and backend versions running in staging, the Coordinator checks the whole system. It asks every part which version is running, compares those answers with the saved batch, and then runs tests that follow real user journeys from start to finish. The batch passes staging only when both the exact versions and the user journeys pass. If a check fails, the last good staging batch is restored and checked before the process stops for human review.",
+            "The Coordinator asks the frontend and backend which versions are running in staging. It compares those answers with the saved batch. It then runs tests that follow real user journeys from start to finish. The batch becomes STAGING_VALIDATED only when the exact versions and the user journeys both pass. Workflow success alone is not enough. If either check fails, the Coordinator restores the last good staging batch and verifies the restoration before the process stops for human review.",
           summary: "Workflow success is not enough; the saved batch must be running and working.",
           owner: "Runtime proof endpoints and manifest-bound E2E",
           happens:
@@ -841,9 +818,9 @@
         },
         {
           phase: "Production",
-          title: "Production permission is checked for the batch",
+          title: "The Coordinator checks production approval",
           story:
-            "Passing staging does not automatically allow the batch into production. The Coordinator checks the rules and permissions for every request inside it. If any included request needs human approval, the whole batch waits for that approval. The approval names the exact saved batch. If permission is denied or expires, production does not change.",
+            "Passing staging does not give the batch permission to enter production. The Coordinator checks the rules and permissions for every request in the batch. The strictest rule applies to the whole batch. If any request needs human approval, the whole batch waits. The approval names the exact saved batch. If approval is denied or expires, production does not change.",
           summary: "Staging success permits evaluation; it does not automatically grant production authority.",
           owner: "Coordinator policy engine and, when required, a human approver",
           happens:
@@ -857,35 +834,99 @@
         },
         {
           phase: "Production",
-          title: "The deployment batch moves into production",
+          title: "The Coordinator saves the rollback point",
           story:
-            "With production permission, the Coordinator takes the production turn and deploys the batch's exact approved outputs in the saved order. When the platform allows it, the batch first reaches a small share of users or a second production environment, and more traffic moves over only while the system stays healthy. Every stage records the running version, traffic, and health. If problems appear, the rollout stops before expanding. Any partial production state is recorded exactly and may require a human-led recovery.",
-          summary: "The staging-validated artifacts enter production in a bounded, observable way.",
+            "Before production starts, the Coordinator saves the previous known-good frontend and backend artifacts and versions. It also keeps the main versions from before this release. These records provide one exact rollback point if the production release fails.",
+          summary: "A verified rollback point is saved before production changes.",
+          owner: "Coordinator, trusted artifact storage, runtime proof, and GitHub",
+          happens:
+            "The Coordinator links the previous production artifact digests and runtime identities to the pre-release main SHAs and the newly promoted main SHAs. If a later production gate fails, it stops the rollout and rechecks every rollback guard. Automatic rollback is allowed only when current main still equals the failed release, the previous artifacts are available, new revert commits apply cleanly, and there is no unsafe or irreversible database or data change. When every guard passes, the Coordinator redeploys the previous artifacts, creates new revert commits on current main without resetting or rewriting history, verifies the restored production versions and health, records ROLLED_BACK, and releases the locks. Otherwise it stops for human recovery and keeps the locks.",
+          proof:
+            "The rollback record names every previous production artifact and version, pre-release and failed-release main SHA, eligibility guard, deploy and revert result, restored runtime check, health result, repository outcome, and lock release.",
+          gap:
+            "The known-good artifact retention, rollback workflows, data-change safety classification, revert-commit method, restored-health gate, and human recovery authority still need to be defined.",
+          failure:
+            "If the rollback point cannot be saved and verified, production does not begin. A partial cross-repository rollback is never reported as recovered. Deployment stays blocked and the locks remain held until every affected repository and production runtime has a truthful, repaired state."
+        },
+        {
+          phase: "Production",
+          title: "The Coordinator deploys the batch to production",
+          story:
+            "With production permission and a saved rollback point, the Coordinator deploys the batch's exact main-derived artifacts in the required order. When the platform supports it, the rollout starts with a small share of users. More traffic moves to the batch only while the system stays healthy. If deployment fails, the Coordinator stops the rollout and follows the saved rollback path.",
+          summary: "The staging-validated, main-derived artifacts enter production in a bounded way.",
           owner: "Product deployment workflows under Coordinator production ownership",
           happens:
-            "The batch claims the separate production lane, deploys the exact approved artifacts in dependency-safe order, and gradually shifts traffic where the platform supports canary or blue-green rollout. Health gates decide each continuation.",
+            "The batch claims the separate production lane and deploys only the artifact digests built from the recorded promoted main SHAs. Backend and frontend follow the saved dependency order. Canary or blue-green health gates decide each continuation where supported.",
           proof:
-            "Every rollout increment reports exact artifact identity, traffic state, health metrics, workflow evidence, and the current production truth.",
+            "Every rollout increment reports the exact main-derived artifact identity, traffic state, health metrics, workflow evidence, and current production truth.",
           gap:
-            "Confirm canary or blue-green support for each deployable, metric thresholds, observation windows, automated abort capability, and safe rollback compatibility.",
+            "Canary or blue-green support, rollout increments, metric limits, observation periods, automated abort capability, and deployment callback trust still need to be defined.",
           failure:
-            "Abort before wider rollout when possible. Retry only proven infrastructure failure. If production is partly updated, record that exact state and require explicit recovery rather than claiming an automatic cross-repo rollback."
+            "A deployment or rollout failure stops expansion and starts the saved bounded rollback. Automatic rollback proceeds only if every guard still passes. Otherwise the Coordinator records the exact partial state, blocks further deployment, keeps the locks, and asks for human recovery."
+        },
+        {
+          phase: "Verify",
+          title: "The Coordinator confirms the production versions",
+          story:
+            "After the rollout, the Coordinator asks the frontend and backend which versions are running in production. It compares those answers with the exact approved batch. This step passes only when every required production version matches. If a version is wrong or cannot be confirmed, nothing is marked DONE and the Coordinator follows the saved rollback path.",
+          summary: "Production must match the exact approved frontend and backend versions.",
+          owner: "Coordinator and production runtime proof",
+          happens:
+            "The Coordinator checks every required production runtime against the approved manifest. It records each reported version, response, and timestamp.",
+          proof:
+            "The evidence links the approved manifest to matching frontend and backend runtime identities at a known time.",
+          gap:
+            "The production runtime identity contracts, trusted proof sources, freshness limit, and required runtime list still need to be defined.",
+          failure:
+            "A mismatch or missing answer stops verification and starts the saved bounded rollback. Automatic rollback proceeds only if every guard still passes. Otherwise the exact state remains saved, deployment stays blocked, the locks remain held, and human recovery is required."
+        },
+        {
+          phase: "Verify",
+          title: "The Coordinator tests important user journeys in production",
+          story:
+            "After the production versions match, the Coordinator runs safe tests of the important user journeys. The tests run against the exact approved batch. This step passes only when every required journey works. If a test fails or the result is unclear, nothing is marked DONE and the Coordinator follows the saved rollback path.",
+          summary: "The exact production batch must pass safe end-to-end tests.",
+          owner: "Coordinator and production end-to-end test integration",
+          happens:
+            "The Coordinator runs the allowed read-only production tests after the version check passes. It records every required journey and result against the exact batch.",
+          proof:
+            "The test evidence links each required journey, result, timestamp, and log to the approved manifest and confirmed production versions.",
+          gap:
+            "The production-safe journeys, test-data rules, unclear-result policy, and retry rules still need to be defined.",
+          failure:
+            "A failed or unclear test stops verification and starts the saved bounded rollback. Automatic rollback proceeds only if every guard still passes. Otherwise the exact state remains saved, deployment stays blocked, the locks remain held, and human recovery is required."
+        },
+        {
+          phase: "Verify",
+          title: "The Coordinator watches production health",
+          story:
+            "After the user journeys pass, the Coordinator watches production health for the required observation window. The full window must stay within the approved limits. If a health check fails or the window is incomplete, nothing is marked DONE and the Coordinator follows the saved rollback path.",
+          summary: "Production must remain healthy for the full observation window.",
+          owner: "Coordinator and production monitoring",
+          happens:
+            "The Coordinator watches the required production metrics and alerts for the complete post-rollout window. It records their values against the exact batch.",
+          proof:
+            "The health evidence shows the observation start and end, required metrics, approved limits, alerts, and the exact production versions.",
+          gap:
+            "The final health metrics, approved limits, observation duration, and incomplete-data rules still need to be defined.",
+          failure:
+            "An unhealthy result, missing evidence, or incomplete window stops verification and starts the saved bounded rollback. Automatic rollback proceeds only if every guard still passes. Otherwise the exact state remains saved, deployment stays blocked, the locks remain held, and human recovery is required."
         },
         {
           phase: "Done",
-          title: "Production is checked and every included request finishes",
+          title: "The Coordinator closes the release",
           story:
-            "After the rollout, the Coordinator confirms that the exact saved batch is running across production, runs safe tests through the whole system, watches its health for the required time, and saves the proof. Only then does it mark the batch and every request inside it as done, free production for the next batch, and send the final results. If any check fails, no included request is marked done. The system records the real state and uses a safe retry, rollback, or human repair.",
-          summary: "Exact runtime proof and E2E—not workflow completion—create DONE.",
-          owner: "Coordinator, runtime proof, E2E, and notification integrations",
+            "Only after the production versions, user journeys, and health window all pass does the Coordinator close the release. It assembles and saves the proof. It marks the batch and every included request as DONE, frees the production lane and release locks, and sends the final result. If any earlier check failed, none of the release is marked DONE.",
+          summary: "Complete saved proof creates DONE and frees the production path.",
+          owner: "Coordinator database, audit evidence, and notification integrations",
           happens:
-            "The system checks every production runtime against the approved manifest, runs the allowed read-only production E2E and final health window, saves the evidence, releases production ownership, and sends a concise terminal notification.",
+            "The Coordinator saves one terminal evidence bundle. It records DONE for the batch and every included request, releases production ownership and repository release locks, and sends a concise terminal notification.",
           proof:
             "DONE links the batch, every included request, exact manifest, artifact digests, runtime versions, tests, metrics, approvals, workflow runs, and complete state history.",
           gap:
-            "Define production-safe E2E, final observation duration, notification channels, audit retention, and how the Coordinator itself is released without depending on its own path.",
+            "The atomic close rules, notification channels, notification retry, audit retention, and how the Coordinator itself is released still need to be defined.",
           failure:
-            "Pause production and preserve exact truth. A safe same-artifact retry, explicit rollback, or human repair must finish and be verified before the lane is released or any success is reported."
+            "If the proof or final state cannot be saved safely, nothing is marked DONE and neither the production lane nor the release locks are released. The exact state remains saved until recovery is completed and verified. A notification failure retries from the saved terminal result without changing the release truth."
         }
       ];
 
