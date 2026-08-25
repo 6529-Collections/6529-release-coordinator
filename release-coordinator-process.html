@@ -631,9 +631,11 @@
       const steps = [
         {
           phase: "Submit",
-          title: "The release request is submitted",
+          title: "Submit the release request",
           story:
-            "The Coordinator receives a release request as a JSON document. The request lists the pull requests that belong together. It states whether the frontend, backend, or both must be deployed. It also records any required order, such as backend before frontend. Pull requests that depend on each other belong in the same request. Separate requests are treated as independent. The request declares whether it changes the database.",
+            "Someone sends one JSON request to the Coordinator. It lists the pull requests that must be released together. It says whether the frontend, backend, or both must be deployed. It also gives the correct order and says whether the database will change. Pull requests that need each other must be in the same request. Separate requests are handled independently.",
+          why:
+            "The Coordinator needs one complete plan before it starts. This keeps related changes together, prevents the wrong deployment order, and shows when automatic rollback may be unsafe.",
           summary: "The JSON request describes the PRs, deployment targets, required order, and database-change declaration.",
           owner: "Release submission",
           happens:
@@ -647,9 +649,11 @@
         },
         {
           phase: "Submit",
-          title: "The Coordinator checks who sent the request",
+          title: "Check who sent it",
           story:
-            "The Coordinator confirms the requester's identity and checks what they are allowed to release. If the requester has permission, the request continues. If not, the Coordinator rejects it.",
+            "The Coordinator checks the identity of the person or tool that sent the request. It checks whether they are allowed to release these pull requests. If yes, the request continues. If not, it is rejected.",
+          why:
+            "Only approved people and tools should be able to start a release. This stops someone from deploying changes they are not allowed to control.",
           summary: "The system proves who is asking and what they are allowed to release.",
           owner: "Release Coordinator API",
           happens:
@@ -663,9 +667,11 @@
         },
         {
           phase: "Submit",
-          title: "The Coordinator accepts or rejects the request",
+          title: "Accept or reject the request",
           story:
-            "The Coordinator checks every pull request. It confirms that each one is open, approved, has passed the required checks, can be merged, and fits the deployment plan. The request says if the database will change. The Coordinator checks the changed files too. If either says yes, the request is marked as a database change. This matters because a database change may make an automatic rollback unsafe. If it is still unclear, a person decides. If everything passes, the Coordinator saves the request and adds it to the waiting list. Accepted means saved and waiting—not merged or deployed. If anything fails, the Coordinator rejects the request.",
+            "The Coordinator checks every pull request. Each one must be open, approved, passing its checks, ready to merge, and part of the deployment plan. The Coordinator also compares the database answer in the request with the changed files. If either shows a database change, the request is marked as one. If it is unclear, a person decides. When everything is valid, the request is saved and added to the waiting list. If anything is wrong, it is rejected. Accepted only means saved and waiting. Nothing has been merged or deployed yet.",
+          why:
+            "The waiting list should contain only work that is ready to release. This keeps incomplete or unsafe work from blocking later releases. If the release later fails, the database result tells the Coordinator whether it may roll back automatically or must wait for a person.",
           summary: "Only a valid, fully planned, and classified request is accepted and saved.",
           owner: "Release Coordinator using GitHub and its database",
           happens:
@@ -678,10 +684,30 @@
             "The request is rejected if any PR or deployment rule is invalid. An uncertain database classification fails closed and requires a human decision before acceptance. The Coordinator returns an accepted ID only after the request, plan, classification, and evidence are safely saved."
         },
         {
-          phase: "Batch",
-          title: "The Coordinator freezes the next release batch",
+          phase: "Queue",
+          title: "Reserve the release lane",
           story:
-            "Accepted requests wait for the next release batch. When the Coordinator forms that batch, it saves the exact pull request versions, the frontend and backend scope, the required order, and the current main version for every affected repository. A database-changing request receives its own batch with only its required dependencies. Unrelated requests wait for another batch. The batch is then fixed.",
+            "Accepted requests wait until no other batch is being released. When the lane is free, the Coordinator reserves it for the next batch. Until that batch finishes or recovery is complete, no other batch may freeze versions, change main, use staging, or deploy to production. Developers may continue working on pull requests, but those changes wait for a later batch.",
+          why:
+            "One batch needs a clear path from its saved versions to production. This prevents main from changing underneath it, stops different versions from mixing, and keeps recovery safe.",
+          summary: "One active batch owns the full release path until it finishes or recovery is complete.",
+          owner: "Release Coordinator and its durable release-lane record",
+          happens:
+            "The Coordinator atomically reserves one global release lane for the next accepted work. The reservation prevents every other batch from freezing a manifest, changing protected main, using staging, or deploying to production. Request intake, pull-request development, review, and CI may continue outside the lane.",
+          proof:
+            "One durable release-lane record names the active release attempt, reservation owner, acquisition time, heartbeat, current phase, and terminal release or recovery result.",
+          gap:
+            "The lane lease duration, heartbeat, abandoned-owner recovery, fair queue selection, emergency override, and manual-deployment blocking rules still need to be defined.",
+          failure:
+            "If the Coordinator cannot prove that the lane is free and reserve it safely, no batch is frozen and nothing changes in main, staging, or production. If the reservation is later lost or becomes uncertain, all new release actions stop until the lane is recovered or a person resolves it."
+        },
+        {
+          phase: "Batch",
+          title: "Freeze the release batch",
+          story:
+            "With the release lane reserved, the Coordinator chooses the accepted requests that will be released together. It saves the exact pull request versions, what must be deployed, the correct order, and the current main version in each repository. A request that changes the database gets its own batch with only the changes it needs. Unrelated requests wait for another batch. After this, the batch cannot change.",
+          why:
+            "The Coordinator needs one exact plan for the active release. Freezing the batch makes sure it tests and deploys the same code. Keeping database changes separate also protects unrelated work if recovery is needed.",
           summary: "One fixed batch saves the exact plan, starting points, and database policy.",
           owner: "Release Coordinator using GitHub and its database",
           happens:
@@ -695,9 +721,11 @@
         },
         {
           phase: "Prepare",
-          title: "The Coordinator prepares the release branches",
+          title: "Prepare the release branches",
           story:
-            "The Coordinator creates a temporary release branch from the saved main version in each affected repository. It confirms that every pull request still has the exact saved version. It then merges the planned changes into those branches in the required order. Main does not change during this step.",
+            "The Coordinator creates a temporary release branch in every affected repository. Each branch starts from the saved main version. It checks that every pull request still has the saved version. It then adds the planned changes in the correct order. The real main branches do not change yet.",
+          why:
+            "This gives the Coordinator a safe place to combine and test the batch. If a pull request changed or the changes do not fit together, it can stop without changing main.",
           summary: "The exact planned changes are combined on temporary branches while main stays unchanged.",
           owner: "Release Coordinator GitHub App and product repositories",
           happens:
@@ -711,9 +739,11 @@
         },
         {
           phase: "Test",
-          title: "The Coordinator tests the combined release",
+          title: "Test the full batch",
           story:
-            "The product repositories run the required checks and tests against the combined release branches. If the exact frontend and backend results both pass, the full batch continues unchanged. If a non-database batch fails, the Coordinator checks whether a safe smaller batch can continue. A database-changing batch stops for human review. Main remains unchanged.",
+            "The frontend and backend run their required checks on the combined release branches. These checks test the whole batch together. If both sides pass, the batch continues unchanged. If a batch without database changes fails, the Coordinator may look for a smaller safe batch. If a database-changing batch fails, it stops for a person to review. Main still does not change.",
+          why:
+            "A pull request can pass on its own but fail when combined with other work. This step finds those problems before anything reaches main or is deployed. Database-changing work stops because splitting or retrying it automatically may be unsafe.",
           summary: "The complete release is tested before any protected main branch changes.",
           owner: "Product repository checks and combined release tests",
           happens:
@@ -727,9 +757,11 @@
         },
         {
           phase: "Recover",
-          title: "The Coordinator salvages a failed batch when possible",
+          title: "Try a smaller safe batch",
           story:
-            "If the full batch passes, it continues unchanged. Only a non-database batch may use salvage after a failure. The Coordinator may try a limited set of smaller combinations on fresh release branches. Every candidate keeps all required dependencies and ordering. The largest passing combination becomes a new replacement batch and is tested again. Excluded requests stay blocked with their evidence. A database-changing batch or an unsuccessful search stops for human review with main unchanged.",
+            "This step is used only when a batch without database changes fails. The Coordinator tries a limited number of smaller groups from that batch. Changes that need each other always stay together and keep the same order. Every group uses new temporary branches and is fully tested. If a group passes, the largest passing group becomes a new batch and is tested again. Requests left out stay blocked with the reason. If nothing safe passes, the process stops for a person. Main does not change.",
+          why:
+            "One broken request should not block other independent work that is ready. This step can save the safe part of a batch without guessing. Database-changing work is never split automatically because recovery may be unsafe.",
           summary: "A failed non-database batch may produce one fully retested, dependency-safe replacement batch.",
           owner: "Release Coordinator dependency planner and product repository tests",
           happens:
@@ -743,25 +775,29 @@
         },
         {
           phase: "Promote",
-          title: "The Coordinator promotes the tested release to main",
+          title: "Move tested code to main",
           story:
-            "After the release branches pass, the Coordinator locks the affected release path and checks that every protected main branch still matches its saved starting point. Only then does it move each main branch to the tested release result. It records the previous and new main versions. Every affected repository must reach a truthful result before building or deployment can begin.",
+            "With the release lane still reserved, the Coordinator checks that each main branch still has the version saved when the batch was frozen. If everything matches, it moves each main branch to the exact result that was tested. It saves the old and new versions. The process continues only when the result is known for every affected repository.",
+          why:
+            "The release lane prevents other batches from changing main. This final check also catches any unexpected change before the Coordinator adds the tested code. Saving the old and new versions gives a clear record for recovery.",
           summary: "Only the tested release result may move protected main forward.",
-          owner: "Release Coordinator GitHub App, repository rules, and Coordinator locks",
+          owner: "Release Coordinator GitHub App, repository rules, and the release lane",
           happens:
-            "The Coordinator claims the required repository release locks, rechecks all saved main bases before the first promotion, and advances each protected main with expected-base guards. It records every old main SHA, tested release SHA, promotion result, and lock owner. The locks remain until the release closes or a rollback or repair is verified.",
+            "While holding the release lane, the Coordinator rechecks all saved main bases before the first promotion and advances each protected main with expected-base guards. It records every old main SHA, tested release SHA, promotion result, and lane owner. The lane remains reserved until the release closes or rollback or repair is verified.",
           proof:
-            "The promotion record links every previous main SHA and new main SHA to the tested release branches, batch manifest, GitHub results, and active release locks.",
+            "The promotion record links every previous main SHA and new main SHA to the tested release branches, batch manifest, GitHub results, and active release-lane reservation.",
           gap:
-            "The exact protected-main promotion method, lock lifetime, multi-repository repair procedure, emergency access, and abandoned-release recovery still need to be defined.",
+            "The exact protected-main promotion method, lane lifetime, multi-repository repair procedure, emergency access, and abandoned-release recovery still need to be defined.",
           failure:
-            "If any main branch changed from its saved base, nothing is promoted. If promotion partly succeeds across repositories, no build or deployment begins. The Coordinator records the exact state and keeps the release path locked until new revert commits or a deliberate repair leave every affected repository truthful. It never resets or rewrites main."
+            "If any main branch changed from its saved base, nothing is promoted. If promotion partly succeeds across repositories, no build or deployment begins. The Coordinator records the exact state and keeps the release lane reserved until new revert commits or a deliberate repair leave every affected repository truthful. It never resets or rewrites main."
         },
         {
           phase: "Build",
-          title: "The Coordinator builds the promoted release",
+          title: "Build the release",
           story:
-            "The Coordinator starts the product repositories' build workflows from the exact promoted main versions. It saves the frontend and backend artifacts that belong to the batch. Staging and production use those same artifacts. Production never uses an artifact built from a pull request or temporary release branch.",
+            "The Coordinator starts the frontend and backend builds from the exact main versions saved for the batch. These builds create the files that will be deployed. The Coordinator saves them and links them to the batch. Staging and production use these same saved builds. Production never uses a build made from a pull request or temporary branch.",
+          why:
+            "Using the same saved build prevents staging from testing one thing while production receives another. Building only from main also gives a clear, trusted record of where the released code came from.",
           summary: "Immutable deployable artifacts are built only from the promoted main versions.",
           owner: "Product repository workflows and trusted artifact storage",
           happens:
@@ -771,29 +807,15 @@
           gap:
             "Artifact storage, signing, provenance, reproducibility, callback authentication, retention, and build-once support still need to be defined.",
           failure:
-            "The batch stops before staging and no environment changes. A non-database batch may retry a proven infrastructure failure with the same promoted main versions; a code failure requires a safe revert-commit or repair decision. Any build failure for a database-changing batch preserves the exact application and database state, keeps the release locks, and requires human recovery."
+            "The batch stops before staging and no environment changes. A non-database batch may retry a proven infrastructure failure with the same promoted main versions; a code failure requires a safe revert-commit or repair decision. Any build failure for a database-changing batch preserves the exact application and database state, keeps the release lane reserved, and requires human recovery."
         },
         {
           phase: "Staging",
-          title: "The batch waits until staging is free",
+          title: "Deploy the backend to staging",
           story:
-            "The Coordinator keeps the built batch waiting until shared staging is free. Only one batch can change and check staging at a time. Required earlier batches must finish first. While another batch owns staging, the Coordinator does not start this batch's deployment. This keeps different batches from mixing together or moving staging backward.",
-          summary: "Shared staging accepts only one changing and validating batch at a time.",
-          owner: "Coordinator staging lane",
-          happens:
-            "Built batches wait separately from request merging. A batch may use staging only after required earlier batches are finished, so staging cannot accidentally move backward or mix two batches.",
-          proof:
-            "One durable staging reservation names the batch, current known-good manifest, issued operations, and expiry or heartbeat state.",
-          gap:
-            "Define whether all services share one staging lane, reservation recovery, maximum validation time, and the exact replacement rules for obsolete batches.",
-          failure:
-            "The batch waits. It does not dispatch deployment while another owner is changing or checking staging."
-        },
-        {
-          phase: "Staging",
-          title: "The Coordinator deploys the backend to staging",
-          story:
-            "The Coordinator starts the backend staging deployment with the saved backend version. It waits until staging reports that the exact version is running and its health check passes. If the backend does not work, the Coordinator stops. Non-database batches may restore the last working version. Database-changing batches wait for human recovery.",
+            "The Coordinator deploys the saved backend build to staging. It checks that the correct version is running and working. If a check fails, the release stops. If the database did not change, it may restore the last working version. If the database changed, a person decides how to recover.",
+          why:
+            "Staging lets us test the real backend before users receive it. The backend goes first because the frontend may depend on it. The version check makes sure we test the same build that will go to production.",
           summary: "The saved backend version is deployed to staging before the frontend.",
           owner: "Backend deployment workflow",
           happens:
@@ -803,13 +825,15 @@
           gap:
             "Define the backend deployment workflow, version check, timeout, retry rules, and restoration process.",
           failure:
-            "A non-database batch may retry a proven infrastructure problem with the same version or restore the last known-good staging version under policy. Any backend deployment, runtime, or health failure for a database-changing batch stops automatic recovery. The Coordinator preserves the exact application and database state, keeps the release and staging locks, and requires a human decision."
+            "A non-database batch may retry a proven infrastructure problem with the same version or restore the last known-good staging version under policy. Any backend deployment, runtime, or health failure for a database-changing batch stops automatic recovery. The Coordinator preserves the exact application and database state, keeps the release lane reserved, and requires a human decision."
         },
         {
           phase: "Staging",
-          title: "The Coordinator deploys the frontend to staging",
+          title: "Deploy the frontend to staging",
           story:
-            "After the backend is ready, the Coordinator starts the frontend staging deployment with the saved frontend version. It waits until staging reports that the exact version is running and works with the backend. If the frontend does not work, the Coordinator stops. Non-database batches may restore the last working version. Database-changing batches wait for human recovery.",
+            "After the backend is ready, the Coordinator deploys the saved frontend build to staging. It checks that the correct version is running and works with the backend. If a check fails, the release stops. If the database did not change, it may restore the last working version. If the database changed, a person decides how to recover.",
+          why:
+            "The frontend and backend must work together before users receive them. Testing them together in staging finds problems before production. The version check makes sure we test the same build that will go to production.",
           summary: "The saved frontend version is deployed after the backend works.",
           owner: "Frontend deployment workflow",
           happens:
@@ -819,13 +843,15 @@
           gap:
             "Define the frontend deployment workflow, version check, cache handling, timeout, retry rules, and restoration process.",
           failure:
-            "A non-database batch may retry a proven infrastructure problem with the same version or restore the last known-good staging version under policy. Any frontend deployment, compatibility, runtime, or health failure for a database-changing batch stops automatic recovery. The Coordinator preserves the exact application and database state, keeps the release and staging locks, and requires a human decision."
+            "A non-database batch may retry a proven infrastructure problem with the same version or restore the last known-good staging version under policy. Any frontend deployment, compatibility, runtime, or health failure for a database-changing batch stops automatic recovery. The Coordinator preserves the exact application and database state, keeps the release lane reserved, and requires a human decision."
         },
         {
           phase: "Verify",
-          title: "The Coordinator checks the batch in staging",
+          title: "Test the batch in staging",
           story:
-            "The Coordinator asks the frontend and backend which versions are running in staging. It compares those answers with the saved batch. It then runs tests that follow real user journeys from start to finish. The batch becomes STAGING_VALIDATED only when the exact versions and the user journeys both pass. If a check fails, non-database batches may restore the last good staging release. Database-changing batches preserve the exact state and wait for human recovery.",
+            "The Coordinator checks that staging is running the saved frontend and backend versions. It then tests important user journeys from start to finish. The step passes only when the versions match and all tests pass. If a check fails, the release stops. If the database did not change, it may restore the last working staging release. If the database changed, a person decides how to recover.",
+          why:
+            "The version check proves that we are testing the correct batch. The journey tests prove that the frontend and backend work together. Only this tested batch can continue toward production.",
           summary: "Workflow success is not enough; the saved batch must be running and working.",
           owner: "Runtime proof endpoints and manifest-bound E2E",
           happens:
@@ -835,119 +861,115 @@
           gap:
             "Define the complete E2E gate, test-data isolation, flaky-test policy, runtime-proof endpoint trust, and what metrics must remain healthy before promotion.",
           failure:
-            "The batch is not validated. A non-database batch restores the last known-good staging batch under policy and verifies it before releasing the lane. A database-changing batch does not restore automatically. The Coordinator preserves the exact application and database state, keeps the release and staging locks, and requires human recovery. Version one does not automatically split a staging failure."
+            "The batch is not validated. A non-database batch restores the last known-good staging batch under policy and verifies it before releasing the lane. A database-changing batch does not restore automatically. The Coordinator preserves the exact application and database state, keeps the release lane reserved, and requires human recovery. Version one does not automatically split a staging failure."
         },
         {
           phase: "Production",
-          title: "The Coordinator checks production approval",
+          title: "Save the recovery point",
           story:
-            "Passing staging does not give the batch permission to enter production. The Coordinator checks the rules and permissions for every request in the batch. The strictest rule applies to the whole batch. If any request needs human approval, the whole batch waits. The approval names the exact saved batch. If approval is denied or expires, production does not change.",
-          summary: "Staging success permits evaluation; it does not automatically grant production authority.",
-          owner: "Coordinator policy engine and, when required, a human approver",
-          happens:
-            "The system checks every included request's risk policy and requester permission, plus staging evidence freshness, change window, environment protection, and any required independent approval. The strictest required rule applies to the whole batch. Approval references the exact batch manifest and artifacts.",
-          proof:
-            "A durable allow or deny decision names the policy version, approver when applicable, exact batch, included requests, and evidence considered.",
-          gap:
-            "Define auto-promotion classes, approver roles, separation of duties, approval expiry, release windows, stop authority, and emergency path.",
-          failure:
-            "A denied or expired approval changes no production state. The batch remains staging-validated, is cancelled, or becomes terminal according to the explicit decision."
-        },
-        {
-          phase: "Production",
-          title: "The Coordinator saves the rollback point",
-          story:
-            "Before production starts, the Coordinator saves the previous known-good frontend and backend artifacts and versions. It also keeps the main versions from before this release. Non-database batches may use these records for automatic rollback. Database-changing batches keep them only as evidence for human recovery.",
+            "Before production starts, the Coordinator saves the last working frontend and backend builds. It also saves the main versions from before this release. If the database did not change, it can use these records to restore the last working release. If the database changed, a person decides how to recover.",
+          why:
+            "If production fails, the Coordinator must know exactly what worked before. The saved recovery point makes an automatic rollback possible when the database did not change. A database change may make the old code unsafe, so recovery needs a person.",
           summary: "Recovery evidence is saved before production, with automatic rollback limited to non-database batches.",
           owner: "Coordinator, trusted artifact storage, runtime proof, and GitHub",
           happens:
-            "The Coordinator links the previous production artifact digests and runtime identities to the pre-release main SHAs, newly promoted main SHAs, and immutable batch database classification. A database-changing batch is marked ineligible for automatic rollback. Version one does not attempt to prove or infer database reversibility. If that batch later fails, the Coordinator preserves the exact application and database state, keeps the locks, and requires human recovery. A non-database batch may use bounded automatic rollback. On failure, the Coordinator stops the rollout and rechecks that current main still equals the failed release, the previous artifacts are available, and new revert commits apply cleanly. When every guard passes, it redeploys the previous artifacts, creates new revert commits on current main without resetting or rewriting history, verifies the restored production versions and health, records ROLLED_BACK, and releases the locks. Otherwise it stops for human recovery and keeps the locks.",
+            "The Coordinator links the previous production artifact digests and runtime identities to the pre-release main SHAs, newly promoted main SHAs, and immutable batch database classification. A database-changing batch is marked ineligible for automatic rollback. Version one does not attempt to prove or infer database reversibility. If that batch later fails, the Coordinator preserves the exact application and database state, keeps the release lane reserved, and requires human recovery. A non-database batch may use bounded automatic rollback. On failure, the Coordinator stops the rollout and rechecks that current main still equals the failed release, the previous artifacts are available, and new revert commits apply cleanly. When every guard passes, it redeploys the previous artifacts, creates new revert commits on current main without resetting or rewriting history, verifies the restored production versions and health, records ROLLED_BACK, and releases the lane. Otherwise it stops for human recovery and keeps the lane reserved.",
           proof:
             "The recovery record names the database classification and evidence, every previous production artifact and version, pre-release and failed-release main SHA, automatic-rollback eligibility, guard result, deploy and revert result when allowed, restored runtime check, health result, repository outcome, and lock release.",
           gap:
             "The known-good artifact retention, non-database rollback workflows, revert-commit method, restored-health gate, database-state evidence contract, and human database-recovery authority still need to be defined.",
           failure:
-            "If the recovery evidence and policy cannot be saved and verified, production does not begin. A database-changing batch never enters automatic rollback. A partial cross-repository rollback is never reported as recovered. Deployment stays blocked and the locks remain held until every affected repository, production runtime, and relevant database state has a truthful, repaired result."
+            "If the recovery evidence and policy cannot be saved and verified, production does not begin. A database-changing batch never enters automatic rollback. A partial cross-repository rollback is never reported as recovered. Deployment stays blocked and the release lane remains reserved until every affected repository, production runtime, and relevant database state has a truthful, repaired result."
         },
         {
           phase: "Production",
-          title: "The Coordinator deploys the batch to production",
+          title: "Deploy to production",
           story:
-            "With production permission and saved recovery evidence, the Coordinator deploys the batch's exact main-derived artifacts in the required order. When the platform supports it, the rollout starts with a small share of users. More traffic moves to the batch only while the system stays healthy. If deployment fails, the Coordinator stops and follows the batch's saved recovery policy.",
+            "After staging passes and the recovery point is saved, the Coordinator deploys the saved builds to production in the correct order. When possible, it starts with a small group of users. More users receive the release only while the system stays healthy. If something fails, the deployment stops and recovery begins.",
+          why:
+            "Production receives the same builds that passed the staging tests. The correct order keeps dependent changes working together. Starting small limits the number of users affected if something goes wrong.",
           summary: "The staging-validated, main-derived artifacts enter production in a bounded way.",
           owner: "Product deployment workflows under Coordinator production ownership",
           happens:
-            "The batch claims the separate production lane and deploys only the artifact digests built from the recorded promoted main SHAs. Backend and frontend follow the saved dependency order. Canary or blue-green health gates decide each continuation where supported.",
+            "While still holding the release lane, the batch deploys only the artifact digests built from the recorded promoted main SHAs. Backend and frontend follow the saved dependency order. Canary or blue-green health gates decide each continuation where supported.",
           proof:
             "Every rollout increment reports the exact main-derived artifact identity, traffic state, health metrics, workflow evidence, and current production truth.",
           gap:
             "Canary or blue-green support, rollout increments, metric limits, observation periods, automated abort capability, and deployment callback trust still need to be defined.",
           failure:
-            "A deployment or rollout failure stops expansion. A non-database batch starts the saved bounded rollback only if every guard still passes. A database-changing batch never rolls back automatically: the Coordinator preserves the exact application and database state, blocks further deployment, keeps the locks, and requires human recovery."
+            "A deployment or rollout failure stops expansion. A non-database batch starts the saved bounded rollback only if every guard still passes. A database-changing batch never rolls back automatically: the Coordinator preserves the exact application and database state, blocks further deployment, keeps the release lane reserved, and requires human recovery."
         },
         {
           phase: "Verify",
-          title: "The Coordinator confirms the production versions",
+          title: "Confirm production versions",
           story:
-            "After the rollout, the Coordinator asks the frontend and backend which versions are running in production. It compares those answers with the exact approved batch. This step passes only when every required production version matches. If a version is wrong or cannot be confirmed, nothing is marked DONE and the Coordinator follows the batch's saved recovery policy.",
-          summary: "Production must match the exact approved frontend and backend versions.",
+            "After deployment, the Coordinator checks which frontend and backend versions are running in production. It compares them with the exact batch tested in staging. The step passes only when every version matches. If a version is wrong or cannot be confirmed, the release is not finished and recovery begins.",
+          why:
+            "A deployment can report success even when the wrong version is running. This check proves that users received the same batch that passed the staging tests. It also catches a partial deployment where only the frontend or backend changed.",
+          summary: "Production must match the exact tested frontend and backend versions.",
           owner: "Coordinator and production runtime proof",
           happens:
-            "The Coordinator checks every required production runtime against the approved manifest. It records each reported version, response, and timestamp.",
+            "The Coordinator checks every required production runtime against the tested batch manifest. It records each reported version, response, and timestamp.",
           proof:
-            "The evidence links the approved manifest to matching frontend and backend runtime identities at a known time.",
+            "The evidence links the tested batch manifest to matching frontend and backend runtime identities at a known time.",
           gap:
             "The production runtime identity contracts, trusted proof sources, freshness limit, and required runtime list still need to be defined.",
           failure:
-            "A mismatch or missing answer stops verification. A non-database batch starts bounded automatic rollback only if every guard still passes. A database-changing batch preserves the exact application and database state and requires human recovery. Nothing is marked DONE, deployment stays blocked, and the locks remain held until recovery is verified."
+            "A mismatch or missing answer stops verification. A non-database batch starts bounded automatic rollback only if every guard still passes. A database-changing batch preserves the exact application and database state and requires human recovery. Nothing is marked DONE, deployment stays blocked, and the release lane remains reserved until recovery is verified."
         },
         {
           phase: "Verify",
-          title: "The Coordinator tests important user journeys in production",
+          title: "Test key journeys in production",
           story:
-            "After the production versions match, the Coordinator runs safe tests of the important user journeys. The tests run against the exact approved batch. This step passes only when every required journey works. If a test fails or the result is unclear, nothing is marked DONE and the Coordinator follows the batch's saved recovery policy.",
+            "After the production versions match, the Coordinator runs safe tests of important user journeys. These tests use the exact batch running in production. The step passes only when every required journey works. If a test fails or the result is unclear, the release is not finished and recovery begins.",
+          why:
+            "The correct version can still fail because production has different data, settings, or services. These tests prove that users can complete the most important actions. They catch problems that may not appear in staging.",
           summary: "The exact production batch must pass safe end-to-end tests.",
           owner: "Coordinator and production end-to-end test integration",
           happens:
             "The Coordinator runs the allowed read-only production tests after the version check passes. It records every required journey and result against the exact batch.",
           proof:
-            "The test evidence links each required journey, result, timestamp, and log to the approved manifest and confirmed production versions.",
+            "The test evidence links each required journey, result, timestamp, and log to the tested batch manifest and confirmed production versions.",
           gap:
             "The production-safe journeys, test-data rules, unclear-result policy, and retry rules still need to be defined.",
           failure:
-            "A failed or unclear test stops verification. A non-database batch starts bounded automatic rollback only if every guard still passes. A database-changing batch preserves the exact application and database state and requires human recovery. Nothing is marked DONE, deployment stays blocked, and the locks remain held until recovery is verified."
+            "A failed or unclear test stops verification. A non-database batch starts bounded automatic rollback only if every guard still passes. A database-changing batch preserves the exact application and database state and requires human recovery. Nothing is marked DONE, deployment stays blocked, and the release lane remains reserved until recovery is verified."
         },
         {
           phase: "Verify",
-          title: "The Coordinator watches production health",
+          title: "Watch production health",
           story:
-            "After the user journeys pass, the Coordinator watches production health for the required observation window. The full window must stay within the approved limits. If a health check fails or the window is incomplete, nothing is marked DONE and the Coordinator follows the batch's saved recovery policy.",
+            "After the user journey tests pass, the Coordinator watches production for a set amount of time. It checks agreed health signals, such as errors, slow responses, and important alerts. The step passes only when production stays healthy for the full time. If a check fails or information is missing, the release is not finished and recovery begins.",
+          why:
+            "Some problems appear only after real users start using the release. Others take time to appear. Watching production before closing the release catches these problems while recovery is still ready.",
           summary: "Production must remain healthy for the full observation window.",
           owner: "Coordinator and production monitoring",
           happens:
             "The Coordinator watches the required production metrics and alerts for the complete post-rollout window. It records their values against the exact batch.",
           proof:
-            "The health evidence shows the observation start and end, required metrics, approved limits, alerts, and the exact production versions.",
+            "The health evidence shows the observation start and end, required metrics, required limits, alerts, and the exact production versions.",
           gap:
-            "The final health metrics, approved limits, observation duration, and incomplete-data rules still need to be defined.",
+            "The final health metrics, required limits, observation duration, and incomplete-data rules still need to be defined.",
           failure:
-            "An unhealthy result, missing evidence, or incomplete window stops verification. A non-database batch starts bounded automatic rollback only if every guard still passes. A database-changing batch preserves the exact application and database state and requires human recovery. Nothing is marked DONE, deployment stays blocked, and the locks remain held until recovery is verified."
+            "An unhealthy result, missing evidence, or incomplete window stops verification. A non-database batch starts bounded automatic rollback only if every guard still passes. A database-changing batch preserves the exact application and database state and requires human recovery. Nothing is marked DONE, deployment stays blocked, and the release lane remains reserved until recovery is verified."
         },
         {
           phase: "Done",
-          title: "The Coordinator closes the release",
+          title: "Close the release",
           story:
-            "Only after the production versions, user journeys, and health window all pass does the Coordinator close the release. It assembles and saves the proof. It marks the batch and every included request as DONE, frees the production lane and release locks, and sends the final result. If any earlier check failed, none of the release is marked DONE.",
+            "After all production checks pass, the Coordinator saves the full release record. It marks the batch and every included request as finished. It releases the release lane so the next batch can start. It also sends the final result. If any required check did not pass, the release is not closed.",
+          why:
+            "The saved record proves what was released and which checks passed. Marking everything together prevents a partly finished result. The release lane stays reserved until the release is truly complete or recovery has finished.",
           summary: "Complete saved proof creates DONE and frees the production path.",
           owner: "Coordinator database, audit evidence, and notification integrations",
           happens:
-            "The Coordinator saves one terminal evidence bundle. It records DONE for the batch and every included request, releases production ownership and repository release locks, and sends a concise terminal notification.",
+            "The Coordinator saves one terminal evidence bundle. It records DONE for the batch and every included request, releases the global release lane, and sends a concise terminal notification.",
           proof:
-            "DONE links the batch, every included request, exact manifest, artifact digests, runtime versions, tests, metrics, approvals, workflow runs, and complete state history.",
+            "DONE links the batch, every included request, exact manifest, artifact digests, runtime versions, tests, metrics, workflow runs, and complete state history.",
           gap:
             "The atomic close rules, notification channels, notification retry, audit retention, and how the Coordinator itself is released still need to be defined.",
           failure:
-            "If the proof or final state cannot be saved safely, nothing is marked DONE and neither the production lane nor the release locks are released. The exact state remains saved until recovery is completed and verified. A notification failure retries from the saved terminal result without changing the release truth."
+            "If the proof or final state cannot be saved safely, nothing is marked DONE and the release lane is not released. The exact state remains saved until recovery is completed and verified. A notification failure retries from the saved terminal result without changing the release truth."
         }
       ];
 
@@ -976,6 +998,7 @@
             </div>
             <div class="story-panel story-panel-why">
               <p class="story-panel-label">Why</p>
+              ${step.why ? `<p class="story-prose">${storySentenceMarkup(step.why)}</p>` : ""}
             </div>
           </div>
         `;
