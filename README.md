@@ -206,6 +206,32 @@ Minimum durable records:
 Only the Coordinator changes queue state. GitHub statuses and PR comments are
 useful projections, but they are not the authoritative queue.
 
+## How progress is saved
+
+Before each step starts, the Coordinator saves what it is about to do. It also
+saves which worker is doing the work and when that worker last reported that it
+was active.
+
+After the step finishes, the Coordinator saves the result and the proof. It
+moves to the next step only after this save succeeds.
+
+Each release record shows:
+
+- the current step and status;
+- when the step started and finished;
+- which worker is responsible;
+- the result and its proof;
+- the current blocker, if there is one;
+- what should happen next.
+
+If a worker stops, another worker reads this record and checks what really
+happened before it continues. It does not trust browser memory or a workflow
+success message.
+
+If the start or result cannot be saved, the release stops. It does not move to
+the next step or open the release lane while its state is unclear. Saving the
+same progress again must be safe and must not create a second result.
+
 ## Sources of truth
 
 | Fact | Source of truth |
@@ -280,6 +306,10 @@ SUBMITTED
   -> DONE
 ```
 
+This is the successful path. If a release fails after `main`, staging, or
+production changed, it leaves this path and enters `RECOVERING`. A successful
+release never passes through recovery.
+
 Important final or side states:
 
 - `CANCELLED`
@@ -321,10 +351,31 @@ The Coordinator:
 6. confirms the exact production versions;
 7. runs safe tests of important user journeys;
 8. watches health for the full agreed time;
-9. closes the release only when every check passes.
+9. closes the successful release only when every check passes.
 
 The Coordinator compares production with the saved batch. It never trusts a
 deployment success message on its own.
+
+## Recovery path
+
+Recovery is a separate path. It runs only after `main`, staging, or production
+changed and the release later failed.
+
+The Coordinator:
+
+1. stops the release and saves the exact current state;
+2. chooses automatic recovery only when the database did not change and
+   restoring the old code is safe;
+3. restores the last working builds and adds new commits that undo the failed
+   code, or follows the plan chosen by a person;
+4. confirms the running versions, tests important user journeys, and checks
+   system health;
+5. closes the failed release and releases the lane only when the system is safe
+   and its exact state is known.
+
+These steps are shown as `R1` to `R5` in the process diagram. If the database
+changed or anything is unclear, a person chooses how to recover. The lane stays
+reserved until recovery is complete.
 
 ## Failure and recovery rules
 
