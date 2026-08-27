@@ -435,17 +435,67 @@
         margin: 0 auto;
       }
 
-      .story-nav {
+      .workflow-navigation {
         position: sticky;
         top: 0;
         z-index: 10;
         margin-bottom: 22px;
-        padding: 10px 2px;
-        overflow-x: auto;
-        overflow-y: hidden;
+        padding: 8px 2px 10px;
         border-bottom: 1px solid var(--line);
         background: rgba(8, 11, 17, 0.96);
         backdrop-filter: blur(12px);
+      }
+
+      .path-switcher {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+        margin-bottom: 6px;
+      }
+
+      .path-switch-button {
+        min-height: 38px;
+        padding: 8px 14px;
+        border: 1px solid rgba(154, 168, 186, 0.22);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.018);
+        color: #8794a7;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 750;
+        cursor: pointer;
+        transition:
+          border-color 120ms ease,
+          background 120ms ease,
+          color 120ms ease;
+      }
+
+      .path-switch-button:hover {
+        border-color: rgba(154, 168, 186, 0.4);
+        color: #c7d0dc;
+      }
+
+      .path-switch-button:focus-visible {
+        outline: 2px solid rgba(100, 168, 255, 0.62);
+        outline-offset: 2px;
+      }
+
+      .path-switch-button[aria-selected="true"] {
+        border-color: rgba(100, 168, 255, 0.48);
+        background: rgba(100, 168, 255, 0.1);
+        color: #dceaff;
+      }
+
+      .path-switch-button-recovery[aria-selected="true"] {
+        border-color: rgba(225, 140, 120, 0.48);
+        background: rgba(225, 140, 120, 0.09);
+        color: #f0c2b7;
+      }
+
+      .story-nav {
+        padding: 8px 2px 0;
+        overflow-x: auto;
+        overflow-y: hidden;
         scrollbar-width: thin;
       }
 
@@ -497,12 +547,6 @@
         color: var(--blue);
       }
 
-      .story-nav-item-recovery-start {
-        margin-left: 8px;
-        padding-left: 16px;
-        border-left: 1px solid rgba(225, 140, 120, 0.34);
-      }
-
       .story-nav-link-recovery .story-nav-number {
         color: #9d6c62;
       }
@@ -538,11 +582,12 @@
       .story {
         min-width: 0;
         padding-bottom: 32vh;
+        scroll-margin-top: 112px;
       }
 
       .story-step {
         padding: 28px 0 44px;
-        scroll-margin-top: 62px;
+        scroll-margin-top: 112px;
       }
 
       .story-step:first-child {
@@ -613,7 +658,7 @@
 
       .story-pair {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr);
         gap: 16px;
       }
 
@@ -631,10 +676,36 @@
       }
 
       .story-panel-failure {
+        display: flex;
+        flex-direction: column;
         grid-column: 1 / -1;
         min-height: 72px;
         border-color: rgba(225, 140, 120, 0.38);
         background: rgba(225, 140, 120, 0.035);
+      }
+
+      .failure-recovery-button {
+        margin: 10px 0 0 auto;
+        padding: 7px 10px;
+        border: 1px solid rgba(225, 140, 120, 0.38);
+        border-radius: 7px;
+        background: rgba(225, 140, 120, 0.07);
+        color: #dca293;
+        font: inherit;
+        font-size: 12px;
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      .failure-recovery-button:hover {
+        border-color: rgba(225, 140, 120, 0.62);
+        background: rgba(225, 140, 120, 0.12);
+        color: #f0c2b7;
+      }
+
+      .failure-recovery-button:focus-visible {
+        outline: 2px solid rgba(225, 140, 120, 0.62);
+        outline-offset: 2px;
       }
 
       .story-panel-label {
@@ -688,13 +759,21 @@
           width: min(100% - 24px, 760px);
         }
 
-        .story-nav {
+        .workflow-navigation {
           margin: 0 -12px 18px;
-          padding: 10px 12px;
+          padding: 8px 12px 10px;
+        }
+
+        .story-nav {
+          padding: 8px 0 0;
         }
 
         .story-step {
-          scroll-margin-top: 56px;
+          scroll-margin-top: 108px;
+        }
+
+        .story {
+          scroll-margin-top: 108px;
         }
 
         .story-step:first-child {
@@ -721,6 +800,7 @@
       }
 
       @media (prefers-reduced-motion: reduce) {
+        .path-switch-button,
         .story-nav-link {
           transition: none;
         }
@@ -730,21 +810,43 @@
   <body>
     <main class="page-shell">
       <div class="story-layout">
-        <nav class="story-nav" aria-label="Release steps">
-          <p class="story-nav-title">Release steps</p>
-          <ol id="story-nav-list"></ol>
-        </nav>
+        <div class="workflow-navigation">
+          <div class="path-switcher" role="tablist" aria-label="Release path">
+            <button
+              class="path-switch-button"
+              id="happy-path-button"
+              type="button"
+              role="tab"
+              aria-controls="story"
+            >
+              Happy path
+            </button>
+            <button
+              class="path-switch-button path-switch-button-recovery"
+              id="recovery-path-button"
+              type="button"
+              role="tab"
+              aria-controls="story"
+            >
+              Recovery path
+            </button>
+          </div>
+          <nav class="story-nav" aria-label="Release steps">
+            <p class="story-nav-title">Release steps</p>
+            <ol id="story-nav-list"></ol>
+          </nav>
+        </div>
 
         <div class="story-content">
           <p class="diagram-context">
-            Before the process starts, every pull request is open, approved, has passed the
-            required checks, and has no merge conflicts. Unready pull requests are not included.
+            Make sure every pull request is open, approved, has passed the checks required by its
+            GitHub repository, and has no merge conflicts. Do not include pull requests that are
+            not ready.
           </p>
           <p class="progress-rule" role="note">
-            <strong>How progress is tracked:</strong> The Coordinator saves where each step is:
-            waiting, in progress, passed, failed, or skipped. It also saves what happened and the
-            proof. The release moves on only after this is saved. If saving fails, the release
-            stops.
+            <strong>How progress is saved:</strong> The Coordinator saves each step and its result.
+            If something fails, the saved progress shows where the release stopped and what
+            happened.
           </p>
           <article class="story" id="story" aria-label="Release process"></article>
         </div>
@@ -756,179 +858,254 @@
         {
           title: "Submit the release request",
           story:
-            "Someone sends one JSON request to the Coordinator. It lists the pull requests that must be released together. It says whether the frontend, backend, or both must be deployed. It gives the correct order and says whether the database will change. Pull requests that need each other must be in the same request. Separate requests are handled independently.",
+            "A requester sends one JSON request with the full release plan. It lists the exact pull-request commits that belong together. It says whether the frontend, backend, or both will change. For backend changes, it lists the exact services to deploy and any required service order. It also says whether the database changes.",
           why:
-            "The Coordinator needs one complete plan before it starts. This keeps related changes together, prevents the wrong deployment order, and shows when automatic rollback may be unsafe."
+            "The Coordinator cannot safely guess what 'deploy the backend' means. One complete plan says which code and services belong in the release, gives their order, and shows whether automatic recovery may be unsafe.",
+          failure:
+            "A request with missing or unreadable information is rejected. This includes a backend request without a service list. The reason is saved, and the release does not start."
         },
         {
-          title: "Check who sent it",
+          title: "Check release permissions",
           story:
-            "The Coordinator checks the identity of the person or tool that sent the request. It checks whether they are allowed to release these pull requests. If yes, the request continues. If not, it is rejected.",
+            "The verified requester identity attached to the request is read. The Coordinator's configured permission rules are loaded. Those rules are checked for every repository in the request. The release continues only when the requester has permission for every repository. The result is saved.",
           why:
-            "Only approved people and tools should be able to start a release. This stops someone from deploying changes they are not allowed to control."
+            "Only approved requesters can start a release. This prevents changes from being deployed without permission.",
+          failure:
+            "The request is rejected when permission is missing or cannot be confirmed. The reason is saved, and the release does not start."
         },
         {
-          title: "Check the pull requests",
+          title: "Check pull request readiness",
           story:
-            "The Coordinator checks every pull request. Each one must be open, approved, passing its required checks, ready to merge, and part of the release plan. The saved pull request version must still match. If anything is wrong, the request is rejected.",
+            "The repository, pull-request number, and exact commit are read from the release request. The pull request and its repository rules are loaded from GitHub. It must exist and still be open. It must not be a draft. It must have the approvals required by the repository rules. The checks required by those rules must have passed. It must have no merge conflicts. GitHub must allow it to be merged. Its current commit must match the exact commit in the release request. Every result is saved. These checks run for every listed pull request. The release continues only when every pull request passes.",
           why:
-            "Only ready work should enter the waiting list. This stops an incomplete or changed pull request from blocking a later release."
+            "The release must use only the listed pull requests and exact commits. This keeps incomplete work and unexpected code out of the release.",
+          failure:
+            "If any pull request is not ready or has the wrong commit, the whole request is rejected. The reason is saved, and the release does not start. A corrected request can be sent again."
         },
         {
-          title: "Decide recovery safety",
+          title: "Check recovery safety",
           story:
-            "The request says whether the database will change. The Coordinator checks the changed files too. If either says yes, the request is marked as a database change. If the answer is unclear, a person decides. When the answer is clear, the Coordinator saves the request and adds it to the waiting list. Accepted only means saved and waiting. Nothing has been merged or deployed yet.",
+            "The database-change answer is read from the release request. The changed files are loaded from every listed pull request. The Coordinator's configured database-file rules are loaded. If the request says yes, it is marked as a database change. If a changed file matches a database-file rule, it is also marked as a database change. Otherwise, it is marked as no database change. If the request answer, changed files, or rules cannot be read, the request waits. A database change blocks automatic recovery. Without a database change, automatic recovery may be used later. The answer, matched files, and final result are saved. The release continues only after the result is saved.",
           why:
-            "A database change may make the old application unsafe with the new data. This decision tells the Coordinator whether it may recover automatically or must wait for a person."
+            "A database change can make old code unsafe with new data. This check stops automatic recovery when it could make the problem worse.",
+          failure:
+            "If the database result is unclear, the Coordinator saves the reason and puts the request on hold. Nothing is merged or deployed. The request continues after a clear database result is saved."
+        },
+        {
+          title: "Check the backend deployment plan",
+          story:
+            "The release is checked to see whether it changes the backend. If it does not, this step is skipped. The configured backend service catalog is loaded. It defines the valid service names, the files owned by each service, and required dependencies. The requested service list and order are checked against that catalog. Every clearly affected service must be included. If an affected service is unclear, the request waits. Missing required dependencies are added. If the database changes, the database update is placed before services that need it. The requested order and dependency order are combined. The final order must have no loop. Services that can deploy at the same time are grouped together. The final service list, deployment order, and reason for every added service are saved. The request is accepted and placed in the waiting list.",
+          why:
+            "The backend has many services. The Coordinator needs an exact service list and a safe order before the release can start.",
+          failure:
+            "If a service is unknown, clearly missing, or ordered incorrectly, the reason is saved and the request waits. The same happens when the affected services are unclear. Nothing is merged or deployed. The request continues after a corrected plan or clear decision is saved."
         },
         {
           title: "Reserve the release lane",
           story:
-            "Accepted requests wait until no other batch is being released. When the lane is free, the Coordinator reserves it for the next batch. Until that batch finishes or recovery is complete, no other batch may freeze versions, change main, use staging, or deploy to production. Developers may continue working on pull requests, but those changes wait for a later batch.",
+            "The shared release-lane record is read. If the lane is busy, the accepted requests stay waiting. No release work starts while the lane is busy. The active release marks the lane as free when it closes. Saving the free state starts a new check of the waiting requests. If nothing is waiting, the lane stays free. If requests are waiting, a reservation is created for the next batch. The reservation is saved only if the lane is still free. If another process reserved it first, the requests stay waiting. The release continues only after the reservation is saved. Only the release holding that reservation can change main, use staging, or deploy to production. The lane stays reserved until the release or its recovery is closed.",
           why:
-            "One batch needs a clear path from its saved versions to production. This prevents main from changing underneath it, stops different versions from mixing, and keeps recovery safe."
+            "Only one batch should use the release system at a time. This stops batches from mixing and keeps recovery safe.",
+          failure:
+            "If the lane state cannot be read or the reservation cannot be saved, no batch starts. The accepted requests stay waiting until the problem is fixed."
         },
         {
-          title: "Freeze the release batch",
+          title: "Create the batch plan",
           story:
-            "With the release lane reserved, the Coordinator chooses the accepted requests that will be released together. It saves the exact pull request versions, what must be deployed, the correct order, and the current main version in each repository. A request that changes the database gets its own batch with only the changes it needs. Unrelated requests wait for another batch. After this, the batch cannot change.",
+            "Accepted requests are loaded in waiting-list order. The oldest request starts the batch. All pull requests inside one request stay together. If the oldest request changes the database, no other request is added. Otherwise, the remaining requests are checked in order. A request with a database change stays waiting for its own batch. A request also stays waiting when the configured batch limit has been reached. For each other request, its full pull-request list and backend service plan are tried in the batch. The service lists are combined with the dependency rules from the backend service catalog. The final service order must have no loop. If the order is valid, the whole request stays in the batch. If adding a request would create a loop in this batch's service order, the request stays waiting. The reason is saved. It can be tried again in another batch. The final request list, pull-request list, release scope, service list, and service order are saved. No code is merged or deployed in this step.",
           why:
-            "The Coordinator needs one exact plan for the active release. Freezing the batch makes sure it tests and deploys the same code. Keeping database changes separate also protects unrelated work if recovery is needed."
+            "This creates one clear plan for the release. Waiting-list order keeps the process fair. The batch limit keeps the release manageable. Database changes stay separate so recovery does not affect unrelated work. Checking the service order prevents an impossible deployment plan.",
+          failure:
+            "If the waiting list or saved request data cannot be read, no batch starts. The requests stay waiting, the reason is saved, and the lane is released."
+        },
+        {
+          title: "Freeze the batch",
+          story:
+            "A batch record is created with its own ID. The included release requests are added in their planned order. For every pull request, its repository, number, and exact commit are saved. The record says whether the frontend, backend, or both will change. It also says whether the database will change. For backend changes, the services and their deployment order are saved. The exact commit currently on each main branch is saved. This is where the batch starts. All batch data is saved together. The batch is marked as frozen only when the full save succeeds. Its requests, commits, services, and order cannot change after it is frozen. Later pull-request commits are not added.",
+          why:
+            "The same exact code and plan must be tested and deployed. Freezing the batch prevents later changes from entering the release.",
+          failure:
+            "If the batch cannot be created or saved, no code is changed. The accepted requests stay waiting. The reason is saved before the lane is released."
         },
         {
           title: "Prepare the release branches",
           story:
-            "The Coordinator creates a temporary release branch in every affected repository. Each branch starts from the saved main version. It checks that every pull request still has the saved version. It then adds the planned changes in the correct order. The real main branches do not change yet. If preparation fails, the reason is saved and the lane is released.",
+            "The frozen batch is loaded. Its pull requests are grouped by repository. For each repository, the saved main commit is read. A temporary branch is created from that exact commit. The temporary branch name is saved. The current commit of each pull request is read from GitHub. It must match the commit saved in the batch. Each saved pull-request commit is merged into the temporary branch in the order saved in the batch. The result of every merge is saved. The final commit of each temporary branch is saved. This step passes only when every affected repository has a complete temporary branch. The real main branches stay unchanged.",
           why:
-            "This gives the Coordinator a safe place to combine and test the batch. If a pull request changed or the changes do not fit together, it can stop without changing main."
+            "Temporary branches provide a safe place to combine the batch. Merge conflicts are found without changing main.",
+          failure:
+            "The exact problem is saved. If a temporary branch cannot be created, the batch stops and the lane is released. If pull requests conflict, a batch without database changes tries a smaller batch. A database-changing batch stops and the lane is released. Main stays unchanged."
+        },
+        {
+          title: "Try a smaller batch",
+          story:
+            "This step runs only when the database does not change. The failed batch and its saved problem are loaded. Every release request stays whole. Smaller groups are created by leaving out one or more requests. If a request is removed, any request that depends on it is removed too. The largest groups are tried first. The frontend, backend, and service plan are rebuilt for each group. The new service order must have no loop. Fresh temporary branches are created for the group. Its exact pull-request commits are merged. The normal frontend and backend checks run on the temporary branches. The included requests, excluded requests, merge result, check results, and failure reason are saved for every attempt. The largest group that passes is used. A new frozen batch is created for that group and linked to the failed batch. Requests left out are marked as blocked, and the reason is saved.",
+          why:
+            "A conflict in one request should not stop other independent requests. Dependencies stay together so we do not release only part of a change. Rebuilding the service plan prevents the smaller batch from deploying services it no longer needs. Saved results show what can continue and what must be fixed.",
+          failure:
+            "If no smaller group can be merged and tested, the batch stops. The failed attempts and reasons are saved. All requests in the batch stay blocked until they are fixed. The lane is released, and main stays unchanged."
         },
         {
           title: "Test the full batch",
           story:
-            "The frontend and backend run their required checks on the combined release branches. These checks test the whole batch together. If both sides pass, the batch continues unchanged. If a required check fails, the reason is saved and the lane is released. Main still does not change.",
+            "The frozen batch is loaded. It shows whether the frontend, backend, or both changed. The temporary branch for each changed repository is loaded. GitHub runs that repository's normal pull-request checks on the temporary branch. The Coordinator waits for every check to finish. Each check name, link, and result are saved. If both repositories changed, both sets of checks must pass. The batch passes only when every check passes. These checks can include the normal build, type checks, linting, and automated tests.",
           why:
-            "A pull request can pass on its own but fail when combined with other work. This step finds those problems before anything reaches main or is deployed."
+            "Pull requests may work alone but break when used together. Testing the full batch finds these problems before main changes.",
+          failure:
+            "If a check fails or its result is unclear, the problem is saved. A batch without database changes tries a smaller batch. A database-changing batch stops and releases the lane. Main stays unchanged."
         },
         {
-          title: "Recheck before changing main",
+          title: "Confirm release readiness",
           story:
-            "After the full batch passes, the Coordinator checks every pull request again. Each one must still be open, approved, passing its required checks, and using the saved version. It also checks that every main branch still has the saved starting version. If everything matches, the Coordinator immediately continues. If anything changed, the batch stops and the lane is released.",
+            "The frozen batch is loaded. Every pull request and its saved commit are read from it. Each pull request is loaded from GitHub. It must still be open and not a draft. Its current commit must match the commit saved in the batch. GitHub shows which approvals and checks are required. Those approvals and checks must still pass. The pull request must still have no merge conflicts. The current main commit is read from each changed repository. It must match the main commit saved when the batch started. Every result is saved. The release continues only when every check passes.",
           why:
-            "The first checks may be old after waiting and testing. This is the last safety check before the Coordinator changes main."
+            "The release must use the exact code that passed testing. If a pull request or main changed, the tested result is no longer safe to use.",
+          failure:
+            "If a pull request is no longer ready or main has changed, the reason is saved. The batch stops, the lane is released, and main stays unchanged."
         },
         {
           title: "Move tested code to main",
           story:
-            "With the release lane still reserved, the Coordinator moves each main branch to the exact result that was tested. It checks the saved starting version again while making each change. It saves the old and new versions. The process continues only when the result is known for every affected repository.",
+            "The frozen batch is loaded. It shows which repositories changed. If both changed, the backend is handled first. The saved starting commit and final tested commit are read for the repository. GitHub returns the commit currently on main. It must match the saved starting commit. The Coordinator's GitHub App moves main to the tested commit. The complete tested result is moved. The pull requests are not merged again. GitHub returns the current main commit again. It must now match the tested commit. The old commit, new commit, and GitHub result are saved. The same steps run for every changed repository. This step passes only when every changed repository is confirmed.",
           why:
-            "The release lane stops other batches from changing main. Checking the starting version during the move catches a last-second change. Saving the old and new versions gives a clear recovery record."
+            "The release is built from main, so the tested code must be moved there. We save the old and new main commits so we can fix main if something goes wrong.",
+          failure:
+            "If any main change fails or cannot be confirmed, the release stops and moves to recovery. For every repository, the record says whether main changed, stayed unchanged, or could not be confirmed."
         },
         {
           title: "Build the release",
           story:
-            "The Coordinator starts the frontend and backend builds from the exact main versions saved for the batch. These builds create the files that will be deployed. The Coordinator saves them and links them to the batch. Staging and production use these same saved builds. Production never uses a build made from a pull request or temporary branch.",
+            "The frozen batch is loaded. It shows whether the frontend and which backend services must be built. The new main commit is read for each changed repository. If the frontend changed, its normal production build starts from the new frontend main commit. Each selected backend service starts its normal production build from the new backend main commit. Every build creates the files that will be deployed. Each build must use the expected main commit. Every build gets its own ID. The build files are saved where they cannot be changed. A checksum is created to prove that the files did not change. The service name, commit, build ID, build link, file location, and checksum are saved. This step passes only when every planned build finishes and is saved.",
           why:
-            "Using the same saved build prevents staging from testing one thing while production receives another. Building only from main also gives a clear, trusted record of where the released code came from."
+            "Each selected service needs the correct files. Saving every build means staging and production use the same files. Building from main proves that those files match the code in main.",
+          failure:
+            "If a planned build fails or cannot be saved, nothing is deployed. The release stops and moves to recovery because main has already changed."
         },
         {
           title: "Update the staging database",
           story:
-            "This step runs only when the batch changes the database. The Coordinator applies the saved database change to staging before it deploys the backend. It checks that the change finished and that the database can be used. If the change fails or the result is unclear, the release stops for a person. If the batch has no database change, this step is skipped.",
+            "The frozen batch is loaded. Its service plan is checked for a database update. If none is needed, this step is marked as skipped. Otherwise, the saved database-update build ID and checksum are read. The saved files must still match the checksum. A database-update job starts in staging with those exact files. The job checks which database changes were already applied. It runs the remaining changes in their saved order. The Coordinator waits for the job to finish. The job must succeed, and the staging database must be usable. The build ID, job link, changes that ran, logs, and final result are saved. This step passes only after all results are saved. Backend services that need the new database may then start.",
           why:
-            "The application must be tested with the same database change planned for production. A failed database change may not be safe to undo automatically."
+            "The new backend may need new tables, columns, or prepared data. Staging must have these changes before dependent backend services are deployed.",
+          failure:
+            "If the database change fails or its result is unclear, the release stops and waits for a recovery decision."
         },
         {
-          title: "Deploy the backend to staging",
+          title: "Deploy backend services to staging",
           story:
-            "The Coordinator deploys the saved backend build to staging. It checks that the correct version is running and working. If a check fails, the release stops. If the database did not change, it may restore the last working version. If the database changed, a person decides how to recover.",
+            "The selected backend services and their deployment order are read from the frozen batch. The first service or group is selected. For each service, the exact saved build is loaded. The build files are checked to make sure they have not changed. That build is deployed to staging. The process waits for the deployment to finish. It checks which build is now running and confirms that it matches the saved build. The service's health check then confirms that the service is working. The deployment, running build, and health-check results are saved. Services in the same group may deploy together because they do not depend on each other. The next group starts only when every service in the current group passes. This continues until every selected backend service is running the correct build and is healthy.",
           why:
-            "Staging lets us test the real backend before users receive it. The backend goes first because the frontend may depend on it. The version check makes sure we test the same build that will go to production."
+            "The backend has many services. Following the saved order prevents a service from starting before something it needs. Checking every service proves that staging has the complete backend release.",
+          failure:
+            "If a service fails or its result is unclear, later services do not start. The services that passed and failed are saved. The release moves to recovery. When the database did not change, saved working versions may be restored. When the database changed, the release waits for a recovery decision."
         },
         {
           title: "Deploy the frontend to staging",
           story:
-            "After the backend is ready, the Coordinator deploys the saved frontend build to staging. It checks that the correct version is running and works with the backend. If a check fails, the release stops. If the database did not change, it may restore the last working version. If the database changed, a person decides how to recover.",
+            "The batch is checked for a frontend change. If there is no frontend change, this step is skipped. The saved frontend build ID, commit, and checksum are loaded. The exact build is loaded from trusted storage. Its checksum is checked to make sure the files have not changed. The build is sent to the staging deployment system. The process waits for the deployment to finish. The build ID now running in staging is read and checked against the saved build. The staging frontend is opened. It must load and connect to the staging backend. The deployment result, running build ID, and check results are saved. This step passes only when the correct build is running and every check passes.",
           why:
-            "The frontend and backend must work together before users receive them. Testing them together in staging finds problems before production. The version check makes sure we test the same build that will go to production."
+            "Staging must run the exact saved frontend build. The deployment check prevents an old or incomplete frontend from being accepted.",
+          failure:
+            "If a check fails, the release stops. When the database did not change, the saved working version may be restored. When the database changed, the release waits for a recovery decision."
         },
         {
           title: "Confirm staging versions",
           story:
-            "The Coordinator checks which frontend and backend versions are running in staging. It compares them with the saved batch. The step passes only when every version matches. If a version is wrong or cannot be confirmed, the release stops and moves to recovery.",
+            "The frozen release record is loaded. If the frontend changed, its saved build ID is loaded. The saved build ID for every selected backend service is loaded too. The staging deployment system is asked which frontend build is running and which build is running for each selected backend service. Every reported build ID is saved. Each reported ID is compared with its saved ID. Every frontend or service version is marked as matched, wrong, or unknown. The expected ID, reported ID, check time, and result are saved. This step passes only when every selected frontend and backend build matches.",
           why:
-            "A deployment can report success even when staging is running old or mixed code. This check proves that staging has the exact batch we mean to test."
+            "A deployment can report success while one service still runs old code. This check proves that staging is running the complete saved batch.",
+          failure:
+            "If a version is wrong or cannot be confirmed, the release stops and moves to recovery."
         },
         {
           title: "Test journeys in staging",
           story:
-            "After the staging versions match, the Coordinator tests important user journeys from start to finish. The step passes only when every required journey works. If a test fails or the result is unclear, the release stops and moves to recovery.",
+            "The fixed list of important staging journeys is loaded. For each journey, its starting page, actions, and expected result are read. A clean test session is started in staging. The starting page is opened. Each action is performed in order. After every action, the expected page or response must appear. The journey must reach its final expected result. The journey name, start time, finish time, result, and test-run link are saved. If the journey fails, the failed action and error are saved. Any test data created by the journey is cleaned up. These steps run for every required journey. This step passes only when every journey passes.",
           why:
-            "Matching versions prove that the right code is running. These tests prove that the frontend, backend, and database work together before users receive the release."
+            "Correct versions can still fail when they work together. These tests prove that important user actions work in staging.",
+          failure:
+            "If a test fails or its result is unclear, the release stops and moves to recovery."
         },
         {
           title: "Save the recovery point",
           story:
-            "Before production starts, the Coordinator checks which frontend and backend versions are running now. It saves those last working builds and the main versions from before this release. If any version or build is missing, production does not start. If the database did not change, these records may be used for automatic recovery. If the database changed, a person decides how to recover.",
+            "The frozen batch is loaded. The frontend and backend services that will change are listed. If the frontend will change, its current production build ID is read. The current production build ID for every selected backend service is read too. Every reported build ID is saved. Each build must still exist in trusted storage. Its checksum must still match. The old main commit saved for every affected repository is loaded. One recovery record is created with the production build IDs and old main commits. The saved database-change result is read. If the database will not change, automatic recovery is allowed. If the database will change, automatic recovery is blocked until a recovery decision is saved. The complete recovery record is saved. This step passes only when every required build, commit, and recovery rule is saved.",
           why:
-            "If production fails, the Coordinator must know exactly what worked before. Checking the current versions prevents recovery from starting with a wrong guess. A database change may make the old code unsafe, so recovery needs a person."
+            "Recovery needs a known working version for every service that may change. Checking the current versions prevents recovery from using the wrong code. A database change may make the saved code unsafe, so a recovery decision is required.",
+          failure:
+            "If any version or build is missing, production does not start. The release stops and moves to recovery."
         },
         {
           title: "Update the production database",
           story:
-            "This step runs only when the batch changes the database. The Coordinator applies the same saved database change that passed in staging. It checks that the change finished and that the production database can be used. If the change fails or the result is unclear, deployment stops and a person decides how to recover. If the batch has no database change, this step is skipped.",
+            "The frozen batch is loaded. The saved service plan is checked for a database update. If there is no database update, this step is marked as skipped. If there is one, the exact database-update build saved for the batch is loaded. Its staging result must have passed. The build and its checksum must still match the saved record. That exact build is deployed to production. The database update is started. The Coordinator waits for it to finish and confirms that it succeeded. The build ID, run ID, start time, finish time, and result are saved. Backend services that need the new database may start only after the successful result is saved. This step passes only after that result is saved.",
           why:
-            "The production application needs the planned database structure. The change passed in staging first, but production still needs its own clear result."
+            "The production application needs the planned database structure. The database change needs a clear result before deployment continues.",
+          failure:
+            "If the database change fails or its result is unclear, deployment stops and the release waits for a recovery decision."
         },
         {
-          title: "Deploy the backend to production",
+          title: "Deploy backend services to production",
           story:
-            "After the recovery point is saved and any database change is complete, the Coordinator deploys the saved backend build to production. It checks that the correct backend version is running and healthy. If the deployment fails or the result is unclear, the release stops and moves to recovery.",
+            "The frozen batch is loaded. The backend services and their saved deployment order are read. If no backend service will change, this step is marked as skipped. The services are split into the saved deployment groups. Services in the same group may deploy together. The saved build for every service in the first group is loaded. Each build and checksum must match the release record. The production deployment starts for each service in the group. The Coordinator waits for every deployment in the group to finish. The build ID now running for each service is read. Each running build ID must match the saved build. The saved health check runs for each service. The deployment run, running build ID, and health-check result are saved. Another group starts only when every service in the current group passes. These actions repeat for every group. This step passes only when every selected backend service is running its saved build and is healthy.",
           why:
-            "The backend goes first because the frontend may depend on it. Production receives the same backend build that passed the staging tests."
+            "Production must receive the same backend services that passed in staging. Following the saved order protects services that depend on each other. The checks prove that the complete backend release is running and healthy.",
+          failure:
+            "If a service fails or its result is unclear, later services do not start. The services that passed and failed are saved. The release stops and moves to recovery."
         },
         {
           title: "Deploy the frontend to production",
           story:
-            "After the backend is ready, the Coordinator deploys the saved frontend build to production. It checks that the correct frontend version is running and works with the backend. If the deployment fails or the result is unclear, the release stops and moves to recovery.",
+            "The frozen batch is loaded. The saved release scope is checked to see whether the frontend will change. If it will not change, this step is marked as skipped. If it will change, the saved frontend build ID and checksum are loaded. The build must still exist in trusted storage. Its checksum must match the release record. The same build must have passed in staging. The production deployment starts with this exact build. The Coordinator waits for the deployment to finish. The build ID now running in production is read. It must match the saved frontend build ID. The frontend health check runs. The frontend must respond normally. The deployment run, running build ID, and health-check result are saved. This step passes only when the deployment, build check, and health check succeed.",
           why:
-            "The frontend goes after the backend it may need. Production receives the same frontend build that passed the staging tests."
+            "Production must run the exact frontend build that was saved. The deployment check prevents an old or incomplete frontend from being accepted.",
+          failure:
+            "If deployment fails or its result is unclear, the release stops and moves to recovery."
         },
         {
           title: "Release to more users",
           story:
-            "When the platform supports a gradual rollout, the Coordinator starts with a small group of users. It gives the release to more users only while the system stays healthy. If the platform cannot do this, the full deployment is already live and this step is skipped. If health becomes worse, the rollout stops and moves to recovery.",
+            "The frozen batch is loaded. The rollout plan saved for this batch is loaded. The user share, waiting time, and health checks for each stage are read. If there is no rollout plan, this step is marked as skipped. If there is one, the first planned share of production traffic is sent to the new release. That traffic must receive the saved frontend and backend builds. The stage number, user share, build IDs, and start time are saved. The Coordinator waits for the time defined for that stage. It then reads the planned health signals, such as errors, slow requests, and important alerts. Each health value and whether it passed are saved. The user share increases only when every health check passes. These actions repeat for each stage until all production traffic uses the new release. The final build IDs and health results are saved. The rollout is marked as complete. This step passes only when every rollout stage succeeds.",
           why:
-            "Starting small limits the number of users affected if something goes wrong. The release reaches everyone only after the early results stay healthy."
+            "Starting small limits how many users are affected if something goes wrong. Access expands only while the early results stay healthy.",
+          failure:
+            "If a configured health check fails, the rollout stops and moves to recovery."
         },
         {
           title: "Confirm production versions",
           story:
-            "After deployment, the Coordinator checks which frontend and backend versions are running in production. It compares them with the exact batch tested in staging. The step passes only when every version matches. If a version is wrong or cannot be confirmed, the release stops and moves to recovery.",
+            "The frozen batch is loaded. The expected frontend build ID is loaded when the frontend changed. The expected build ID for every selected backend service is loaded. These IDs form the list of expected production builds. The production deployment system is asked which build ID is currently running for each item. These IDs are read directly from production, not from the earlier deployment results. Each reported build ID, its source, and the time it was read are saved. If an ID cannot be read, that item is marked as unconfirmed. Every reported build ID is compared with its expected build ID. Each comparison is saved as matched, failed, or unconfirmed. Every expected frontend and backend item must be checked. This step passes only when every reported build ID exactly matches the saved build ID.",
           why:
-            "A deployment can report success even when the wrong version is running. This check proves that users received the same batch that passed the staging tests. It also catches a partial deployment where only the frontend or backend changed."
+            "A deployment can report success while one service still runs old code. This check proves that production is running the complete saved batch. It also catches a partial deployment.",
+          failure:
+            "If a version is wrong or cannot be confirmed, the release stops and moves to recovery."
         },
         {
           title: "Test key journeys in production",
           story:
-            "After the production versions match, the Coordinator runs safe tests of important user journeys. These tests use the exact batch running in production. The step passes only when every required journey works. If a test fails or the result is unclear, the release stops and moves to recovery.",
+            "The production tests saved for this batch are loaded. For each test, its actions and expected result are loaded. The system confirms that every required test is available. The production build IDs being tested are saved. Each test runs in production. Its actions run in their saved order. The result is checked after every action. The test name, start time, finish time, result, logs, and proof are saved. Any temporary test data is removed. The cleanup result is saved. The same steps run for every required test. This step passes only when every test and cleanup succeeds.",
           why:
-            "The correct version can still fail because production has different data, settings, or services. These tests prove that users can complete the most important actions. They catch problems that may not appear in staging."
+            "Correct versions can still fail because production has different data or settings. These tests prove that users can complete the most important actions.",
+          failure:
+            "If a test fails or its result is unclear, the release stops and moves to recovery."
         },
         {
           title: "Watch production health",
           story:
-            "After the user journey tests pass, the Coordinator watches production for a set amount of time. It checks agreed health signals, such as errors, slow responses, and important alerts. The step passes only when production stays healthy for the full time. If a check fails or information is missing, the release stops and moves to recovery.",
+            "The watch plan saved for this batch is loaded. Its watch time and check times are loaded. Every health check, its data source, and its safe limit are loaded. The production build IDs being watched are saved. The watch start time is saved, and the timer starts. At each check time, the current error rate, response time, and alert state are read. Each value, its safe limit, its source, and the time it was read are saved. A missing result is marked as unconfirmed. The checks continue until the full watch time ends. The watch end time and final result are saved. This step passes only when every check stayed within its safe limit and no result was missing.",
           why:
-            "Some problems appear only after real users start using the release. Others take time to appear. Watching production before closing the release catches these problems while recovery is still ready."
+            "Some problems appear only under real user traffic. Others take time to appear. Watching production catches them while recovery is ready.",
+          failure:
+            "If a health check fails or information is missing, the release stops and moves to recovery."
         },
         {
           title: "Close the successful release",
           story:
-            "After all production checks pass, the Coordinator saves the full release record. It marks the batch and every included request as finished. It releases the release lane so the next batch can start. It also sends the final result. If any required check did not pass, the release is not closed.",
+            "The frozen batch and its release record are loaded. Every planned workflow, build, deployment, test, and health check is loaded. Every planned item must have a saved result. Each item must have passed or been allowed to be skipped. Every skipped item must have a saved reason. Closing stops if anything failed, is still running, or has an unclear result. The final production build IDs are saved. The released commits, services, test results, health results, and finish time are saved. The final result is saved as successful. The batch and all its release requests are marked as finished together. The complete release record must be saved successfully. The release lane is marked as free, and the free state is confirmed. The final result is sent with a link to the release record. The release closes only after all required state is saved.",
           why:
-            "The saved record proves what was released and which checks passed. Marking everything together prevents a partly finished result. The release lane stays reserved until the release is truly complete or recovery has finished.",
+            "The saved record proves what was released and which checks passed. Closing the batch and its requests together prevents a partly finished result. The lane is released only when closing succeeds.",
           failure:
-            "If closing the release fails, the Coordinator tries again. If it still fails, the release stays open. No other release can start. A person must fix the problem."
+            "If closing fails, the closing step runs again. If it still fails, the release stays open and is marked as waiting for a fix. No other release can start."
         }
       ];
 
@@ -936,75 +1113,105 @@
         {
           title: "Stop and save",
           story:
-            "The Coordinator stops the release. It stops any new deployment or rollout work. It saves the current main versions, the versions running in staging and production, the database state, and any work that may still be running.",
+            "The release stops. No new deployment or rollout work starts. The current main commits and frontend versions are saved. The version of every selected backend service in staging and production is saved too. The record also shows which service deployments finished, the database state, and any unfinished work.",
           why:
-            "The system may be only partly changed. The Coordinator needs to know the exact state before it can recover safely."
+            "The system may be only partly changed. Safe recovery needs the exact current state.",
+          failure:
+            "If the current state cannot be saved, automatic recovery does not start. The lane stays reserved, and the release needs a recovery owner."
         },
         {
-          title: "Choose how to recover",
+          title: "Apply the recovery rules",
           story:
-            "If the database did not change and restoring the old code is safe, the Coordinator may recover automatically. If the database changed or anything is unclear, a person chooses what to do.",
+            "The Coordinator's configured recovery rules are loaded. The saved database result and service results are checked against those rules. Automatic recovery starts only when the database is safe and every changed service has a saved working build. Otherwise, automatic work stops and the release needs a recovery owner. The recovery owner repairs, checks, and closes the release.",
           why:
-            "Old code may not work with a changed database. The Coordinator must not guess when recovery could make the problem worse."
+            "Old code may not work with a changed database. Automatic recovery must not run unless the saved data shows that it is safe.",
+          failure:
+            "If the saved result or recovery rules cannot be read, automatic recovery does not start. The release needs a recovery owner."
         },
         {
-          title: "Restore or repair",
+          title: "Restore automatically",
           story:
-            "The Coordinator restores the last working frontend and backend builds. It adds new commits to main that undo the failed code. If a person chose another recovery plan, the Coordinator follows that plan and saves every action.",
+            "The saved working frontend build and affected backend service builds are restored. Backend services are restored in reverse deployment order when their dependencies require it. Every result is saved. New commits are added to main to undo the failed code.",
           why:
-            "The running code and main must return to one clear, working state. Main is never reset or rewritten."
+            "The running code and main must return to one clear, working state. Main is never reset or rewritten.",
+          failure:
+            "If automatic recovery fails, the release needs a recovery owner. The recovery owner repairs, checks, and closes the release."
         },
         {
           title: "Check the recovery",
           story:
-            "The Coordinator confirms the versions now running. It tests important user journeys and checks system health. Recovery passes only when the restored system works and its exact state is known.",
+            "The configured production version checks, journey tests, and health checks run on the restored system. Every result is saved. Recovery passes only when every check passes and the exact running versions are known.",
           why:
-            "A restore command can report success while the system is still broken. The Coordinator needs proof that users have a working system."
+            "A restore command can report success while the system is still broken. These checks prove that users have a working system.",
+          failure:
+            "If a check fails or the system state is unclear, recovery stays open and the lane stays reserved. The release needs a recovery owner."
         },
         {
           title: "Close the failed release",
           story:
-            "The Coordinator saves the recovery result. It marks the release as failed and records whether recovery succeeded. It sends the final result. It releases the release lane only when the system is safe and its exact state is known.",
+            "The recovery result for every affected service is saved. The release is marked as failed, and the record shows whether recovery succeeded. The final result is sent. The lane is released only when the system is safe and its exact state is known.",
           why:
-            "The saved result explains what failed and how the system was made safe. Keeping the lane reserved prevents another release from starting too early."
+            "The saved result explains what failed and how the system was made safe. Keeping the lane reserved prevents changes while the failed release remains open.",
+          failure:
+            "If the final result cannot be saved, the release stays open and the lane stays reserved."
         }
       ];
 
-      const allSteps = [
-        ...steps.map((step, index) => ({
+      const pathSteps = {
+        happy: steps.map((step, index) => ({
           ...step,
           id: `step-${index + 1}`,
           navLabel: String(index + 1).padStart(2, "0"),
           param: String(index + 1),
-          recovery: false
+          recovery: false,
+          // Main first changes in step 12. Step 27 has its own close-failure state.
+          recoveryOnFailure: index >= 11 && index <= 25
         })),
-        ...recoverySteps.map((step, index) => ({
+        recovery: recoverySteps.map((step, index) => ({
           ...step,
           id: `recovery-step-${index + 1}`,
           navLabel: `R${index + 1}`,
           param: `r${index + 1}`,
           recovery: true
         }))
-      ];
+      };
 
       const storyNavRoot = document.querySelector("#story-nav-list");
       const storyRoot = document.querySelector("#story");
       const storyNav = document.querySelector(".story-nav");
+      if ("scrollRestoration" in window.history) {
+        window.history.scrollRestoration = "manual";
+      }
+      const pathButtons = {
+        happy: document.querySelector("#happy-path-button"),
+        recovery: document.querySelector("#recovery-path-button")
+      };
       const navLinks = [];
       const storySections = [];
-      let activeIndex = readInitialStep();
+      let activePath = readInitialPath();
+      let visibleSteps = [];
+      let activeIndex = 0;
+      let pathRenderInProgress = false;
 
-      function readInitialStep() {
-        const rawStep = new URLSearchParams(window.location.search).get("step") || "1";
-        const requestedIndex = allSteps.findIndex(
-          (step) => step.param === rawStep.toLowerCase()
-        );
-        return requestedIndex >= 0 ? requestedIndex : 0;
+      function readInitialPath() {
+        const params = new URLSearchParams(window.location.search);
+        const requestedPath = params.get("path");
+        const requestedStep = (params.get("step") || "").toLowerCase();
+
+        if (requestedPath === "happy" || requestedPath === "recovery") {
+          return requestedPath;
+        }
+
+        return requestedStep.startsWith("r") ? "recovery" : "happy";
       }
 
-      function storyMarkup(step, index) {
+      function readRequestedStep() {
+        return (new URLSearchParams(window.location.search).get("step") || "").toLowerCase();
+      }
+
+      function storyMarkup(step) {
         return `
-          <h2 id="story-step-title-${index + 1}">
+          <h2 id="${step.id}-title">
             ${step.recovery ? `<span class="recovery-step-code">${step.navLabel}</span>` : ""}
             ${step.title}
           </h2>
@@ -1020,10 +1227,15 @@
             <div class="story-panel story-panel-failure">
               <p class="story-panel-label">If it fails</p>
               ${step.failure ? `<p class="story-prose">${storySentenceMarkup(step.failure)}</p>` : ""}
+              ${step.recoveryOnFailure ? `
+                <button class="failure-recovery-button" type="button" data-open-recovery>
+                  Recovery path →
+                </button>
+              ` : ""}
             </div>
           </div>
           <p class="story-progress-note">
-            Saved before moving on: step state, result, and proof.
+            Saved for this step: state, result, and proof.
           </p>
         `;
       }
@@ -1036,7 +1248,7 @@
       }
 
       function setActiveStep(index, options = {}) {
-        const nextIndex = Math.max(0, Math.min(allSteps.length - 1, index));
+        const nextIndex = Math.max(0, Math.min(visibleSteps.length - 1, index));
         activeIndex = nextIndex;
 
         navLinks.forEach((link, linkIndex) => {
@@ -1051,7 +1263,10 @@
 
         if (options.updateUrl !== false) {
           const url = new URL(window.location.href);
-          url.searchParams.set("step", allSteps[activeIndex].param);
+          url.searchParams.delete("node");
+          url.searchParams.delete("view");
+          url.searchParams.set("path", activePath);
+          url.searchParams.set("step", visibleSteps[activeIndex].param);
           url.hash = "";
           window.history.replaceState({}, "", url);
         }
@@ -1072,34 +1287,24 @@
         setActiveStep(index);
       }
 
-      allSteps.forEach((step, index) => {
-        const navItem = document.createElement("li");
-        const navLink = document.createElement("a");
-        if (step.recovery && index === steps.length) {
-          navItem.className = "story-nav-item-recovery-start";
-        }
-        navLink.className = step.recovery
-          ? "story-nav-link story-nav-link-recovery"
-          : "story-nav-link";
-        navLink.href = `#${step.id}`;
-        navLink.innerHTML = `
-          <span class="story-nav-number">${step.navLabel}</span>
-          <span class="story-nav-text">${step.title}</span>
-        `;
-        navLink.addEventListener("click", (event) => {
-          event.preventDefault();
-          scrollToStep(index);
+      function renderPath(path, requestedStep = "", options = {}) {
+        pathRenderInProgress = true;
+        activePath = path;
+        visibleSteps = pathSteps[activePath];
+        navLinks.length = 0;
+        storySections.length = 0;
+        storyNavRoot.innerHTML = "";
+        storyRoot.innerHTML = "";
+        storyRoot.setAttribute(
+          "aria-label",
+          activePath === "happy" ? "Happy release path" : "Recovery path"
+        );
+
+        Object.entries(pathButtons).forEach(([buttonPath, button]) => {
+          button.setAttribute("aria-selected", String(buttonPath === activePath));
         });
 
-        const section = document.createElement("section");
-        section.className = step.recovery ? "story-step recovery-step" : "story-step";
-        section.id = step.id;
-        section.setAttribute("aria-labelledby", `story-step-title-${index + 1}`);
-        section.innerHTML = storyMarkup(step, index);
-
-        navItem.append(navLink);
-        storyNavRoot.append(navItem);
-        if (step.recovery && index === steps.length) {
+        if (activePath === "recovery") {
           const recoveryIntro = document.createElement("header");
           recoveryIntro.className = "recovery-intro";
           recoveryIntro.innerHTML = `
@@ -1112,12 +1317,65 @@
           `;
           storyRoot.append(recoveryIntro);
         }
-        storyRoot.append(section);
-        navLinks.push(navLink);
-        storySections.push(section);
-      });
+
+        visibleSteps.forEach((step, index) => {
+          const navItem = document.createElement("li");
+          const navLink = document.createElement("a");
+          navLink.className = step.recovery
+            ? "story-nav-link story-nav-link-recovery"
+            : "story-nav-link";
+          navLink.href = `#${step.id}`;
+          navLink.innerHTML = `
+            <span class="story-nav-number">${step.navLabel}</span>
+            <span class="story-nav-text">${step.title}</span>
+          `;
+          navLink.addEventListener("click", (event) => {
+            event.preventDefault();
+            scrollToStep(index);
+          });
+
+          const section = document.createElement("section");
+          section.className = step.recovery ? "story-step recovery-step" : "story-step";
+          section.id = step.id;
+          section.setAttribute("aria-labelledby", `${step.id}-title`);
+          section.innerHTML = storyMarkup(step);
+          section.querySelector("[data-open-recovery]")?.addEventListener("click", () => {
+            renderPath("recovery", "r1", { scroll: true });
+          });
+
+          navItem.append(navLink);
+          storyNavRoot.append(navItem);
+          storyRoot.append(section);
+          navLinks.push(navLink);
+          storySections.push(section);
+        });
+
+        const requestedIndex = visibleSteps.findIndex((step) => step.param === requestedStep);
+        setActiveStep(requestedIndex >= 0 ? requestedIndex : 0);
+
+        const shouldScroll = options.scroll === true || (options.scroll !== false && activeIndex > 0);
+        window.requestAnimationFrame(() => {
+          if (shouldScroll) {
+            const scrollTarget = options.scroll === true && activeIndex === 0
+              ? storyRoot
+              : storySections[activeIndex];
+            const previousScrollBehavior = document.documentElement.style.scrollBehavior;
+            document.documentElement.style.scrollBehavior = "auto";
+            scrollTarget.scrollIntoView({ block: "start", behavior: "auto" });
+            document.documentElement.style.scrollBehavior = previousScrollBehavior;
+          }
+          window.requestAnimationFrame(() => {
+            pathRenderInProgress = false;
+            updateActiveStepFromScroll();
+          });
+        });
+      }
 
       function updateActiveStepFromScroll() {
+        if (pathRenderInProgress) {
+          return;
+        }
+
         const readingLine = Math.min(window.innerHeight * 0.3, 260);
         let nextIndex = 0;
 
@@ -1152,14 +1410,17 @@
       window.addEventListener("scroll", queueActiveStepUpdate, { passive: true });
       window.addEventListener("resize", queueActiveStepUpdate);
 
-      setActiveStep(activeIndex);
-      if (activeIndex > 0) {
-        window.requestAnimationFrame(() => {
-          storySections[activeIndex].scrollIntoView({ block: "start" });
+      Object.entries(pathButtons).forEach(([path, button]) => {
+        button.addEventListener("click", () => {
+          if (path === activePath) {
+            return;
+          }
+          renderPath(path, "", { scroll: true });
         });
-      } else {
-        window.requestAnimationFrame(updateActiveStepFromScroll);
-      }
+      });
+
+      const initialRequestedStep = readRequestedStep();
+      renderPath(activePath, initialRequestedStep, { scroll: Boolean(initialRequestedStep) });
     </script>
   </body>
 </html>
