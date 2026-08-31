@@ -8,9 +8,9 @@ Version `0.000001` defines the first file produced by the developer-side tool.
 ## Current boundary
 
 The first tool is a small CLI package at `packages/release-request/` in this
-repository. Its package name is `@6529/release-request`. It is implemented and
-tested locally, but it is not published or installed in the product
-repositories yet.
+repository. Its package name is `@6529-collections/release-request`. It is
+implemented, tested locally, and prepared for GitHub Packages, but it is not
+published or installed in the product repositories yet.
 
 When product integration is added, frontend and backend will install only that
 package as a development dependency. Their existing agent skills will call its

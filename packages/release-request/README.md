@@ -1,4 +1,4 @@
-# @6529/release-request
+# @6529-collections/release-request
 
 This package creates and validates one local 6529 release request.
 
@@ -37,3 +37,9 @@ The command writes local files inside the project directory where it runs:
 
 Every `create` attempt saves a run record. Only a valid release request is
 saved to the outbox.
+
+## Publishing
+
+The package is prepared for the private GitHub Packages registry. A manual run
+of the publishing workflow checks the package without publishing it. Pushing a
+tag such as `release-request-v0.0.1` publishes the matching package version.

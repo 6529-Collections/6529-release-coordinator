@@ -1,5 +1,5 @@
 {
-  "name": "@6529/release-request",
+  "name": "@6529-collections/release-request",
   "version": "0.0.1",
   "description": "Create and validate local 6529 release-request files.",
   "type": "module",
@@ -20,6 +20,14 @@
   ],
   "engines": {
     "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/6529-Collections/6529-release-coordinator.git",
+    "directory": "packages/release-request"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"

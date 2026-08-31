@@ -37,10 +37,11 @@ The first package is:
 packages/release-request/
 ```
 
-The package is named `@6529/release-request`. It is not published or installed
-in the product repositories yet. When that integration is added, frontend and
-backend will install only this package. Their existing agent skills will call
-its `6529-release-request` command.
+The package is named `@6529-collections/release-request`. It is prepared for
+GitHub Packages, but it is not published or installed in the product
+repositories yet. When that integration is added, frontend and backend will
+install only this package. Their existing agent skills will call its
+`6529-release-request` command.
 
 The package will contain only:
 
