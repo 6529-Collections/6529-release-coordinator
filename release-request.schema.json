@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "6529 Release Request v0.000001",
+  "description": "The local release-request file created by a developer agent.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "request_id",
+    "created_at",
+    "requested_by",
+    "target",
+    "database_change",
+    "release_parts"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.000001"
+    },
+    "request_id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "requested_by": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 100
+    },
+    "target": {
+      "enum": ["staging", "production"]
+    },
+    "database_change": {
+      "description": "The requester's answer. Unknown is valid when the answer still needs confirmation.",
+      "enum": ["yes", "no", "unknown"]
+    },
+    "release_parts": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/release_part"
+      }
+    }
+  },
+  "$defs": {
+    "part_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]*$",
+      "maxLength": 80
+    },
+    "deploy_unit": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "maxLength": 120
+    },
+    "pull_request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "branch", "commit"],
+      "properties": {
+        "number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "branch": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._/-]+$",
+          "maxLength": 255
+        },
+        "commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        }
+      }
+    },
+    "deploy_dependency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["before", "after"],
+      "properties": {
+        "before": {
+          "$ref": "#/$defs/deploy_unit"
+        },
+        "after": {
+          "$ref": "#/$defs/deploy_unit"
+        }
+      }
+    },
+    "release_part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "repository", "pull_requests", "depends_on"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/part_id"
+        },
+        "repository": {
+          "enum": ["6529seize-frontend", "6529seize-backend"]
+        },
+        "pull_requests": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/pull_request"
+          }
+        },
+        "depends_on": {
+          "description": "IDs of other release parts that must finish first.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/part_id"
+          }
+        },
+        "deploy_units": {
+          "description": "Backend services selected for this release. Frontend has no unit list because it deploys as one app.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/deploy_unit"
+          }
+        },
+        "deploy_dependencies": {
+          "description": "Release-specific backend order rules. Normal service dependencies stay in the backend service catalog.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/deploy_dependency"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "repository": {
+                "const": "6529seize-backend"
+              }
+            },
+            "required": ["repository"]
+          },
+          "then": {
+            "required": ["deploy_units", "deploy_dependencies"]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": ["deploy_units"]
+                },
+                {
+                  "required": ["deploy_dependencies"]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

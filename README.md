@@ -9,6 +9,77 @@ worker, database, GitHub App, or deployment authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
+[Open the first-version architecture](./release-coordinator-architecture.html)
+
+The first implementation is smaller than the full design. It will be one small
+CLI package. The existing agent flow will call it without asking the developer
+to fill in a new form or write JSON.
+
+Every CLI run will be saved locally. A successful run will also create a valid
+release-request JSON file. A failed run will save its input and validation
+errors, but it will not create a valid release request. Nothing is posted, and
+no release starts.
+
+The release-request contract is saved in the
+[versioned JSON Schema](./release-request.schema.json), with a
+[field guide](./release-request-schema.md) and a
+[valid example](./release-request.example.json).
+
+## First software piece
+
+All Release Coordinator source code can live in this repository without making
+frontend and backend install the full Coordinator.
+
+The planned first package is:
+
+```text
+packages/release-request/
+```
+
+It will be published as a small development package, planned as
+`@6529/release-request`. Frontend and backend will install only that package.
+Their existing agent skills will call its `6529-release-request` command.
+
+The package will contain only:
+
+- the CLI command;
+- release-request creation;
+- local validation;
+- local run records;
+- local release-request files.
+
+It will not contain the future Coordinator server, queue, database, GitHub App,
+build logic, deployment logic, or these HTML documents.
+
+The future central system can be added separately in the same repository:
+
+```text
+apps/coordinator/
+```
+
+That application will be deployed as a service. Frontend and backend will not
+install it.
+
+### Local files from the first CLI
+
+| File | Created when | Meaning |
+| --- | --- | --- |
+| `.release-coordinator/runs/<run-id>.json` | Every run | Shows whether the CLI started, succeeded, or failed. A record left as `running` shows that the run did not finish cleanly. |
+| `.release-coordinator/outbox/<request-id>.json` | Only after validation passes | The valid release request that a later Coordinator can accept. |
+
+The CLI saves the run record before it creates the request. It updates the same
+record when validation succeeds or fails. If validation fails, the error is
+kept in the run record and no request is added to the outbox.
+
+These paths are inside the frontend or backend repository where the agent runs
+the command. The whole `.release-coordinator/` folder is local runtime data and
+should be ignored by Git.
+
+For a combined frontend and backend release, the agent runs the CLI once from
+the repository where the release was requested. The one JSON request contains
+both release parts. The CLI does not create a second copy in the other
+repository.
+
 ## The problem
 
 Many developers and agents want to release work at the same time. Today, merge
@@ -84,9 +155,9 @@ checks to the final close step.
 A developer, automation, or agent can submit one release request containing:
 
 - exact frontend and backend PR numbers and 40-character head SHAs;
-- dependencies between PRs;
-- order among otherwise independent PRs;
-- whether the frontend, backend, or both must be deployed;
+- dependencies between release parts;
+- selected backend deploy units and any release-specific dependencies;
+- whether the frontend, backend, or both will change;
 - whether the database changes;
 - requester identity and request time.
 
@@ -149,42 +220,62 @@ logic.
 - repository-specific checks and journey-test entry points;
 - deployment communication and release-note implementations.
 
-## Where requests go
+## Request submission
 
-All entry points call the same authenticated Coordinator API:
+The first implementation saves every CLI run locally. A valid request is saved
+to the local outbox. It has no API and sends nothing anywhere.
+
+Later, all entry points should call the same authenticated Coordinator API:
 
 - a small web interface;
 - a CLI command;
 - a Codex or agent skill;
 - a direct API client.
 
-An illustrative request is:
+A version `0.000001` request looks like this:
 
 ```json
 {
-  "database_change": true,
-  "items": [
+  "schema_version": "0.000001",
+  "request_id": "11111111-1111-4111-8111-111111111111",
+  "created_at": "2026-08-31T09:00:00Z",
+  "requested_by": "simo",
+  "target": "staging",
+  "database_change": "no",
+  "release_parts": [
     {
+      "id": "backend",
       "repository": "6529seize-backend",
-      "pr": 123,
-      "sha": "40-character-exact-head-sha",
-      "deploy": "backend",
-      "depends_on": []
+      "pull_requests": [
+        {
+          "number": 123,
+          "branch": "feature/backend-change",
+          "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "depends_on": [],
+      "deploy_units": ["api"],
+      "deploy_dependencies": []
     },
     {
+      "id": "frontend",
       "repository": "6529seize-frontend",
-      "pr": 456,
-      "sha": "40-character-exact-head-sha",
-      "deploy": "frontend",
-      "depends_on": ["6529seize-backend#123"]
+      "pull_requests": [
+        {
+          "number": 456,
+          "branch": "feature/frontend-change",
+          "commit": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        }
+      ],
+      "depends_on": ["backend"]
     }
   ]
 }
 ```
 
-The exact API contract remains a design decision. The important rule is that
-all clients submit the same structured request instead of encoding release
-intent in chat text, PR labels, or workflow names.
+The JSON contract for the local first version is defined by
+[`release-request.schema.json`](./release-request.schema.json). A future API may
+wrap this request, but it should not change what the fields mean.
 
 ## Where queue state lives
 

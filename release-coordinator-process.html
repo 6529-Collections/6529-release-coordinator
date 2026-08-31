@@ -84,6 +84,22 @@
         line-height: 1.55;
       }
 
+      .implementation-boundary {
+        max-width: none;
+        margin: 0 0 14px;
+        padding: 14px 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        color: var(--text);
+        font-size: 16px;
+        line-height: 1.55;
+      }
+
+      .implementation-boundary strong {
+        color: #ffffff;
+      }
+
       .flow-layout {
         display: grid;
         grid-template-columns: minmax(460px, 0.95fr) minmax(430px, 1.05fr);
@@ -492,6 +508,51 @@
         color: #f0c2b7;
       }
 
+      .view-switcher {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        padding: 2px 0 0;
+      }
+
+      .view-switcher-label {
+        margin-right: 2px;
+        color: #66758a;
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .view-switch-button {
+        padding: 5px 9px;
+        border: 1px solid rgba(154, 168, 186, 0.2);
+        border-radius: 6px;
+        background: transparent;
+        color: #758399;
+        font: inherit;
+        font-size: 11px;
+        font-weight: 750;
+        cursor: pointer;
+      }
+
+      .view-switch-button:hover {
+        border-color: rgba(154, 168, 186, 0.38);
+        color: #c7d0dc;
+      }
+
+      .view-switch-button:focus-visible {
+        outline: 2px solid rgba(100, 168, 255, 0.6);
+        outline-offset: 2px;
+      }
+
+      .view-switch-button[aria-pressed="true"] {
+        border-color: rgba(100, 168, 255, 0.44);
+        background: rgba(100, 168, 255, 0.09);
+        color: #dceaff;
+      }
+
       .story-nav {
         padding: 8px 2px 0;
         overflow-x: auto;
@@ -754,6 +815,45 @@
         content: "";
       }
 
+      .page-shell.compact-view .story-nav,
+      .page-shell.compact-view .diagram-context,
+      .page-shell.compact-view .implementation-boundary,
+      .page-shell.compact-view .progress-rule,
+      .page-shell.compact-view .recovery-intro,
+      .page-shell.compact-view .story-pair,
+      .page-shell.compact-view .story-progress-note {
+        display: none;
+      }
+
+      .page-shell.compact-view .workflow-navigation {
+        margin-bottom: 18px;
+      }
+
+      .page-shell.compact-view .story {
+        padding: 0 0 48px;
+      }
+
+      .page-shell.compact-view .story-step,
+      .page-shell.compact-view .story-step:first-child,
+      .page-shell.compact-view .story-step:last-child {
+        margin: 0;
+        padding: 0;
+        border-left: 0;
+        border-bottom: 1px solid rgba(154, 168, 186, 0.16);
+      }
+
+      .page-shell.compact-view .story-step:first-child {
+        border-top: 1px solid rgba(154, 168, 186, 0.16);
+      }
+
+      .page-shell.compact-view .story-step h2 {
+        margin: 0;
+        padding: 14px 4px;
+        font-size: 17px;
+        line-height: 1.35;
+        letter-spacing: -0.01em;
+      }
+
       @media (max-width: 820px) {
         .page-shell {
           width: min(100% - 24px, 760px);
@@ -762,6 +862,14 @@
         .workflow-navigation {
           margin: 0 -12px 18px;
           padding: 8px 12px 10px;
+        }
+
+        .view-switcher {
+          justify-content: stretch;
+        }
+
+        .view-switcher-label {
+          margin-right: auto;
         }
 
         .story-nav {
@@ -801,6 +909,7 @@
 
       @media (prefers-reduced-motion: reduce) {
         .path-switch-button,
+        .view-switch-button,
         .story-nav-link {
           transition: none;
         }
@@ -831,6 +940,15 @@
               Recovery path
             </button>
           </div>
+          <div class="view-switcher" role="group" aria-label="Step view">
+            <span class="view-switcher-label">View</span>
+            <button class="view-switch-button" id="full-view-button" type="button">
+              Full
+            </button>
+            <button class="view-switch-button" id="compact-view-button" type="button">
+              Compact
+            </button>
+          </div>
           <nav class="story-nav" aria-label="Release steps">
             <p class="story-nav-title">Release steps</p>
             <ol id="story-nav-list"></ol>
@@ -838,6 +956,12 @@
         </div>
 
         <div class="story-content">
+          <p class="implementation-boundary" role="note">
+            <strong>Current first version:</strong> The agent calls one small CLI package. The CLI
+            saves every run locally, creates and checks the complete release-request JSON, and adds
+            only a valid request to the local outbox. It does not send anything or start the
+            Coordinator. The remaining steps show the later target process.
+          </p>
           <p class="diagram-context">
             Make sure every pull request is open, approved, has passed the checks required by its
             GitHub repository, and has no merge conflicts. Do not include pull requests that are
@@ -856,13 +980,13 @@
     <script>
       const steps = [
         {
-          title: "Submit the release request",
+          title: "Create, validate, and save the release request run",
           story:
-            "A requester sends one JSON request with the full release plan. It lists the exact pull-request commits that belong together. It says whether the frontend, backend, or both will change. For backend changes, it lists the exact services to deploy and any required service order. It also says whether the database changes.",
+            "The existing agent skill calls the small release-request CLI package. The CLI creates a run ID and saves a run record as running. It reads the release instruction. It records the schema version, request ID, time, requester, and target. It creates one release part for each related group of work. Every part records its repository, pull-request numbers, branches, and exact commits. A part may depend on another part, such as frontend waiting for backend. A backend part records the selected deploy units and only the dependency rules that are special to this release. It does not invent a full service order. It records whether the database will change. It creates one JSON request and validates it against the local release-request schema. When validation passes, the request is saved in .release-coordinator/outbox and the run is saved as succeeded. When validation fails, the input and errors are saved in the run record and the run is saved as failed. The current first version stops here. It does not send anything or start a release.",
           why:
-            "The Coordinator cannot safely guess what 'deploy the backend' means. One complete plan says which code and services belong in the release, gives their order, and shows whether automatic recovery may be unsafe.",
+            "This gives the future Coordinator one complete and predictable input. Local validation finds missing or malformed data before release work starts. Saving every run also shows what the tool tried and why it failed.",
           failure:
-            "A request with missing or unreadable information is rejected. This includes a backend request without a service list. The reason is saved, and the release does not start."
+            "If the JSON cannot be created or does not match the schema, the failed run and its errors are saved. No release request is added to the outbox. If the run record itself cannot be saved, the CLI stops and accepts nothing. Nothing is sent, merged, built, tested, or deployed."
         },
         {
           title: "Check release permissions",
@@ -894,9 +1018,9 @@
         {
           title: "Check the backend deployment plan",
           story:
-            "The release request is checked for backend changes. If there are none, this step is skipped. The requested service names are checked against the backend service catalog. Required service dependencies are added. A database update is placed before any service that needs it. The requested order and the catalog rules are combined. The final order must have no loop. Changed file paths are checked only for warnings. They do not choose the services. The final service list, order, and warnings are saved. The request is accepted only when this plan is clear.",
+            "The release request is checked for backend changes. If there are none, this step is skipped. Every selected deploy-unit name is checked against the backend service catalog. The normal dependencies from that catalog are added. Any dependency rule that is special to this release is added from the request. A database update is placed before any service that needs it. The combined plan must have no loop. Units with no dependency may deploy together. Changed file paths are checked only for warnings. They do not choose the deploy units. The final unit list, dependency plan, and warnings are saved. The request is accepted only when this plan is clear.",
           why:
-            "The backend has many services. The request chooses what to release. The catalog confirms that the service names and order are safe.",
+            "The backend has many deploy units. The request chooses what this release needs. The backend catalog keeps the normal dependency rules in one place.",
           failure:
             "If a service name is unknown, a dependency is missing, or the order has a loop, the reason is saved and the request waits. A file-path warning also makes the request wait until the saved service plan is confirmed. Nothing is merged or deployed."
         },
@@ -1230,6 +1354,7 @@
       const storyNavRoot = document.querySelector("#story-nav-list");
       const storyRoot = document.querySelector("#story");
       const storyNav = document.querySelector(".story-nav");
+      const pageShell = document.querySelector(".page-shell");
       if ("scrollRestoration" in window.history) {
         window.history.scrollRestoration = "manual";
       }
@@ -1237,9 +1362,14 @@
         happy: document.querySelector("#happy-path-button"),
         recovery: document.querySelector("#recovery-path-button")
       };
+      const viewButtons = {
+        full: document.querySelector("#full-view-button"),
+        compact: document.querySelector("#compact-view-button")
+      };
       const navLinks = [];
       const storySections = [];
       let activePath = readInitialPath();
+      let activeView = readInitialView();
       let visibleSteps = [];
       let activeIndex = 0;
       let pathRenderInProgress = false;
@@ -1258,6 +1388,40 @@
 
       function readRequestedStep() {
         return (new URLSearchParams(window.location.search).get("step") || "").toLowerCase();
+      }
+
+      function readInitialView() {
+        return new URLSearchParams(window.location.search).get("view") === "compact"
+          ? "compact"
+          : "full";
+      }
+
+      function updateView(view, options = {}) {
+        activeView = view;
+        pageShell.classList.toggle("compact-view", activeView === "compact");
+
+        Object.entries(viewButtons).forEach(([buttonView, button]) => {
+          button.setAttribute("aria-pressed", String(buttonView === activeView));
+        });
+
+        if (options.updateUrl !== false) {
+          const url = new URL(window.location.href);
+          if (activeView === "compact") {
+            url.searchParams.set("view", "compact");
+          } else {
+            url.searchParams.delete("view");
+          }
+          window.history.replaceState({}, "", url);
+        }
+
+        if (options.scroll === true) {
+          window.requestAnimationFrame(() => {
+            const target = activeView === "compact"
+              ? storyRoot
+              : storySections[activeIndex] || storyRoot;
+            target.scrollIntoView({ block: "start", behavior: "auto" });
+          });
+        }
       }
 
       function storyMarkup(step) {
@@ -1315,7 +1479,11 @@
         if (options.updateUrl !== false) {
           const url = new URL(window.location.href);
           url.searchParams.delete("node");
-          url.searchParams.delete("view");
+          if (activeView === "compact") {
+            url.searchParams.set("view", "compact");
+          } else {
+            url.searchParams.delete("view");
+          }
           url.searchParams.set("path", activePath);
           url.searchParams.set("step", visibleSteps[activeIndex].param);
           url.hash = "";
@@ -1407,7 +1575,9 @@
         const shouldScroll = options.scroll === true || (options.scroll !== false && activeIndex > 0);
         window.requestAnimationFrame(() => {
           if (shouldScroll) {
-            const scrollTarget = options.scroll === true && activeIndex === 0
+            const scrollTarget = activeView === "compact"
+              ? storyRoot
+              : options.scroll === true && activeIndex === 0
               ? storyRoot
               : storySections[activeIndex];
             const previousScrollBehavior = document.documentElement.style.scrollBehavior;
@@ -1470,7 +1640,17 @@
         });
       });
 
+      Object.entries(viewButtons).forEach(([view, button]) => {
+        button.addEventListener("click", () => {
+          if (view === activeView) {
+            return;
+          }
+          updateView(view, { scroll: true });
+        });
+      });
+
       const initialRequestedStep = readRequestedStep();
+      updateView(activeView, { updateUrl: false });
       renderPath(activePath, initialRequestedStep, { scroll: Boolean(initialRequestedStep) });
     </script>
   </body>
