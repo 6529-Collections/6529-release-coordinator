@@ -2,18 +2,19 @@
 
 Version `0.000001` defines the first file produced by the developer-side tool.
 
-- [JSON Schema](./release-request.schema.json)
-- [Valid example](./release-request.example.json)
+- [JSON Schema](./packages/release-request/release-request.schema.json)
+- [Valid example](./packages/release-request/release-request.example.json)
 
 ## Current boundary
 
-The first tool is a small CLI package. It is planned to live at
-`packages/release-request/` in this repository and be published as
-`@6529/release-request`.
+The first tool is a small CLI package at `packages/release-request/` in this
+repository. Its package name is `@6529/release-request`. It is implemented and
+tested locally, but it is not published or installed in the product
+repositories yet.
 
-Frontend and backend install only that package as a development dependency.
-Their existing agent skills call its command. They do not install the future
-Coordinator server.
+When product integration is added, frontend and backend will install only that
+package as a development dependency. Their existing agent skills will call its
+command. They will not install the future Coordinator server.
 
 The CLI does this:
 
@@ -29,7 +30,7 @@ or deploy code.
 
 ## Local files
 
-Every attempt has a run record:
+Every `create` attempt has a run record:
 
 ```text
 .release-coordinator/runs/<run-id>.json

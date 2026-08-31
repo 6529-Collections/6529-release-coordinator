@@ -4,41 +4,43 @@
 backend changes through `main`, build, staging, production, checks, and recovery.
 A developer or agent does not need to watch the release while it runs.
 
-Status: **design only**. This repository does not yet contain a running API,
-worker, database, GitHub App, or deployment authority.
+Status: **the first local CLI is implemented**. The full Coordinator remains a
+design. This repository does not yet contain a running API, worker, database,
+GitHub App, or deployment authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
 [Open the first-version architecture](./release-coordinator-architecture.html)
 
-The first implementation is smaller than the full design. It will be one small
-CLI package. The existing agent flow will call it without asking the developer
-to fill in a new form or write JSON.
+The first implementation is smaller than the full design. It is one small CLI
+package. The existing agent flow can call it without asking the developer to
+fill in a new form or write JSON.
 
-Every CLI run will be saved locally. A successful run will also create a valid
-release-request JSON file. A failed run will save its input and validation
+Every `create` run is saved locally. A successful run also creates a valid
+release-request JSON file. A failed run saves its input and validation
 errors, but it will not create a valid release request. Nothing is posted, and
 no release starts.
 
 The release-request contract is saved in the
-[versioned JSON Schema](./release-request.schema.json), with a
+[versioned JSON Schema](./packages/release-request/release-request.schema.json), with a
 [field guide](./release-request-schema.md) and a
-[valid example](./release-request.example.json).
+[valid example](./packages/release-request/release-request.example.json).
 
 ## First software piece
 
 All Release Coordinator source code can live in this repository without making
 frontend and backend install the full Coordinator.
 
-The planned first package is:
+The first package is:
 
 ```text
 packages/release-request/
 ```
 
-It will be published as a small development package, planned as
-`@6529/release-request`. Frontend and backend will install only that package.
-Their existing agent skills will call its `6529-release-request` command.
+The package is named `@6529/release-request`. It is not published or installed
+in the product repositories yet. When that integration is added, frontend and
+backend will install only this package. Their existing agent skills will call
+its `6529-release-request` command.
 
 The package will contain only:
 
@@ -64,7 +66,7 @@ install it.
 
 | File | Created when | Meaning |
 | --- | --- | --- |
-| `.release-coordinator/runs/<run-id>.json` | Every run | Shows whether the CLI started, succeeded, or failed. A record left as `running` shows that the run did not finish cleanly. |
+| `.release-coordinator/runs/<run-id>.json` | Every `create` run | Shows whether the CLI started, succeeded, or failed. A record left as `running` shows that the run did not finish cleanly. |
 | `.release-coordinator/outbox/<request-id>.json` | Only after validation passes | The valid release request that a later Coordinator can accept. |
 
 The CLI saves the run record before it creates the request. It updates the same
@@ -222,7 +224,7 @@ logic.
 
 ## Request submission
 
-The first implementation saves every CLI run locally. A valid request is saved
+The first implementation saves every `create` run locally. A valid request is saved
 to the local outbox. It has no API and sends nothing anywhere.
 
 Later, all entry points should call the same authenticated Coordinator API:
@@ -274,7 +276,7 @@ A version `0.000001` request looks like this:
 ```
 
 The JSON contract for the local first version is defined by
-[`release-request.schema.json`](./release-request.schema.json). A future API may
+[`release-request.schema.json`](./packages/release-request/release-request.schema.json). A future API may
 wrap this request, but it should not change what the fields mean.
 
 ## Where queue state lives

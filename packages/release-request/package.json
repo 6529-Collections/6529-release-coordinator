@@ -1,0 +1,31 @@
+{
+  "name": "@6529/release-request",
+  "version": "0.0.1",
+  "description": "Create and validate local 6529 release-request files.",
+  "type": "module",
+  "bin": {
+    "6529-release-request": "./bin/6529-release-request.mjs"
+  },
+  "exports": {
+    ".": "./src/index.mjs",
+    "./schema": "./release-request.schema.json",
+    "./example": "./release-request.example.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "release-request.schema.json",
+    "release-request.example.json"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1"
+  }
+}

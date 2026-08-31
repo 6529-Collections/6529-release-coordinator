@@ -190,20 +190,20 @@
           <aside class="boundary">
             <span class="label">v0.000001 boundary</span>
             <p>
-              One small package creates and validates the request. Every run is saved locally.
+              One small package creates and validates the request. Every create run is saved locally.
               Only a valid request is added to the local outbox.
             </p>
             <p>
-              Source: <code>packages/release-request/</code>. Frontend and backend install only
+              Source: <code>packages/release-request/</code>. Frontend and backend will install only
               <code>@6529/release-request</code>. The future Coordinator application is separate.
             </p>
             <p>
               It does not post a file, call an API, start a release, merge, build, test, or deploy.
             </p>
             <p>
-              Contract: <a href="./release-request.schema.json">schema</a> ·
+              Contract: <a href="./packages/release-request/release-request.schema.json">schema</a> ·
               <a href="./release-request-schema.md">field guide</a> ·
-              <a href="./release-request.example.json">example</a>
+              <a href="./packages/release-request/release-request.example.json">example</a>
             </p>
           </aside>
         </div>
@@ -214,7 +214,7 @@
       const details = {
         release: {
           title: "Ask for a release",
-          text: "The developer tells the existing agent what should go to staging or production. The agent skill will call this tool quietly. The developer does not fill in a new form or write JSON by hand.",
+          text: "The developer tells the existing agent what should go to staging or production. After product integration, the agent skill will call this tool quietly. The developer will not fill in a new form or write JSON by hand.",
         },
         collect: {
           title: "Read exact code",

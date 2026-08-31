@@ -957,10 +957,11 @@
 
         <div class="story-content">
           <p class="implementation-boundary" role="note">
-            <strong>Current first version:</strong> The agent calls one small CLI package. The CLI
-            saves every run locally, creates and checks the complete release-request JSON, and adds
-            only a valid request to the local outbox. It does not send anything or start the
-            Coordinator. The remaining steps show the later target process.
+            <strong>Current first version:</strong> The local CLI package is implemented. It saves
+            every create run locally, creates and checks the complete release-request JSON, and
+            adds only a valid request to the local outbox. It is not published or connected to the
+            product agent skills yet. It does not send anything or start the Coordinator. The
+            remaining steps show the later target process.
           </p>
           <p class="diagram-context">
             Make sure every pull request is open, approved, has passed the checks required by its
@@ -982,9 +983,9 @@
         {
           title: "Create, validate, and save the release request run",
           story:
-            "The existing agent skill calls the small release-request CLI package. The CLI creates a run ID and saves a run record as running. It reads the release instruction. It records the schema version, request ID, time, requester, and target. It creates one release part for each related group of work. Every part records its repository, pull-request numbers, branches, and exact commits. A part may depend on another part, such as frontend waiting for backend. A backend part records the selected deploy units and only the dependency rules that are special to this release. It does not invent a full service order. It records whether the database will change. It creates one JSON request and validates it against the local release-request schema. When validation passes, the request is saved in .release-coordinator/outbox and the run is saved as succeeded. When validation fails, the input and errors are saved in the run record and the run is saved as failed. The current first version stops here. It does not send anything or start a release.",
+            "After product integration, the existing agent skill calls the small release-request CLI package. The CLI creates a run ID and saves a run record as running. It reads the release instruction. It records the schema version, request ID, time, requester, and target. It creates one release part for each related group of work. Every part records its repository, pull-request numbers, branches, and exact commits. A part may depend on another part, such as frontend waiting for backend. A backend part records the selected deploy units and only the dependency rules that are special to this release. It does not invent a full service order. It records whether the database will change. It creates one JSON request and validates it against the local release-request schema. When validation passes, the request is saved in .release-coordinator/outbox and the run is saved as succeeded. When validation fails, the input and errors are saved in the run record and the run is saved as failed. The current first version stops here. It does not send anything or start a release.",
           why:
-            "This gives the future Coordinator one complete and predictable input. Local validation finds missing or malformed data before release work starts. Saving every run also shows what the tool tried and why it failed.",
+            "This gives the future Coordinator one complete and predictable input. Local validation finds missing or malformed data before release work starts. Saving every create run also shows what the tool tried and why it failed.",
           failure:
             "If the JSON cannot be created or does not match the schema, the failed run and its errors are saved. No release request is added to the outbox. If the run record itself cannot be saved, the CLI stops and accepts nothing. Nothing is sent, merged, built, tested, or deployed."
         },

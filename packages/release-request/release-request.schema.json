@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "6529 Release Request v0.000001",
-  "description": "The local release-request file created by a developer agent.",
+  "description": "The local release-request file created by the 6529 release-request CLI.",
   "type": "object",
   "additionalProperties": false,
   "required": [
