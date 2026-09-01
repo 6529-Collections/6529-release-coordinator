@@ -23,6 +23,13 @@ errors, but it will not create a valid release request. Nothing is posted to a
 Coordinator. In the frontend, a successful local preflight lets the existing
 Release Bus process continue. The saved JSON is not Release Bus input.
 
+The next planned command is `submit`. The agent will give it the same completed
+input JSON. The CLI will create and validate the release request, save the run,
+start the central GitHub workflow, wait for it, and return one success or failure
+result. The first workflow will only validate and log what it received. It will
+not call an inbox or start a release. A later `status` command can check a request
+after the CLI is no longer waiting.
+
 The release-request contract is saved in the
 [versioned JSON Schema](./packages/release-request/release-request.schema.json), with a
 [field guide](./release-request-schema.md) and a
@@ -182,8 +189,9 @@ flowchart LR
     U[Developer or agent] --> S[Product release skill]
     S --> CLI[Release-request CLI]
     CLI --> LOCAL[Local run and outbox files]
-    CLI -. planned submission .-> GHIN[Central GitHub submission workflow]
-    GHIN -. planned submission .-> API[Coordinator inbox API]
+    CLI -. planned submit .-> GHIN[Central GitHub submission workflow]
+    GHIN -. first version .-> LOG[GitHub run result and log]
+    GHIN -. later .-> API[Coordinator inbox API]
     API --> DB[(Coordinator database)]
     DB --> W[Coordinator worker]
 
@@ -238,34 +246,45 @@ logic.
 The current `create` command saves every run locally. A valid request is saved
 to the local outbox. It has no API and sends nothing anywhere.
 
-The planned submission path is:
+The agent-facing path is:
 
 ```text
 Product release skill
-  -> CLI creates and validates the JSON
-  -> skill starts the central workflow in this repository
-  -> GitHub records who started the workflow
-  -> workflow sends the JSON to the Coordinator inbox
-  -> inbox saves the request and GitHub submission proof
+  -> CLI template shows the input shape
+  -> CLI submit receives the completed JSON
+  -> CLI returns success or failure with a reason
 ```
 
-The workflow is a delivery step, not release approval. It lives only in this
-Release Coordinator repository. Frontend and backend do not need their own
-workflow files. Their release skills start this central workflow after local
-validation passes.
+The agent does not start, find, or wait for a GitHub workflow itself. The CLI
+hides those steps. Internally, `submit` reuses the current creation and
+validation logic, saves the local run and valid request, starts the one workflow
+in this Release Coordinator repository, waits for its result, and translates
+that result into a clear CLI response. Frontend and backend do not need their
+own submission workflow files.
 
 GitHub's default rule is the first permission boundary: an account needs Write
 access to this repository to start the manual workflow. Read-only access is not
 enough. No extra permission service is planned for the first version. A developer
-or agent uses its own GitHub login, and GitHub records that account's actor name,
-stable actor ID, and workflow run. The request JSON itself lists every product
-repository, branch, pull request, and exact commit to release.
+or agent uses its own GitHub login through the CLI, and GitHub records that
+account's actor name, stable actor ID, and workflow run. The request JSON itself
+lists every product repository, branch, pull request, and exact commit to release.
 
-The planned first version uses a narrow write-only inbox secret stored in this
-repository's GitHub Actions settings. Developers do not receive that secret. The
-inbox saves the GitHub actor and workflow run separately from the release JSON.
-It saves accepted and rejected submissions and returns a submission ID. Sending
-the same request again must not create a second accepted release request.
+The first central workflow is a chain test. It validates the request again, logs
+the request and GitHub sender facts, and finishes. The CLI waits for that result
+and reports `submitted` or `failed` with a reason. In this version, `submitted`
+means only that GitHub received and validated the request. It does not mean that
+a Coordinator accepted it or that anything was deployed.
+
+Later, the same `submit` command will let the workflow send the request to the
+Coordinator inbox. That future workflow will use a narrow write-only inbox secret
+stored in this repository's GitHub Actions settings. Developers will not receive
+that secret. The inbox will save the GitHub actor and workflow run separately
+from the release JSON. It will save accepted and rejected submissions and return
+a submission ID. Sending the same request again must not create a second accepted
+release request. The agent-facing CLI command will not change.
+
+A later `status <request-id>` command will ask the Coordinator for the saved
+state. It is not part of the first chain test.
 
 The `requested_by` field remains useful context, but it is not proof of
 identity. The Coordinator uses the GitHub actor from the central workflow as the

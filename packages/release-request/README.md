@@ -38,13 +38,25 @@ The command writes local files inside the project directory where it runs:
 Every `create` attempt saves a run record. Only a valid release request is
 saved to the outbox.
 
-## Future delivery
+## Planned submission
 
-`create` remains a local command. The planned next command sends an already
-valid outbox request through one central workflow in the Release Coordinator
-repository. Frontend and backend do not need their own submission workflow
-files. The workflow adds the real GitHub actor, stable actor ID, and workflow
-run before it sends the request to the future Coordinator inbox.
+`create` remains a local command so the current frontend preflight keeps working.
+The planned `submit` command accepts the same agent-input JSON:
+
+```sh
+6529-release-request submit --input release-input.json
+```
+
+The CLI will create and validate the full request, save the local run, start one
+central workflow in the Release Coordinator repository, wait for it, and return
+success or failure with a reason. The agent will not run `gh`, choose a workflow,
+or poll GitHub itself. Frontend and backend do not need their own submission
+workflow files.
+
+The first workflow will validate the request again and log the request, real
+GitHub actor, stable actor ID, workflow run, and result. It will not call an inbox,
+merge, build, or deploy anything. In this version, `submitted` means only that
+GitHub received and validated the request.
 
 By default, GitHub allows accounts with Write access to the Release Coordinator
 repository to start this manual workflow. The request JSON already names every
@@ -54,7 +66,16 @@ The release JSON says what should be released. Its `requested_by` field is not
 authentication. The GitHub submission proof says who sent it. Future delivery
 must keep those two records separate.
 
-The workflow and inbox do not exist yet. This package still sends nothing.
+Later, the same `submit` command will let the workflow send the request to the
+Coordinator inbox. A future command can read its saved status without exposing
+Coordinator or workflow details to the agent:
+
+```sh
+6529-release-request status REQUEST_ID
+```
+
+The `submit` command, central submission workflow, inbox, and `status` command do
+not exist yet. This package still sends nothing.
 
 ## Publishing
 

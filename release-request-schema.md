@@ -33,30 +33,40 @@ request lets the existing Release Bus process continue. An invalid request
 stops that process before release mutation. The saved JSON is not Release Bus
 input.
 
-## Identity and future submission
+## Identity and planned CLI submission
 
 `requested_by` records who the agent says requested the release. It is useful
 context, but it is not trusted proof of identity. Anyone creating JSON could
 write a different name there.
 
-The planned inbox submission keeps two records separate:
+The planned submission keeps two records separate:
 
 1. The release-request JSON says what should be released.
 2. One trusted workflow in the Release Coordinator repository adds the GitHub
    actor, stable actor ID, and workflow run.
 
-The workflow sends both to the future Coordinator inbox. The inbox saves the
-GitHub facts as submission proof and checks them before accepting the request.
-The workflow is only a delivery step. It does not approve or deploy the
-release. This submission path is not implemented yet.
+The agent will still use only this package. The planned `submit` command accepts
+the same completed input JSON as `create`. It creates and validates the full
+request, saves the local run, starts the central workflow, waits for the result,
+and returns success or failure with a reason. The agent does not need to know the
+workflow name or any GitHub command.
 
-Frontend and backend do not need their own submission workflow files. After the
-CLI creates a valid request, their release skills start the central workflow and
-pass it that JSON. GitHub's default permission rule allows accounts with Write
-access to the Release Coordinator repository to start the workflow. Read-only
+The first central workflow will validate the full request again and log the
+request, GitHub actor, actor ID, workflow run, and result. It will not call an
+inbox or start a release. This proves the developer-to-CLI-to-GitHub chain before
+the inbox exists. Later, the same `submit` command will send through the workflow
+to the Coordinator inbox. The inbox will save the GitHub facts as submission
+proof and check them before accepting the request. The agent-facing command will
+not change. A future `status <request-id>` command can read the saved Coordinator
+state after submission.
+
+Frontend and backend do not need their own submission workflow files. The CLI
+hides the one central workflow. GitHub's default permission rule allows accounts
+with Write access to the Release Coordinator repository to start it. Read-only
 access is not enough. The repositories, branches, and commits to release are
 already recorded in the JSON; the repository where the CLI ran is not used as
-permission proof.
+permission proof. Submission does not approve or deploy the release. None of
+this submission path is implemented yet.
 
 ## Local files
 

@@ -175,8 +175,8 @@
             <span class="step-description">Keep the result. Valid requests also go to the outbox.</span>
           </button>
           <button type="button" role="tab" aria-selected="false" data-step="send">
-            <span class="step-title">6. Start the central workflow</span>
-            <span class="step-description">GitHub records who started the trusted workflow.</span>
+            <span class="step-title">6. Submit with the CLI</span>
+            <span class="step-description">The CLI hides GitHub and returns one clear result.</span>
           </button>
           <button type="button" role="tab" aria-selected="false" data-step="inbox">
             <span class="step-title">7. Save in the inbox</span>
@@ -206,9 +206,9 @@
               The CLI does not send anything yet.
             </p>
             <p>
-              Next, one trusted workflow in this Release Coordinator repository will send a valid
-              request to the Coordinator inbox. GitHub supplies the real actor, actor ID, and
-              workflow run. The inbox saves that proof separately from the release JSON.
+              Next, the same CLI will gain a <code>submit</code> command. It will start one workflow
+              in this Release Coordinator repository, wait for it, and return success or failure.
+              The first workflow will only validate and log the request. It will not call an inbox.
             </p>
             <p>
               Source: <code>packages/release-request/</code>. Product repositories install only
@@ -270,12 +270,12 @@
           text: "The CLI always saves its result in .release-coordinator/runs inside the product repository where it ran. A successful run also saves the valid request in .release-coordinator/outbox. A failed run saves the input and errors but creates no outbox request. This local folder is ignored by Git. The implemented CLI stops here. In the frontend, a successful preflight lets the existing Release Bus process continue, but Release Bus does not read this JSON.",
         },
         send: {
-          title: "Start the central workflow",
-          text: "This is the next planned piece. After local validation passes, the product release skill starts one workflow in the Release Coordinator repository and passes it the valid JSON. Frontend and backend do not need their own workflow files. By default, GitHub allows accounts with Write access to the Release Coordinator repository to start it. GitHub records the real actor, actor ID, and workflow run. The JSON itself names every repository, branch, pull request, and exact commit to release. The workflow uses a narrow write-only inbox secret. Developers do not receive that secret. Starting this workflow submits a request; it does not approve or deploy it.",
+          title: "Submit with the CLI",
+          text: "This is the next planned piece. The product release skill gives the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. The first workflow validates the request again and logs the request, actor, actor ID, workflow run, and result. It does not call an inbox, approve, or deploy anything.",
         },
         inbox: {
           title: "Save in the inbox",
-          text: "This is also planned, not implemented. The inbox gives every submission its own ID and saves the release JSON beside GitHub's trusted sender proof. It accepts or rejects the submission and saves the reason. The first inbox does not queue, merge, build, or deploy anything.",
+          text: "This comes later. The same CLI submit command will wait while the central workflow sends the request to the inbox. The inbox gives every submission its own ID and saves the release JSON beside GitHub's trusted sender proof. It accepts or rejects the submission and saves the reason. The CLI returns that result. A future CLI status command can read it again later. The first inbox does not queue, merge, build, or deploy anything.",
         },
       };
 
