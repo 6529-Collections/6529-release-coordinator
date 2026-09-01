@@ -126,7 +126,7 @@ batch owns `main`, staging, and production.
 ## Process at a glance
 
 1. Create and submit the release request.
-2. Check the trusted GitHub sender.
+2. Confirm the central GitHub submission.
 3. Check the pull requests.
 4. Decide recovery safety.
 5. Reserve the release lane.
@@ -167,9 +167,9 @@ A developer, automation, or agent can submit one release request containing:
 - the requester's stated identity and request time.
 
 The release JSON says what should be released. It does not prove who submitted
-it. For repository submissions, the trusted GitHub workflow adds the real
-GitHub actor, source repository, workflow run, ref, and commit when it sends the
-request to the inbox.
+it. One trusted workflow in this Release Coordinator repository adds the real
+GitHub actor, actor ID, and workflow run when it sends the request to the inbox.
+The repositories, branches, and commits to release come from the JSON itself.
 
 Once accepted, the Coordinator queues, merges, builds, deploys, tests, retries,
 recovers, and reports the exact outcome. The submitter does not need to keep a
@@ -182,7 +182,7 @@ flowchart LR
     U[Developer or agent] --> S[Product release skill]
     S --> CLI[Release-request CLI]
     CLI --> LOCAL[Local run and outbox files]
-    CLI -. planned submission .-> GHIN[Trusted GitHub submission workflow]
+    CLI -. planned submission .-> GHIN[Central GitHub submission workflow]
     GHIN -. planned submission .-> API[Coordinator inbox API]
     API --> DB[(Coordinator database)]
     DB --> W[Coordinator worker]
@@ -238,30 +238,40 @@ logic.
 The current `create` command saves every run locally. A valid request is saved
 to the local outbox. It has no API and sends nothing anywhere.
 
-The planned repository submission path is:
+The planned submission path is:
 
 ```text
 Product release skill
   -> CLI creates and validates the JSON
-  -> trusted GitHub workflow records who started it
+  -> skill starts the central workflow in this repository
+  -> GitHub records who started the workflow
   -> workflow sends the JSON to the Coordinator inbox
   -> inbox saves the request and GitHub submission proof
 ```
 
-The workflow is a delivery step, not release approval. It lives on the product
-repository's default branch. GitHub repository access and organization actor
-rules control who may start it. The planned first version uses a narrow
-write-only inbox secret stored in GitHub Actions. Developers do not receive that
-secret. The workflow sends the GitHub actor, source repository, workflow run,
-ref, and commit with the request. The inbox saves those trusted facts separately
-from the release JSON. It saves accepted and rejected submissions and returns a
-submission ID. Sending the same request again must not create a second accepted
-release request.
+The workflow is a delivery step, not release approval. It lives only in this
+Release Coordinator repository. Frontend and backend do not need their own
+workflow files. Their release skills start this central workflow after local
+validation passes.
+
+GitHub's default rule is the first permission boundary: an account needs Write
+access to this repository to start the manual workflow. Read-only access is not
+enough. No extra permission service is planned for the first version. A developer
+or agent uses its own GitHub login, and GitHub records that account's actor name,
+stable actor ID, and workflow run. The request JSON itself lists every product
+repository, branch, pull request, and exact commit to release.
+
+The planned first version uses a narrow write-only inbox secret stored in this
+repository's GitHub Actions settings. Developers do not receive that secret. The
+inbox saves the GitHub actor and workflow run separately from the release JSON.
+It saves accepted and rejected submissions and returns a submission ID. Sending
+the same request again must not create a second accepted release request.
 
 The `requested_by` field remains useful context, but it is not proof of
-identity. The Coordinator checks the GitHub submission proof before accepting
-the request. A later web interface or direct API client needs its own trusted
-authentication path.
+identity. The Coordinator uses the GitHub actor from the central workflow as the
+submitter. It does not use the repository where the local CLI happened to run as
+identity or permission proof. A later web interface or direct API client needs
+its own trusted authentication path.
 
 A version `0.000001` request looks like this:
 
@@ -317,7 +327,7 @@ that includes both frontend and backend.
 Minimum durable records:
 
 - release request and stated requester;
-- trusted GitHub actor, source repository, workflow run, ref, and commit;
+- trusted GitHub actor, actor ID, and central workflow run;
 - ordered release items and dependency edges;
 - exact PR heads and captured `main` SHAs;
 - current state and state-transition history;

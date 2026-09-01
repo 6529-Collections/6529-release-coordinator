@@ -41,9 +41,14 @@ saved to the outbox.
 ## Future delivery
 
 `create` remains a local command. The planned next command sends an already
-valid outbox request through a trusted product-repository GitHub workflow. The
-workflow adds the real GitHub actor, source repository, workflow run, ref, and
-commit before it sends the request to the future Coordinator inbox.
+valid outbox request through one central workflow in the Release Coordinator
+repository. Frontend and backend do not need their own submission workflow
+files. The workflow adds the real GitHub actor, stable actor ID, and workflow
+run before it sends the request to the future Coordinator inbox.
+
+By default, GitHub allows accounts with Write access to the Release Coordinator
+repository to start this manual workflow. The request JSON already names every
+repository, branch, pull request, and exact commit to release.
 
 The release JSON says what should be released. Its `requested_by` field is not
 authentication. The GitHub submission proof says who sent it. Future delivery

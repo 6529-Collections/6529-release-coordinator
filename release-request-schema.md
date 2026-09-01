@@ -42,13 +42,21 @@ write a different name there.
 The planned inbox submission keeps two records separate:
 
 1. The release-request JSON says what should be released.
-2. A trusted GitHub workflow adds who started the workflow, the source
-   repository, workflow run, ref, and commit.
+2. One trusted workflow in the Release Coordinator repository adds the GitHub
+   actor, stable actor ID, and workflow run.
 
 The workflow sends both to the future Coordinator inbox. The inbox saves the
 GitHub facts as submission proof and checks them before accepting the request.
 The workflow is only a delivery step. It does not approve or deploy the
 release. This submission path is not implemented yet.
+
+Frontend and backend do not need their own submission workflow files. After the
+CLI creates a valid request, their release skills start the central workflow and
+pass it that JSON. GitHub's default permission rule allows accounts with Write
+access to the Release Coordinator repository to start the workflow. Read-only
+access is not enough. The repositories, branches, and commits to release are
+already recorded in the JSON; the repository where the CLI ran is not used as
+permission proof.
 
 ## Local files
 
