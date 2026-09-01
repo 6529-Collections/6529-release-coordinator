@@ -1,0 +1,100 @@
+name: Submit release request
+
+run-name: Release request ${{ inputs.request_id }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Release request ID used to identify this workflow run
+        required: true
+        type: string
+      request_json:
+        description: Complete release-request JSON created by the CLI
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-log:
+    name: Validate and log request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate and log the release request
+        env:
+          REQUEST_ID: ${{ inputs.request_id }}
+          REQUEST_JSON: ${{ inputs.request_json }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { validateReleaseRequest } from "./packages/release-request/src/index.mjs";
+
+          const requestId = process.env.REQUEST_ID ?? "";
+          const requestText = process.env.REQUEST_JSON ?? "";
+          const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+          function fail(reason, errors = []) {
+            console.error(JSON.stringify({
+              status: "failed",
+              request_id: requestId,
+              reason,
+              errors,
+              github: {
+                actor: process.env.GITHUB_ACTOR,
+                actor_id: process.env.GITHUB_ACTOR_ID,
+                workflow_run_id: process.env.GITHUB_RUN_ID,
+                workflow_run_url: runUrl
+              }
+            }, null, 2));
+            process.exit(1);
+          }
+
+          let request;
+          try {
+            request = JSON.parse(requestText);
+          } catch (error) {
+            fail(`Request is not valid JSON: ${error.message}`);
+          }
+
+          const validation = validateReleaseRequest(request);
+          if (!validation.ok) {
+            fail("Request does not match the release-request schema.", validation.errors);
+          }
+
+          if (request.request_id !== requestId) {
+            fail("The workflow request ID does not match the JSON request ID.", [{
+              code: "request_id_mismatch",
+              location: "/request_id",
+              message: `Expected ${requestId}, received ${request.request_id}.`
+            }]);
+          }
+
+          console.log(JSON.stringify({
+            status: "submitted",
+            request_id: request.request_id,
+            message: "GitHub received and validated the release request.",
+            github: {
+              actor: process.env.GITHUB_ACTOR,
+              actor_id: process.env.GITHUB_ACTOR_ID,
+              workflow_run_id: process.env.GITHUB_RUN_ID,
+              workflow_run_url: runUrl
+            },
+            request
+          }, null, 2));
+          NODE

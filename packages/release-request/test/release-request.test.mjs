@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 
 import {
   createReleaseRequestRun,
-  getInputTemplate
+  getInputTemplate,
+  validateReleaseRequest
 } from "../src/index.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
@@ -52,6 +53,15 @@ function validDraft() {
   };
 }
 
+function validRequest() {
+  return {
+    schema_version: "0.000001",
+    request_id: "22222222-2222-4222-8222-222222222222",
+    created_at: fixedTime,
+    ...validDraft()
+  };
+}
+
 function idSequence(...ids) {
   let index = 0;
   return () => ids[index++] || `temporary-${index}`;
@@ -75,6 +85,27 @@ test("template describes agent input and leaves generated fields to the CLI", ()
   assert.equal(template.created_at, undefined);
   assert.equal(template.release_parts[0].repository, "6529seize-backend");
   assert.equal(template.release_parts[1].repository, "6529seize-frontend");
+});
+
+test("a complete release request can be validated again", () => {
+  const result = validateReleaseRequest(validRequest());
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.errors, []);
+});
+
+test("complete request validation returns clear schema errors", () => {
+  const request = validRequest();
+  delete request.release_parts[0].deploy_units;
+
+  const result = validateReleaseRequest(request);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.errors.some((error) => error.code === "required"), true);
+  assert.equal(
+    result.errors.some((error) => error.location.endsWith("/deploy_units")),
+    true
+  );
 });
 
 test("valid input saves a succeeded run and one outbox request", async (t) => {

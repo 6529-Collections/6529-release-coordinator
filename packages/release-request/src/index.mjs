@@ -65,6 +65,15 @@ export function getReleaseRequestSchema() {
   return structuredClone(schema);
 }
 
+export function validateReleaseRequest(request) {
+  const ok = validateRequestSchema(request);
+
+  return {
+    ok,
+    errors: ok ? [] : validationErrors(validateRequestSchema.errors)
+  };
+}
+
 function timestamp(now) {
   return now().toISOString();
 }
@@ -164,9 +173,10 @@ function createFinalRequest(draft, requestId, createdAt) {
     ...draft
   };
 
-  if (!validateRequestSchema(request)) {
+  const validation = validateReleaseRequest(request);
+  if (!validation.ok) {
     return {
-      errors: validationErrors(validateRequestSchema.errors),
+      errors: validation.errors,
       request: null
     };
   }
