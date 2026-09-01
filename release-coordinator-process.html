@@ -957,11 +957,13 @@
 
         <div class="story-content">
           <p class="implementation-boundary" role="note">
-            <strong>Current first version:</strong> The local CLI package is implemented. It saves
-            every create run locally, creates and checks the complete release-request JSON, and
-            adds only a valid request to the local outbox. It is not published or connected to the
-            product agent skills yet. It does not send anything or start the Coordinator. The
-            remaining steps show the later target process.
+            <strong>Current first version:</strong> The local CLI package is implemented and
+            published. The frontend release skill uses it as a local preflight. Backend integration
+            is next. The CLI saves every run locally and adds only a valid request to the local
+            outbox. It does not send anything to a Coordinator yet. After a successful frontend
+            preflight, the existing Release Bus process continues without reading this JSON. The
+            trusted GitHub submission workflow, inbox, and remaining Coordinator steps are still the
+            target process.
           </p>
           <p class="diagram-context">
             Make sure every pull request is open, approved, has passed the checks required by its
@@ -981,20 +983,20 @@
     <script>
       const steps = [
         {
-          title: "Create, validate, and save the release request run",
+          title: "Create and submit the release request",
           story:
-            "After product integration, the existing agent skill calls the small release-request CLI package. The CLI creates a run ID and saves a run record as running. It reads the release instruction. It records the schema version, request ID, time, requester, and target. It creates one release part for each related group of work. Every part records its repository, pull-request numbers, branches, and exact commits. A part may depend on another part, such as frontend waiting for backend. A backend part records the selected deploy units and only the dependency rules that are special to this release. It does not invent a full service order. It records whether the database will change. It creates one JSON request and validates it against the local release-request schema. When validation passes, the request is saved in .release-coordinator/outbox and the run is saved as succeeded. When validation fails, the input and errors are saved in the run record and the run is saved as failed. The current first version stops here. It does not send anything or start a release.",
+            "The existing product release skill calls the small release-request CLI package. The CLI creates a run ID and saves a run record as running. It reads the release instruction and records the target, pull requests, branches, exact commits, release dependencies, selected backend deploy units, and database-change answer. It creates one JSON request and checks it against the local schema. A valid request is saved in .release-coordinator/outbox and the run is saved as succeeded. An invalid request is not submitted. Today, the frontend uses this as a local preflight and then continues through the existing Release Bus process. Backend integration is next. In the target flow, the product release skill starts one trusted GitHub submission workflow after local validation passes. GitHub adds the real actor, source repository, workflow run, ref, and commit. The workflow uses a narrow write-only inbox secret to send the request to the Coordinator inbox. The inbox creates a submission ID, saves the attempt, checks the request, and marks it accepted or rejected. Starting the workflow submits the request; it does not approve or deploy it. This step passes only when the inbox accepts the submission.",
           why:
-            "This gives the future Coordinator one complete and predictable input. Local validation finds missing or malformed data before release work starts. Saving every create run also shows what the tool tried and why it failed.",
+            "The release JSON gives the Coordinator one complete description of what should change. GitHub supplies trusted proof of who sent it and where it came from. Developers do not need a second inbox password or a new release command.",
           failure:
-            "If the JSON cannot be created or does not match the schema, the failed run and its errors are saved. No release request is added to the outbox. If the run record itself cannot be saved, the CLI stops and accepts nothing. Nothing is sent, merged, built, tested, or deployed."
+            "If the JSON cannot be created or does not match the schema, the failed local run and its errors are saved and no workflow starts. If GitHub rejects the workflow, delivery fails, or the inbox rejects the submission, no Coordinator release starts. The failure and any available workflow or inbox link are saved."
         },
         {
           title: "Check release permissions",
           story:
-            "The verified requester identity attached to the request is read. The Coordinator's configured permission rules are loaded. Those rules are checked for every repository in the request. The release continues only when the requester has permission for every repository. The result is saved.",
+            "The inbox record and GitHub submission proof are loaded. The Coordinator checks that the workflow and source repository are allowed. It reads the GitHub actor that started the workflow and checks that actor's permission for every repository in the release request. The request's requested_by value is context only; it is not identity proof. The release continues only when every permission check passes. The result is saved.",
           why:
-            "Only approved requesters can start a release. This prevents changes from being deployed without permission.",
+            "GitHub proves who submitted the request. The Coordinator still checks whether that person may release every included repository. Submitting a request is not deployment approval.",
           failure:
             "The request is rejected when permission is missing or cannot be confirmed. The reason is saved, and the release does not start."
         },

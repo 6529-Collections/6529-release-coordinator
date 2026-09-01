@@ -9,12 +9,12 @@ Version `0.000001` defines the first file produced by the developer-side tool.
 
 The first tool is a small CLI package at `packages/release-request/` in this
 repository. Its package name is `@6529-collections/release-request`. It is
-implemented, tested locally, and prepared for GitHub Packages, but it is not
-published or installed in the product repositories yet.
+implemented, tested, and published in GitHub Packages. The frontend installs it
+and calls it from the existing release skill. The backend does not use it yet.
 
-When product integration is added, frontend and backend will install only that
-package as a development dependency. Their existing agent skills will call its
-command. They will not install the future Coordinator server.
+When backend integration is added, the backend will install only that package
+as a development dependency. It will not install the future Coordinator
+server.
 
 The CLI does this:
 
@@ -27,6 +27,28 @@ The CLI does this:
 
 It does not call an API, post the file, start a release, merge code, build code,
 or deploy code.
+
+In the frontend release skill, this local command is a preflight. A valid
+request lets the existing Release Bus process continue. An invalid request
+stops that process before release mutation. The saved JSON is not Release Bus
+input.
+
+## Identity and future submission
+
+`requested_by` records who the agent says requested the release. It is useful
+context, but it is not trusted proof of identity. Anyone creating JSON could
+write a different name there.
+
+The planned inbox submission keeps two records separate:
+
+1. The release-request JSON says what should be released.
+2. A trusted GitHub workflow adds who started the workflow, the source
+   repository, workflow run, ref, and commit.
+
+The workflow sends both to the future Coordinator inbox. The inbox saves the
+GitHub facts as submission proof and checks them before accepting the request.
+The workflow is only a delivery step. It does not approve or deploy the
+release. This submission path is not implemented yet.
 
 ## Local files
 
@@ -80,7 +102,7 @@ The backend has many separately deployed units, so its part must list them.
 | `schema_version` | File format version. | Lets future tools read old files safely. |
 | `request_id` | Unique ID for this request. | Gives the file a stable identity. |
 | `created_at` | Time the file was created. | Shows when the saved facts were collected. |
-| `requested_by` | Developer or agent owner. | Shows who asked for the release. |
+| `requested_by` | Name recorded by the agent. | Gives human context. It is not trusted identity proof. |
 | `target` | `staging` or `production`. | Says where the work is intended to go. |
 | `database_change` | `yes`, `no`, or `unknown`. | Recovery rules differ when the database changes. |
 | `release_parts` | The code groups included in the release. | Supports frontend-only, backend-only, and combined releases. |

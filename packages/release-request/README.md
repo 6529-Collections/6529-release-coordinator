@@ -38,8 +38,21 @@ The command writes local files inside the project directory where it runs:
 Every `create` attempt saves a run record. Only a valid release request is
 saved to the outbox.
 
+## Future delivery
+
+`create` remains a local command. The planned next command sends an already
+valid outbox request through a trusted product-repository GitHub workflow. The
+workflow adds the real GitHub actor, source repository, workflow run, ref, and
+commit before it sends the request to the future Coordinator inbox.
+
+The release JSON says what should be released. Its `requested_by` field is not
+authentication. The GitHub submission proof says who sent it. Future delivery
+must keep those two records separate.
+
+The workflow and inbox do not exist yet. This package still sends nothing.
+
 ## Publishing
 
-The package is prepared for the private GitHub Packages registry. A manual run
-of the publishing workflow checks the package without publishing it. Pushing a
-tag such as `release-request-v0.0.1` publishes the matching package version.
+The package is published in the private GitHub Packages registry. A manual run
+of the publishing workflow checks a package version without publishing it.
+Pushing a new matching tag publishes that package version.

@@ -4,22 +4,24 @@
 backend changes through `main`, build, staging, production, checks, and recovery.
 A developer or agent does not need to watch the release while it runs.
 
-Status: **the first local CLI is implemented**. The full Coordinator remains a
-design. This repository does not yet contain a running API, worker, database,
-GitHub App, or deployment authority.
+Status: **the first local CLI is implemented and published**. The frontend
+release skill uses it as a local preflight. Backend integration is next. The
+full Coordinator remains a design. This repository does not yet contain a
+running inbox API, worker, database, GitHub App, or deployment authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
 [Open the first-version architecture](./release-coordinator-architecture.html)
 
 The first implementation is smaller than the full design. It is one small CLI
-package. The existing agent flow can call it without asking the developer to
-fill in a new form or write JSON.
+package. The frontend release skill calls it without asking the developer to
+fill in a new form or write JSON. Backend integration is next.
 
 Every `create` run is saved locally. A successful run also creates a valid
 release-request JSON file. A failed run saves its input and validation
-errors, but it will not create a valid release request. Nothing is posted, and
-no release starts.
+errors, but it will not create a valid release request. Nothing is posted to a
+Coordinator. In the frontend, a successful local preflight lets the existing
+Release Bus process continue. The saved JSON is not Release Bus input.
 
 The release-request contract is saved in the
 [versioned JSON Schema](./packages/release-request/release-request.schema.json), with a
@@ -37,13 +39,13 @@ The first package is:
 packages/release-request/
 ```
 
-The package is named `@6529-collections/release-request`. It is prepared for
-GitHub Packages, but it is not published or installed in the product
-repositories yet. When that integration is added, frontend and backend will
-install only this package. Their existing agent skills will call its
-`6529-release-request` command.
+The package is named `@6529-collections/release-request`. It is published in
+GitHub Packages. The frontend installs it and its existing release skill calls
+the `6529-release-request` command. The backend does not use it yet. When the
+backend integration is added, it will install only this package, not the future
+Coordinator application.
 
-The package will contain only:
+The package contains only:
 
 - the CLI command;
 - release-request creation;
@@ -123,8 +125,8 @@ batch owns `main`, staging, and production.
 
 ## Process at a glance
 
-1. Submit the release request.
-2. Check who sent it.
+1. Create and submit the release request.
+2. Check the trusted GitHub sender.
 3. Check the pull requests.
 4. Decide recovery safety.
 5. Reserve the release lane.
@@ -162,7 +164,12 @@ A developer, automation, or agent can submit one release request containing:
 - selected backend deploy units and any release-specific dependencies;
 - whether the frontend, backend, or both will change;
 - whether the database changes;
-- requester identity and request time.
+- the requester's stated identity and request time.
+
+The release JSON says what should be released. It does not prove who submitted
+it. For repository submissions, the trusted GitHub workflow adds the real
+GitHub actor, source repository, workflow run, ref, and commit when it sends the
+request to the inbox.
 
 Once accepted, the Coordinator queues, merges, builds, deploys, tests, retries,
 recovers, and reports the exact outcome. The submitter does not need to keep a
@@ -172,8 +179,11 @@ browser, terminal, or agent task open.
 
 ```mermaid
 flowchart LR
-    U[Developer or agent] --> C[Web UI, CLI, or skill]
-    C --> API[Release Coordinator API]
+    U[Developer or agent] --> S[Product release skill]
+    S --> CLI[Release-request CLI]
+    CLI --> LOCAL[Local run and outbox files]
+    CLI -. planned submission .-> GHIN[Trusted GitHub submission workflow]
+    GHIN -. planned submission .-> API[Coordinator inbox API]
     API --> DB[(Coordinator database)]
     DB --> W[Coordinator worker]
 
@@ -225,15 +235,33 @@ logic.
 
 ## Request submission
 
-The first implementation saves every `create` run locally. A valid request is saved
+The current `create` command saves every run locally. A valid request is saved
 to the local outbox. It has no API and sends nothing anywhere.
 
-Later, all entry points should call the same authenticated Coordinator API:
+The planned repository submission path is:
 
-- a small web interface;
-- a CLI command;
-- a Codex or agent skill;
-- a direct API client.
+```text
+Product release skill
+  -> CLI creates and validates the JSON
+  -> trusted GitHub workflow records who started it
+  -> workflow sends the JSON to the Coordinator inbox
+  -> inbox saves the request and GitHub submission proof
+```
+
+The workflow is a delivery step, not release approval. It lives on the product
+repository's default branch. GitHub repository access and organization actor
+rules control who may start it. The planned first version uses a narrow
+write-only inbox secret stored in GitHub Actions. Developers do not receive that
+secret. The workflow sends the GitHub actor, source repository, workflow run,
+ref, and commit with the request. The inbox saves those trusted facts separately
+from the release JSON. It saves accepted and rejected submissions and returns a
+submission ID. Sending the same request again must not create a second accepted
+release request.
+
+The `requested_by` field remains useful context, but it is not proof of
+identity. The Coordinator checks the GitHub submission proof before accepting
+the request. A later web interface or direct API client needs its own trusted
+authentication path.
 
 A version `0.000001` request looks like this:
 
@@ -288,7 +316,8 @@ that includes both frontend and backend.
 
 Minimum durable records:
 
-- release request and requester;
+- release request and stated requester;
+- trusted GitHub actor, source repository, workflow run, ref, and commit;
 - ordered release items and dependency edges;
 - exact PR heads and captured `main` SHAs;
 - current state and state-transition history;
@@ -589,8 +618,8 @@ Version one should include:
 
 ## Open decisions
 
-- database technology and hosting;
-- API and authentication contract;
+- inbox hosting and database technology;
+- whether the workflow later replaces its write-only secret with GitHub OIDC;
 - GitHub App permissions and emergency access;
 - maximum release size;
 - exact merge implementation and repository rules;
