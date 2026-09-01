@@ -50,7 +50,7 @@ jobs:
           const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
 
           function fail(reason, errors = []) {
-            console.error(JSON.stringify({
+            const result = {
               status: "failed",
               request_id: requestId,
               reason,
@@ -61,7 +61,9 @@ jobs:
                 workflow_run_id: process.env.GITHUB_RUN_ID,
                 workflow_run_url: runUrl
               }
-            }, null, 2));
+            };
+            console.error(`RELEASE_REQUEST_RESULT=${Buffer.from(JSON.stringify(result)).toString("base64url")}`);
+            console.error(JSON.stringify(result, null, 2));
             process.exit(1);
           }
 
@@ -85,7 +87,7 @@ jobs:
             }]);
           }
 
-          console.log(JSON.stringify({
+          const result = {
             status: "submitted",
             request_id: request.request_id,
             message: "GitHub received and validated the release request.",
@@ -96,5 +98,7 @@ jobs:
               workflow_run_url: runUrl
             },
             request
-          }, null, 2));
+          };
+          console.log(`RELEASE_REQUEST_RESULT=${Buffer.from(JSON.stringify(result)).toString("base64url")}`);
+          console.log(JSON.stringify(result, null, 2));
           NODE

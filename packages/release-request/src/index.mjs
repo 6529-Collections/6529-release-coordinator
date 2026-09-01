@@ -6,6 +6,12 @@ import { fileURLToPath } from "node:url";
 import Ajv2020 from "ajv/dist/2020.js";
 import addFormats from "ajv-formats";
 
+import {
+  COORDINATOR_REPOSITORY,
+  SUBMISSION_WORKFLOW,
+  submitReleaseRequestToGitHub
+} from "./github-submission.mjs";
+
 const RUN_RECORD_VERSION = "0.000001";
 const GENERATED_FIELDS = ["schema_version", "request_id", "created_at"];
 
@@ -196,7 +202,8 @@ function baseRunRecord({ runId, startedAt, inputSource }) {
       text: null
     },
     errors: [],
-    request: null
+    request: null,
+    submission: null
   };
 }
 
@@ -333,5 +340,104 @@ export async function createReleaseRequestRun({
     requestPath: requestRelativePath,
     run: succeededRun,
     runPath: runRelativePath
+  };
+}
+
+export async function submitReleaseRequestRun({
+  projectDirectory = process.cwd(),
+  inputSource = "stdin",
+  readInput,
+  now = () => new Date(),
+  createId = randomUUID,
+  createTemporaryId = randomUUID,
+  submitRequest = submitReleaseRequestToGitHub
+}) {
+  const created = await createReleaseRequestRun({
+    projectDirectory,
+    inputSource,
+    readInput,
+    now,
+    createId,
+    createTemporaryId
+  });
+
+  if (!created.ok) {
+    return { ...created, submission: null };
+  }
+
+  const runPath = absoluteRuntimePath(
+    projectDirectory,
+    "runs",
+    `${created.run.run_id}.json`
+  );
+  let run = {
+    ...created.run,
+    status: "running",
+    finished_at: null,
+    submission: {
+      status: "running",
+      repository: COORDINATOR_REPOSITORY,
+      workflow: SUBMISSION_WORKFLOW,
+      workflow_run_id: null,
+      workflow_run_url: null,
+      actor: null,
+      actor_id: null,
+      reason: null
+    }
+  };
+  await replaceJson(runPath, run, createTemporaryId);
+
+  let submission;
+  try {
+    submission = await submitRequest({ request: created.request });
+  } catch (error) {
+    submission = {
+      ok: false,
+      status: "failed",
+      repository: COORDINATOR_REPOSITORY,
+      workflow: SUBMISSION_WORKFLOW,
+      workflowRun: null,
+      github: null,
+      reason: `Could not submit the release request: ${error.message}`,
+      errors: [
+        errorRecord(
+          "submission_error",
+          `Could not submit the release request: ${error.message}`
+        )
+      ]
+    };
+  }
+
+  const errors = submission.ok
+    ? []
+    : submission.errors || [
+      errorRecord(
+        "submission_failed",
+        submission.reason || "The release request submission failed."
+      )
+    ];
+  run = {
+    ...run,
+    status: submission.ok ? "succeeded" : "failed",
+    finished_at: timestamp(now),
+    errors,
+    submission: {
+      status: submission.status,
+      repository: submission.repository || COORDINATOR_REPOSITORY,
+      workflow: submission.workflow || SUBMISSION_WORKFLOW,
+      workflow_run_id: submission.workflowRun?.id || null,
+      workflow_run_url: submission.workflowRun?.url || null,
+      actor: submission.github?.actor || null,
+      actor_id: submission.github?.actor_id || null,
+      reason: submission.reason || null
+    }
+  };
+  await replaceJson(runPath, run, createTemporaryId);
+
+  return {
+    ...created,
+    ok: submission.ok,
+    run,
+    submission
   };
 }

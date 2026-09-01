@@ -1,8 +1,8 @@
 # @6529-collections/release-request
 
-This package creates and validates one local 6529 release request.
+This package creates, validates, and submits one 6529 release request.
 
-It does not call an API, merge, build, test, or deploy.
+It does not call a Coordinator inbox, merge, build, test, or deploy.
 
 ## Commands
 
@@ -38,23 +38,23 @@ The command writes local files inside the project directory where it runs:
 Every `create` attempt saves a run record. Only a valid release request is
 saved to the outbox.
 
-## Planned submission
+## Submit a request
 
 `create` remains a local command so the current frontend preflight keeps working.
-The planned `submit` command accepts the same agent-input JSON:
+`submit` accepts the same agent-input JSON:
 
 ```sh
 6529-release-request submit --input release-input.json
 ```
 
-The CLI will create and validate the full request, save the local run, start one
-central workflow in the Release Coordinator repository, wait for it, and return
+The CLI creates and validates the full request, saves the local run, starts one
+central workflow in the Release Coordinator repository, waits for it, and returns
 success or failure with a reason. The agent will not run `gh`, choose a workflow,
 or poll GitHub itself. Frontend and backend do not need their own submission
 workflow files.
 
-The first workflow will validate the request again and log the request, real
-GitHub actor, stable actor ID, workflow run, and result. It will not call an inbox,
+The workflow validates the request again and logs the request, real GitHub actor,
+stable actor ID, workflow run, and result. It does not call an inbox,
 merge, build, or deploy anything. In this version, `submitted` means only that
 GitHub received and validated the request.
 
@@ -74,8 +74,9 @@ Coordinator or workflow details to the agent:
 6529-release-request status REQUEST_ID
 ```
 
-The `submit` command, central submission workflow, inbox, and `status` command do
-not exist yet. This package still sends nothing.
+The `submit` command and central logging workflow are implemented and tested in
+this repository. They are not published in a new package version or used by the
+frontend yet. The inbox and `status` command do not exist.
 
 ## Publishing
 

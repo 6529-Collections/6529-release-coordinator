@@ -203,12 +203,13 @@
             </p>
             <p>
               The frontend release skill uses this local preflight. The backend integration is next.
-              The CLI does not send anything yet.
+              The published CLI does not send anything yet.
             </p>
             <p>
-              Next, the same CLI will gain a <code>submit</code> command. It will start one workflow
-              in this Release Coordinator repository, wait for it, and return success or failure.
-              The first workflow will only validate and log the request. It will not call an inbox.
+              This repository now contains the tested <code>submit</code> command. It starts one
+              workflow in this Release Coordinator repository, waits for it, and returns success
+              or failure. It is not published or used by the frontend yet. The workflow only
+              validates and logs the request. It does not call an inbox.
             </p>
             <p>
               Source: <code>packages/release-request/</code>. Product repositories install only
@@ -267,11 +268,11 @@
         },
         save: {
           title: "Save every run",
-          text: "The CLI always saves its result in .release-coordinator/runs inside the product repository where it ran. A successful run also saves the valid request in .release-coordinator/outbox. A failed run saves the input and errors but creates no outbox request. This local folder is ignored by Git. The implemented CLI stops here. In the frontend, a successful preflight lets the existing Release Bus process continue, but Release Bus does not read this JSON.",
+          text: "The CLI always saves its result in .release-coordinator/runs inside the product repository where it ran. A successful run also saves the valid request in .release-coordinator/outbox. A failed local validation saves the input and errors but creates no outbox request. A failed submission keeps the valid outbox request and saves the submission reason in the run record. This local folder is ignored by Git. The published frontend preflight still stops here and lets the existing Release Bus process continue. Release Bus does not read this JSON.",
         },
         send: {
           title: "Submit with the CLI",
-          text: "This is the next planned piece. The product release skill gives the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. The first workflow validates the request again and logs the request, actor, actor ID, workflow run, and result. It does not call an inbox, approve, or deploy anything.",
+          text: "This command is implemented and tested in this repository, but it is not published or used by the frontend yet. The product release skill will give the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. The workflow validates the request again and logs the request, actor, actor ID, workflow run, and result. It does not call an inbox, approve, or deploy anything.",
         },
         inbox: {
           title: "Save in the inbox",

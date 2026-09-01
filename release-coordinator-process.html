@@ -960,11 +960,12 @@
             <strong>Current first version:</strong> The local CLI package is implemented and
             published. The frontend release skill uses it as a local preflight. Backend integration
             is next. The CLI saves every run locally and adds only a valid request to the local
-            outbox. It does not send anything to a Coordinator yet. After a successful frontend
-            preflight, the existing Release Bus process continues without reading this JSON. The
-            next small version adds a CLI <code>submit</code> command and one central workflow that
-            validates and logs the request, then returns a result to the CLI. It will not call an
-            inbox. The inbox and remaining Coordinator steps are still the later target process.
+            outbox. This repository now also contains the tested CLI <code>submit</code> command and
+            central workflow. They validate and log a submitted request and return the result to
+            the CLI. This CLI change is not published or used by the frontend yet. After a
+            successful frontend preflight, the existing Release Bus process continues without
+            reading this JSON. The workflow does not call an inbox. The inbox and remaining
+            Coordinator steps are still the later target process.
           </p>
           <p class="diagram-context">
             Make sure every pull request is open, approved, has passed the checks required by its
@@ -986,7 +987,7 @@
         {
           title: "Create and submit the release request",
           story:
-            "The existing product release skill calls the small release-request CLI package. Today, its create command creates a run ID, saves the run, creates and validates one release-request JSON, and saves a valid request to .release-coordinator/outbox. The frontend uses that local preflight and then continues through the existing Release Bus process. Backend integration is next. The next planned command is submit. The product release skill gives the completed input JSON to the CLI. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands, know the workflow name, or poll GitHub. By default, GitHub allows accounts with Write access to the Release Coordinator repository to start the workflow. The first workflow validates the request again and logs the request, GitHub actor, stable actor ID, workflow run, and result. It does not call an inbox, merge, build, or deploy anything. Later, the same submit command will wait while the workflow sends the request to the Coordinator inbox. The inbox will create a submission ID, save the attempt, and mark it accepted or rejected. A future status command can read that saved result later. The agent-facing commands will not change when the inbox is added.",
+            "The existing product release skill calls the small release-request CLI package. Its create command creates a run ID, saves the run, creates and validates one release-request JSON, and saves a valid request to .release-coordinator/outbox. The frontend uses the published create command as a local preflight and then continues through the existing Release Bus process. Backend integration is next. This repository now also contains the tested submit command, but it is not published or used by the frontend yet. The product release skill will give the completed input JSON to submit. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands, know the workflow name, or poll GitHub. By default, GitHub allows accounts with Write access to the Release Coordinator repository to start the workflow. The workflow validates the request again and logs the request, GitHub actor, stable actor ID, workflow run, and result. It does not call an inbox, merge, build, or deploy anything. Later, the same submit command will wait while the workflow sends the request to the Coordinator inbox. The inbox will create a submission ID, save the attempt, and mark it accepted or rejected. A future status command can read that saved result later. The agent-facing commands will not change when the inbox is added.",
           why:
             "The agent has one stable interface: ask the CLI for the shape, submit the completed JSON, and read the answer. The CLI hides GitHub and later Coordinator details. The central workflow gives every product the same submission path and GitHub supplies trusted proof of who started it.",
           failure:

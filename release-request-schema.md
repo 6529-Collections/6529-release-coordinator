@@ -16,7 +16,7 @@ When backend integration is added, the backend will install only that package
 as a development dependency. It will not install the future Coordinator
 server.
 
-The CLI does this:
+The `create` command does this:
 
 1. Creates a unique run ID.
 2. Saves a local run record with status `running`.
@@ -25,34 +25,35 @@ The CLI does this:
 5. Updates the run record to `succeeded` or `failed`.
 6. Saves a valid request to the local outbox only when validation passes.
 
-It does not call an API, post the file, start a release, merge code, build code,
-or deploy code.
+The `submit` command performs those same steps, starts the central GitHub
+workflow, waits for it, and saves the workflow result in the run record. It does
+not call an inbox, start a release, merge code, build code, or deploy code.
 
 In the frontend release skill, this local command is a preflight. A valid
 request lets the existing Release Bus process continue. An invalid request
 stops that process before release mutation. The saved JSON is not Release Bus
 input.
 
-## Identity and planned CLI submission
+## Identity and CLI submission
 
 `requested_by` records who the agent says requested the release. It is useful
 context, but it is not trusted proof of identity. Anyone creating JSON could
 write a different name there.
 
-The planned submission keeps two records separate:
+Submission keeps two records separate:
 
 1. The release-request JSON says what should be released.
 2. One trusted workflow in the Release Coordinator repository adds the GitHub
    actor, stable actor ID, and workflow run.
 
-The agent will still use only this package. The planned `submit` command accepts
+The agent still uses only this package. The `submit` command accepts
 the same completed input JSON as `create`. It creates and validates the full
 request, saves the local run, starts the central workflow, waits for the result,
 and returns success or failure with a reason. The agent does not need to know the
 workflow name or any GitHub command.
 
-The first central workflow will validate the full request again and log the
-request, GitHub actor, actor ID, workflow run, and result. It will not call an
+The central workflow validates the full request again and logs the
+request, GitHub actor, actor ID, workflow run, and result. It does not call an
 inbox or start a release. This proves the developer-to-CLI-to-GitHub chain before
 the inbox exists. Later, the same `submit` command will send through the workflow
 to the Coordinator inbox. The inbox will save the GitHub facts as submission
@@ -65,21 +66,23 @@ hides the one central workflow. GitHub's default permission rule allows accounts
 with Write access to the Release Coordinator repository to start it. Read-only
 access is not enough. The repositories, branches, and commits to release are
 already recorded in the JSON; the repository where the CLI ran is not used as
-permission proof. Submission does not approve or deploy the release. None of
-this submission path is implemented yet.
+permission proof. Submission does not approve or deploy the release. The command
+and logging workflow are implemented and tested here, but the new CLI version is
+not published or used by the frontend yet.
 
 ## Local files
 
-Every `create` attempt has a run record:
+Every `create` and `submit` attempt has a run record:
 
 ```text
 .release-coordinator/runs/<run-id>.json
 ```
 
 The run record contains the run ID, start and finish times, status, received
-input, errors, and the saved request ID and path when successful. A run that
-stops unexpectedly may remain `running`, which shows that it did not finish
-cleanly.
+input, errors, and the saved request ID and path when successful. A submit run
+also contains the workflow run, GitHub actor when available, and submission
+result. A run that stops unexpectedly may remain `running`, which shows that it
+did not finish cleanly.
 
 Only a valid release request is saved here:
 

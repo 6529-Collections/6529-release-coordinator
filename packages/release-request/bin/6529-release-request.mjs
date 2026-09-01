@@ -5,7 +5,8 @@ import path from "node:path";
 
 import {
   createReleaseRequestRun,
-  getInputTemplate
+  getInputTemplate,
+  submitReleaseRequestRun
 } from "../src/index.mjs";
 
 const packageJson = JSON.parse(
@@ -16,11 +17,13 @@ function help() {
   return `Usage:
   6529-release-request template
   6529-release-request create [--input <file|->] [--project-dir <directory>]
+  6529-release-request submit [--input <file|->] [--project-dir <directory>]
   6529-release-request --version
 
 Commands:
   template  Print the current agent-input template as JSON.
   create    Create, validate, and save one local release-request run.
+  submit    Create, validate, save, and submit one release request.
 
 Options:
   --input        JSON input file. Use - for standard input. Default: -
@@ -28,7 +31,7 @@ Options:
 `;
 }
 
-function parseCreateArguments(args) {
+function parseInputArguments(args) {
   const options = {
     input: "-",
     projectDirectory: process.cwd()
@@ -95,29 +98,36 @@ async function main() {
     return;
   }
 
-  if (command !== "create") {
+  if (command !== "create" && command !== "submit") {
     throw new Error(`Unknown command: ${command}`);
   }
 
-  const options = parseCreateArguments(args);
+  const options = parseInputArguments(args);
   const inputSource = options.input === "-" ? "stdin" : path.resolve(options.input);
   const readInput = options.input === "-"
     ? readStandardInput
     : () => readFile(inputSource, "utf8");
 
-  const result = await createReleaseRequestRun({
+  const runCommand = command === "submit"
+    ? submitReleaseRequestRun
+    : createReleaseRequestRun;
+  const result = await runCommand({
     projectDirectory: options.projectDirectory,
     inputSource,
     readInput
   });
 
   const summary = {
-    status: result.run.status,
+    status: command === "submit"
+      ? result.submission?.status || result.run.status
+      : result.run.status,
     run_id: result.run.run_id,
     run_path: result.runPath,
     request_id: result.run.request?.id || null,
     request_path: result.run.request?.path || null,
-    errors: result.run.errors
+    errors: result.run.errors,
+    workflow_run_id: result.run.submission?.workflow_run_id || null,
+    workflow_run_url: result.run.submission?.workflow_run_url || null
   };
 
   if (result.ok) {

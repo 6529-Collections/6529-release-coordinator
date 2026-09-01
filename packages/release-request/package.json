@@ -1,7 +1,7 @@
 {
   "name": "@6529-collections/release-request",
   "version": "0.0.1",
-  "description": "Create and validate local 6529 release-request files.",
+  "description": "Create, validate, and submit 6529 release-request files.",
   "type": "module",
   "bin": {
     "6529-release-request": "./bin/6529-release-request.mjs"

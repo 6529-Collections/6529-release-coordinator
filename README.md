@@ -5,9 +5,11 @@ backend changes through `main`, build, staging, production, checks, and recovery
 A developer or agent does not need to watch the release while it runs.
 
 Status: **the first local CLI is implemented and published**. The frontend
-release skill uses it as a local preflight. Backend integration is next. The
-full Coordinator remains a design. This repository does not yet contain a
-running inbox API, worker, database, GitHub App, or deployment authority.
+release skill uses its `create` command as a local preflight. This repository
+now also contains the tested `submit` command and central logging workflow, but
+that CLI change is not published or used by the frontend yet. The full
+Coordinator remains a design. This repository does not yet contain a running
+inbox API, worker, database, GitHub App, or deployment authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
@@ -23,12 +25,12 @@ errors, but it will not create a valid release request. Nothing is posted to a
 Coordinator. In the frontend, a successful local preflight lets the existing
 Release Bus process continue. The saved JSON is not Release Bus input.
 
-The next planned command is `submit`. The agent will give it the same completed
-input JSON. The CLI will create and validate the release request, save the run,
-start the central GitHub workflow, wait for it, and return one success or failure
-result. The first workflow will only validate and log what it received. It will
-not call an inbox or start a release. A later `status` command can check a request
-after the CLI is no longer waiting.
+The new `submit` command accepts the same completed input JSON. It creates and
+validates the release request, saves the run, starts the central GitHub workflow,
+waits for it, and returns one success or failure result. The workflow only
+validates and logs what it received. It does not call an inbox or start a
+release. A later `status` command can check a request after the CLI is no longer
+waiting.
 
 The release-request contract is saved in the
 [versioned JSON Schema](./packages/release-request/release-request.schema.json), with a
@@ -58,7 +60,8 @@ The package contains only:
 - release-request creation;
 - local validation;
 - local run records;
-- local release-request files.
+- local release-request files;
+- the small client that starts and waits for the central GitHub workflow.
 
 It will not contain the future Coordinator server, queue, database, GitHub App,
 build logic, deployment logic, or these HTML documents.
@@ -76,7 +79,7 @@ install it.
 
 | File | Created when | Meaning |
 | --- | --- | --- |
-| `.release-coordinator/runs/<run-id>.json` | Every `create` run | Shows whether the CLI started, succeeded, or failed. A record left as `running` shows that the run did not finish cleanly. |
+| `.release-coordinator/runs/<run-id>.json` | Every `create` or `submit` run | Shows whether the CLI started, succeeded, or failed. A submit run also saves its workflow run and result. A record left as `running` shows that the run did not finish cleanly. |
 | `.release-coordinator/outbox/<request-id>.json` | Only after validation passes | The valid release request that a later Coordinator can accept. |
 
 The CLI saves the run record before it creates the request. It updates the same
@@ -189,7 +192,7 @@ flowchart LR
     U[Developer or agent] --> S[Product release skill]
     S --> CLI[Release-request CLI]
     CLI --> LOCAL[Local run and outbox files]
-    CLI -. planned submit .-> GHIN[Central GitHub submission workflow]
+    CLI -->|submit| GHIN[Central GitHub submission workflow]
     GHIN -. first version .-> LOG[GitHub run result and log]
     GHIN -. later .-> API[Coordinator inbox API]
     API --> DB[(Coordinator database)]
@@ -243,8 +246,9 @@ logic.
 
 ## Request submission
 
-The current `create` command saves every run locally. A valid request is saved
-to the local outbox. It has no API and sends nothing anywhere.
+The current `create` command saves every run locally and stops. The new `submit`
+command follows the same creation path and then sends the valid request to the
+central logging workflow.
 
 The agent-facing path is:
 
