@@ -4,12 +4,13 @@
 backend changes through `main`, build, staging, production, checks, and recovery.
 A developer or agent does not need to watch the release while it runs.
 
-Status: **the first local CLI is implemented and published**. The frontend
-release skill uses its `create` command as a local preflight. This repository
-now also contains the tested `submit` command and central logging workflow in
-package version `0.0.2`. The frontend has not upgraded to this version yet. The full
-Coordinator remains a design. This repository does not yet contain a running
-GitHub Issue inbox, worker, database, GitHub App, or deployment authority.
+Status: **the first CLI is implemented and published**. The frontend release
+skill uses package version `0.0.2` and its `submit` command as a synchronous
+observation step. The command validates and saves the request, starts the
+central logging workflow, waits for its result, and reports what happened. The
+full Coordinator remains a design. This repository does not yet contain a
+running GitHub Issue inbox, worker, database, GitHub App, or deployment
+authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
@@ -19,18 +20,17 @@ The first implementation is smaller than the full design. It is one small CLI
 package. The frontend release skill calls it without asking the developer to
 fill in a new form or write JSON. Backend integration is next.
 
-Every `create` run is saved locally. A successful run also creates a valid
-release-request JSON file. A failed run saves its input and validation
-errors, but it will not create a valid release request. Nothing is posted to a
-Coordinator. In the frontend, a successful local preflight lets the existing
-Release Bus process continue. The saved JSON is not Release Bus input.
+Every `create` or `submit` run is saved locally. A valid request is also saved
+to the local outbox. A failed local validation saves the input and errors but
+does not create a valid request. `submit` also starts the central GitHub
+workflow, waits for it, and saves its result.
 
-The new `submit` command accepts the same completed input JSON. It creates and
-validates the release request, saves the run, starts the central GitHub workflow,
-waits for it, and returns one success or failure result. The workflow only
-validates and logs what it received. It does not yet create an inbox issue or
-start a release. A later `status` command can check a request after the CLI is no
-longer waiting.
+In the frontend, this is observation only. A normal returned success or failure
+does not replace or stop the existing Release Bus process. A signal-style exit
+or a wait that never returns stops the release and is raised to the Coordinator
+owner. The workflow currently only validates and logs what it received. It does
+not create an inbox issue or start a Coordinator release. The saved JSON is not
+Release Bus input.
 
 The release-request contract is saved in the
 [versioned JSON Schema](./packages/release-request/release-request.schema.json), with a

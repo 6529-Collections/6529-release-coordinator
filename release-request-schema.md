@@ -30,10 +30,11 @@ workflow, waits for it, and saves the workflow result in the run record. It does
 not yet create an inbox issue, start a release, merge code, build code, or deploy
 code.
 
-In the frontend release skill, this local command is a preflight. A valid
-request lets the existing Release Bus process continue. An invalid request
-stops that process before release mutation. The saved JSON is not Release Bus
-input.
+In the frontend release skill, `submit` is a synchronous observation step. A
+normal returned success or failure is reported, saved, and followed by the
+existing Release Bus process. A signal-style exit or a wait that never returns
+stops the release and is raised to the Coordinator owner. The saved JSON is not
+Release Bus input and does not grant deployment authority.
 
 ## Identity and CLI submission
 
@@ -78,8 +79,8 @@ with Write access to the Release Coordinator repository to start it. Read-only
 access is not enough. The repositories, branches, and commits to release are
 already recorded in the JSON; the repository where the CLI ran is not used as
 permission proof. Submission does not approve or deploy the release. The command
-and logging workflow are included in package version `0.0.2`. The frontend has
-not upgraded to this version yet.
+and logging workflow are included in package version `0.0.2`, which the frontend
+release skill now uses. The backend has not been integrated yet.
 
 ## Local files
 

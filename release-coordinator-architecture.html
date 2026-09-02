@@ -202,16 +202,15 @@
               valid request is added to the local outbox.
             </p>
             <p>
-              The frontend release skill uses this local preflight. The backend integration is next.
-              The CLI version currently installed by the frontend does not send anything yet.
+              The frontend release skill now uses the CLI submit command as a synchronous
+              observation step. The backend integration is next.
             </p>
             <p>
-              This repository now contains the tested <code>submit</code> command. It starts one
-              workflow in this Release Coordinator repository, waits for it, and returns success
-              or failure. It is included in package version 0.0.2, but the frontend has not
-              upgraded to it yet. The workflow only validates and logs the request. The next
-              version will save accepted requests as private GitHub Issues in this repository.
-              It needs no new server or database.
+              Package version 0.0.2 starts one workflow in this Release Coordinator repository,
+              waits for it, and returns success or failure. The frontend now uses it. The workflow
+              only validates and logs the request. A normal returned result does not stop the
+              existing release flow. The next version will save accepted requests as private
+              GitHub Issues in this repository. It needs no new server or database.
             </p>
             <p>
               Source: <code>packages/release-request/</code>. Product repositories install only
@@ -270,11 +269,11 @@
         },
         save: {
           title: "Save every run",
-          text: "The CLI always saves its result in .release-coordinator/runs inside the product repository where it ran. A successful run also saves the valid request in .release-coordinator/outbox. A failed local validation saves the input and errors but creates no outbox request. A failed submission keeps the valid outbox request and saves the submission reason in the run record. This local folder is ignored by Git. The published frontend preflight still stops here and lets the existing Release Bus process continue. Release Bus does not read this JSON.",
+          text: "The CLI always saves its result in .release-coordinator/runs inside the product repository where it ran. A successful validation also saves the valid request in .release-coordinator/outbox. A failed local validation saves the input and errors but creates no outbox request. A failed submission keeps the valid outbox request and saves the submission reason in the run record. This local folder is ignored by Git. The frontend uses this as observation only. A normal returned success or failure is reported, and the existing Release Bus process continues. Release Bus does not read this JSON.",
         },
         send: {
           title: "Submit with the CLI",
-          text: "This command is included in package version 0.0.2, but the frontend has not upgraded to it yet. The product release skill will give the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. The workflow validates the request again and logs the request, actor, actor ID, workflow run, and result. It does not yet create an inbox issue, approve, or deploy anything.",
+          text: "Package version 0.0.2 is installed by the frontend. The product release skill gives the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. A normal returned result is observation only and does not stop the existing release flow. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. The workflow validates the request again and logs the request, actor, actor ID, workflow run, and result. It does not yet create an inbox issue, approve, or deploy anything.",
         },
         inbox: {
           title: "Save in the inbox",

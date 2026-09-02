@@ -40,8 +40,8 @@ saved to the outbox.
 
 ## Submit a request
 
-`create` remains a local command so the current frontend preflight keeps working.
-`submit` accepts the same agent-input JSON:
+`create` remains available for local-only use. The frontend release skill now
+uses `submit`, which accepts the same agent-input JSON:
 
 ```sh
 6529-release-request submit --input release-input.json
@@ -79,9 +79,12 @@ details to the agent:
 6529-release-request status REQUEST_ID
 ```
 
-Package version `0.0.2` contains the `submit` command. The frontend has not
-upgraded to this version yet. Inbox issue creation and the `status` command do
-not exist yet.
+Package version `0.0.2` contains the `submit` command and is installed by the
+frontend. Its release skill treats a normal returned result as observation and
+then continues the existing release flow. A signal-style exit or a wait that
+never returns stops the release and is raised to the Coordinator owner. The
+backend has not been integrated yet. Inbox issue creation and the `status`
+command do not exist yet.
 
 ## Publishing
 
