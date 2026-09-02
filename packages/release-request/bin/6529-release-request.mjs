@@ -127,7 +127,9 @@ async function main() {
     request_path: result.run.request?.path || null,
     errors: result.run.errors,
     workflow_run_id: result.run.submission?.workflow_run_id || null,
-    workflow_run_url: result.run.submission?.workflow_run_url || null
+    workflow_run_url: result.run.submission?.workflow_run_url || null,
+    inbox_issue_number: result.run.submission?.inbox_issue_number || null,
+    inbox_issue_url: result.run.submission?.inbox_issue_url || null
   };
 
   if (result.ok) {

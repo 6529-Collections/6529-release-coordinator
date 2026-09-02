@@ -2,7 +2,8 @@
 
 This package creates, validates, and submits one 6529 release request.
 
-It does not call a Coordinator inbox, merge, build, test, or deploy.
+Its central workflow saves each accepted request as one private GitHub Issue.
+It does not queue, merge, build, test, or deploy anything.
 
 ## Commands
 
@@ -53,10 +54,13 @@ success or failure with a reason. The agent will not run `gh`, choose a workflow
 or poll GitHub itself. Frontend and backend do not need their own submission
 workflow files.
 
-The workflow validates the request again and logs the request, real GitHub actor,
-stable actor ID, workflow run, and result. It does not yet create an inbox issue,
-merge, build, or deploy anything. In this version, `submitted` means only that
-GitHub received and validated the request.
+The workflow validates the request again and saves one private GitHub Issue. The
+Issue title is `Release request <request-id>`. Its body contains the exact
+validated request, checksum, real GitHub actor, stable actor ID, workflow run,
+submission time, and accepted result. It starts with `release-request`,
+`pending`, and target labels. In this version,
+`submitted` means GitHub validated and saved the request. It does not mean that
+anything was approved or deployed.
 
 By default, GitHub allows accounts with Write access to the Release Coordinator
 repository to start this manual workflow. The request JSON already names every
@@ -66,11 +70,9 @@ The release JSON says what should be released. Its `requested_by` field is not
 authentication. The GitHub submission proof says who sent it. Future delivery
 must keep those two records separate.
 
-The next inbox version will keep the same `submit` command. The central workflow
-will create one private GitHub Issue in the Release Coordinator repository for
-each accepted request. The issue will store the exact JSON, its checksum, the
-trusted GitHub sender, and the workflow run. The CLI will return the request ID
-and issue link. Sending the same request again will reuse the same issue.
+The CLI returns the request ID and Issue link. Sending the same request again
+reuses the same Issue. Reusing the same request ID with different JSON fails.
+Invalid requests create no Issue.
 
 A future command can read the issue status without exposing GitHub workflow
 details to the agent:
@@ -79,12 +81,10 @@ details to the agent:
 6529-release-request status REQUEST_ID
 ```
 
-Package version `0.0.2` contains the `submit` command and is installed by the
-frontend. Its release skill treats a normal returned result as observation and
-then continues the existing release flow. A signal-style exit or a wait that
-never returns stops the release and is raised to the Coordinator owner. The
-backend has not been integrated yet. Inbox issue creation and the `status`
-command do not exist yet.
+Package version `0.0.3` source adds the GitHub Issue inbox result. It is not yet
+published or installed by the frontend. The frontend still uses published
+version `0.0.2`, whose workflow result is observation only. The backend has not
+been integrated yet. The `status` command does not exist yet.
 
 ## Publishing
 

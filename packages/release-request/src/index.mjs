@@ -380,6 +380,8 @@ export async function submitReleaseRequestRun({
       workflow: SUBMISSION_WORKFLOW,
       workflow_run_id: null,
       workflow_run_url: null,
+      inbox_issue_number: null,
+      inbox_issue_url: null,
       actor: null,
       actor_id: null,
       reason: null
@@ -397,6 +399,7 @@ export async function submitReleaseRequestRun({
       repository: COORDINATOR_REPOSITORY,
       workflow: SUBMISSION_WORKFLOW,
       workflowRun: null,
+      inboxIssue: null,
       github: null,
       reason: `Could not submit the release request: ${error.message}`,
       errors: [
@@ -427,6 +430,8 @@ export async function submitReleaseRequestRun({
       workflow: submission.workflow || SUBMISSION_WORKFLOW,
       workflow_run_id: submission.workflowRun?.id || null,
       workflow_run_url: submission.workflowRun?.url || null,
+      inbox_issue_number: submission.inboxIssue?.number || null,
+      inbox_issue_url: submission.inboxIssue?.url || null,
       actor: submission.github?.actor || null,
       actor_id: submission.github?.actor_id || null,
       reason: submission.reason || null

@@ -48,6 +48,7 @@ function failedSubmission(code, message, workflowRun = null, errors = null) {
     repository: COORDINATOR_REPOSITORY,
     workflow: SUBMISSION_WORKFLOW,
     workflowRun,
+    inboxIssue: null,
     github: null,
     reason: message,
     errors: errors || [errorRecord(code, message)]
@@ -116,6 +117,21 @@ function readWorkflowResult(log) {
   } catch {
     return null;
   }
+}
+
+function inboxIssueFromWorkflowResult(result) {
+  const number = result.inbox_issue_number;
+  const url = result.inbox_issue_url;
+  if (!Number.isInteger(number) || number < 1 || typeof url !== "string") {
+    return null;
+  }
+
+  const expectedUrl = `https://github.com/${COORDINATOR_REPOSITORY}/issues/${number}`;
+  if (url !== expectedUrl) {
+    return null;
+  }
+
+  return { number, url };
 }
 
 export async function submitReleaseRequestToGitHub({
@@ -247,12 +263,22 @@ export async function submitReleaseRequestToGitHub({
     return failedSubmission("workflow_failed", reason, workflowRun, errors);
   }
 
+  const inboxIssue = inboxIssueFromWorkflowResult(workflowResult);
+  if (!inboxIssue) {
+    return failedSubmission(
+      "github_inbox_missing",
+      "The workflow finished without a valid Coordinator inbox Issue.",
+      workflowRun
+    );
+  }
+
   return {
     ok: true,
     status: "submitted",
     repository: COORDINATOR_REPOSITORY,
     workflow: SUBMISSION_WORKFLOW,
     workflowRun,
+    inboxIssue,
     github: workflowResult.github || null,
     reason: null,
     errors: []

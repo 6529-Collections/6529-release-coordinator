@@ -13,9 +13,23 @@ import {
   validateReleaseRequest
 } from "../src/index.mjs";
 import { submitReleaseRequestToGitHub } from "../src/github-submission.mjs";
+import {
+  buildReleaseRequestIssueBody,
+  releaseRequestChecksum,
+  saveReleaseRequestIssue
+} from "../src/inbox-issue.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
 const binPath = path.join(testDirectory, "..", "bin", "6529-release-request.mjs");
+const workflowPath = path.join(
+  testDirectory,
+  "..",
+  "..",
+  "..",
+  ".github",
+  "workflows",
+  "submit-release-request.yml"
+);
 
 const fixedTime = "2026-08-31T10:00:00.000Z";
 
@@ -85,6 +99,47 @@ async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
+function fakeInboxGitHub() {
+  const labels = new Map();
+  const issues = [];
+  const calls = [];
+
+  return {
+    calls,
+    issues,
+    async request({ method, path: requestPath, body }) {
+      calls.push({ method, path: requestPath, body });
+      if (method === "GET" && requestPath.startsWith("/issues?")) {
+        return { status: 200, data: issues };
+      }
+      if (method === "GET" && requestPath.startsWith("/labels/")) {
+        const name = decodeURIComponent(requestPath.slice("/labels/".length));
+        return labels.has(name)
+          ? { status: 200, data: labels.get(name) }
+          : { status: 404, data: { message: "Not Found" } };
+      }
+      if (method === "POST" && requestPath === "/labels") {
+        labels.set(body.name, body);
+        return { status: 201, data: body };
+      }
+      if (method === "POST" && requestPath === "/issues") {
+        const issue = {
+          number: issues.length + 1,
+          html_url:
+            `https://github.com/6529-Collections/6529-release-coordinator/issues/` +
+            `${issues.length + 1}`,
+          title: body.title,
+          body: body.body,
+          labels: body.labels
+        };
+        issues.push(issue);
+        return { status: 201, data: issue };
+      }
+      throw new Error(`Unexpected fake GitHub request: ${method} ${requestPath}`);
+    }
+  };
+}
+
 test("template describes agent input and leaves generated fields to the CLI", () => {
   const template = getInputTemplate();
 
@@ -114,6 +169,121 @@ test("complete request validation returns clear schema errors", () => {
     result.errors.some((error) => error.location.endsWith("/deploy_units")),
     true
   );
+});
+
+test("the inbox creates one labeled Issue and reuses it", async () => {
+  const request = validRequest();
+  const github = fakeInboxGitHub();
+  const input = {
+    request,
+    actor: "simo6529",
+    actorId: "209783236",
+    workflowRunUrl:
+      "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/12345",
+    submittedAt: fixedTime,
+    githubRequest: github.request
+  };
+
+  const created = await saveReleaseRequestIssue(input);
+  const reused = await saveReleaseRequestIssue(input);
+
+  assert.equal(created.issue.created, true);
+  assert.deepEqual(github.issues[0].labels, [
+    "release-request",
+    "pending",
+    "target:staging"
+  ]);
+
+  // Reuse still works if someone removes the label or renames the Issue.
+  github.issues[0].labels = [];
+  github.issues[0].title = "Renamed release request";
+  const reusedAfterEdit = await saveReleaseRequestIssue(input);
+
+  assert.equal(reused.issue.created, false);
+  assert.equal(reused.issue.url, created.issue.url);
+  assert.equal(reusedAfterEdit.issue.created, false);
+  assert.equal(reusedAfterEdit.issue.url, created.issue.url);
+  assert.equal(github.issues.length, 1);
+  assert.match(github.issues[0].body, /Trusted GitHub actor \| @simo6529/u);
+  assert.match(github.issues[0].body, new RegExp(releaseRequestChecksum(request), "u"));
+  assert.equal(
+    github.calls.filter(
+      (call) => call.method === "POST" && call.path === "/issues"
+    ).length,
+    1
+  );
+});
+
+test("the inbox rejects one request ID with different JSON", async () => {
+  const github = fakeInboxGitHub();
+  const request = validRequest();
+  const input = {
+    request,
+    actor: "simo6529",
+    actorId: "209783236",
+    workflowRunUrl:
+      "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/12345",
+    submittedAt: fixedTime,
+    githubRequest: github.request
+  };
+  await saveReleaseRequestIssue(input);
+
+  await assert.rejects(
+    saveReleaseRequestIssue({
+      ...input,
+      request: { ...request, requested_by: "another-requester" }
+    }),
+    /already exists with different JSON/u
+  );
+  assert.equal(github.issues.length, 1);
+});
+
+test("the inbox rejects an Issue whose saved release JSON changed", async () => {
+  const github = fakeInboxGitHub();
+  const request = validRequest();
+  const checksum = releaseRequestChecksum(request);
+  const body = buildReleaseRequestIssueBody({
+    request,
+    checksum,
+    actor: "simo6529",
+    actorId: "209783236",
+    workflowRunUrl:
+      "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/12345",
+    submittedAt: fixedTime
+  }).replace('"requested_by": "simo"', '"requested_by": "changed"');
+  github.issues.push({
+    number: 1,
+    html_url:
+      "https://github.com/6529-Collections/6529-release-coordinator/issues/1",
+    title: `Release request ${request.request_id}`,
+    body,
+    labels: ["release-request", "pending", "target:staging"]
+  });
+
+  await assert.rejects(
+    saveReleaseRequestIssue({
+      request,
+      actor: "simo6529",
+      actorId: "209783236",
+      workflowRunUrl:
+        "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/12345",
+      submittedAt: fixedTime,
+      githubRequest: github.request
+    }),
+    /release JSON was changed/u
+  );
+});
+
+test("the central workflow has the narrow Issue permission and request lock", async () => {
+  const workflow = await readFile(workflowPath, "utf8");
+
+  assert.match(workflow, /permissions:\n  contents: read\n  issues: write/u);
+  assert.match(
+    workflow,
+    /group: release-request-inbox-\$\{\{ inputs\.request_id \}\}/u
+  );
+  assert.match(workflow, /saveReleaseRequestIssue/u);
+  assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/u);
 });
 
 test("valid input saves a succeeded run and one outbox request", async (t) => {
@@ -303,6 +473,9 @@ test("GitHub submission starts, waits for, and reads the central workflow", asyn
   const workflowResult = {
     status: "submitted",
     request_id: request.request_id,
+    inbox_issue_number: 42,
+    inbox_issue_url:
+      "https://github.com/6529-Collections/6529-release-coordinator/issues/42",
     github: {
       actor: "simo6529",
       actor_id: "209783236",
@@ -337,6 +510,11 @@ test("GitHub submission starts, waits for, and reads the central workflow", asyn
   assert.equal(result.ok, true);
   assert.equal(result.status, "submitted");
   assert.equal(result.workflowRun.id, "12345");
+  assert.equal(result.inboxIssue.number, 42);
+  assert.equal(
+    result.inboxIssue.url,
+    "https://github.com/6529-Collections/6529-release-coordinator/issues/42"
+  );
   assert.equal(result.github.actor, "simo6529");
   assert.deepEqual(calls, ["auth status", "workflow run", "run watch", "run view"]);
 });
@@ -379,6 +557,42 @@ test("GitHub submission returns the workflow rejection reason", async () => {
   assert.equal(result.workflowRun.id, "67890");
 });
 
+test("GitHub submission rejects success without a trusted inbox Issue", async () => {
+  const request = validRequest();
+  const runUrl =
+    "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/13579";
+  const workflowResult = {
+    status: "submitted",
+    request_id: request.request_id,
+    github: {
+      actor: "simo6529",
+      actor_id: "209783236",
+      workflow_run_id: "13579",
+      workflow_run_url: runUrl
+    }
+  };
+
+  const result = await submitReleaseRequestToGitHub({
+    request,
+    runGh: async (args) => {
+      if (args[0] === "auth") {
+        return { exitCode: 0, stdout: "", stderr: "" };
+      }
+      if (args[0] === "workflow") {
+        return { exitCode: 0, stdout: `${runUrl}\n`, stderr: "" };
+      }
+      if (args[1] === "watch") {
+        return { exitCode: 0, stdout: "completed\n", stderr: "" };
+      }
+      return { exitCode: 0, stdout: workflowMarker(workflowResult), stderr: "" };
+    }
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.errors[0].code, "github_inbox_missing");
+  assert.equal(result.inboxIssue, null);
+});
+
 test("a successful submit run saves GitHub proof locally", async (t) => {
   const projectDirectory = await temporaryProject(t);
   const runId = "77777777-7777-4777-8777-777777777777";
@@ -399,6 +613,10 @@ test("a successful submit run saves GitHub proof locally", async (t) => {
         repository: "6529-Collections/6529-release-coordinator",
         workflow: "submit-release-request.yml",
         workflowRun: { id: "24680", url: runUrl },
+        inboxIssue: {
+          number: 42,
+          url: "https://github.com/6529-Collections/6529-release-coordinator/issues/42"
+        },
         github: { actor: "simo6529", actor_id: "209783236" },
         reason: null,
         errors: []
@@ -413,6 +631,11 @@ test("a successful submit run saves GitHub proof locally", async (t) => {
   const run = await readJson(path.join(projectDirectory, result.runPath));
   assert.equal(run.request.id, requestId);
   assert.equal(run.submission.workflow_run_url, runUrl);
+  assert.equal(run.submission.inbox_issue_number, 42);
+  assert.equal(
+    run.submission.inbox_issue_url,
+    "https://github.com/6529-Collections/6529-release-coordinator/issues/42"
+  );
   assert.equal(run.submission.actor, "simo6529");
 });
 

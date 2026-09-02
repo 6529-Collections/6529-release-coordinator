@@ -9,8 +9,10 @@ Version `0.000001` defines the first file produced by the developer-side tool.
 
 The first tool is a small CLI package at `packages/release-request/` in this
 repository. Its package name is `@6529-collections/release-request`. It is
-implemented, tested, and published in GitHub Packages. The frontend installs it
-and calls it from the existing release skill. The backend does not use it yet.
+implemented and published in GitHub Packages. The frontend installs published
+version `0.0.2` and calls it from the existing release skill. The backend does
+not use it yet. Version `0.0.3` source adds the Issue inbox and is not yet
+published or installed by the frontend.
 
 When backend integration is added, the backend will install only that package
 as a development dependency. It will not install the future Coordinator
@@ -26,9 +28,10 @@ The `create` command does this:
 6. Saves a valid request to the local outbox only when validation passes.
 
 The `submit` command performs those same steps, starts the central GitHub
-workflow, waits for it, and saves the workflow result in the run record. It does
-not yet create an inbox issue, start a release, merge code, build code, or deploy
-code.
+workflow, waits for it, and saves the workflow result in the run record. In
+version `0.0.3` source, success also requires one accepted inbox Issue and the
+run record saves its number and URL. It does not start a release, merge code,
+build code, or deploy code.
 
 In the frontend release skill, `submit` is a synchronous observation step. A
 normal returned success or failure is reported, saved, and followed by the
@@ -54,21 +57,15 @@ request, saves the local run, starts the central workflow, waits for the result,
 and returns success or failure with a reason. The agent does not need to know the
 workflow name or any GitHub command.
 
-The central workflow validates the full request again and logs the request,
-GitHub actor, actor ID, workflow run, and result. It does not yet create an inbox
-issue or start a release. This proves the developer-to-CLI-to-GitHub chain before
-the inbox exists.
-
-The next version will create one private GitHub Issue in the Release Coordinator
-repository for each accepted request. The issue will store the exact JSON,
-request checksum, GitHub actor, actor ID, workflow run, submission time, and
-result. Labels will show whether it is pending, processing, finished, or failed.
-The workflow will reuse an existing issue when the same request is submitted
-again, and it will reject the same request ID with different JSON. No separate
-server, database, or inbox secret is needed for this first inbox. The CLI uses
-the developer's GitHub login to start the workflow. The workflow uses GitHub's
-short-lived `GITHUB_TOKEN`, limited to `issues: write`, to create or update the
-issue.
+The version `0.0.3` workflow validates the full request again and creates one
+private GitHub Issue in the Release Coordinator repository. The Issue stores the
+exact validated JSON, request checksum, GitHub actor, actor ID, workflow run,
+submission time, and accepted result. It starts with `release-request`,
+`pending`, and target labels. The workflow reuses the Issue when the same
+request is submitted again. It rejects the same request ID with different JSON.
+No separate server, database, or inbox secret is needed. The CLI uses the
+developer's GitHub login to start the workflow. The workflow uses GitHub's
+short-lived `GITHUB_TOKEN`, limited to `issues: write`, to create the Issue.
 
 The agent-facing command will not change. A future `status <request-id>` command
 can read the matching issue after submission.
@@ -78,9 +75,10 @@ hides the one central workflow. GitHub's default permission rule allows accounts
 with Write access to the Release Coordinator repository to start it. Read-only
 access is not enough. The repositories, branches, and commits to release are
 already recorded in the JSON; the repository where the CLI ran is not used as
-permission proof. Submission does not approve or deploy the release. The command
-and logging workflow are included in package version `0.0.2`, which the frontend
-release skill now uses. The backend has not been integrated yet.
+permission proof. Submission does not approve or deploy the release. Package
+version `0.0.2`, which the frontend release skill uses, validates and logs only.
+Version `0.0.3` source adds the Issue inbox result. The backend has not been
+integrated yet.
 
 ## Local files
 

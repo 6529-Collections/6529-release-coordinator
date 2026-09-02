@@ -961,13 +961,13 @@
             The frontend release skill uses package version 0.0.2 and its <code>submit</code>
             command as a synchronous observation step. Backend integration is next. The CLI saves
             every run locally, adds only a valid request to the local outbox, starts the central
-            workflow, waits for it, and returns the result. The workflow validates and logs the
-            submitted request. A normal returned success or failure does not stop the existing
-            Release Bus process. A signal-style exit or a wait that never returns stops the release
-            and is raised to the Coordinator owner. The workflow does not yet create an inbox issue.
-            The next version will save each accepted request as one private GitHub Issue in this
-            repository. It needs no new server or database. The remaining Coordinator steps are
-            still the later target process.
+            workflow, waits for it, and returns the result. Published version 0.0.2 validates and
+            logs the submitted request. A normal returned success or failure does not stop the
+            existing Release Bus process. A signal-style exit or a wait that never returns stops the
+            release and is raised to the Coordinator owner. Version 0.0.3 source now saves each
+            accepted request as one private GitHub Issue and returns its number and link. It is not
+            yet published or running on GitHub. It needs no new server or database. The remaining
+            Coordinator steps are still the later target process.
           </p>
           <p class="diagram-context">
             Make sure every pull request is open, approved, has passed the checks required by its
@@ -989,11 +989,11 @@
         {
           title: "Create and submit the release request",
           story:
-            "The frontend product release skill calls package version 0.0.2 and gives the completed input JSON to the CLI submit command. The CLI creates a run ID, saves the run, creates and validates the full release request, saves a valid request to .release-coordinator/outbox, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. A normal returned result is observation only, and the existing Release Bus process continues without reading this JSON. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. Backend integration is next. The agent does not run GitHub commands, know the workflow name, or poll GitHub. By default, GitHub allows accounts with Write access to the Release Coordinator repository to start the workflow. The workflow validates the request again and logs the request, GitHub actor, stable actor ID, workflow run, and result. It does not yet create an inbox issue, merge, build, or deploy anything. In the next version, the same workflow will create one private GitHub Issue for each accepted request. The issue will store the exact JSON, checksum, trusted sender proof, workflow run, time, and result. The CLI will return the request ID and issue link. A future status command can read that issue. The agent-facing commands will not change when the inbox is added.",
+            "The frontend product release skill currently calls published package version 0.0.2 and gives the completed input JSON to the CLI submit command. The CLI creates a run ID, saves the run, creates and validates the full release request, saves a valid request to .release-coordinator/outbox, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. A normal returned result is observation only, and the existing Release Bus process continues without reading this JSON. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. Backend integration is next. The agent does not run GitHub commands, know the workflow name, or poll GitHub. By default, GitHub allows accounts with Write access to the Release Coordinator repository to start the workflow. Published version 0.0.2 validates and logs the request. Version 0.0.3 source now also creates or reuses one private GitHub Issue for each accepted request. The Issue stores the exact validated JSON, checksum, trusted sender proof, workflow run, time, and accepted result. The CLI returns the request ID, Issue number, and Issue link. A future status command can read that Issue. Version 0.0.3 is not yet published or running on GitHub. Neither version merges, builds, or deploys anything.",
           why:
             "The agent has one stable interface: ask the CLI for the shape, submit the completed JSON, and read the answer. The CLI hides GitHub and later Coordinator details. The central workflow gives every product the same submission path and GitHub supplies trusted proof of who started it.",
           failure:
-            "Every attempt is saved locally. If the JSON cannot be created or does not match the schema, the CLI returns the validation reason and no workflow starts. If the GitHub login is missing, Write access is missing, or the workflow fails, the CLI returns that reason. A normal returned failure is reported as an observation warning, and the existing Release Bus process continues. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. In the later inbox version, the CLI also returns an inbox rejection reason. A failed submission creates no inbox issue and starts no Coordinator release work."
+            "Every attempt is saved locally. If the JSON cannot be created or does not match the schema, the CLI returns the validation reason and no workflow starts. If the GitHub login is missing, Write access is missing, or the workflow fails, the CLI returns that reason. A normal returned failure is reported as an observation warning, and the existing Release Bus process continues. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. Version 0.0.3 also returns an inbox rejection reason. A failed submission creates no inbox Issue and starts no Coordinator release work."
         },
         {
           title: "Confirm the central GitHub submission",

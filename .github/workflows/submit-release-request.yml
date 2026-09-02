@@ -16,10 +16,15 @@ on:
 
 permissions:
   contents: read
+  issues: write
+
+concurrency:
+  group: release-request-inbox-${{ inputs.request_id }}
+  cancel-in-progress: false
 
 jobs:
-  validate-and-log:
-    name: Validate and log request
+  validate-and-save:
+    name: Validate and save request
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -37,13 +42,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Validate and log the release request
+      - name: Validate and save the release request
         env:
+          GH_TOKEN: ${{ github.token }}
           REQUEST_ID: ${{ inputs.request_id }}
           REQUEST_JSON: ${{ inputs.request_json }}
         run: |
           node --input-type=module <<'NODE'
           import { validateReleaseRequest } from "./packages/release-request/src/index.mjs";
+          import { saveReleaseRequestIssue } from "./packages/release-request/src/inbox-issue.mjs";
 
           const requestId = process.env.REQUEST_ID ?? "";
           const requestText = process.env.REQUEST_JSON ?? "";
@@ -55,6 +62,8 @@ jobs:
               request_id: requestId,
               reason,
               errors,
+              inbox_issue_number: null,
+              inbox_issue_url: null,
               github: {
                 actor: process.env.GITHUB_ACTOR,
                 actor_id: process.env.GITHUB_ACTOR_ID,
@@ -87,10 +96,66 @@ jobs:
             }]);
           }
 
+          const token = process.env.GH_TOKEN ?? "";
+          const apiUrl = process.env.GITHUB_API_URL ?? "https://api.github.com";
+          const repository = process.env.GITHUB_REPOSITORY ?? "";
+          if (!token || !repository) {
+            fail("The workflow cannot authenticate to the GitHub Issue inbox.", [{
+              code: "inbox_auth",
+              location: "$",
+              message: "The workflow GitHub token or repository is missing."
+            }]);
+          }
+
+          async function githubRequest({ method, path, body }) {
+            const response = await fetch(`${apiUrl}/repos/${repository}${path}`, {
+              method,
+              headers: {
+                accept: "application/vnd.github+json",
+                authorization: `Bearer ${token}`,
+                "content-type": "application/json",
+                "x-github-api-version": "2022-11-28"
+              },
+              body: body === undefined ? undefined : JSON.stringify(body)
+            });
+            const responseText = await response.text();
+            let data = null;
+            if (responseText) {
+              try {
+                data = JSON.parse(responseText);
+              } catch {
+                data = { message: "GitHub returned a response that was not JSON." };
+              }
+            }
+            return { status: response.status, data };
+          }
+
+          let inbox;
+          try {
+            inbox = await saveReleaseRequestIssue({
+              request,
+              actor: process.env.GITHUB_ACTOR,
+              actorId: process.env.GITHUB_ACTOR_ID,
+              workflowRunUrl: runUrl,
+              submittedAt: new Date().toISOString(),
+              githubRequest
+            });
+          } catch (error) {
+            fail(`Could not save the release request in the inbox: ${error.message}`, [{
+              code: "inbox_issue",
+              location: "$",
+              message: error.message
+            }]);
+          }
+
           const result = {
             status: "submitted",
             request_id: request.request_id,
-            message: "GitHub received and validated the release request.",
+            message: inbox.issue.created
+              ? "GitHub validated and saved the release request in the inbox."
+              : "GitHub validated the release request and reused its inbox Issue.",
+            inbox_issue_number: inbox.issue.number,
+            inbox_issue_url: inbox.issue.url,
             github: {
               actor: process.env.GITHUB_ACTOR,
               actor_id: process.env.GITHUB_ACTOR_ID,
