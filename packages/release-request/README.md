@@ -54,7 +54,7 @@ or poll GitHub itself. Frontend and backend do not need their own submission
 workflow files.
 
 The workflow validates the request again and logs the request, real GitHub actor,
-stable actor ID, workflow run, and result. It does not call an inbox,
+stable actor ID, workflow run, and result. It does not yet create an inbox issue,
 merge, build, or deploy anything. In this version, `submitted` means only that
 GitHub received and validated the request.
 
@@ -66,16 +66,22 @@ The release JSON says what should be released. Its `requested_by` field is not
 authentication. The GitHub submission proof says who sent it. Future delivery
 must keep those two records separate.
 
-Later, the same `submit` command will let the workflow send the request to the
-Coordinator inbox. A future command can read its saved status without exposing
-Coordinator or workflow details to the agent:
+The next inbox version will keep the same `submit` command. The central workflow
+will create one private GitHub Issue in the Release Coordinator repository for
+each accepted request. The issue will store the exact JSON, its checksum, the
+trusted GitHub sender, and the workflow run. The CLI will return the request ID
+and issue link. Sending the same request again will reuse the same issue.
+
+A future command can read the issue status without exposing GitHub workflow
+details to the agent:
 
 ```sh
 6529-release-request status REQUEST_ID
 ```
 
 Package version `0.0.2` contains the `submit` command. The frontend has not
-upgraded to this version yet. The inbox and `status` command do not exist.
+upgraded to this version yet. Inbox issue creation and the `status` command do
+not exist yet.
 
 ## Publishing
 

@@ -9,7 +9,7 @@ release skill uses its `create` command as a local preflight. This repository
 now also contains the tested `submit` command and central logging workflow in
 package version `0.0.2`. The frontend has not upgraded to this version yet. The full
 Coordinator remains a design. This repository does not yet contain a running
-inbox API, worker, database, GitHub App, or deployment authority.
+GitHub Issue inbox, worker, database, GitHub App, or deployment authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
@@ -28,9 +28,9 @@ Release Bus process continue. The saved JSON is not Release Bus input.
 The new `submit` command accepts the same completed input JSON. It creates and
 validates the release request, saves the run, starts the central GitHub workflow,
 waits for it, and returns one success or failure result. The workflow only
-validates and logs what it received. It does not call an inbox or start a
-release. A later `status` command can check a request after the CLI is no longer
-waiting.
+validates and logs what it received. It does not yet create an inbox issue or
+start a release. A later `status` command can check a request after the CLI is no
+longer waiting.
 
 The release-request contract is saved in the
 [versioned JSON Schema](./packages/release-request/release-request.schema.json), with a
@@ -63,7 +63,7 @@ The package contains only:
 - local release-request files;
 - the small client that starts and waits for the central GitHub workflow.
 
-It will not contain the future Coordinator server, queue, database, GitHub App,
+It will not contain the future Coordinator worker, queue, database, GitHub App,
 build logic, deployment logic, or these HTML documents.
 
 The future central system can be added separately in the same repository:
@@ -194,9 +194,9 @@ flowchart LR
     CLI --> LOCAL[Local run and outbox files]
     CLI -->|submit| GHIN[Central GitHub submission workflow]
     GHIN -. first version .-> LOG[GitHub run result and log]
-    GHIN -. later .-> API[Coordinator inbox API]
-    API --> DB[(Coordinator database)]
-    DB --> W[Coordinator worker]
+    GHIN -. next version .-> INBOX[Private GitHub Issue inbox]
+    INBOX -. later .-> W[Coordinator worker]
+    W --> DB[(Coordinator database)]
 
     W --> GH[GitHub API and merge rules]
     W --> FE[Frontend workflows]
@@ -213,8 +213,9 @@ flowchart LR
 
     STG --> E2E[Version and journey checks]
     PROD --> E2E
-    E2E --> API
-    API --> C
+    E2E --> DB
+    DB --> C[Final result]
+    W -. status .-> INBOX
 ```
 
 The Coordinator is a separate system. It coordinates the product repositories
@@ -279,16 +280,33 @@ and reports `submitted` or `failed` with a reason. In this version, `submitted`
 means only that GitHub received and validated the request. It does not mean that
 a Coordinator accepted it or that anything was deployed.
 
-Later, the same `submit` command will let the workflow send the request to the
-Coordinator inbox. That future workflow will use a narrow write-only inbox secret
-stored in this repository's GitHub Actions settings. Developers will not receive
-that secret. The inbox will save the GitHub actor and workflow run separately
-from the release JSON. It will save accepted and rejected submissions and return
-a submission ID. Sending the same request again must not create a second accepted
-release request. The agent-facing CLI command will not change.
+The next version keeps the same `submit` command. After validation, the central
+workflow will create one private GitHub Issue in this repository. That issue is
+the first inbox record. No new server, API secret, or database is needed.
+The CLI will still use the developer's GitHub login to start the workflow. The
+workflow will use GitHub's short-lived `GITHUB_TOKEN`, limited to
+`issues: write`, to create or update the inbox issue.
 
-A later `status <request-id>` command will ask the Coordinator for the saved
-state. It is not part of the first chain test.
+The issue will contain:
+
+- the request ID and exact release JSON;
+- the request checksum;
+- the trusted GitHub actor and stable actor ID;
+- the central workflow run and submission time;
+- the accepted result.
+
+The issue will use simple labels such as `release-request`, `pending`,
+`processing`, `finished`, and `failed`. Later status changes can be added as
+comments. The CLI will return the request ID and issue link.
+
+The workflow will check the request ID before creating an issue. Submitting the
+same request again will return the existing issue. Reusing the same request ID
+with different JSON will fail. Release requests must not contain secrets. The
+agent-facing CLI command will not change. Invalid or rejected submissions remain
+in the CLI run record and GitHub workflow log; they do not become inbox issues.
+
+A later `status <request-id>` command can read the matching inbox issue. It is
+not part of the first chain test.
 
 The `requested_by` field remains useful context, but it is not proof of
 identity. The Coordinator uses the GitHub actor from the central workflow as the
@@ -338,14 +356,19 @@ A version `0.000001` request looks like this:
 ```
 
 The JSON contract for the local first version is defined by
-[`release-request.schema.json`](./packages/release-request/release-request.schema.json). A future API may
-wrap this request, but it should not change what the fields mean.
+[`release-request.schema.json`](./packages/release-request/release-request.schema.json). The GitHub
+workflow and any future API must keep the same field meanings.
 
-## Where queue state lives
+## Where inbox and queue state live
 
-The Coordinator uses its own database, such as PostgreSQL or MySQL. GitHub has
-one merge queue per repository, so it cannot hold the full truth for one release
-that includes both frontend and backend.
+The first inbox is a set of private GitHub Issues in this repository. One issue
+stores one accepted release request and its trusted submission proof. This is
+enough to collect requests before the Coordinator starts doing release work.
+
+The inbox is not the full release queue. When the Coordinator starts batching,
+merging, building, and deploying requests, it will use its own database, such as
+PostgreSQL. GitHub has one merge queue per repository, so it cannot hold the full
+truth for one release that includes both frontend and backend.
 
 Minimum durable records:
 
@@ -392,7 +415,8 @@ same progress again must be safe and must not create a second result.
 
 | Fact | Source of truth |
 | --- | --- |
-| Release intent, queue, order, and current phase | Coordinator database |
+| Accepted request and trusted submission proof | Private GitHub inbox issue |
+| Queue, order, and current release phase | Coordinator database, once processing exists |
 | PR number, current exact head, review, and CI | GitHub |
 | Saved build identity | Trusted build storage |
 | What is actually running | Runtime version proof |
@@ -651,8 +675,7 @@ Version one should include:
 
 ## Open decisions
 
-- inbox hosting and database technology;
-- whether the workflow later replaces its write-only secret with GitHub OIDC;
+- when the GitHub Issue inbox should move into the Coordinator database;
 - GitHub App permissions and emergency access;
 - maximum release size;
 - exact merge implementation and repository rules;

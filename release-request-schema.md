@@ -27,7 +27,8 @@ The `create` command does this:
 
 The `submit` command performs those same steps, starts the central GitHub
 workflow, waits for it, and saves the workflow result in the run record. It does
-not call an inbox, start a release, merge code, build code, or deploy code.
+not yet create an inbox issue, start a release, merge code, build code, or deploy
+code.
 
 In the frontend release skill, this local command is a preflight. A valid
 request lets the existing Release Bus process continue. An invalid request
@@ -52,14 +53,24 @@ request, saves the local run, starts the central workflow, waits for the result,
 and returns success or failure with a reason. The agent does not need to know the
 workflow name or any GitHub command.
 
-The central workflow validates the full request again and logs the
-request, GitHub actor, actor ID, workflow run, and result. It does not call an
-inbox or start a release. This proves the developer-to-CLI-to-GitHub chain before
-the inbox exists. Later, the same `submit` command will send through the workflow
-to the Coordinator inbox. The inbox will save the GitHub facts as submission
-proof and check them before accepting the request. The agent-facing command will
-not change. A future `status <request-id>` command can read the saved Coordinator
-state after submission.
+The central workflow validates the full request again and logs the request,
+GitHub actor, actor ID, workflow run, and result. It does not yet create an inbox
+issue or start a release. This proves the developer-to-CLI-to-GitHub chain before
+the inbox exists.
+
+The next version will create one private GitHub Issue in the Release Coordinator
+repository for each accepted request. The issue will store the exact JSON,
+request checksum, GitHub actor, actor ID, workflow run, submission time, and
+result. Labels will show whether it is pending, processing, finished, or failed.
+The workflow will reuse an existing issue when the same request is submitted
+again, and it will reject the same request ID with different JSON. No separate
+server, database, or inbox secret is needed for this first inbox. The CLI uses
+the developer's GitHub login to start the workflow. The workflow uses GitHub's
+short-lived `GITHUB_TOKEN`, limited to `issues: write`, to create or update the
+issue.
+
+The agent-facing command will not change. A future `status <request-id>` command
+can read the matching issue after submission.
 
 Frontend and backend do not need their own submission workflow files. The CLI
 hides the one central workflow. GitHub's default permission rule allows accounts

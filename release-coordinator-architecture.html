@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="How a local release request reaches the future Coordinator inbox." />
+    <meta name="description" content="How a local release request reaches the planned GitHub Issue inbox." />
     <title>Release request path</title>
     <style>
       :root {
@@ -180,7 +180,7 @@
           </button>
           <button type="button" role="tab" aria-selected="false" data-step="inbox">
             <span class="step-title">7. Save in the inbox</span>
-            <span class="step-description">Keep the request and its trusted sender proof.</span>
+            <span class="step-description">Create one private GitHub Issue for the request.</span>
           </button>
         </div>
 
@@ -209,8 +209,9 @@
               This repository now contains the tested <code>submit</code> command. It starts one
               workflow in this Release Coordinator repository, waits for it, and returns success
               or failure. It is included in package version 0.0.2, but the frontend has not
-              upgraded to it yet. The workflow only
-              validates and logs the request. It does not call an inbox.
+              upgraded to it yet. The workflow only validates and logs the request. The next
+              version will save accepted requests as private GitHub Issues in this repository.
+              It needs no new server or database.
             </p>
             <p>
               Source: <code>packages/release-request/</code>. Product repositories install only
@@ -273,11 +274,11 @@
         },
         send: {
           title: "Submit with the CLI",
-          text: "This command is included in package version 0.0.2, but the frontend has not upgraded to it yet. The product release skill will give the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. The workflow validates the request again and logs the request, actor, actor ID, workflow run, and result. It does not call an inbox, approve, or deploy anything.",
+          text: "This command is included in package version 0.0.2, but the frontend has not upgraded to it yet. The product release skill will give the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. The workflow validates the request again and logs the request, actor, actor ID, workflow run, and result. It does not yet create an inbox issue, approve, or deploy anything.",
         },
         inbox: {
           title: "Save in the inbox",
-          text: "This comes later. The same CLI submit command will wait while the central workflow sends the request to the inbox. The inbox gives every submission its own ID and saves the release JSON beside GitHub's trusted sender proof. It accepts or rejects the submission and saves the reason. The CLI returns that result. A future CLI status command can read it again later. The first inbox does not queue, merge, build, or deploy anything.",
+          text: "This is the next small version. After validation, the central workflow creates one private GitHub Issue in this repository. It uses GitHub's short-lived workflow token with permission to write issues, so no new inbox secret is needed. The issue stores the request ID, exact JSON, checksum, GitHub actor, actor ID, workflow run, time, and accepted result. Labels show pending, processing, finished, or failed. The CLI returns the request ID and issue link. The same request reuses the same issue; the same ID with different JSON fails. Invalid submissions stay in the CLI run and workflow log and create no issue. A future status command can read the issue. This inbox does not queue, merge, build, or deploy anything, and it needs no new server or database.",
         },
       };
 
