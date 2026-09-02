@@ -74,9 +74,8 @@ Coordinator or workflow details to the agent:
 6529-release-request status REQUEST_ID
 ```
 
-The `submit` command and central logging workflow are implemented and tested in
-this repository. They are not published in a new package version or used by the
-frontend yet. The inbox and `status` command do not exist.
+Package version `0.0.2` contains the `submit` command. The frontend has not
+upgraded to this version yet. The inbox and `status` command do not exist.
 
 ## Publishing
 

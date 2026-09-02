@@ -1,6 +1,6 @@
 {
   "name": "@6529-collections/release-request",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Create, validate, and submit 6529 release-request files.",
   "type": "module",
   "bin": {

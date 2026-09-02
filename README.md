@@ -6,8 +6,8 @@ A developer or agent does not need to watch the release while it runs.
 
 Status: **the first local CLI is implemented and published**. The frontend
 release skill uses its `create` command as a local preflight. This repository
-now also contains the tested `submit` command and central logging workflow, but
-that CLI change is not published or used by the frontend yet. The full
+now also contains the tested `submit` command and central logging workflow in
+package version `0.0.2`. The frontend has not upgraded to this version yet. The full
 Coordinator remains a design. This repository does not yet contain a running
 inbox API, worker, database, GitHub App, or deployment authority.
 

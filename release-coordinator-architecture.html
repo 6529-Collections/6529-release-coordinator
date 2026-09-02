@@ -203,12 +203,13 @@
             </p>
             <p>
               The frontend release skill uses this local preflight. The backend integration is next.
-              The published CLI does not send anything yet.
+              The CLI version currently installed by the frontend does not send anything yet.
             </p>
             <p>
               This repository now contains the tested <code>submit</code> command. It starts one
               workflow in this Release Coordinator repository, waits for it, and returns success
-              or failure. It is not published or used by the frontend yet. The workflow only
+              or failure. It is included in package version 0.0.2, but the frontend has not
+              upgraded to it yet. The workflow only
               validates and logs the request. It does not call an inbox.
             </p>
             <p>
@@ -272,7 +273,7 @@
         },
         send: {
           title: "Submit with the CLI",
-          text: "This command is implemented and tested in this repository, but it is not published or used by the frontend yet. The product release skill will give the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. The workflow validates the request again and logs the request, actor, actor ID, workflow run, and result. It does not call an inbox, approve, or deploy anything.",
+          text: "This command is included in package version 0.0.2, but the frontend has not upgraded to it yet. The product release skill will give the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. The workflow validates the request again and logs the request, actor, actor ID, workflow run, and result. It does not call an inbox, approve, or deploy anything.",
         },
         inbox: {
           title: "Save in the inbox",

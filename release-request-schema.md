@@ -67,8 +67,8 @@ with Write access to the Release Coordinator repository to start it. Read-only
 access is not enough. The repositories, branches, and commits to release are
 already recorded in the JSON; the repository where the CLI ran is not used as
 permission proof. Submission does not approve or deploy the release. The command
-and logging workflow are implemented and tested here, but the new CLI version is
-not published or used by the frontend yet.
+and logging workflow are included in package version `0.0.2`. The frontend has
+not upgraded to this version yet.
 
 ## Local files
 
