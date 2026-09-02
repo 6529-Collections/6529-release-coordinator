@@ -6,10 +6,11 @@ A developer or agent does not need to watch the release while it runs.
 
 Status: **the first CLI is implemented and published**. The frontend release
 skill uses package version `0.0.2` and its `submit` command as a synchronous
-observation step. Version `0.0.3` source now adds the first private GitHub Issue
-inbox and returns the Issue number and link. It is not yet published or running
-on GitHub. The full Coordinator remains a design. This repository does not yet
-contain a running worker, database, GitHub App, or deployment authority.
+observation step. Package version `0.0.3` is also published. The central workflow
+now saves accepted requests in the first private GitHub Issue inbox. Version
+`0.0.3` returns and saves the Issue number and link. The full Coordinator remains
+a design. This repository does not yet contain a running worker, database,
+GitHub App, or deployment authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
@@ -27,9 +28,10 @@ workflow, waits for it, and saves its result.
 In the frontend, this is observation only. A normal returned success or failure
 does not replace or stop the existing Release Bus process. A signal-style exit
 or a wait that never returns stops the release and is raised to the Coordinator
-owner. Published version `0.0.2` only validates and logs what it received.
-Version `0.0.3` source also saves an accepted request as one inbox Issue. Neither
-version starts a Coordinator release. The saved JSON is not Release Bus input.
+owner. The frontend's installed `0.0.2` CLI now reaches the live inbox workflow,
+but it does not show or save the returned Issue link. Published version `0.0.3`
+adds that result handling. Neither version starts a Coordinator release. The
+saved JSON is not Release Bus input.
 
 The release-request contract is saved in the
 [versioned JSON Schema](./packages/release-request/release-request.schema.json), with a
@@ -192,8 +194,7 @@ flowchart LR
     S --> CLI[Release-request CLI]
     CLI --> LOCAL[Local run and outbox files]
     CLI -->|submit| GHIN[Central GitHub submission workflow]
-    GHIN -. published 0.0.2 .-> LOG[GitHub run result and log]
-    GHIN -->|0.0.3 source| INBOX[Private GitHub Issue inbox]
+    GHIN --> INBOX[Private GitHub Issue inbox]
     INBOX -. later .-> W[Coordinator worker]
     W --> DB[(Coordinator database)]
 
@@ -273,15 +274,13 @@ or agent uses its own GitHub login through the CLI, and GitHub records that
 account's actor name, stable actor ID, and workflow run. The request JSON itself
 lists every product repository, branch, pull request, and exact commit to release.
 
-Published package version `0.0.2` is the chain test. Its central workflow
-validates the request again, logs the request and GitHub sender facts, and
-finishes.
-
-Version `0.0.3` source keeps the same `submit` command. After validation, the
-central workflow creates one private GitHub Issue in this repository. That Issue
-is the first inbox record. No new server, API secret, or database is needed.
-The CLI will still use the developer's GitHub login to start the workflow. The
-workflow will use GitHub's short-lived `GITHUB_TOKEN`, limited to
+The central workflow validates the request again and creates one private GitHub
+Issue in this repository. That Issue is the first inbox record. No new server,
+API secret, or database is needed. Both package versions `0.0.2` and `0.0.3`
+start this workflow. Version `0.0.3` also requires, saves, and returns the Issue
+result.
+The CLI uses the developer's GitHub login to start the workflow. The workflow
+uses GitHub's short-lived `GITHUB_TOKEN`, limited to
 `issues: write`, to create the inbox Issue.
 
 The issue will contain:

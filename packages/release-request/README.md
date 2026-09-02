@@ -81,10 +81,10 @@ details to the agent:
 6529-release-request status REQUEST_ID
 ```
 
-Package version `0.0.3` source adds the GitHub Issue inbox result. It is not yet
-published or installed by the frontend. The frontend still uses published
-version `0.0.2`, whose workflow result is observation only. The backend has not
-been integrated yet. The `status` command does not exist yet.
+Package version `0.0.3` is published and adds the GitHub Issue inbox result. The
+frontend still uses published version `0.0.2`, so it reaches the same inbox
+workflow but does not show or save the returned Issue link yet. The backend has
+not been integrated yet. The `status` command does not exist yet.
 
 ## Publishing
 

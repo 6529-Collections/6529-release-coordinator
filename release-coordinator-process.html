@@ -961,13 +961,13 @@
             The frontend release skill uses package version 0.0.2 and its <code>submit</code>
             command as a synchronous observation step. Backend integration is next. The CLI saves
             every run locally, adds only a valid request to the local outbox, starts the central
-            workflow, waits for it, and returns the result. Published version 0.0.2 validates and
-            logs the submitted request. A normal returned success or failure does not stop the
-            existing Release Bus process. A signal-style exit or a wait that never returns stops the
-            release and is raised to the Coordinator owner. Version 0.0.3 source now saves each
-            accepted request as one private GitHub Issue and returns its number and link. It is not
-            yet published or running on GitHub. It needs no new server or database. The remaining
-            Coordinator steps are still the later target process.
+            workflow, waits for it, and returns the result. A normal returned success or failure
+            does not stop the existing Release Bus process. A signal-style exit or a wait that never returns stops the
+            release and is raised to the Coordinator owner. The central workflow now saves each
+            accepted request as one private GitHub Issue. Published version 0.0.3 returns and saves
+            its number and link. The frontend still uses 0.0.2, so it reaches the inbox but does not
+            show the link yet. The inbox needs no new server or database. The remaining Coordinator
+            steps are still the later target process.
           </p>
           <p class="diagram-context">
             Make sure every pull request is open, approved, has passed the checks required by its
@@ -989,7 +989,7 @@
         {
           title: "Create and submit the release request",
           story:
-            "The frontend product release skill currently calls published package version 0.0.2 and gives the completed input JSON to the CLI submit command. The CLI creates a run ID, saves the run, creates and validates the full release request, saves a valid request to .release-coordinator/outbox, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. A normal returned result is observation only, and the existing Release Bus process continues without reading this JSON. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. Backend integration is next. The agent does not run GitHub commands, know the workflow name, or poll GitHub. By default, GitHub allows accounts with Write access to the Release Coordinator repository to start the workflow. Published version 0.0.2 validates and logs the request. Version 0.0.3 source now also creates or reuses one private GitHub Issue for each accepted request. The Issue stores the exact validated JSON, checksum, trusted sender proof, workflow run, time, and accepted result. The CLI returns the request ID, Issue number, and Issue link. A future status command can read that Issue. Version 0.0.3 is not yet published or running on GitHub. Neither version merges, builds, or deploys anything.",
+            "The frontend product release skill currently calls published package version 0.0.2 and gives the completed input JSON to the CLI submit command. The CLI creates a run ID, saves the run, creates and validates the full release request, saves a valid request to .release-coordinator/outbox, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. A normal returned result is observation only, and the existing Release Bus process continues without reading this JSON. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. Backend integration is next. The agent does not run GitHub commands, know the workflow name, or poll GitHub. By default, GitHub allows accounts with Write access to the Release Coordinator repository to start the workflow. The central workflow now creates or reuses one private GitHub Issue for each accepted request. The Issue stores the exact validated JSON, checksum, trusted sender proof, workflow run, time, and accepted result. Published version 0.0.3 returns and saves the request ID, Issue number, and Issue link. The frontend still uses 0.0.2, so it reaches the inbox but does not show the link yet. A future status command can read that Issue. Neither version merges, builds, or deploys anything.",
           why:
             "The agent has one stable interface: ask the CLI for the shape, submit the completed JSON, and read the answer. The CLI hides GitHub and later Coordinator details. The central workflow gives every product the same submission path and GitHub supplies trusted proof of who started it.",
           failure:
