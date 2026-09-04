@@ -35,7 +35,7 @@ public. Release requests must never contain secrets.
 - [x] The npm organization has two human owners.
 - [x] `Check package` runs for pull requests into `main`.
 - [x] Pull request #4 proved that the package check passes without publishing.
-- [ ] `main` requires a pull request and a successful package check.
+- [x] `main` requires a pull request and a successful package check.
 - [ ] The CLI exists on public npm.
 - [ ] npm Trusted Publishing is configured.
 - [ ] Frontend installs the CLI from public npm without a package token.
@@ -53,16 +53,19 @@ to approve every change yet.
 - [x] Run all release-request CLI tests.
 - [x] Inspect package contents with `npm pack --dry-run`.
 - [x] Confirm that a valid pull request passes without publishing.
-- [ ] Create a lightweight branch ruleset for `main`.
-- [ ] Require changes to use a pull request.
-- [ ] Require `Check package` to pass.
-- [ ] Block force pushes.
-- [ ] Block deletion of `main`.
-- [ ] Require open review conversations to be resolved.
-- [ ] Keep required approvals at zero during bootstrap.
-- [ ] Confirm that a failing package check blocks merging.
-- [ ] Confirm that `simo6529` can merge a passing pull request without asking
+- [x] Create a lightweight branch ruleset for `main`.
+- [x] Require changes to use a pull request.
+- [x] Require `Check package` to pass.
+- [x] Block force pushes.
+- [x] Block deletion of `main`.
+- [x] Require open review conversations to be resolved.
+- [x] Keep required approvals at zero during bootstrap.
+- [x] Confirm that a failing package check blocks merging.
+- [x] Confirm that `simo6529` can merge a passing pull request without asking
   another person for approval.
+
+Pull request #6 proved both paths: its intentional package-check failure blocked
+merging, and its repaired version passed and could merge with zero approvals.
 
 Do not add `CODEOWNERS` or a required human approval yet. Add them in Phase 7.
 
