@@ -40,7 +40,8 @@ public. Release requests must never contain secrets.
 - [ ] npm Trusted Publishing is configured.
 - [ ] Frontend installs the CLI from public npm without a package token.
 
-The current tag workflow still publishes to GitHub Packages. No npm release has
+GitHub Packages version `0.0.3` remains available for the frontend. The current
+workflow checks the package but cannot publish a new version. No npm release has
 been made yet.
 
 ## Phase 1: Protect `main` without human approval
@@ -71,17 +72,22 @@ Do not add `CODEOWNERS` or a required human approval yet. Add them in Phase 7.
 
 ## Phase 2: Prepare the public package
 
-- [ ] Choose an approved open-source license.
-- [ ] Add the license to the repository and published package.
-- [ ] Keep a strict allowlist of published files.
-- [ ] Confirm the package contains no credentials or private configuration.
-- [ ] Confirm the package has no install-time scripts.
-- [ ] Confirm the archive contains only the CLI, source, schema, example,
+- [x] Choose an approved open-source license.
+- [x] Add the license to the repository and published package.
+- [x] Keep a strict allowlist of published files.
+- [x] Confirm the package contains no credentials or private configuration.
+- [x] Confirm the package has no install-time scripts.
+- [x] Confirm the archive contains only the CLI, source, schema, example,
   package README, and license.
-- [ ] Change the publishing registry to `https://registry.npmjs.org`.
-- [ ] Set package publication access to `public`.
-- [ ] Update package documentation from GitHub Packages to public npm.
-- [ ] Inspect the exact package archive before publishing.
+- [x] Change the publishing registry to `https://registry.npmjs.org`.
+- [x] Set package publication access to `public`.
+- [x] Update package documentation from GitHub Packages to public npm.
+- [x] Inspect the exact package archive before publishing.
+
+The MIT-licensed archive was inspected on 2026-09-04. It contained nine files:
+the package metadata, CLI, three source files, schema, example, README, and
+license. All 21 package tests passed. No install-time scripts or
+credential-shaped values were found.
 
 Do not reuse version `0.0.3` on npm. Use a new version so one version number
 always identifies one exact package archive.
@@ -91,10 +97,10 @@ always identifies one exact package archive.
 The package must exist on npm before its trusted publisher can be configured.
 Create it with one manual prerelease.
 
-- [ ] Change the package version to `0.0.4-bootstrap.0` in a pull request.
-- [ ] Wait for `Check package` to pass.
-- [ ] Merge the pull request.
-- [ ] Start from a clean `main` checkout.
+- [x] Change the package version to `0.0.4-bootstrap.0` in a pull request.
+- [x] Wait for `Check package` to pass.
+- [x] Merge the pull request.
+- [x] Start from a clean `main` checkout.
 - [ ] Sign in to npm as an owner with 2FA.
 - [ ] Run the package tests.
 - [ ] Inspect the package archive.
@@ -220,8 +226,7 @@ Frontend requires normal public packages to be at least seven days old.
 - [ ] The existing frontend release flow remains unchanged.
 
 Keep GitHub Packages version `0.0.3` available until the npm installation is
-proven. Stop publishing new GitHub Packages versions after the npm path is
-stable.
+proven. New GitHub Packages versions are disabled during the migration.
 
 ## Phase 7: Add human approval later
 
