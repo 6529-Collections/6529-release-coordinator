@@ -2,7 +2,7 @@
 
 This package creates, validates, and submits one 6529 release request.
 
-Its central workflow saves each accepted request as one private GitHub Issue.
+Its central workflow saves each accepted request as one public GitHub Issue.
 It does not queue, merge, build, test, or deploy anything.
 
 ## Commands
@@ -54,7 +54,7 @@ success or failure with a reason. The agent will not run `gh`, choose a workflow
 or poll GitHub itself. Frontend and backend do not need their own submission
 workflow files.
 
-The workflow validates the request again and saves one private GitHub Issue. The
+The workflow validates the request again and saves one public GitHub Issue. The
 Issue title is `Release request <request-id>`. Its body contains the exact
 validated request, checksum, real GitHub actor, stable actor ID, workflow run,
 submission time, and accepted result. It starts with `release-request`,
@@ -82,12 +82,14 @@ details to the agent:
 ```
 
 Package version `0.0.3` is published and adds the GitHub Issue inbox result. The
-frontend still uses published version `0.0.2`, so it reaches the same inbox
-workflow but does not show or save the returned Issue link yet. The backend has
-not been integrated yet. The `status` command does not exist yet.
+frontend uses version `0.0.3`, so it returns and saves the Issue link. The
+backend has not been integrated yet. The `status` command does not exist yet.
 
 ## Publishing
 
 The package is published in the private GitHub Packages registry. A manual run
 of the publishing workflow checks a package version without publishing it.
 Pushing a new matching tag publishes that package version.
+
+The current plan is to move future versions to public npm. Until that migration
+is complete, GitHub Packages remains the active package source.

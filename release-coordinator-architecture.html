@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="How a local release request reaches the planned GitHub Issue inbox." />
+    <meta name="description" content="How a local release request reaches the live GitHub Issue inbox." />
     <title>Release request path</title>
     <style>
       :root {
@@ -180,7 +180,7 @@
           </button>
           <button type="button" role="tab" aria-selected="false" data-step="inbox">
             <span class="step-title">7. Save in the inbox</span>
-            <span class="step-description">Create one private GitHub Issue for the request.</span>
+            <span class="step-description">Create one public GitHub Issue for the request.</span>
           </button>
         </div>
 
@@ -203,18 +203,21 @@
             </p>
             <p>
               The frontend release skill now uses the CLI submit command as a synchronous
-              observation step. The backend integration is next.
+              observation step. The backend does not use it yet.
             </p>
             <p>
-              The frontend still uses published package version 0.0.2. It starts one workflow,
-              waits for it, and returns success or failure. A normal returned result does not stop
-              the existing release flow.
+              The frontend uses published package version 0.0.3. It starts one workflow, waits for
+              it, and returns success or failure with the inbox Issue result. A normal returned
+              result does not stop the existing release flow.
             </p>
             <p>
-              The central workflow now saves each accepted request as one private GitHub Issue.
-              Published version 0.0.3 returns and saves its number and link. The frontend still
-              uses 0.0.2, so it reaches the inbox but does not show that link yet. The inbox needs
-              no new server or database.
+              The central workflow now saves each accepted request as one public GitHub Issue.
+              One controlled frontend test completed the full path and created test Issue #1.
+              Nothing was merged or deployed. The inbox needs no new server or database.
+            </p>
+            <p>
+              No inbox reader or worker exists yet. The next Coordinator-side step is to read and
+              validate pending Issues without changing them.
             </p>
             <p>
               Source: <code>packages/release-request/</code>. Product repositories install only
@@ -235,7 +238,7 @@
       const details = {
         release: {
           title: "Ask for a release",
-          text: "The developer tells the existing agent what should go to staging or production. The frontend release skill already calls the CLI quietly. Backend integration is next. The developer does not fill in a new form or write JSON by hand.",
+          text: "The developer tells the existing agent what should go to staging or production. The frontend release skill already calls CLI version 0.0.3 quietly. The backend does not use it yet. The developer does not fill in a new form or write JSON by hand.",
         },
         collect: {
           title: "Read exact code",
@@ -277,11 +280,11 @@
         },
         send: {
           title: "Submit with the CLI",
-          text: "Published package version 0.0.2 is installed by the frontend. The product release skill gives the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with a reason. A normal returned result is observation only and does not stop the existing release flow. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow. Published version 0.0.3 keeps this same interface and also requires, saves, and returns a valid inbox Issue result.",
+          text: "Published package version 0.0.3 is installed by the frontend. The product release skill gives the completed input JSON to the CLI submit command. The CLI creates and validates the full request, saves the run, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with the inbox Issue result. A normal returned result is observation only and does not stop the existing release flow. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. The agent does not run GitHub commands or know the workflow name. By default, GitHub allows accounts with Write access to this repository to start the workflow.",
         },
         inbox: {
           title: "Save in the inbox",
-          text: "This inbox workflow is now live. After validation, it creates one private GitHub Issue in this repository. It uses GitHub's short-lived workflow token with permission to write issues, so no new inbox secret is needed. The Issue stores the request ID, exact validated JSON, checksum, GitHub actor, actor ID, workflow run, time, and accepted result. It starts with release-request, pending, and target labels. Package version 0.0.3 returns the request ID, Issue number, and Issue link. The same request reuses the same Issue; the same ID with different JSON fails. Invalid submissions stay in the CLI run and workflow log and create no Issue. A future status command can read the Issue. This inbox does not queue, merge, build, or deploy anything, and it needs no new server or database.",
+          text: "This inbox workflow is now live. After validation, it creates one public GitHub Issue in this repository. It uses GitHub's short-lived workflow token with permission to write issues, so no new inbox secret is needed. The Issue stores the request ID, exact validated JSON, checksum, GitHub actor, actor ID, workflow run, time, and accepted result. It starts with release-request, pending, and target labels. Package version 0.0.3 returns the request ID, Issue number, and Issue link. The same request reuses the same Issue; the same ID with different JSON fails. Invalid submissions stay in the CLI run and workflow log and create no Issue. One controlled frontend test created test Issue #1 and stopped before merge or deployment. No inbox reader exists yet. This inbox does not queue, merge, build, or deploy anything, and it needs no new server or database. Release requests must not contain secrets.",
         },
       };
 
