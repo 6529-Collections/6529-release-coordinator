@@ -98,9 +98,9 @@ The package must exist on npm before its trusted publisher can be configured.
 Create it with one manual prerelease.
 
 - [x] Change the package version to `0.0.4-bootstrap.0` in a pull request.
-- [ ] Wait for `Check package` to pass.
-- [ ] Merge the pull request.
-- [ ] Start from a clean `main` checkout.
+- [x] Wait for `Check package` to pass.
+- [x] Merge the pull request.
+- [x] Start from a clean `main` checkout.
 - [ ] Sign in to npm as an owner with 2FA.
 - [ ] Run the package tests.
 - [ ] Inspect the package archive.
