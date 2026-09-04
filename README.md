@@ -4,21 +4,23 @@
 backend changes through `main`, build, staging, production, checks, and recovery.
 A developer or agent does not need to watch the release while it runs.
 
-Status: **the first CLI is implemented and published**. The frontend release
-skill uses package version `0.0.2` and its `submit` command as a synchronous
-observation step. Package version `0.0.3` is also published. The central workflow
-now saves accepted requests in the first private GitHub Issue inbox. Version
-`0.0.3` returns and saves the Issue number and link. The full Coordinator remains
-a design. This repository does not yet contain a running worker, database,
-GitHub App, or deployment authority.
+Status: **the first release-request path is live**. Package version `0.0.3` is
+published and installed by the frontend. The frontend release skill calls its
+`submit` command as a synchronous observation step. The central workflow saves
+each accepted request as one GitHub Issue in this public repository, and the CLI
+returns and saves the Issue number and link. The full Coordinator remains a
+design. This repository does not yet contain an inbox reader, running worker,
+database, GitHub App, or deployment authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
 [Open the first-version architecture](./release-coordinator-architecture.html)
 
+[Follow the public npm publication plan](./secure-npm-publication-plan.md)
+
 The first implementation is smaller than the full design. It is one small CLI
 package. The frontend release skill calls it without asking the developer to
-fill in a new form or write JSON. Backend integration is next.
+fill in a new form or write JSON. The backend does not use it yet.
 
 Every `create` or `submit` run is saved locally. A valid request is also saved
 to the local outbox. A failed local validation saves the input and errors but
@@ -28,10 +30,26 @@ workflow, waits for it, and saves its result.
 In the frontend, this is observation only. A normal returned success or failure
 does not replace or stop the existing Release Bus process. A signal-style exit
 or a wait that never returns stops the release and is raised to the Coordinator
-owner. The frontend's installed `0.0.2` CLI now reaches the live inbox workflow,
-but it does not show or save the returned Issue link. Published version `0.0.3`
-adds that result handling. Neither version starts a Coordinator release. The
-saved JSON is not Release Bus input.
+owner. The frontend's installed `0.0.3` CLI reaches the live inbox workflow and
+saves the returned Issue number and link. It does not start a Coordinator
+release. The saved JSON is not Release Bus input.
+
+### Verified intake test
+
+The complete intake path has been tested once from the frontend:
+
+```text
+Frontend release skill -> CLI 0.0.3 -> central workflow -> public inbox Issue
+```
+
+The test created request `30363b08-3c7f-4054-8570-f5ff2be3d6d6` in public
+Issue `#1`. The workflow saved the exact frontend PR, branch, commit, target,
+GitHub actor, and workflow proof. It did not merge or deploy anything. Issue
+`#1` is test evidence and must not be processed as a real release.
+
+The next Coordinator-side step is a read-only inbox reader. It will list pending
+Issues, validate their saved data, and show what they contain. It will not change
+labels, merge code, or deploy code.
 
 The release-request contract is saved in the
 [versioned JSON Schema](./packages/release-request/release-request.schema.json), with a
@@ -274,11 +292,10 @@ or agent uses its own GitHub login through the CLI, and GitHub records that
 account's actor name, stable actor ID, and workflow run. The request JSON itself
 lists every product repository, branch, pull request, and exact commit to release.
 
-The central workflow validates the request again and creates one private GitHub
-Issue in this repository. That Issue is the first inbox record. No new server,
-API secret, or database is needed. Both package versions `0.0.2` and `0.0.3`
-start this workflow. Version `0.0.3` also requires, saves, and returns the Issue
-result.
+The central workflow validates the request again and creates one GitHub Issue in
+this public repository. That Issue is the first inbox record. No new server,
+API secret, or database is needed. The frontend uses package version `0.0.3`,
+which requires, saves, and returns the Issue result.
 The CLI uses the developer's GitHub login to start the workflow. The workflow
 uses GitHub's short-lived `GITHUB_TOKEN`, limited to
 `issues: write`, to create the inbox Issue.
@@ -358,7 +375,7 @@ workflow and any future API must keep the same field meanings.
 
 ## Where inbox and queue state live
 
-The first inbox is a set of private GitHub Issues in this repository. One issue
+The first inbox is a set of GitHub Issues in this public repository. One issue
 stores one accepted release request and its trusted submission proof. This is
 enough to collect requests before the Coordinator starts doing release work.
 

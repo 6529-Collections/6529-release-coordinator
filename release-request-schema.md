@@ -10,9 +10,8 @@ Version `0.000001` defines the first file produced by the developer-side tool.
 The first tool is a small CLI package at `packages/release-request/` in this
 repository. Its package name is `@6529-collections/release-request`. It is
 implemented and published in GitHub Packages. The frontend installs published
-version `0.0.2` and calls it from the existing release skill. The backend does
-not use it yet. Published version `0.0.3` adds the Issue inbox result but is not
-yet installed by the frontend.
+version `0.0.3` and calls it from the existing release skill. The backend does
+not use it yet. Version `0.0.3` returns and saves the Issue inbox result.
 
 When backend integration is added, the backend will install only that package
 as a development dependency. It will not install the future Coordinator
@@ -57,8 +56,8 @@ request, saves the local run, starts the central workflow, waits for the result,
 and returns success or failure with a reason. The agent does not need to know the
 workflow name or any GitHub command.
 
-The central workflow validates the full request again and creates one
-private GitHub Issue in the Release Coordinator repository. The Issue stores the
+The central workflow validates the full request again and creates one public
+GitHub Issue in the Release Coordinator repository. The Issue stores the
 exact validated JSON, request checksum, GitHub actor, actor ID, workflow run,
 submission time, and accepted result. It starts with `release-request`,
 `pending`, and target labels. The workflow reuses the Issue when the same
@@ -76,9 +75,9 @@ with Write access to the Release Coordinator repository to start it. Read-only
 access is not enough. The repositories, branches, and commits to release are
 already recorded in the JSON; the repository where the CLI ran is not used as
 permission proof. Submission does not approve or deploy the release. Package
-version `0.0.2`, which the frontend release skill uses, reaches the same inbox
-workflow but does not show or save the Issue link. Published version `0.0.3`
-adds that result handling. The backend has not been integrated yet.
+version `0.0.3`, which the frontend release skill uses, requires, shows, and
+saves the Issue result. The backend has not been integrated yet. One controlled
+frontend test created test Issue `#1` and stopped before merge or deployment.
 
 ## Local files
 
