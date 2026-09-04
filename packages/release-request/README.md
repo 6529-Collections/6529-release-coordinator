@@ -87,9 +87,18 @@ backend has not been integrated yet. The `status` command does not exist yet.
 
 ## Publishing
 
-The package is published in the private GitHub Packages registry. A manual run
-of the publishing workflow checks a package version without publishing it.
-Pushing a new matching tag publishes that package version.
+Version `0.0.3` remains available from GitHub Packages for the current frontend
+integration. New versions will be public on npm after the bootstrap release.
 
-The current plan is to move future versions to public npm. Until that migration
-is complete, GitHub Packages remains the active package source.
+The package manifest points to the public npm registry and allows public access.
+The published archive contains only the CLI, source files, schema, example,
+README, license, and npm package metadata. It has no install-time scripts.
+
+After a public version exists, install an exact version from npm:
+
+```sh
+npm install --save-dev @6529-collections/release-request@<version>
+```
+
+The current GitHub tag workflow still publishes to GitHub Packages. Do not make
+a release tag until the token-free public npm workflow is ready.

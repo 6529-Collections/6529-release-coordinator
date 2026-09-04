@@ -2,6 +2,7 @@
   "name": "@6529-collections/release-request",
   "version": "0.0.3",
   "description": "Create, validate, and submit 6529 release-request files.",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "6529-release-request": "./bin/6529-release-request.mjs"
@@ -12,8 +13,11 @@
     "./example": "./release-request.example.json"
   },
   "files": [
-    "bin",
-    "src",
+    "bin/6529-release-request.mjs",
+    "src/github-submission.mjs",
+    "src/inbox-issue.mjs",
+    "src/index.mjs",
+    "LICENSE",
     "README.md",
     "release-request.schema.json",
     "release-request.example.json"
@@ -27,7 +31,8 @@
     "directory": "packages/release-request"
   },
   "publishConfig": {
-    "registry": "https://npm.pkg.github.com"
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
   },
   "scripts": {
     "test": "node --test test/*.test.mjs"

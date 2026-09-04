@@ -71,17 +71,22 @@ Do not add `CODEOWNERS` or a required human approval yet. Add them in Phase 7.
 
 ## Phase 2: Prepare the public package
 
-- [ ] Choose an approved open-source license.
-- [ ] Add the license to the repository and published package.
-- [ ] Keep a strict allowlist of published files.
-- [ ] Confirm the package contains no credentials or private configuration.
-- [ ] Confirm the package has no install-time scripts.
-- [ ] Confirm the archive contains only the CLI, source, schema, example,
+- [x] Choose an approved open-source license.
+- [x] Add the license to the repository and published package.
+- [x] Keep a strict allowlist of published files.
+- [x] Confirm the package contains no credentials or private configuration.
+- [x] Confirm the package has no install-time scripts.
+- [x] Confirm the archive contains only the CLI, source, schema, example,
   package README, and license.
-- [ ] Change the publishing registry to `https://registry.npmjs.org`.
-- [ ] Set package publication access to `public`.
-- [ ] Update package documentation from GitHub Packages to public npm.
-- [ ] Inspect the exact package archive before publishing.
+- [x] Change the publishing registry to `https://registry.npmjs.org`.
+- [x] Set package publication access to `public`.
+- [x] Update package documentation from GitHub Packages to public npm.
+- [x] Inspect the exact package archive before publishing.
+
+The MIT-licensed archive was inspected on 2026-09-04. It contained nine files:
+the package metadata, CLI, three source files, schema, example, README, and
+license. All 21 package tests passed. No install-time scripts or
+credential-shaped values were found.
 
 Do not reuse version `0.0.3` on npm. Use a new version so one version number
 always identifies one exact package archive.
