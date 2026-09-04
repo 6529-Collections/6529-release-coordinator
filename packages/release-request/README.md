@@ -100,5 +100,6 @@ After a public version exists, install an exact version from npm:
 npm install --save-dev @6529-collections/release-request@<version>
 ```
 
-The current GitHub tag workflow still publishes to GitHub Packages. Do not make
-a release tag until the token-free public npm workflow is ready.
+The current GitHub workflow checks the package but does not publish it. Public
+npm publishing will be added only after the bootstrap package exists and npm
+Trusted Publishing can be configured.

@@ -40,7 +40,8 @@ public. Release requests must never contain secrets.
 - [ ] npm Trusted Publishing is configured.
 - [ ] Frontend installs the CLI from public npm without a package token.
 
-The current tag workflow still publishes to GitHub Packages. No npm release has
+GitHub Packages version `0.0.3` remains available for the frontend. The current
+workflow checks the package but cannot publish a new version. No npm release has
 been made yet.
 
 ## Phase 1: Protect `main` without human approval
@@ -225,8 +226,7 @@ Frontend requires normal public packages to be at least seven days old.
 - [ ] The existing frontend release flow remains unchanged.
 
 Keep GitHub Packages version `0.0.3` available until the npm installation is
-proven. Stop publishing new GitHub Packages versions after the npm path is
-stable.
+proven. New GitHub Packages versions are disabled during the migration.
 
 ## Phase 7: Add human approval later
 
