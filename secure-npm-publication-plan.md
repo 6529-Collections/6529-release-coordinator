@@ -96,7 +96,7 @@ always identifies one exact package archive.
 The package must exist on npm before its trusted publisher can be configured.
 Create it with one manual prerelease.
 
-- [ ] Change the package version to `0.0.4-bootstrap.0` in a pull request.
+- [x] Change the package version to `0.0.4-bootstrap.0` in a pull request.
 - [ ] Wait for `Check package` to pass.
 - [ ] Merge the pull request.
 - [ ] Start from a clean `main` checkout.

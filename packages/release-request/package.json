@@ -1,6 +1,6 @@
 {
   "name": "@6529-collections/release-request",
-  "version": "0.0.3",
+  "version": "0.0.4-bootstrap.0",
   "description": "Create, validate, and submit 6529 release-request files.",
   "license": "MIT",
   "type": "module",
@@ -13,10 +13,8 @@
     "./example": "./release-request.example.json"
   },
   "files": [
-    "bin/6529-release-request.mjs",
-    "src/github-submission.mjs",
-    "src/inbox-issue.mjs",
-    "src/index.mjs",
+    "bin",
+    "src",
     "LICENSE",
     "README.md",
     "release-request.schema.json",
