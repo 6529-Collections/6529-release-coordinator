@@ -1,6 +1,6 @@
 {
   "name": "@6529-collections/release-request",
-  "version": "0.0.4-bootstrap.0",
+  "version": "0.0.4",
   "description": "Create, validate, and submit 6529 release-request files.",
   "license": "MIT",
   "type": "module",
