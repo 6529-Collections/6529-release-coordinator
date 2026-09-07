@@ -157,9 +157,8 @@ Update the GitHub workflow so:
 5. The publish job uses Node 24 and confirms npm is 11.5.1 or newer.
 6. Only the publish job uses `contents: read` and `id-token: write`.
 7. The requested version matches the package version.
-8. A matching `release-request-v<version>` source tag exists on the exact
-   `main` commit being published.
-9. Package scripts stay disabled while the archive is created and published.
+8. Package scripts stay disabled while the archive is created and published.
+9. The archive checksum is checked again immediately before publication.
 10. The inspected public archive is published with `npm publish`.
 
 Security checks:
@@ -178,6 +177,12 @@ Trusted Publishing uses short-lived GitHub identity instead of a stored npm
 token. During bootstrap it publishes immediately after all workflow checks pass;
 it does not wait for a second person.
 
+The GitHub environment's selected-branch rule is the main security gate. It is
+configured in GitHub, outside this repository, and allows only the `main`
+branch. The shell branch check is a second check, not a replacement for that
+environment rule. Release tags are not used as publication permission during
+bootstrap because they are not protected yet.
+
 ## Phase 5: Publish the first stable npm versions
 
 For each bootstrap release:
@@ -185,14 +190,13 @@ For each bootstrap release:
 1. Change the package version in a pull request.
 2. Wait for `Check package` to pass.
 3. Merge the pull request.
-4. Create the matching `release-request-v<version>` tag from `main`.
-5. Start `Release request CLI` manually from `main` and enter the exact
+4. Start `Release request CLI` manually from `main` and enter the exact
    version.
-6. Wait for the trusted npm workflow.
-7. Confirm the expected version became available on npm.
-8. Confirm npm shows GitHub provenance.
-9. Install it in a clean temporary project.
-10. Test `template`, `create`, and `submit` without deploying anything.
+5. Wait for the trusted npm workflow.
+6. Confirm the expected version became available on npm.
+7. Confirm npm shows GitHub provenance and the exact source commit.
+8. Install it in a clean temporary project.
+9. Test `template`, `create`, and `submit` without deploying anything.
 
 The first stable version is planned as `0.0.4`. Later bootstrap releases use new
 version numbers. npm versions are never reused.

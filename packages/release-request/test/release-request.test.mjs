@@ -303,8 +303,9 @@ test("npm publishing is limited to protected main and a short-lived identity", a
   assert.match(workflow, /environment: npm-publish/u);
   assert.equal([...workflow.matchAll(/id-token: write/gu)].length, 1);
   assert.match(workflow, /GITHUB_REF.*refs\/heads\/main/u);
-  assert.match(workflow, /release-request-v\$\{package_version\}/u);
-  assert.match(workflow, /npm publish.*--ignore-scripts.*--provenance/u);
+  assert.match(workflow, /npm publish/u);
+  assert.match(workflow, /--ignore-scripts/u);
+  assert.match(workflow, /--provenance/u);
   assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN/u);
 });
 
