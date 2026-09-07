@@ -90,7 +90,7 @@ not exist yet.
 
 Version `0.0.3` remains available from GitHub Packages for the current frontend
 integration. Public npm contains stable version `0.0.4` as `latest`. The earlier
-`0.0.4-bootstrap.0` remains under the `bootstrap` tag.
+`0.0.4-bootstrap.0` remains under the `bootstrap` tag; it is no longer `latest`.
 
 The package manifest points to the public npm registry and allows public access.
 The published archive contains only the CLI, source files, schema, example,

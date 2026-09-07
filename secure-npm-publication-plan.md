@@ -213,9 +213,11 @@ environment, and commit `eea2c47e570611e43e9cd7aacf9fb2df1405595b`.
 A clean temporary project installed exact version `0.0.4` with zero reported
 vulnerabilities. The installed CLI reported `0.0.4`; `template` and `create`
 worked. We did not call `submit` with a fake product release because that would
-create a misleading public inbox Issue. The full submit path was already proven
-from the frontend, and remains covered by the package tests. It will be tested
-again from a product repository when that repository moves to public npm.
+create a misleading public inbox Issue. Package tests cover local CLI behavior
+and mocked GitHub responses; they do not run the live central workflow or create
+a real Issue. The complete live path was previously proven from the frontend
+with version `0.0.3`. A product repository will repeat that live test after it
+moves to public npm.
 
 ## Phase 6: Move frontend installation to npm
 
