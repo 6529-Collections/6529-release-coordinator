@@ -81,29 +81,31 @@ details to the agent:
 6529-release-request status REQUEST_ID
 ```
 
-Public npm prerelease `0.0.4-bootstrap.0` contains the same current CLI behavior.
-The frontend still uses GitHub Packages version `0.0.3`, so it returns and saves
-the Issue link. The backend has not been integrated yet. The `status` command
-does not exist yet.
+Public npm stable version `0.0.4` contains the same current CLI behavior. The
+frontend still uses GitHub Packages version `0.0.3`, so it returns and saves the
+Issue link. The backend has not been integrated yet. The `status` command does
+not exist yet.
 
 ## Publishing
 
 Version `0.0.3` remains available from GitHub Packages for the current frontend
-integration. Public npm contains prerelease `0.0.4-bootstrap.0` under the
-`bootstrap` tag.
+integration. Public npm contains stable version `0.0.4` as `latest`. The earlier
+`0.0.4-bootstrap.0` remains under the `bootstrap` tag; it is no longer `latest`.
 
 The package manifest points to the public npm registry and allows public access.
 The published archive contains only the CLI, source files, schema, example,
 README, license, and npm package metadata. It has no install-time scripts.
 
-Install the public prerelease only by its exact version:
+Install the public stable package by its exact version:
 
 ```sh
-npm install --save-dev @6529-collections/release-request@0.0.4-bootstrap.0
+npm install --save-dev @6529-collections/release-request@0.0.4
 ```
 
-Do not use an unversioned install during bootstrap. The frontend will move to
-public npm only after a stable version is published and proven.
+Keep the version exact so a product repository always installs the reviewed
+archive. Version `0.0.4` was published from protected `main` by Trusted
+Publishing and its public npm provenance points to the exact GitHub workflow and
+source commit.
 
 The central GitHub workflow checks every pull request. It can also publish an
 exact version from protected `main`. npm accepts that publish only from the
