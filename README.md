@@ -5,12 +5,13 @@ backend changes through `main`, build, staging, production, checks, and recovery
 A developer or agent does not need to watch the release while it runs.
 
 Status: **the first release-request path is live**. Package version `0.0.3` is
-published and installed by the frontend. The frontend release skill calls its
-`submit` command as a synchronous observation step. The central workflow saves
-each accepted request as one GitHub Issue in this public repository, and the CLI
-returns and saves the Issue number and link. The full Coordinator remains a
-design. This repository does not yet contain an inbox reader, running worker,
-database, GitHub App, or deployment authority.
+published in GitHub Packages and installed by the frontend. Public npm also has
+prerelease `0.0.4-bootstrap.0`; the frontend has not moved to it yet. The
+frontend release skill calls `submit` as a synchronous observation step. The
+central workflow saves each accepted request as one GitHub Issue in this public
+repository, and the CLI returns and saves the Issue number and link. The full
+Coordinator remains a design. This repository does not yet contain an inbox
+reader, running worker, database, GitHub App, or deployment authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
@@ -67,11 +68,12 @@ The first package is:
 packages/release-request/
 ```
 
-The package is named `@6529-collections/release-request`. It is published in
-GitHub Packages. The frontend installs it and its existing release skill calls
-the `6529-release-request` command. The backend does not use it yet. When the
-backend integration is added, it will install only this package, not the future
-Coordinator application.
+The package is named `@6529-collections/release-request`. Frontend currently
+installs version `0.0.3` from GitHub Packages, and its existing release skill
+calls the `6529-release-request` command. Public npm contains prerelease
+`0.0.4-bootstrap.0`, but no product repository uses it yet. The backend does not
+use the package yet. When the backend integration is added, it will install only
+this package, not the future Coordinator application.
 
 The package contains only:
 

@@ -5,7 +5,7 @@
   "license": "MIT",
   "type": "module",
   "bin": {
-    "6529-release-request": "./bin/6529-release-request.mjs"
+    "6529-release-request": "bin/6529-release-request.mjs"
   },
   "exports": {
     ".": "./src/index.mjs",

@@ -23,7 +23,7 @@ This work does not:
 The Release Coordinator repository is public. Its Issues and Actions logs are
 public. Release requests must never contain secrets.
 
-## Current state — verified 2026-09-04
+## Current state — verified 2026-09-07
 
 - [x] The Release Coordinator repository is public.
 - [x] CLI version `0.0.3` is published in GitHub Packages.
@@ -36,13 +36,20 @@ public. Release requests must never contain secrets.
 - [x] `Check package` runs for pull requests into `main`.
 - [x] Pull request #4 proved that the package check passes without publishing.
 - [x] `main` requires a pull request and a successful package check.
-- [ ] The CLI exists on public npm.
+- [x] CLI prerelease `0.0.4-bootstrap.0` exists on public npm.
 - [ ] npm Trusted Publishing is configured.
 - [ ] Frontend installs the CLI from public npm without a package token.
 
 GitHub Packages version `0.0.3` remains available for the frontend. The current
-workflow checks the package but cannot publish a new version. No npm release has
-been made yet.
+workflow checks the package but cannot publish a new version. The public npm
+prerelease was published manually with the npm owner's security key. The
+frontend has not moved to npm yet.
+
+npm added both `bootstrap` and `latest` to the first published version. Two
+authenticated attempts to remove `latest`, using npm 11.9.0 and 11.19.1, were
+rejected by the registry with HTTP 400. Until the first stable release replaces
+`latest`, consumers must install the exact version and must not use an unversioned
+install.
 
 ## Phase 1: Protect `main` without human approval
 
@@ -101,17 +108,27 @@ Create it with one manual prerelease.
 - [x] Wait for `Check package` to pass.
 - [x] Merge the pull request.
 - [x] Start from a clean `main` checkout.
-- [ ] Sign in to npm as an owner with 2FA.
-- [ ] Run the package tests.
-- [ ] Inspect the package archive.
-- [ ] Publish `0.0.4-bootstrap.0` publicly under the non-default `bootstrap`
+- [x] Sign in to npm as an owner with 2FA.
+- [x] Run the package tests.
+- [x] Inspect the package archive.
+- [x] Publish `0.0.4-bootstrap.0` publicly under the non-default `bootstrap`
   tag.
-- [ ] Complete the npm 2FA prompt.
-- [ ] Confirm the package exists on npm.
-- [ ] Confirm the prerelease is not the default `latest` version.
+- [x] Complete the npm 2FA prompt.
+- [x] Confirm the package exists on npm.
+- [x] Confirm the public tarball checksum matches the inspected archive.
+- [x] Install the exact public version in a clean temporary project and run the
+  CLI.
+- [ ] Move `latest` away from the prerelease when the first stable version is
+  published.
 
 This is the only manual npm publication. It needs the owner's own npm 2FA, but
 it does not need approval from a second person.
+
+The published archive contains the expected nine files. All 21 tests passed.
+The public registry reports SHA-1
+`b8c97e73b29adedabd99faa30d685ea45da3aebc`, matching the inspected tarball.
+The installed public package reports version `0.0.4-bootstrap.0` and its
+`template` command works.
 
 ## Phase 4: Add token-free npm publishing
 
