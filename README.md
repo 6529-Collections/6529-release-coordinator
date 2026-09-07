@@ -5,10 +5,11 @@ backend changes through `main`, build, staging, production, checks, and recovery
 A developer or agent does not need to watch the release while it runs.
 
 Status: **the first release-request path is live**. Package version `0.0.3` is
-published in GitHub Packages and installed by the frontend. Public npm also has
-prerelease `0.0.4-bootstrap.0`; the frontend has not moved to it yet. The
-public npm package now trusts only the named GitHub publish workflow and its
-`npm-publish` environment. That environment accepts only protected `main`. The
+published in GitHub Packages and installed by the frontend. Stable version
+`0.0.4` is published on public npm as `latest`; the frontend has not moved to it
+yet. npm records signed GitHub provenance for the public package. New public npm
+versions trust only the named GitHub publish workflow and its `npm-publish`
+environment. That environment accepts only protected `main`. The
 frontend release skill calls `submit` as a synchronous observation step. The
 central workflow saves each accepted request as one GitHub Issue in this public
 repository, and the CLI returns and saves the Issue number and link. The full
@@ -72,10 +73,10 @@ packages/release-request/
 
 The package is named `@6529-collections/release-request`. Frontend currently
 installs version `0.0.3` from GitHub Packages, and its existing release skill
-calls the `6529-release-request` command. Public npm contains prerelease
-`0.0.4-bootstrap.0`, but no product repository uses it yet. The backend does not
-use the package yet. When the backend integration is added, it will install only
-this package, not the future Coordinator application.
+calls the `6529-release-request` command. Public npm contains proven stable
+version `0.0.4`, but no product repository uses the public package yet. The
+backend does not use the package yet. When the backend integration is added, it
+will install only this package, not the future Coordinator application.
 
 The package contains only:
 

@@ -40,18 +40,21 @@ public. Release requests must never contain secrets.
 - [x] The `npm-publish` GitHub environment exists and accepts only `main`.
 - [x] npm Trusted Publishing is connected to the package, repository, workflow,
   and `npm-publish` environment.
+- [x] Stable CLI version `0.0.4` is published on public npm as `latest`.
+- [x] npm provenance points to protected `main`, the named workflow, and source
+  commit `eea2c47e570611e43e9cd7aacf9fb2df1405595b`.
+- [x] A clean temporary project installed and ran exact public version `0.0.4`.
 - [ ] Frontend installs the CLI from public npm without a package token.
 
 GitHub Packages version `0.0.3` remains available for the frontend. The public
-npm prerelease was published manually with the npm owner's security key. New
-public npm versions can use the protected GitHub workflow after that workflow
-is merged. The frontend has not moved to npm yet.
+npm prerelease was published manually with the npm owner's security key. Stable
+version `0.0.4` was published by the protected GitHub workflow using a
+short-lived trusted identity. The frontend has not moved to npm yet.
 
 npm added both `bootstrap` and `latest` to the first published version. Two
 authenticated attempts to remove `latest`, using npm 11.9.0 and 11.19.1, were
-rejected by the registry with HTTP 400. Until the first stable release replaces
-`latest`, consumers must install the exact version and must not use an unversioned
-install.
+rejected by the registry with HTTP 400. Stable version `0.0.4` now owns `latest`.
+Product repositories must still install an exact version.
 
 ## Phase 1: Protect `main` without human approval
 
@@ -120,7 +123,7 @@ Create it with one manual prerelease.
 - [x] Confirm the public tarball checksum matches the inspected archive.
 - [x] Install the exact public version in a clean temporary project and run the
   CLI.
-- [ ] Move `latest` away from the prerelease when the first stable version is
+- [x] Move `latest` away from the prerelease when the first stable version is
   published.
 
 This is the only manual npm publication. It needs the owner's own npm 2FA, but
@@ -167,11 +170,11 @@ Security checks:
 - [x] Use `https://registry.npmjs.org`.
 - [x] Do not grant GitHub Packages `packages: write` permission.
 - [x] Do not pass `NODE_AUTH_TOKEN` to npm publication.
-- [ ] Confirm npm receives GitHub OIDC proof through `id-token: write`.
-- [ ] Confirm npm records package provenance.
+- [x] Confirm npm receives GitHub OIDC proof through `id-token: write`.
+- [x] Confirm npm records package provenance.
 - [ ] Set package access to require 2FA and disallow traditional tokens.
 - [ ] Revoke unused npm write tokens.
-- [ ] Merge the workflow without creating a release tag.
+- [x] Merge the workflow without creating a release tag.
 
 Trusted Publishing uses short-lived GitHub identity instead of a stored npm
 token. During bootstrap it publishes immediately after all workflow checks pass;
@@ -198,8 +201,21 @@ For each bootstrap release:
 8. Install it in a clean temporary project.
 9. Test `template`, `create`, and `submit` without deploying anything.
 
-The first stable version is planned as `0.0.4`. Later bootstrap releases use new
-version numbers. npm versions are never reused.
+The first stable version is `0.0.4`. Later bootstrap releases use new version
+numbers. npm versions are never reused.
+
+Stable version `0.0.4` was published on 2026-09-07 by workflow run
+`34096336628`. Both workflow jobs passed. npm reports nine files, SHA-1
+`1738d74f9f8852559a600e81f88c4bf0a3e24efe`, and signed SLSA provenance for
+protected `main`, the `publish-release-request.yml` workflow, the `npm-publish`
+environment, and commit `eea2c47e570611e43e9cd7aacf9fb2df1405595b`.
+
+A clean temporary project installed exact version `0.0.4` with zero reported
+vulnerabilities. The installed CLI reported `0.0.4`; `template` and `create`
+worked. We did not call `submit` with a fake product release because that would
+create a misleading public inbox Issue. The full submit path was already proven
+from the frontend, and remains covered by the package tests. It will be tested
+again from a product repository when that repository moves to public npm.
 
 ## Phase 6: Move frontend installation to npm
 
