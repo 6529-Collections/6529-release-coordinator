@@ -37,13 +37,15 @@ public. Release requests must never contain secrets.
 - [x] Pull request #4 proved that the package check passes without publishing.
 - [x] `main` requires a pull request and a successful package check.
 - [x] CLI prerelease `0.0.4-bootstrap.0` exists on public npm.
-- [ ] npm Trusted Publishing is configured.
+- [x] The `npm-publish` GitHub environment exists and accepts only `main`.
+- [x] npm Trusted Publishing is connected to the package, repository, workflow,
+  and `npm-publish` environment.
 - [ ] Frontend installs the CLI from public npm without a package token.
 
-GitHub Packages version `0.0.3` remains available for the frontend. The current
-workflow checks the package but cannot publish a new version. The public npm
-prerelease was published manually with the npm owner's security key. The
-frontend has not moved to npm yet.
+GitHub Packages version `0.0.3` remains available for the frontend. The public
+npm prerelease was published manually with the npm owner's security key. New
+public npm versions can use the protected GitHub workflow after that workflow
+is merged. The frontend has not moved to npm yet.
 
 npm added both `bootstrap` and `latest` to the first published version. Two
 authenticated attempts to remove `latest`, using npm 11.9.0 and 11.19.1, were
@@ -146,25 +148,26 @@ Configure npm Trusted Publishing with:
 | Environment | `npm-publish` |
 | Allow direct `npm publish` during bootstrap | Yes |
 
-Update the GitHub workflow so the npm publish job:
+Update the GitHub workflow so:
 
-1. Runs only for a `release-request-v*` tag.
-2. Uses Node 24 and npm 11.5.1 or newer.
-3. Uses `contents: read` and `id-token: write`.
-4. Uses the `npm-publish` environment.
-5. Installs from the lockfile without a package cache.
-6. Runs the package tests.
-7. Confirms the tag matches the package version.
-8. Confirms the tagged commit is already in `main`.
-9. Inspects the package archive.
-10. Publishes the public package with `npm publish`.
+1. Pull requests and publish runs use the same package check.
+2. The package check has no npm publishing identity.
+3. Publishing starts only through a manual workflow run from `main`.
+4. The `npm-publish` environment rejects every branch except `main`.
+5. The publish job uses Node 24 and confirms npm is 11.5.1 or newer.
+6. Only the publish job uses `contents: read` and `id-token: write`.
+7. The requested version matches the package version.
+8. A matching `release-request-v<version>` source tag exists on the exact
+   `main` commit being published.
+9. Package scripts stay disabled while the archive is created and published.
+10. The inspected public archive is published with `npm publish`.
 
 Security checks:
 
-- [ ] Pin third-party GitHub Actions to full commit hashes.
-- [ ] Use `https://registry.npmjs.org`.
-- [ ] Remove the GitHub Packages `packages: write` permission.
-- [ ] Do not pass `NODE_AUTH_TOKEN` to npm publication.
+- [x] Pin external GitHub Actions to full commit hashes.
+- [x] Use `https://registry.npmjs.org`.
+- [x] Do not grant GitHub Packages `packages: write` permission.
+- [x] Do not pass `NODE_AUTH_TOKEN` to npm publication.
 - [ ] Confirm npm receives GitHub OIDC proof through `id-token: write`.
 - [ ] Confirm npm records package provenance.
 - [ ] Set package access to require 2FA and disallow traditional tokens.
@@ -183,11 +186,13 @@ For each bootstrap release:
 2. Wait for `Check package` to pass.
 3. Merge the pull request.
 4. Create the matching `release-request-v<version>` tag from `main`.
-5. Wait for the trusted npm workflow.
-6. Confirm the expected version became available on npm.
-7. Confirm npm shows GitHub provenance.
-8. Install it in a clean temporary project.
-9. Test `template`, `create`, and `submit` without deploying anything.
+5. Start `Release request CLI` manually from `main` and enter the exact
+   version.
+6. Wait for the trusted npm workflow.
+7. Confirm the expected version became available on npm.
+8. Confirm npm shows GitHub provenance.
+9. Install it in a clean temporary project.
+10. Test `template`, `create`, and `submit` without deploying anything.
 
 The first stable version is planned as `0.0.4`. Later bootstrap releases use new
 version numbers. npm versions are never reused.

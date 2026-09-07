@@ -7,6 +7,8 @@ A developer or agent does not need to watch the release while it runs.
 Status: **the first release-request path is live**. Package version `0.0.3` is
 published in GitHub Packages and installed by the frontend. Public npm also has
 prerelease `0.0.4-bootstrap.0`; the frontend has not moved to it yet. The
+public npm package now trusts only the named GitHub publish workflow and its
+`npm-publish` environment. That environment accepts only protected `main`. The
 frontend release skill calls `submit` as a synchronous observation step. The
 central workflow saves each accepted request as one GitHub Issue in this public
 repository, and the CLI returns and saves the Issue number and link. The full

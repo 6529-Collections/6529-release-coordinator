@@ -105,6 +105,7 @@ npm install --save-dev @6529-collections/release-request@0.0.4-bootstrap.0
 Do not use an unversioned install during bootstrap. The frontend will move to
 public npm only after a stable version is published and proven.
 
-The current GitHub workflow checks the package but does not publish it. Public
-npm publishing will next move to npm Trusted Publishing so GitHub can publish
-without a stored npm token.
+The central GitHub workflow checks every pull request. It can also publish an
+exact version from protected `main`. npm accepts that publish only from the
+named workflow and `npm-publish` environment. GitHub sends a short-lived proof;
+the workflow does not store an npm publishing token.

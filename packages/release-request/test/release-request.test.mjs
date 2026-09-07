@@ -30,6 +30,15 @@ const workflowPath = path.join(
   "workflows",
   "submit-release-request.yml"
 );
+const publishWorkflowPath = path.join(
+  testDirectory,
+  "..",
+  "..",
+  "..",
+  ".github",
+  "workflows",
+  "publish-release-request.yml"
+);
 
 const fixedTime = "2026-08-31T10:00:00.000Z";
 
@@ -284,6 +293,19 @@ test("the central workflow has the narrow Issue permission and request lock", as
   );
   assert.match(workflow, /saveReleaseRequestIssue/u);
   assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/u);
+});
+
+test("npm publishing is limited to protected main and a short-lived identity", async () => {
+  const workflow = await readFile(publishWorkflowPath, "utf8");
+
+  assert.match(workflow, /workflow_dispatch:\n    inputs:\n      version:/u);
+  assert.match(workflow, /needs: check/u);
+  assert.match(workflow, /environment: npm-publish/u);
+  assert.equal([...workflow.matchAll(/id-token: write/gu)].length, 1);
+  assert.match(workflow, /GITHUB_REF.*refs\/heads\/main/u);
+  assert.match(workflow, /release-request-v\$\{package_version\}/u);
+  assert.match(workflow, /npm publish.*--ignore-scripts.*--provenance/u);
+  assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN/u);
 });
 
 test("valid input saves a succeeded run and one outbox request", async (t) => {
