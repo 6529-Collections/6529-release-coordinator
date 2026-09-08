@@ -101,6 +101,18 @@ the same root locked versions before backend PR #1977. No dependency versions
 were changed in this task. This calls for a separate assessment of affected
 code paths and fixes; successful request delivery is not a security audit.
 
+The subsequent [focused fast-uri assessment](./security/fast-uri-assessment.md)
+found that the four reviewed URI-rewriting vulnerabilities are not reachable
+through the current CLI request path. Both installed public `0.0.4` consumer
+copies used affected `fast-uri@3.1.5`, while this Coordinator lockfile already
+used patched `3.1.6`. Across all three installations, request validation,
+schema-injection probes, and simulated submissions made zero request-time
+calls to fast-uri. No dependency versions were changed or warnings suppressed.
+Other dependency uses and the remaining audit findings are not cleared by this
+result. The assessment and regression test are on branch
+`codex/assess-fast-uri-boundary`.
+The full local suite passed 75 tests: 26 package tests and 49 reader tests.
+
 ## Deliberately deferred
 
 - Keep narrow, exact-version package-age exceptions during active development
