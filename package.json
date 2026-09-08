@@ -8,6 +8,7 @@
     "apps/*"
   ],
   "scripts": {
+    "inbox:read": "node apps/coordinator/bin/read-inbox.mjs",
     "test": "npm test --workspaces --if-present"
   }
 }

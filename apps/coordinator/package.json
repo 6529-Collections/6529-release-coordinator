@@ -1,0 +1,13 @@
+{
+  "name": "@6529-collections/coordinator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "inbox:read": "node bin/read-inbox.mjs"
+  }
+}

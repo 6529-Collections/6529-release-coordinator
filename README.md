@@ -4,17 +4,17 @@
 backend changes through `main`, build, staging, production, checks, and recovery.
 A developer or agent does not need to watch the release while it runs.
 
-Status: **the first release-request path is live**. Package version `0.0.3` is
-published in GitHub Packages and installed by the frontend. Stable version
-`0.0.4` is published on public npm as `latest`; the frontend has not moved to it
-yet. npm records signed GitHub provenance for the public package. New public npm
+Status: **the release-request path is live, and a local inbox reader is implemented**.
+Stable package version `0.0.4` is published on public npm. npm records signed
+GitHub provenance for the public package. New public npm
 versions trust only the named GitHub publish workflow and its `npm-publish`
 environment. That environment accepts only protected `main`. The
-frontend release skill calls `submit` as a synchronous observation step. The
+release skill calls `submit` as a synchronous observation step. The
 central workflow saves each accepted request as one GitHub Issue in this public
 repository, and the CLI returns and saves the Issue number and link. The full
-Coordinator remains a design. This repository does not yet contain an inbox
-reader, running worker, database, GitHub App, or deployment authority.
+Coordinator remains a design beyond request intake and inspection. The local
+reader checks pending Issues and their workflow evidence. There is no running
+worker, database, GitHub App, or deployment authority.
 
 [Open the interactive process diagram](./release-coordinator-process.html)
 
@@ -22,38 +22,66 @@ reader, running worker, database, GitHub App, or deployment authority.
 
 [Follow the public npm publication plan](./secure-npm-publication-plan.md)
 
-The first implementation is smaller than the full design. It is one small CLI
-package. The frontend release skill calls it without asking the developer to
-fill in a new form or write JSON. The backend does not use it yet.
+The implementation is smaller than the full design. It consists of one small
+CLI package for product repositories and a separate, private Coordinator app
+for reading the inbox. The release skill creates the CLI input without asking
+the developer to fill in a new form or write JSON.
 
 Every `create` or `submit` run is saved locally. A valid request is also saved
 to the local outbox. A failed local validation saves the input and errors but
 does not create a valid request. `submit` also starts the central GitHub
 workflow, waits for it, and saves its result.
 
-In the frontend, this is observation only. A normal returned success or failure
-does not replace or stop the existing Release Bus process. A signal-style exit
-or a wait that never returns stops the release and is raised to the Coordinator
-owner. The frontend's installed `0.0.3` CLI reaches the live inbox workflow and
-saves the returned Issue number and link. It does not start a Coordinator
-release. The saved JSON is not Release Bus input.
+Request submission is observation only. Saving an Issue does not start a
+Coordinator release or grant permission to merge or deploy.
 
 ### Verified intake test
 
-The complete intake path has been tested once from the frontend:
+The public package's complete intake path was tested from a local frontend
+checkout on September 8, 2026:
 
 ```text
-Frontend release skill -> CLI 0.0.3 -> central workflow -> public inbox Issue
+Local frontend checkout -> CLI 0.0.4 -> central workflow -> public inbox Issue
 ```
 
-The test created request `30363b08-3c7f-4054-8570-f5ff2be3d6d6` in public
-Issue `#1`. The workflow saved the exact frontend PR, branch, commit, target,
-GitHub actor, and workflow proof. It did not merge or deploy anything. Issue
-`#1` is test evidence and must not be processed as a real release.
+The test created request `300057e3-9a51-466b-a149-5f80f9822672` in public
+[Issue #12](https://github.com/6529-Collections/6529-release-coordinator/issues/12).
+The workflow saved the exact frontend PR, branch, commit, target, GitHub actor,
+and workflow proof. It did not merge or deploy anything. The test Issue was
+closed and its `pending` label removed.
 
-The next Coordinator-side step is a read-only inbox reader. It will list pending
-Issues, validate their saved data, and show what they contain. It will not change
-labels, merge code, or deploy code.
+The older `0.0.3` test in [Issue #1](https://github.com/6529-Collections/6529-release-coordinator/issues/1)
+is also test evidence, not a real release. It was still open and pending during
+the September 8 reader check, so it appears in that report. The reader does not
+change its labels or close it.
+
+### Read the inbox locally
+
+With Node.js 20+ and an authenticated, current GitHub CLI (`gh`), run from this
+repository after installing its dependencies with `npm ci --ignore-scripts`:
+
+```sh
+npm run inbox:read
+```
+
+For JSON output without npm's script banner:
+
+```sh
+npm run --silent inbox:read -- --json
+```
+
+The command runs on your machine, reads GitHub, prints the report, and exits.
+It reads all pages of open Issues carrying both `release-request` and `pending`.
+For each request it checks the schema, checksum, and matching successful inbox
+workflow result. It displays the requested PRs, commits, target, dependencies,
+backend units, and verified GitHub actor. Closed test Issues are excluded.
+
+**Valid means the saved request matches its workflow evidence.** It does not
+mean the current PR is ready to release. Missing workflow evidence is reported
+as unverified. An inbox listing failure is an error, not an empty inbox.
+The reader only makes GitHub GET requests; it cannot change labels, merge,
+deploy, or start a workflow. See the [reader guide](./apps/coordinator/README.md)
+for statuses, exit codes, and evidence limits.
 
 The release-request contract is saved in the
 [versioned JSON Schema](./packages/release-request/release-request.schema.json), with a
@@ -71,12 +99,10 @@ The first package is:
 packages/release-request/
 ```
 
-The package is named `@6529-collections/release-request`. Frontend currently
-installs version `0.0.3` from GitHub Packages, and its existing release skill
-calls the `6529-release-request` command. Public npm contains proven stable
-version `0.0.4`, but no product repository uses the public package yet. The
-backend does not use the package yet. When the backend integration is added, it
-will install only this package, not the future Coordinator application.
+The package is named `@6529-collections/release-request`. Product release skills
+call its `6529-release-request` command. Public npm contains stable version
+`0.0.4`. Frontend and backend install only this package, not the Coordinator
+application. Adding the local reader does not require a new package release.
 
 The package contains only:
 
@@ -90,13 +116,14 @@ The package contains only:
 It will not contain the future Coordinator worker, queue, database, GitHub App,
 build logic, deployment logic, or these HTML documents.
 
-The future central system can be added separately in the same repository:
+The local reader lives separately in the same repository:
 
 ```text
 apps/coordinator/
 ```
 
-That application will be deployed as a service. Frontend and backend will not
+This private application currently runs manually on a local machine. A hosted
+service and release worker remain future work. Frontend and backend do not
 install it.
 
 ### Local files from the first CLI
@@ -299,8 +326,8 @@ lists every product repository, branch, pull request, and exact commit to releas
 
 The central workflow validates the request again and creates one GitHub Issue in
 this public repository. That Issue is the first inbox record. No new server,
-API secret, or database is needed. The frontend uses package version `0.0.3`,
-which requires, saves, and returns the Issue result.
+API secret, or database is needed. The published CLI requires, saves, and returns
+the Issue result.
 The CLI uses the developer's GitHub login to start the workflow. The workflow
 uses GitHub's short-lived `GITHUB_TOKEN`, limited to
 `issues: write`, to create the inbox Issue.
@@ -324,8 +351,9 @@ with different JSON will fail. Release requests must not contain secrets. The
 agent-facing CLI command will not change. Invalid or rejected submissions remain
 in the CLI run record and GitHub workflow log; they do not become inbox Issues.
 
-A later `status <request-id>` command can read the matching inbox Issue. It is
-not part of version `0.0.3`.
+A later `status <request-id>` command could read the matching inbox Issue. It is
+not part of the published CLI. The local reader described above inspects all
+pending Issues from this repository instead.
 
 The `requested_by` field remains useful context, but it is not proof of
 identity. The Coordinator uses the GitHub actor from the central workflow as the
