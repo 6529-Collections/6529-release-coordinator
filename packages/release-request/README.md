@@ -41,8 +41,8 @@ saved to the outbox.
 
 ## Submit a request
 
-`create` remains available for local-only use. The frontend release skill now
-uses `submit`, which accepts the same agent-input JSON:
+`create` remains available for local-only use. Product release skills use
+`submit`, which accepts the same agent-input JSON:
 
 ```sh
 6529-release-request submit --input release-input.json
@@ -81,16 +81,16 @@ details to the agent:
 6529-release-request status REQUEST_ID
 ```
 
-Public npm stable version `0.0.4` contains the same current CLI behavior. The
-frontend still uses GitHub Packages version `0.0.3`, so it returns and saves the
-Issue link. The backend has not been integrated yet. The `status` command does
-not exist yet.
+The `status` command does not exist yet. This package returns and saves the
+Issue link as part of `submit`. The separate local Coordinator app can inspect
+pending Issues; it is not installed with this package. Consumer rollout status
+is tracked in the [Coordinator repository](https://github.com/6529-Collections/6529-release-coordinator).
 
 ## Publishing
 
-Version `0.0.3` remains available from GitHub Packages for the current frontend
-integration. Public npm contains stable version `0.0.4` as `latest`. The earlier
-`0.0.4-bootstrap.0` remains under the `bootstrap` tag; it is no longer `latest`.
+Stable version `0.0.4` is available from public npm. New releases use the
+protected publication workflow; product repositories pin a reviewed exact
+version rather than relying on a moving tag.
 
 The package manifest points to the public npm registry and allows public access.
 The published archive contains only the CLI, source files, schema, example,
@@ -99,9 +99,11 @@ README, license, and npm package metadata. It has no install-time scripts.
 Install the public stable package by its exact version:
 
 ```sh
-npm install --save-dev @6529-collections/release-request@0.0.4
+npm install --save-dev --save-exact @6529-collections/release-request@0.0.4
 ```
 
+This npm command is for a standalone consumer. In the 6529 product repositories,
+use their `6529` wrapper and package policy instead of calling npm directly.
 Keep the version exact so a product repository always installs the reviewed
 archive. Version `0.0.4` was published from protected `main` by Trusted
 Publishing and its public npm provenance points to the exact GitHub workflow and

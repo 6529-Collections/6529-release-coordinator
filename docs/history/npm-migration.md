@@ -1,16 +1,43 @@
-# Public npm publication and frontend migration
+# npm migration history
+
+Historical evidence, captured during documentation housekeeping on **2026-09-08**.
+These snapshots preserve the former root publication checklist and independent
+frontend review, including the local edits that had not yet been committed.
+They are not current instructions or a list of work to repeat.
+
+The migration and release-recording PRs have since merged. Public `0.0.4`
+delivery and the local reader have also been tested. Use
+[progress](../progress.md) for dated current evidence and the
+[publishing guide](../npm-publishing.md) for the next release.
+
+The review below verified head `72f24d2b07035de893b227a7838fb20825043735`
+on September 7. GitHub now records frontend PR #3898 as merged, with a later
+PR head. Do not present the historical review's test results as a new audit of
+that later head. The previously demonstrated findings were resolved at the
+reviewed head; their descriptions are retained to explain the fixes.
+
+The owner's decision to keep exact-version age exceptions during development
+supersedes the old checklist's unconditional seven-day wait. Later human
+approval remains deferred. Original unchecked boxes and present-tense status
+claims below describe their historical snapshots only.
+
+## Publication checklist snapshot
+
+Source: former `secure-npm-publication-plan.md` (status written September 7).
+
+### Public npm publication and frontend migration
 
 This is the working checklist for moving
 `@6529-collections/release-request` from GitHub Packages to public npm.
 
-## Goals
+#### Goals
 
 1. Publish the CLI on public npm without storing an npm publishing token.
 2. Let the frontend install the CLI from public npm without a package token.
 3. Keep the current frontend release flow unchanged.
 4. Add second-person approval later, after the first few npm releases.
 
-## Boundaries
+#### Boundaries
 
 This work does not:
 
@@ -23,7 +50,7 @@ This work does not:
 The Release Coordinator repository is public. Its Issues and Actions logs are
 public. Release requests must never contain secrets.
 
-## Current state — verified 2026-09-07
+#### Current state — verified 2026-09-07
 
 - [x] The Release Coordinator repository is public.
 - [x] CLI version `0.0.3` is published in GitHub Packages.
@@ -56,7 +83,7 @@ authenticated attempts to remove `latest`, using npm 11.9.0 and 11.19.1, were
 rejected by the registry with HTTP 400. Stable version `0.0.4` now owns `latest`.
 Product repositories must still install an exact version.
 
-## Phase 1: Protect `main` without human approval
+#### Phase 1: Protect `main` without human approval
 
 The first few npm releases are a bootstrap period. A second person does not need
 to approve every change yet.
@@ -82,7 +109,7 @@ merging, and its repaired version passed and could merge with zero approvals.
 
 Do not add `CODEOWNERS` or a required human approval yet. Add them in Phase 7.
 
-## Phase 2: Prepare the public package
+#### Phase 2: Prepare the public package
 
 - [x] Choose an approved open-source license.
 - [x] Add the license to the repository and published package.
@@ -104,7 +131,7 @@ credential-shaped values were found.
 Do not reuse version `0.0.3` on npm. Use a new version so one version number
 always identifies one exact package archive.
 
-## Phase 3: Create the package on npm once
+#### Phase 3: Create the package on npm once
 
 The package must exist on npm before its trusted publisher can be configured.
 Create it with one manual prerelease.
@@ -135,7 +162,7 @@ The public registry reports SHA-1
 The installed public package reports version `0.0.4-bootstrap.0` and its
 `template` command works.
 
-## Phase 4: Add token-free npm publishing
+#### Phase 4: Add token-free npm publishing
 
 Create one GitHub environment named `npm-publish`. Use the environment from the
 start, but do not add required reviewers during bootstrap. Later, Phase 7 can add
@@ -172,13 +199,17 @@ Security checks:
 - [x] Do not pass `NODE_AUTH_TOKEN` to npm publication.
 - [x] Confirm npm receives GitHub OIDC proof through `id-token: write`.
 - [x] Confirm npm records package provenance.
-- [ ] Set package access to require 2FA and disallow traditional tokens.
-- [ ] Revoke unused npm write tokens.
+- [x] Set package access to require 2FA and disallow traditional tokens.
+- [x] Confirm no npm access tokens remain to revoke.
 - [x] Merge the workflow without creating a release tag.
 
 Trusted Publishing uses short-lived GitHub identity instead of a stored npm
 token. During bootstrap it publishes immediately after all workflow checks pass;
 it does not wait for a second person.
+
+On 2026-09-07, npm package access was changed to require 2FA and disallow
+bypass-2FA tokens. The trusted GitHub publisher remains connected and compatible
+with this setting. The npm owner account showed zero access tokens.
 
 The GitHub environment's selected-branch rule is the main security gate. It is
 configured in GitHub, outside this repository, and allows only the `main`
@@ -186,7 +217,7 @@ branch. The shell branch check is a second check, not a replacement for that
 environment rule. Release tags are not used as publication permission during
 bootstrap because they are not protected yet.
 
-## Phase 5: Publish the first stable npm versions
+#### Phase 5: Publish the first stable npm versions
 
 For each bootstrap release:
 
@@ -219,12 +250,12 @@ a real Issue. The complete live path was previously proven from the frontend
 with version `0.0.3`. A product repository will repeat that live test after it
 moves to public npm.
 
-## Phase 6: Move frontend installation to npm
+#### Phase 6: Move frontend installation to npm
 
 Use one separate frontend pull request after choosing a proven stable npm
 version.
 
-### Wait for the package-age rule
+##### Wait for the package-age rule
 
 Frontend requires normal public packages to be at least seven days old.
 
@@ -232,7 +263,7 @@ Frontend requires normal public packages to be at least seven days old.
 - [ ] Confirm no security problem was reported during that period.
 - [ ] Do not add an age exception unless a separate review accepts that risk.
 
-### Replace the package source
+##### Replace the package source
 
 - [ ] Keep `@6529-collections/release-request` as an exact development
   dependency.
@@ -244,7 +275,7 @@ Frontend requires normal public packages to be at least seven days old.
 - [ ] Remove the old private-package age exception.
 - [ ] Remove the old private-package Dependabot exception.
 
-### Remove only obsolete authentication code
+##### Remove only obsolete authentication code
 
 - [ ] Remove the package-token path from the frontend install wrapper.
 - [ ] Remove unused Keychain and Credential Manager package-token handling.
@@ -255,7 +286,7 @@ Frontend requires normal public packages to be at least seven days old.
 - [ ] Keep the normal `6529` package-command boundary.
 - [ ] Keep Socket Firewall checks for public packages.
 
-### Prove frontend still works
+##### Prove frontend still works
 
 - [ ] A developer can install dependencies without a package token.
 - [ ] Clean CI and fork pull requests can install dependencies.
@@ -272,7 +303,7 @@ Frontend requires normal public packages to be at least seven days old.
 Keep GitHub Packages version `0.0.3` available until the npm installation is
 proven. New GitHub Packages versions are disabled during the migration.
 
-## Phase 7: Add human approval later
+#### Phase 7: Add human approval later
 
 Start this phase only after the first few npm releases are proven and the owner
 decides bootstrap is over.
@@ -295,7 +326,7 @@ decides bootstrap is over.
 Staged publishing is intentionally deferred because it always adds a human
 approval before the package becomes public.
 
-## Completion condition
+#### Completion condition
 
 The migration is complete when:
 
@@ -308,8 +339,188 @@ The migration is complete when:
 Human approval and staged publishing are a later hardening milestone, not a
 requirement for the bootstrap releases.
 
-## References
+#### References
 
 - [npm Trusted Publishing](https://docs.npmjs.com/trusted-publishers/)
 - [npm staged publishing](https://docs.npmjs.com/staged-publishing/)
 - [GitHub Actions security](https://docs.github.com/en/actions/reference/security/secure-use)
+
+## Independent review snapshot
+
+Source: former `npm-migration-independent-review.md` (reviewed September 7).
+
+### Frontend npm migration: independent review
+
+Reviewed 2026-09-07. PR: [6529seize-frontend #3898](https://github.com/6529-Collections/6529seize-frontend/pull/3898).
+
+Initial reviewed head: `41499953b183bf4f99bcd2cfe4da195bb6294a17`.
+Comparison base: `bdaa383936243d4c632234e4e957cfdd299fba41`.
+First migration commit: `30ff4692bef1545fbdc2b190f0deac6aae0f9428`.
+
+Final independently verified head:
+`72f24d2b07035de893b227a7838fb20825043735`.
+
+**Review status: R1, R2, and R3 are closed on the final head.** GitHub reports
+24 passing checks, no pending or failed checks, and zero unresolved review
+threads across all 34 conversations. The PR is open and unmerged. GitHub
+reports `MERGEABLE` with merge state `BLOCKED`; this review does not authorize
+changing repository rules, merging, or deploying.
+
+#### Judgment at the initial reviewed head
+
+The migration is worth completing. It removes the GitHub Packages credential
+requirement and special registry routing, keeps an exact public package version,
+and retains Socket Firewall around package operations. The diff is substantially
+smaller overall, and the frontend release skill is outside the changed files.
+
+The initial replacement discarded some existing protection. Subsequent commits
+restored it piecemeal. That explains part of the repeated review cycle. Finishing
+requires a comparison of protections and supported workflows, not another
+unbounded search after every green CI run.
+
+The reviewed head is not ready for an independent all-clear. The following
+findings were reproduced without changing repository files or downloading code.
+
+#### Remaining findings at the reviewed head
+
+##### R1: Workspace overrides escape validation
+
+In the existing `overrides` mapping in `pnpm-workspace.yaml`, either of these
+additional entries is accepted by `validateWorkspace`:
+
+```yaml
+  "@6529-collections/release-request": "0.0.5"
+```
+
+```yaml
+  sharp: https://example.invalid/sharp.tgz
+```
+
+The existing installed YAML parser confirms both are valid entries in the
+effective overrides object. The validator currently checks only selected
+top-level names and ignores override selectors and values. Package mutations
+can resolve dependencies using these settings. A frozen install may reject
+a stale lockfile; that does not establish safety for `add`, `update`, or
+`audit:fix`.
+
+Required result: preserve legitimate security overrides while rejecting
+Coordinator-version overrides and unapproved dependency sources. Inspect all
+accepted workspace fields, with an explicit policy for unsupported fields.
+Check invariants after supported mutations too where appropriate, while keeping
+checks that must prevent execution before package scripts can run.
+
+##### R2: Lockfile validation depends on field spelling
+
+Replacing the existing `sharp` resolution line with this valid YAML is accepted
+by `validateLockfile`:
+
+```yaml
+    "resolution": {integrity: sha512-test, tarball: https://example.invalid/sharp.tgz}
+```
+
+The installed YAML parser reads it as the package's normal resolution object.
+The validator skips it because it scans only unquoted `resolution:` lines.
+The dummy integrity is sufficient to demonstrate the missed validation; no
+download or successful install was attempted.
+
+Required result: validate the accepted representation consistently. Quoting,
+escapes, alternate layouts, aliases/merges, and comments or scalar strings must
+not hide effective policy fields. Use a deliberately restricted complete format
+or a trustworthy parser available before dependency installation. Requiring a
+package from `node_modules` in install preflight would break clean setup.
+
+##### R3: The documented build-approval workflow conflicts with policy
+
+The guide still recommends `6529 approve-builds`. The policy independently
+hard-codes the existing eleven approved package names. Adding another build
+approval to `allowBuilds` is rejected by `validateWorkspace`.
+
+Required result: make the supported workflow and policy agree. If new approvals
+require a reviewed change to policy constants, say so in the command guidance
+and documentation. Do not silently promise that the approval command alone
+prepares the next installation.
+
+#### Preservation and completion matrix
+
+| Protection or behavior | Before | Reviewed head / required proof |
+| --- | --- | --- |
+| Exact Coordinator version and integrity | Explicitly checked | Restored for the normal manifest and lockfile; close R1 and R2 |
+| Narrow package-age exception | Specific version | Specific `0.0.4` again; the initial PR broadened this |
+| Package source restrictions | Special private-package route plus public Socket route | One public route is simpler; validate every effective resolution input |
+| Nested workspaces | Explicitly rejected | Rejection restored |
+| Hooks and build scripts | Token-bearing fetch disabled hooks/scripts; approved rebuild followed without token | Tokens removed and hook/build settings checked; close parsing/input gaps and align approvals |
+| Command and environment overrides | Extensive validation | Explicit command-option allowlists are an improvement; preserve documented commands and intentional CI store configuration |
+| Clean install before `node_modules` | Node built-ins only | Still uses Node built-ins; keep this property while repairing parsing |
+| Package credentials | Required and narrowly scoped | Removed from install environment and several setup/runtime paths; retain failure and mixed-case coverage |
+| Socket execution and failures | Wrapper plus private routing helper | Direct Socket-wrapped pnpm; retain exit-code/error propagation and Windows quoting coverage |
+| CI / production dependency install | Frozen installation | Wrapper still supplies frozen flags; require clean token-free proof on final head |
+| Add / remove / update / audit fix | Supported through wrapper | Positive-path coverage and post-operation invariant proof required, especially overrides |
+| Worktree / staging setup | Token-aware trusted tooling | Simpler token-free setup; inspect and test changed routing without deployment |
+| Release behavior | CLI observes the existing release flow | No release-skill change in this PR; keep live submit evidence distinct from local CLI and mocked tests |
+
+The deleted private-routing suite mixed obsolete credential tests with still
+relevant command, parsing, platform, and setup tests. Map each relevant old test
+to retained coverage or a documented intentional removal. Line-count reduction
+alone is not evidence that coverage was preserved.
+
+#### Bounded finish line sent to the implementation task
+
+1. Address demonstrated, in-scope findings in one coherent batch.
+2. Complete the preservation matrix, including successful supported operations
+   and negative cases for each protected input family.
+3. Use focused tests and a clean token-free install/CLI smoke within the task's
+   existing authorization. Keep live submission, merge, and deployment separate.
+4. Push the final changes, resolve existing actionable review feedback, and
+   complete required checks on that exact commit.
+5. Obtain one review of the final changed code. Stop at review-ready when that
+   review and the matrix are satisfied. Continue only for concrete new findings
+   or failures, not another unrestricted search for hypothetical improvements.
+
+#### Evidence boundary
+
+This independent review used source comparisons, existing review records,
+live PR metadata, and pure in-memory policy/parser calls. It did not execute
+package installation, repository tests, deployment, or dependency code. The
+implementation task owns repairs and runtime verification.
+
+The working publication plan still says to wait seven days, but the task's
+later user messages explicitly accepted an exception for this trusted project.
+Treat that as an authorized decision and keep it exact-version scoped; do not
+restart an approval loop because the older checklist has not caught up.
+
+#### Final independent verification
+
+After the implementation task reported completion, this review independently:
+
+- Confirmed GitHub's PR head is `72f24d2b07` and the local worktree is clean.
+- Re-ran the original pure in-memory probes: the real repository passes;
+  Coordinator-version overrides, external tarball overrides, unsupported
+  workspace settings, and quoted lockfile resolutions are rejected.
+- Confirmed supported argument forms for frozen install, production install,
+  add, remove, update, audit, and audit fix still pass policy validation.
+  These are argument checks, not separate live installations for every command.
+- Read the command and documentation changes: build approvals now explicitly
+  require coordinated reviewed changes to the workspace and policy. The old
+  interactive approval command fails with actionable guidance.
+- Inspected added tests for the original findings, escaped keys, alternate
+  lockfile layouts, aliases/merges, block-scalar decoys, policy loading before
+  `node_modules`, Windows quoting and exit propagation, and validation after a
+  successful package operation.
+- Confirmed the runner revalidates repository files after successful package
+  operations. This detects invalid resulting state; it is not represented as
+  preventing execution that already happened during the operation.
+- Queried live GitHub checks: 24 pass, zero pending, zero fail.
+- Queried every review conversation: 34 total, zero unresolved, no further page.
+
+The implementation task separately reported 15/15 focused policy tests,
+`lint:diff`, quality, test typechecking, and secure installation passing. Its
+runtime results were not independently rerun here. Live CI includes the
+production build, quality/contracts, coverage, desktop/mobile browser suites,
+and package/security checks.
+
+The demonstrated gaps from this review are resolved, and the migration retains
+the useful simplification: public installation without package credentials or
+the private registry route. Stop this review here. No further code changes are
+requested without a concrete new failure or finding. Actual merge/deployment,
+live Coordinator submission, and a native Windows runtime exercise remain
+separate evidence; none is claimed by this review.

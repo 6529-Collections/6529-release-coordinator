@@ -957,27 +957,23 @@
 
         <div class="story-content">
           <p class="implementation-boundary" role="note">
-            <strong>Current first version:</strong> The CLI package is implemented and published.
-            The frontend release skill uses package version 0.0.3 and its <code>submit</code>
-            command as a synchronous observation step. The backend does not use it yet. The CLI saves
-            every run locally, adds only a valid request to the local outbox, starts the central
-            workflow, waits for it, and returns the result. A normal returned success or failure
-            does not stop the existing Release Bus process. A signal-style exit or a wait that never returns stops the
-            release and is raised to the Coordinator owner. The central workflow now saves each
-            accepted request as one public GitHub Issue, and version 0.0.3 returns and saves its
-            number and link. One controlled frontend test created test Issue #1 and stopped before
-            merge or deployment. No inbox reader or worker exists yet. The inbox needs no new server
-            or database. The remaining Coordinator steps are still the later target process.
+            <strong>Implemented today:</strong> Frontend and backend record new release intents
+            through the public CLI and central GitHub Issue workflow. The local reader verifies
+            pending records and prints a report. Neither step authorizes or executes a release.
+            The worker, durable queue, merges, builds, deployments, and recovery described below
+            remain proposed work. See <a href="./docs/progress.md">progress and evidence</a> and
+            the <a href="./release-coordinator-architecture.html">implemented intake path</a>.
           </p>
           <p class="diagram-context">
-            Make sure every pull request is open, approved, has passed the checks required by its
-            GitHub repository, and has no merge conflicts. Do not include pull requests that are
-            not ready.
+            <strong>Draft differences to settle:</strong> This diagram and the older written
+            baseline differ on release ownership, when main changes, and production builds.
+            Read the <a href="./docs/design.md#decisions-to-settle-before-execution">design decisions</a>
+            before implementing these steps. A staging request alone never authorizes production.
           </p>
           <p class="progress-rule" role="note">
-            <strong>How progress is saved:</strong> The Coordinator saves each step and its result.
-            If something fails, the saved progress shows where the release stopped and what
-            happened.
+            <strong>Planned progress storage:</strong> A future worker will save each release
+            step and its result. The local reader currently prints its report and exits;
+            it does not save a release state or start later steps.
           </p>
           <article class="story" id="story" aria-label="Release process"></article>
         </div>
@@ -989,20 +985,20 @@
         {
           title: "Create and submit the release request",
           story:
-            "The frontend product release skill calls published package version 0.0.3 and gives the completed input JSON to the CLI submit command. The CLI creates a run ID, saves the run, creates and validates the full release request, saves a valid request to .release-coordinator/outbox, starts one workflow in the Release Coordinator repository, waits for it, and returns success or failure with the request ID, inbox Issue number, and Issue link. A normal returned result is observation only, and the existing Release Bus process continues without reading this JSON. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. The backend does not use the CLI yet. The agent does not run GitHub commands, know the workflow name, or poll GitHub. By default, GitHub allows accounts with Write access to the Release Coordinator repository to start the workflow. The central workflow creates or reuses one public GitHub Issue for each accepted request. The Issue stores the exact validated JSON, checksum, trusted sender proof, workflow run, time, and accepted result. One controlled frontend test created test Issue #1 and stopped before merge or deployment. A future status command can read an Issue. Release requests must not contain secrets. Version 0.0.3 does not merge, build, or deploy anything.",
+            "The product release skill gives completed input JSON to the installed public CLI submit command. Frontend and combined intents record from the frontend context; backend-only intents record from the backend. A combined release uses one shared request. The CLI saves a local run, creates and validates the request, saves valid JSON to the outbox, starts the central workflow, waits, and returns the request ID and inbox Issue result. The workflow creates or reuses one public Issue with the request, checksum, GitHub actor, and workflow evidence. Recording is observation only; ordinary returned outcomes continue the existing authorized release flow. The agent does not dispatch or poll the submission workflow separately. Requests and logs must not contain secrets. This implemented intake step does not start the future release steps below.",
           why:
             "The agent has one stable interface: ask the CLI for the shape, submit the completed JSON, and read the answer. The CLI hides GitHub and later Coordinator details. The central workflow gives every product the same submission path and GitHub supplies trusted proof of who started it.",
           failure:
-            "Every attempt is saved locally. If the JSON cannot be created or does not match the schema, the CLI returns the validation reason and no workflow starts. If the GitHub login is missing, Write access is missing, or the workflow fails, the CLI returns that reason. A normal returned failure is reported as an observation warning, and the existing Release Bus process continues. A signal-style exit or a wait that never returns stops the release and is raised to the Coordinator owner. Version 0.0.3 also returns an inbox rejection reason. A failed submission creates no inbox Issue and starts no Coordinator release work."
+            "Local creation or validation failure prevents workflow dispatch. A normal returned setup, validation, or submission failure is reported as an observation warning, and the product skill continues the existing authorized release path. A signal-style interruption or a wait that never returns stops release work and is raised to the Coordinator owner. Do not silently retry or create another request on continuation. Failed or uncertain delivery is not permission to start Coordinator release work; use the returned evidence and local records to describe what is known."
         },
         {
           title: "Confirm the central GitHub submission",
           story:
-            "The public GitHub inbox issue is loaded. It contains the exact release JSON, request checksum, GitHub actor, stable actor ID, workflow run, submission time, and result. The Coordinator confirms that the request came through the expected workflow in the Release Coordinator repository. GitHub already required that account to have Write access before the manual workflow could start. The Coordinator does not use the repository where the local CLI ran as permission proof, and it does not repeat a permission check for every product repository. The request's requested_by value is context only; it is not identity proof. The release continues only when the issue and central workflow proof are complete. The result is saved.",
+            "The implemented local reader loads open pending Issues, validates their saved JSON and checksum, and compares them with the expected successful inbox workflow result from main. That result must name the same request, exact JSON, Issue, run, and GitHub actor. The request's requested_by value remains supplied context, not identity proof. The reader prints its findings and exits. A future worker could save and use that verification before checking release readiness, but no automatic continuation or durable release-state save exists yet.",
           why:
             "There is one simple permission boundary. Anyone with Write access to the Release Coordinator repository may submit a request. The release repositories and exact code come from the JSON and are checked in the next steps. Submitting a request is not deployment approval.",
           failure:
-            "GitHub refuses to start the workflow when the account lacks Write access. Invalid submissions do not create inbox issues. If a saved issue is missing the expected central workflow proof or was changed, it is marked as failed. The reason is saved, and the release does not start."
+            "A changed or contradictory saved record is reported as invalid. Missing or unconfirmable workflow evidence is reported as unverified. An inbox listing failure is an error, not an empty inbox. The reader does not edit Issue labels or save a release result. A future worker must not treat any of those outcomes as permission to continue."
         },
         {
           title: "Check pull request readiness",

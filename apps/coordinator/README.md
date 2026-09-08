@@ -94,8 +94,8 @@ observed during that scan. Repeated Issues across pages cause an explicit error.
 
 Closed test Issues are excluded by selection. An old test still labelled
 pending can appear as a valid saved record: that does not make it a real release.
-In particular, historical test Issue #1 was still open and pending on September
-8, 2026. The reader cannot decide whether a saved request is still wanted.
+The reader cannot decide whether a saved request is still wanted. Dated live
+results and known test records are tracked in [progress](../../docs/progress.md).
 
 ## Read-only boundary and tests
 
