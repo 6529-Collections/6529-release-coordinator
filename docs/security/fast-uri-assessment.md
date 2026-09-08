@@ -97,8 +97,10 @@ Issue, package publication, or deployment was created by this assessment.
 
 The full local suite also passed: **75 tests**, comprising 26 package tests
 (including the four new boundary checks) and 49 reader tests. The assessment
-and tests are on branch `codex/assess-fast-uri-boundary`; these are local test
-results, and no new remote CI result is claimed.
+and tests are shared through
+[PR #17](https://github.com/6529-Collections/6529-release-coordinator/pull/17).
+These counts describe the local assessment runs; the PR records its separate
+GitHub check and merge evidence.
 
 ## Reproduce
 

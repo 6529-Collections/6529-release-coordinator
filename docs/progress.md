@@ -109,8 +109,9 @@ used patched `3.1.6`. Across all three installations, request validation,
 schema-injection probes, and simulated submissions made zero request-time
 calls to fast-uri. No dependency versions were changed or warnings suppressed.
 Other dependency uses and the remaining audit findings are not cleared by this
-result. The assessment and regression test are on branch
-`codex/assess-fast-uri-boundary`.
+result. The assessment and regression test are shared through
+[PR #17](https://github.com/6529-Collections/6529-release-coordinator/pull/17),
+which records their GitHub check and merge evidence.
 The full local suite passed 75 tests: 26 package tests and 49 reader tests.
 
 ## Deliberately deferred
