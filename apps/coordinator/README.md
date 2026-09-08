@@ -1,4 +1,4 @@
-# Local inbox reader
+# Local Coordinator checks
 
 This private workspace is the first Coordinator application. It reads the saved
 requests in `6529-Collections/6529-release-coordinator` and prints a report.
@@ -75,7 +75,7 @@ leave the request unverified. Raw logs and CLI stderr are not printed.
 
 ## Limits and trust
 
-**This checks the saved record, not whether it should be released now.** It does
+**`inbox:read` checks the saved record, not whether it should be released now.** It does
 not check current PR heads, checks, approvals, deployment-unit existence, or
 whether the dependency graph makes sense. It never chooses between two requests
 for different commits of the same PR. It does not authorize a release.
@@ -97,17 +97,102 @@ pending can appear as a valid saved record: that does not make it a real release
 The reader cannot decide whether a saved request is still wanted. Dated live
 results and known test records are tracked in [progress](../../docs/progress.md).
 
+## Readiness checks
+
+Run a separate, read-only inspection of current evidence:
+
+```sh
+npm run readiness:check
+npm run --silent readiness:check -- --json
+```
+
+The account also needs read access to frontend and backend PR/check metadata
+and the backend catalog. `--help` makes no GitHub calls.
+
+The command first runs the complete inbox proof check above. Invalid or
+unverified records do not trigger product repository reads. For verified records,
+it checks:
+
+1. **Exact PR code and current state.** Compare branch and full commit, verify
+   repository identity, and report drafts, closed PRs, and already merged PRs.
+   A changed head means outdated; a merged PR does not prove a deployment.
+2. **GitHub merge, check, and review evidence.** Read each PR's mergeability,
+   merge gate, review decision, and every page of head-commit check contexts.
+   GitHub identifies required contexts with `isRequired`; optional checks are
+   counted separately. Required successful, neutral, or skipped check runs
+   satisfy that individual check. Missing, pending, failing, or unfamiliar
+   evidence never becomes passing merely because the visible list is empty.
+   Passing the required-check group also requires GitHub's `CLEAN` or
+   `UNSTABLE` merge gate; `UNSTABLE` can include non-required failures. This
+   uses [GitHub's own state definitions](https://docs.github.com/en/graphql/reference/pulls#mergestatestatus),
+   rather than independently implementing all branch rules or bypass policies.
+3. **Part and service dependencies.** Require unique part IDs and PRs, existing
+   dependency endpoints, and no cycles. Read `src/config/deploy-services.json`
+   at each exact requested backend commit, recording its blob SHA. Check names,
+   environment (`production` maps to `prod`), catalog prerequisites, and extra
+   ordering edges. Combine service and part edges, including dependencies across
+   backend parts. Conflicting orders or ambiguous unit ownership block the request.
+   Different catalog service definitions across requested commits require the
+   catalog from an exact combined merge result; none is silently chosen.
+4. **Stable observations.** Read each PR again after the initial PR/catalog
+   reads. Changes to its head, base, state, checks, or reviews make the observation
+   unknown. API errors and incomplete pagination also leave evidence unknown.
+5. **Overlaps and missing history.** Identify other pending requests for the
+   same PR and target, without choosing one. Report completed, cancelled, and
+   replaced as unknown because no durable Coordinator release-history source
+   exists. Issue closure, labels, PR merge state, and newer requests cannot
+   substitute for that history.
+
+An omitted catalog prerequisite stays **unknown** until there is proof that its
+required state already runs in the requested environment. The checker does not
+add it to the request or deploy it. A displayed dependency order describes the
+selected services only; it does not prove every affected service was selected,
+validate deployment adapters, or establish runtime health.
+
+**Merge proof is limited to each PR's own base branch.** A PR targeting `main`
+does not prove it merges into `1a-staging`. Individual PR results do not prove
+several PRs merge together. This command does not perform a temporary merge
+simulation or choose an execution destination. `release_merge_plan` remains
+unknown until the execution plan and exact combined merge proof exist.
+
+Each check reports `pass`, `blocked` (a demonstrated obstacle), or `unknown`
+(missing/ambiguous evidence). A request reports `blocked` if any check blocks it;
+otherwise it reports `unknown`. There is deliberately no overall `ready` result
+while release history and execution merge proof are absent. Both report and
+request objects always have `release_authorized: false`.
+
+Exit codes: **0** means a successful scan found no pending requests, **1** means
+requests have blocked or unknown readiness, and **2** means usage or inbox
+listing failure. Exit 1 is an expected inspection result, not a checker crash.
+An empty inbox is not release authorization either.
+
+These are observations, not an atomic snapshot, reservation, or GitHub lock.
+Facts can change immediately after the last read. Future execution must recheck
+its exact plan and authorization. The unresolved execution design remains in
+[design](../../docs/design.md); this checker does not settle it.
+
 ## Read-only boundary and tests
 
-The GitHub adapter allows only a fixed set of Issue/run/job/log endpoints in
+The inbox GitHub adapter allows only a fixed set of Issue/run/job/log endpoints in
 this repository, always with explicit HTTP `GET`, without a shell or request
 body. The reader has no GitHub write action, merge/deploy operation, workflow
 dispatch, scheduler, or local request-record write. It does not call the CLI's
 create/submit/save functions. Its workspace is private and adds no dependencies
 or files to the published release-request package.
 
+The separate readiness adapter permits only the two fixed product repositories,
+positive PR numbers, a fixed GraphQL **read query**, and the fixed backend
+catalog path with a full commit SHA. GraphQL queries use HTTP `POST` as required
+by GitHub; this is not a GraphQL mutation. Catalog reads use `GET`. There is no
+caller-supplied query, method, host, shell, or code execution from a PR. Both
+adapters use the same timeout/response-size limits and suppress raw CLI errors.
+
 Run all package and reader tests from the repository root with `npm test`.
 The existing PR check runs both suites. Reader tests cover altered and copied
 records, actor/run mismatches, unavailable and ambiguous evidence, pagination,
 closed tests, duplicate requests, output safety, read failures, and the GET-only
 adapter. Unit tests use fake GitHub responses and do not contact GitHub.
+Readiness tests additionally cover current-head changes, merge/check/review
+blocks, catalog and graph errors, missing history, conflicting requests,
+pagination races, adapter input boundaries, and the verified-intake-to-readiness
+CLI path. Live evidence is dated separately in the progress record.

@@ -3,8 +3,9 @@
 ## Purpose
 
 This is a standalone project for designing and implementing a new release
-coordinator from the ground up. Request submission and local inbox inspection
-are implemented; release execution remains a design.
+coordinator from the ground up. Request submission, local inbox inspection,
+and read-only readiness observations are implemented; release execution remains
+a design. Readiness observations never authorize a release.
 
 It is intended to coordinate releases across:
 
@@ -42,7 +43,7 @@ from first principles.
 - `docs/design.md` contains the proposed execution design and unresolved
   differences with the full process diagram. Settle those choices before
   implementing release execution.
-- CLI and reader usage belong in their package/application READMEs. The JSON
+- CLI, inbox reader, and readiness usage belong in their package/application READMEs. The JSON
   Schema owns the request shape; `release-request-schema.md` explains it.
 - `docs/npm-publishing.md` is the publishing/adoption guide.
 - `docs/history/` holds historical evidence, not current work instructions.
