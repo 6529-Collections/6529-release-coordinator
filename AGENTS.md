@@ -2,8 +2,9 @@
 
 ## Purpose
 
-This is a standalone project for designing a new release coordinator from the
-ground up.
+This is a standalone project for designing and implementing a new release
+coordinator from the ground up. Request submission and local inbox inspection
+are implemented; release execution remains a design.
 
 It is intended to coordinate releases across:
 
@@ -32,3 +33,20 @@ with them.
 
 Design decisions for the new Coordinator are made in this standalone project
 from first principles.
+
+## Documentation map
+
+- `README.md` is the entry point and documentation index.
+- `docs/progress.md` records dated implementation, merge/publication evidence,
+  next steps, and deliberately deferred work.
+- `docs/design.md` contains the proposed execution design and unresolved
+  differences with the full process diagram. Settle those choices before
+  implementing release execution.
+- CLI and reader usage belong in their package/application READMEs. The JSON
+  Schema owns the request shape; `release-request-schema.md` explains it.
+- `docs/npm-publishing.md` is the publishing/adoption guide.
+- `docs/history/` holds historical evidence, not current work instructions.
+
+Update the relevant guide and progress record when implementation changes.
+Distinguish local implementation, tests, remote merge, package publication,
+and runtime/deployment proof. Keep current status out of historical snapshots.

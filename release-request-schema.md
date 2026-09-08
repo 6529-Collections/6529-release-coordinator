@@ -7,77 +7,38 @@ Version `0.000001` defines the first file produced by the developer-side tool.
 
 ## Current boundary
 
-The first tool is a small CLI package at `packages/release-request/` in this
-repository. Its package name is `@6529-collections/release-request`. It is
-implemented and published in GitHub Packages. The frontend installs published
-version `0.0.3` and calls it from the existing release skill. The backend does
-not use it yet. Version `0.0.3` returns and saves the Issue inbox result.
+The JSON Schema is the source of truth for the saved request's shape. The CLI
+at `packages/release-request/` creates and validates that request; its `submit`
+command also saves it through the central GitHub workflow. Product repositories
+install only the CLI package. The private local reader at `apps/coordinator/`
+reuses the schema and checks saved inbox records against their workflow proof.
 
-When backend integration is added, the backend will install only that package
-as a development dependency. It will not install the future Coordinator
-server.
+For commands and submission behavior, use the [CLI guide](./packages/release-request/README.md).
+For consumer versions, merged integrations, and delivery evidence, use
+[progress](./docs/progress.md). For the reader's exact checks and limitations,
+use the [reader guide](./apps/coordinator/README.md).
 
-The `create` command does this:
+`create` saves local records only. `submit` creates and validates the same request,
+then waits for the central workflow and saves the returned Issue result. Saving
+or verifying a request does not authorize or perform a release. The product
+repositories' release skills own their current recording and deployment rules.
 
-1. Creates a unique run ID.
-2. Saves a local run record with status `running`.
-3. Creates one release-request JSON file from the agent's input.
-4. Checks the request against the local schema.
-5. Updates the run record to `succeeded` or `failed`.
-6. Saves a valid request to the local outbox only when validation passes.
+## Identity and submission proof
 
-The `submit` command performs those same steps, starts the central GitHub
-workflow, waits for it, and saves the workflow result in the run record. In
-version `0.0.3`, success also requires one accepted inbox Issue and the
-run record saves its number and URL. It does not start a release, merge code,
-build code, or deploy code.
+`requested_by` is supplied context, not authentication. The request JSON says
+what code is requested. GitHub separately records the real actor, stable actor
+ID, and workflow run. The public inbox Issue stores the request, checksum, and
+that submission metadata. Editable Issue text is not sufficient proof: the
+reader compares it with the expected successful workflow's result.
 
-In the frontend release skill, `submit` is a synchronous observation step. A
-normal returned success or failure is reported, saved, and followed by the
-existing Release Bus process. A signal-style exit or a wait that never returns
-stops the release and is raised to the Coordinator owner. The saved JSON is not
-Release Bus input and does not grant deployment authority.
+The central workflow validates the request and creates one Issue with
+`release-request`, `pending`, and target labels. Repeating the same request ID
+and JSON reuses that Issue; different JSON under the same ID is rejected.
+No separate inbox server or stored inbox secret is required.
 
-## Identity and CLI submission
-
-`requested_by` records who the agent says requested the release. It is useful
-context, but it is not trusted proof of identity. Anyone creating JSON could
-write a different name there.
-
-Submission keeps two records separate:
-
-1. The release-request JSON says what should be released.
-2. One trusted workflow in the Release Coordinator repository adds the GitHub
-   actor, stable actor ID, and workflow run.
-
-The agent still uses only this package. The `submit` command accepts
-the same completed input JSON as `create`. It creates and validates the full
-request, saves the local run, starts the central workflow, waits for the result,
-and returns success or failure with a reason. The agent does not need to know the
-workflow name or any GitHub command.
-
-The central workflow validates the full request again and creates one public
-GitHub Issue in the Release Coordinator repository. The Issue stores the
-exact validated JSON, request checksum, GitHub actor, actor ID, workflow run,
-submission time, and accepted result. It starts with `release-request`,
-`pending`, and target labels. The workflow reuses the Issue when the same
-request is submitted again. It rejects the same request ID with different JSON.
-No separate server, database, or inbox secret is needed. The CLI uses the
-developer's GitHub login to start the workflow. The workflow uses GitHub's
-short-lived `GITHUB_TOKEN`, limited to `issues: write`, to create the Issue.
-
-The agent-facing command will not change. A future `status <request-id>` command
-can read the matching issue after submission.
-
-Frontend and backend do not need their own submission workflow files. The CLI
-hides the one central workflow. GitHub's default permission rule allows accounts
-with Write access to the Release Coordinator repository to start it. Read-only
-access is not enough. The repositories, branches, and commits to release are
-already recorded in the JSON; the repository where the CLI ran is not used as
-permission proof. Submission does not approve or deploy the release. Package
-version `0.0.3`, which the frontend release skill uses, requires, shows, and
-saves the Issue result. The backend has not been integrated yet. One controlled
-frontend test created test Issue `#1` and stopped before merge or deployment.
+The CLI generates `schema_version`, `request_id`, and `created_at`. The agent
+must not include those fields in its input template. A combined frontend/backend
+release is one request with both parts, not two separate requests.
 
 ## Local files
 
@@ -153,8 +114,8 @@ The release file does not copy the whole backend service catalog.
 4. A later Coordinator combines both sources and checks that the result has no loop.
 5. Units with no dependency may deploy together.
 
-The first local-only tool does not calculate this final order yet. It only
-checks that the JSON has the agreed structure.
+The CLI and local inbox reader do not calculate this final order. Schema
+validation checks the agreed structure, not catalog membership or graph safety.
 
 ## What the schema checks now
 
