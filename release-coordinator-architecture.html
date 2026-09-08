@@ -220,9 +220,10 @@
               and must never contain secrets.
             </p>
             <p>
-              The local reader is implemented. It checks pending requests against their workflow
-              results and prints a report without changing GitHub. It does not check current PR
-              readiness or start a release. No release worker exists yet.
+              The local inbox reader checks pending requests against their workflow results.
+              A separate readiness command checks current PR evidence and backend dependency
+              order. Both print reports without changing GitHub. Missing release history and
+              execution merge proof remain unknown. No release worker exists yet.
             </p>
             <p>
               Source: <code>packages/release-request/</code>. Product repositories install only
@@ -298,7 +299,7 @@
         },
         read: {
           title: "Inspect the inbox locally",
-          text: "Run npm run inbox:read from the Coordinator repository. The reader runs on your machine, reads every page of open Issues carrying release-request and pending, and checks the saved JSON, request ID, checksum, and matching successful workflow result. It verifies the GitHub actor and the exact request and Issue named by that result. It prints valid, invalid, or unverified with reasons, then exits. Missing logs never become a valid record. Closed test Issues are excluded. It does not change GitHub, check current PR readiness, queue releases, or merge or deploy code. Local versus remote availability is recorded in the progress document.",
+          text: "Run npm run inbox:read from the Coordinator repository to verify saved requests against their workflow proof. Run npm run readiness:check to also inspect current PR commits, GitHub merge/check/review evidence, and backend service dependencies. Both run locally and exit without changing GitHub. Missing release history and exact execution merge proof remain unknown; neither command authorizes or performs a release. Closed test Issues are excluded. Local versus remote availability and dated live results are recorded in the progress document.",
         },
       };
 

@@ -14,6 +14,7 @@ description of a running release service.
 | Backend release recording | Public `0.0.4` is pinned in `main`; backend-only intents submit from the backend. Combined releases reuse one frontend-owned request. | [PR #1977](https://github.com/6529-Collections/6529seize-backend/pull/1977), merged at `c52537a11b529b801cff614679e0914a62d4d686`; current manifest, `AGENTS.md`, and deployment skill checked. |
 | Central inbox | The submission workflow validates requests and saves public GitHub Issues. | [Workflow source](../.github/workflows/submit-release-request.yml) and the live intake test below. |
 | Local inbox reader | Implemented in `6af610a`; reader and documentation shared through [PR #14](https://github.com/6529-Collections/6529-release-coordinator/pull/14). Follow the PR for merge and check evidence. | [Reader guide](../apps/coordinator/README.md). All 71 local tests passed: 22 CLI tests and 49 reader tests. No npm release is required for this private application. |
+| Local readiness observations | Implemented in `81e54e9` and shared through [PR #18](https://github.com/6529-Collections/6529-release-coordinator/pull/18). Follow the PR for GitHub check and merge evidence. | [Readiness guide](../apps/coordinator/README.md#readiness-checks); dated local/live results below. Public CLI `0.0.4` and product code are unchanged; no deployment is part of this work. |
 
 Both controlled intake tests below ran the central workflow at Coordinator
 commit `9e69d60a64e8d0bbceda9abd9c3ae8df1b77c33f`. This is their evidence
@@ -64,9 +65,14 @@ prove release readiness or execution.
 
 ## What the system does not do yet
 
-The reader checks the saved JSON and its workflow evidence. It does not check
-current PR readiness, resolve dependency graphs, choose the latest wanted
-request, or approve a deployment. It makes only GitHub GET requests.
+`inbox:read` checks saved JSON and workflow evidence using GitHub GET requests.
+The separate `readiness:check` adds current PR/check/review observations and
+dependency validation. It uses a fixed GraphQL read query and catalog GETs.
+Neither command chooses the latest wanted request or approves a deployment.
+
+Readiness still lacks a durable completed/cancelled/replaced history source,
+runtime evidence for omitted prerequisites, and an exact execution merge plan.
+The checker reports these gaps as unknown, even when individual checks pass.
 
 There is no running Coordinator worker, durable release queue/database,
 GitHub App with merge authority, automatic merge/build/deploy flow, or recovery
@@ -75,15 +81,40 @@ procedures. Recording a release intent is observation only.
 
 ## Current scope and later work
 
-The authorized scope is sharing the reader/docs through PR #14 and proving
-backend delivery with the controlled test above. The delivery test is complete;
-the PR is the source of truth for the sharing milestone. No new npm version or
-product deployment is part of this work.
+The intake/delivery work and focused URI assessment are shared through PRs #14
+and #17. The owner subsequently authorized implementing and testing a separate
+read-only readiness checker. That supersedes the earlier readiness deferral;
+it does not authorize building or running the release worker. No new npm version
+or product deployment is part of this work.
 
-Readiness checking is **deferred at the owner's request**. A future separate
-read-only check could inspect current PR heads, repository rules, checks, and
-request dependencies, then report ready, blocked, or unverifiable with reasons.
-Do not start that implementation as a continuation of this delivery test.
+### Readiness evidence, September 8
+
+The local suite passed **130 tests** on Node.js 25.6.1: 26 package, 49 inbox,
+and 55 readiness tests. The package dry run also passed and included only the
+existing nine public CLI files. These tests include a complete fake GitHub
+intake-to-readiness CLI run and
+failure cases for moving commits/bases/checks/reviews, required-check failures,
+missing evidence, service/dependency mistakes, pagination, and unsafe API inputs.
+These are local tests; no remote CI result is claimed for this change.
+
+A live read-only scan at **12:40 UTC** verified five saved pending records and
+reported **3 blocked, 2 unknown**, with no GitHub writes:
+
+- Issues #1, #2, and #3 name older PR commits than GitHub currently reports.
+  These existing requests are outdated. #2 and #3 also overlap on the same PR
+  and target; neither was selected or marked replaced.
+- Issue #13 matches backend PR #1978's recorded head. The PR is merged, which
+  does not prove deployment. The pinned catalog says `api` depends on
+  `dbMigrationsLoop`; only `api` is selected, and prerequisite runtime evidence
+  is unavailable. This remains unknown, not an instruction to deploy migrations.
+- Issue #16 matches frontend PR #3908's recorded head. The PR is merged, but
+  completed/cancelled/replaced release history remains unknown.
+
+The scan successfully read real workflow proof, PR/check metadata, and the
+backend catalog. All observed PRs were already merged, so passing open-PR
+mergeability behavior was covered by automated fixtures, not a live open-PR
+release test. Closed delivery tests #12 and #15 remained excluded. No pending
+Issue, product branch, workflow, or deployment was changed.
 
 Before implementing release execution, settle the three
 [design disagreements](./design.md#decisions-to-settle-before-execution),

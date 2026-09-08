@@ -1,7 +1,9 @@
 # Proposed release execution design
 
 **Draft, not implemented release behavior.** The live system submits requests
-and the local app reads them. See [progress](./progress.md) for that boundary.
+and the local app verifies intake and inspects current readiness evidence.
+It does not authorize or execute releases. See [progress](./progress.md) for
+that boundary.
 This document retains the written execution baseline formerly embedded in the
 root README. The [process diagram](../release-coordinator-process.html) is a
 separate step-by-step draft; it currently differs in the ways listed below.

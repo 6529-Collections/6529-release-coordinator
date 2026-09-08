@@ -12,6 +12,8 @@ at `packages/release-request/` creates and validates that request; its `submit`
 command also saves it through the central GitHub workflow. Product repositories
 install only the CLI package. The private local reader at `apps/coordinator/`
 reuses the schema and checks saved inbox records against their workflow proof.
+Its separate `readiness:check` command validates cross-field dependencies and
+reads current PR/catalog evidence without changing the public request format.
 
 For commands and submission behavior, use the [CLI guide](./packages/release-request/README.md).
 For consumer versions, merged integrations, and delivery evidence, use
@@ -111,11 +113,16 @@ The release file does not copy the whole backend service catalog.
 1. `deploy_units` says which backend units this release needs.
 2. The backend service catalog owns normal service dependencies.
 3. `deploy_dependencies` adds only rules that are special to this release.
-4. A later Coordinator combines both sources and checks that the result has no loop.
-5. Units with no dependency may deploy together.
+4. The local readiness checker combines both sources with release-part order
+   and checks that the result has no loop.
+5. A later execution plan will decide how to run units with no dependency.
 
-The CLI and local inbox reader do not calculate this final order. Schema
-validation checks the agreed structure, not catalog membership or graph safety.
+The CLI and `inbox:read` do not calculate this order. `readiness:check` reads the
+catalog at the exact requested backend commits, validates selected units and
+target environments, and reports an order only when the graph is complete and
+valid. A missing prerequisite requires deployment evidence; it is not silently
+added. Conflicting catalog definitions require the exact combined merge result.
+Schema validation itself checks structure, not catalog membership or graph safety.
 
 ## What the schema checks now
 
@@ -123,16 +130,18 @@ The JSON Schema checks required fields, allowed repository and target names,
 field types, and the exact 40-character commit shape. It also requires backend
 parts to contain deploy units and prevents frontend parts from containing them.
 
-Some rules compare several fields and need normal program code. Later checks
-should confirm that:
+Some rules compare several fields and need normal program code. The private
+readiness checker now confirms that:
 
 - every `id` is unique;
 - every `depends_on` value points to another part;
 - dependencies have no loop;
-- every backend deploy unit exists in the current backend service catalog;
+- every backend deploy unit exists in the catalog at the requested code;
 - every deploy dependency uses a selected backend unit.
 
-Those later checks do not change this file shape.
+These checks do not change this file shape or make intake verification a release
+approval. See the [readiness guide](./apps/coordinator/README.md#readiness-checks)
+for missing history, merge-proof limits, and result meanings.
 
 ## Changing the schema
 
