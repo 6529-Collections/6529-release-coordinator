@@ -77,6 +77,18 @@ Current merge status, dated test results, and rollout evidence are tracked in
 package stay unchanged. Update local readers together with the intake workflow,
 so removing legacy `pending` cannot hide waiting tickets.
 
+## Next: test merge rehearsals
+
+The next planned stage tries exact PR commits against explicit destination
+commits in temporary local repositories. First test real Git with local
+fixtures, then use real sample PRs in two private GitHub test repositories.
+The [merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) defines
+the separate sandbox inputs, implementation steps, test cases, and finish line.
+One engine will serve sandbox and real repository profiles; real mode needs
+its verified-inbox integration before the configuration switch can enable it.
+The command and test repositories have not been created by this planning step.
+This stage produces local evidence; it does not update tickets or perform a release.
+
 ## Documentation map
 
 | Need | Document |
@@ -85,6 +97,7 @@ so removing legacy `pending` cannot hide waiting tickets.
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
 | Understand the ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
+| Build and test the next local merge rehearsal in isolated test repositories | [Merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
 | Review the future release design and unsettled choices | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |

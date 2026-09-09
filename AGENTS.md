@@ -46,6 +46,11 @@ from first principles.
   Documentation alone does not authorize changing tickets.
   Keep existing read-only commands read-only; ticket writes belong to a separate
   explicit processing command. This stage precedes the local merge rehearsal.
+- `docs/merge-rehearsal-testing.md` owns the next planned sandbox rehearsal,
+  its two proposed private test repositories, test matrix, and finish line.
+  Keep test manifests separate from verified inbox requests; do not widen the
+  public schema or production repository allowlist to accommodate test fixtures.
+  The plan is not implementation or permission to create external resources.
 - `docs/design.md` contains the proposed execution design and unresolved
   differences with the full process diagram. Settle those choices before
   implementing release execution.

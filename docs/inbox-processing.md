@@ -350,5 +350,8 @@ application; this policy description does not claim those closures happened.
 - Repeating processing with unchanged facts produces no duplicate comments,
   transitions, or reopened requests. No merge, build, or deployment occurs.
 
-After this stage, return to the local merge rehearsal. Release execution and
-independent deployment/prerequisite evidence still need their own work.
+The next stage is defined in the [merge rehearsal testing plan](./merge-rehearsal-testing.md):
+local Git fixtures followed by real sample PRs in two private test repositories.
+It produces local sandbox evidence and does not change this ticket contract.
+Release execution and independent deployment/prerequisite evidence still need
+their own work.

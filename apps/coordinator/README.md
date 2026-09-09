@@ -177,6 +177,20 @@ Facts can change immediately after the last read. Future execution must recheck
 its exact plan and authorization. The unresolved execution design remains in
 [design](../../docs/design.md); this checker does not settle it.
 
+### Planned sandbox merge rehearsal
+
+The next private command is described in the
+[merge rehearsal testing plan](../../docs/merge-rehearsal-testing.md).
+It is not implemented yet. It will use separate test manifests and an explicit
+sandbox repository profile, with real Git merges in temporary local repositories.
+One shared engine will support explicit sandbox/real profiles. The proposed
+environment switch selects configuration and input loading, not release
+permission. Real mode remains disabled until its verified-inbox integration
+is built and checked; switching cannot turn a test manifest into a real request.
+The current commands, production repository restrictions, and verified inbox
+receipt requirements stay unchanged. Sandbox results will be local reports,
+not ticket decisions, proof of public CLI submission, or release authorization.
+
 ## Read-only boundary and tests
 
 The inbox GitHub adapter allows only a fixed set of Issue/run/job/log endpoints in

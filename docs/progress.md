@@ -91,9 +91,9 @@ procedures. Recording a release intent is observation only.
 
 ## Current scope and later work
 
-The owner has chosen to organize the inbox before building the local merge
-rehearsal. The agreed scope is the complete **submit a request -> first inbox
-processing** stage, captured in [one plan](./inbox-processing.md):
+The complete **submit a request -> first inbox processing** stage was chosen
+before the merge rehearsal and is now implemented and exercised live. Its
+[contract](./inbox-processing.md) covers:
 
 - Keep public CLI input and schema unchanged.
 - Initialize new tickets centrally with readable titles, verified submitter
@@ -115,9 +115,40 @@ The owner then narrowed intake: a request whose PRs are all already merged
 should close without claiming deployment. The merged policy was applied to #13
 and #16, and both closures were verified. A deployment-proof checker for retiring these
 requests is deferred; mixed requests remain open for a scope decision.
-After this stage, return to the local merge rehearsal. The larger release worker,
-execution permissions, deployment evidence sources, and recovery remain later
-work. No npm release or product deployment is required for inbox organization.
+The next planned scope is the [sandbox merge rehearsal and testing plan](./merge-rehearsal-testing.md).
+Build and test the private engine with real local Git fixtures, create two
+private sample repositories, run the bounded live PR matrix, and record the
+results. Test manifests remain separate from real inbox receipts. This stage
+adds no ticket writes, product changes, npm release, or deployment.
+
+The larger release worker, real-inbox rehearsal integration, execution
+permissions, deployment evidence sources, and recovery remain later work.
+
+### Rehearsal planning baseline, September 9
+
+Before this documentation update, local `main`, freshly fetched `origin/main`,
+and GitHub's live `main` all matched
+`514fed01f2c5149eac60a15898b562409479ec1f` (the PR #24 merge). There were no
+uncommitted tracked implementation changes. The two older untracked root npm
+planning/review documents were left untouched; they are not current instructions.
+
+The new plan defines one shared rehearsal engine with explicit sandbox/real
+profiles, the private sandbox input boundary, exact destination and
+merge behavior, two proposed repository names, phased setup, automated/live
+test matrix, evidence requirements, and a bounded finish line. The README,
+app guide, ticket contract, design, and agent documentation map link to it.
+The first milestone enables sandbox operation. The real profile will use the
+same engine once its verified-inbox adapter has separate integration proof;
+an environment change alone cannot make a test manifest trusted.
+
+This update is documentation only. No rehearsal command, test repository,
+sample PR, or test execution is claimed. The prior 170-test results above are
+implementation evidence from the earlier work, not new tests of this plan.
+Documentation checks passed for all seven changed/new guides, 52 local links,
+the 21 scenario IDs, and whitespace. The planning edits are local and uncommitted;
+there is no new remote documentation merge to report.
+Repository creation, implementation, and live exercises begin only in a
+subsequently authorized execution step.
 
 ### Merged intake and real migration, September 9
 
