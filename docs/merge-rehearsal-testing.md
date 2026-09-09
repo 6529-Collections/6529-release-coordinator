@@ -36,9 +36,11 @@ unless a concrete failure or uncovered requirement justifies one.
 
 ## The two GitHub repositories
 
-Proposed owner: `6529-Collections`. Confirm permission and name availability at
-setup time; the names below are planned resources, not verified existing repos.
-If a name already exists, inspect ownership and contents before using it.
+Owner: `6529-Collections`. Both repositories were created September 9; their
+IDs, visibility, sample PRs, and current acceptance limits are recorded in
+[progress](./progress.md). Setup verifies pinned ownership and empty repositories,
+or resumes its recorded seed only after checking the exact baseline branches.
+It does not overwrite an unrelated existing repository.
 
 | Repository | Sample content |
 | --- | --- |
@@ -57,6 +59,10 @@ Require the check on the tested destination branches, disable force pushes,
 and verify the rules are actually enforced. Private repository rules and
 Actions availability must be checked during setup; if unavailable, record the
 blocked live coverage rather than describing an ordinary check as required.
+This account limitation occurred during setup. Local merge diagnostics may
+continue, but clean merges remain `unknown` while the profile's named check is
+not enforced. Full live acceptance requires resolving that limitation; changing
+visibility or buying plan features is a separate owner decision.
 
 The setup step is allowed to seed test branches and open/update test PRs once
 execution is authorized. The rehearsal command itself only reads GitHub and
@@ -286,21 +292,25 @@ test record, each case ID, result, Coordinator revision, exact PR/base/head/tree
 identities, check-run links, timestamp, and any limitation. Private repository
 URLs are references for authorized readers, not public evidence access.
 
-- [ ] Private engine and manifest/profile validation implemented and documented.
-- [ ] The engine takes a shared internal plan; profile selection and input proof
+- [x] Private engine and manifest/profile validation implemented and documented.
+- [x] The engine takes a shared internal plan; profile selection and input proof
       stay outside it. MR-21 verifies switching boundaries and the disabled real path.
 - [ ] All MR local cases and existing package/Coordinator tests pass in CI.
-- [ ] Public package dry-pack contents remain the existing nine files.
+- [x] Public package dry-pack contents remain the existing nine files.
 - [ ] Both private repositories and their enforced check rules verified live.
 - [ ] All required MR live cases pass their stated expectations; expected
       conflicts and failed checks count as successful detection, not green merges.
-- [ ] Repeat runs and independent before/after reads confirm no rehearsal writes
+- [x] Repeat runs and independent before/after reads confirm no rehearsal writes
       to GitHub and no source checkout changes.
-- [ ] Cleanup and error behavior verified, including a clearly reported leftover.
+- [x] Cleanup and error behavior verified, including a clearly reported leftover.
 - [ ] Implementation reviewed and merged through the Coordinator's normal PR
       checks, with local and CI evidence recorded separately from live results.
 - [ ] Progress and command documentation describe the implemented limits;
       deferred cases are explicitly marked rather than counted as covered.
+
+The [September 9 test record](./testing/merge-rehearsal-2026-09-09.md) records
+15 live runs with correct local expectations and the unverified required-check
+gate. Unchecked acceptance items are not implied complete by those diagnostics.
 
 Retain the two test repositories and reusable fixtures for later development.
 After recording evidence, close temporary scenario PRs with a test reason when

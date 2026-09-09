@@ -13,14 +13,6 @@ export function safeRehearsalError(error) {
 function stableObservation(observation) {
   return JSON.stringify({ destination: observation.destination, pulls: observation.pulls.map(pr => fingerprint(pr)) });
 }
-function serviceRequest(plan) {
-  // Translate roles for the existing pure graph inspector, not for inbox trust.
-  return { target: plan.target, release_parts: plan.repositories.map(repo => ({
-    id: repo.role, repository: `6529seize-${repo.role}`, depends_on: repo.depends_on,
-    deploy_units: repo.deploy_units ?? [], deploy_dependencies: repo.deploy_dependencies ?? []
-  })) };
-}
-
 // The merge algorithm consumes a normalized plan. Repository/profile/input
 // selection stays in adapters; it does not choose between fake and real code.
 export async function rehearseMerge(planInput, {
@@ -100,7 +92,7 @@ export async function rehearseMerge(planInput, {
             try {
               const result = await workspace.catalog(current);
               item.catalog = { commit: current, tree: item.final_tree, blob_sha: result.blob_sha };
-              const graph = inspectServiceGraph(serviceRequest(plan), catalogServices(result.catalog));
+              const graph = inspectServiceGraph(plan.dependency_request, catalogServices(result.catalog));
               item.checks.push(check("combined_services", graph.status,
                 graph.errors.length ? graph.errors.join(" ") : graph.missing_prerequisites.length ? "Runtime prerequisites are not proven; no services were added." : "Selected dependencies are valid in the exact combined catalog.", graph));
             } catch (error) { item.checks.push(check("combined_catalog", "unknown", safeRehearsalError(error).message)); }
@@ -111,6 +103,9 @@ export async function rehearseMerge(planInput, {
         if (problem.code === "cleanup_failed") report.cleanup = { status: "failed", owned_path: problem.owned_path };
         item.checks.push(check("local_merge", "unknown", problem.message));
         report.operation_errors.push({ role: repo.role, ...problem });
+        // Do not start another workspace after losing cleanup ownership of one.
+        // The original leftover must remain visible in the final report.
+        if (problem.code === "cleanup_failed") break;
       }
     }
     // Re-observe even after a failed merge. Nothing locks GitHub in this stage.

@@ -7,7 +7,7 @@ import { selectRehearsalProfile, sandboxMergePlan, RehearsalError } from "../src
 import { createRehearsalGit } from "../src/rehearsal-git.mjs";
 import { runRehearsalProcess } from "../src/rehearsal-process.mjs";
 import { runRehearsalCli, readRehearsalManifest, saveRehearsalReport } from "../src/rehearsal-cli.mjs";
-import { formatRehearsal, rehearsalExitCode } from "../src/rehearsal.mjs";
+import { formatRehearsal, rehearsalExitCode, rehearseMerge } from "../src/rehearsal.mjs";
 
 async function single(t, role = "frontend", files = { "feature.txt": "new\n" }) {
   const f = await rehearsalFixture(t);
@@ -294,9 +294,16 @@ test("MR-18: storage limits also clean up setup failures", async t => {
 
 test("MR-18: failed initialization plus failed cleanup still records the owned leftover", async t => {
   const { f, input } = await single(t);
-  const report = await f.run(input, { createGit: options => createRehearsalGit({ ...options, temporaryRoot: f.directory,
-    maxStorageBytes: 1, remove: async () => { throw new Error("denied"); } }) });
+  const backend = await f.branch("backend", "feature/cleanup", { "feature.txt": "backend\n" });
+  input.repositories.push(f.manifest([{ role: "backend", pulls: [backend] }]).repositories[0]);
+  let attempts = 0;
+  const report = await f.run(input, { createGit: options => {
+    attempts++;
+    return createRehearsalGit({ ...options, temporaryRoot: f.directory,
+      maxStorageBytes: 1, remove: async () => { throw new Error("denied"); } });
+  } });
   assert.equal(report.status, "unknown"); assert.equal(report.cleanup.status, "failed");
+  assert.equal(attempts, 1);
   assert.ok(report.cleanup.owned_path.startsWith(f.directory));
   await rm(report.cleanup.owned_path, { recursive: true });
 });
@@ -311,4 +318,18 @@ test("MR-12: an optional sample check cannot replace the profile's required GitH
   assert.ok(report.repositories[0].final_tree);
   assert.equal(report.status, "unknown");
   assert.equal(checks(report).find(c => c.id === "configured_required_check").status, "unknown");
+});
+
+test("MR-21: the shared engine preserves an adapter's multiple service parts per repository", async t => {
+  const { f, pr } = await single(t);
+  const backend = await f.branch("backend", "feature/multi-part", { "feature.txt": "backend\n" });
+  const plan = sandboxMergePlan(f.manifest([{ role: "backend", pulls: [backend] }, { role: "frontend", pulls: [pr] }]), f.profile);
+  plan.dependency_request.release_parts = [
+    { id: "migrations", repository: "6529seize-backend", depends_on: [], deploy_units: ["dbMigrationsLoop"], deploy_dependencies: [] },
+    { id: "api", repository: "6529seize-backend", depends_on: ["migrations"], deploy_units: ["api"], deploy_dependencies: [] },
+    { id: "web", repository: "6529seize-frontend", depends_on: ["api"] }
+  ];
+  const report = await rehearseMerge(plan, { github: f.github, createGit: f.createGit });
+  assert.equal(report.status, "pass");
+  assert.deepEqual(checks(report).find(c => c.id === "combined_services").evidence.order, ["migrations/dbMigrationsLoop", "api/api", "web/frontend"]);
 });

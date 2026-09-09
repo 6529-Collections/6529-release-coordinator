@@ -135,8 +135,8 @@ JSON/text reports. Real mode stops before input reads until its verified-inbox
 adapter is integrated. Existing production repository restrictions and public
 CLI/schema are unchanged.
 
-All **215 local tests passed**: 26 public-package tests and 189 Coordinator
-tests, including 45 new rehearsal tests across the MR matrix. Tests exercise
+All **216 local tests passed**: 26 public-package tests and 190 Coordinator
+tests, including 46 new rehearsal tests across the MR matrix. Tests exercise
 real local Git merges, conflicts across individually clean PRs, exact combined
 catalogs, changing/missing evidence, profile boundaries, interrupted and partial
 operations, resource limits, and cleanup. The public package dry pack still
@@ -163,10 +163,24 @@ public. No plan upgrade or visibility change was made. The sandbox profile
 explicitly requires `Sandbox check` to be marked required by GitHub; an optional
 check cannot substitute, so missing enforcement stays unknown in reports.
 
-Seed/setup evidence is under
-`.release-coordinator/rehearsal-setup-20260909/`. Live merge-case execution and
-independent before/after verification are the next verification step. Their
-results are not implied by completed fixture creation or passing local tests.
+All **15 live cases** met their local merge/input expectations from clean
+Coordinator commit `ee8fd94c2537e5e78bd1e351e4eed1c8c8207885`, between
+10:15:49 and 10:16:55 UTC. Required-check acceptance remains incomplete:
+clean merges reported `unknown`, while demonstrated conflicts and inactive/
+outdated inputs reported `blocked`. The failed sample CI was observed, but
+could not prove required-failure enforcement while protection was unavailable.
+Independent before/after snapshots verified unchanged sandbox branch commits
+and PR state. All run-owned temporary Git directories were removed.
+
+[The dated test record](./testing/merge-rehearsal-2026-09-09.md) retains exact
+fixture commits, PR/check links, run IDs, result trees, and coverage limits.
+Raw evidence is under `.release-coordinator/rehearsal-setup-20260909/` and
+`.release-coordinator/live-rehearsal/2026-09-09T10-15-49-009Z/`. A subsequent
+local review tightened the rare setup-failure cleanup path so a second
+repository cannot hide a leftover from the first; its two-repository regression
+test is part of the current suite. Input adaptation also preserves multiple
+service parts per repository in the shared engine; the added regression proves
+that later real-inbox integration does not need a second merge algorithm.
 
 ### Rehearsal planning baseline, September 9
 

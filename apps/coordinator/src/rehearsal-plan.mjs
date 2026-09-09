@@ -70,6 +70,13 @@ export function sandboxMergePlan(manifest, profile) {
   return {
     version: 1, profile: profile.name, input_source: "test-manifest", case_id: manifest.case_id,
     input_hash: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
-    target: manifest.target, repositories
+    target: manifest.target, repositories,
+    // Adapt sandbox roles for the existing pure dependency inspector. A future
+    // verified-input adapter can preserve multiple real release parts per repo.
+    // These internal graph fields carry no inbox proof or execution permission.
+    dependency_request: { target: manifest.target, release_parts: repositories.map(repo => ({
+      id: repo.role, repository: `6529seize-${repo.role}`, depends_on: repo.depends_on,
+      deploy_units: repo.deploy_units ?? [], deploy_dependencies: repo.deploy_dependencies ?? []
+    })) }
   };
 }
