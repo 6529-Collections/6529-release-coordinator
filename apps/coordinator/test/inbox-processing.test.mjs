@@ -8,11 +8,16 @@ import { createCoordinatorGitHub } from "../src/coordinator-github.mjs";
 import { runProcessingCli } from "../src/processing-cli.mjs";
 import { readInbox } from "../src/inbox-reader.mjs";
 import { runCli } from "../src/cli.mjs";
+import { buildReleaseRequestIssueBody, releaseRequestChecksum } from "../../../packages/release-request/src/inbox-issue.mjs";
 
 const issueWrites = f => f.calls.filter(call => call.method !== "GET" && !call.path.startsWith("/git/"));
 const processOne = (f, extra = {}) => processInbox({ ...f, issueNumber: 1, ...extra });
 const intake = f => ({ request: f.request, actor: f.actor.login, actorId: String(f.actor.id),
   workflowRunUrl: f.run.html_url, submittedAt: f.request.created_at, githubRequest: f.api });
+const saveFixtureRequest = f => {
+  f.result.request = structuredClone(f.request);
+  f.issue.body = buildReleaseRequestIssueBody({ ...intake(f), checksum: releaseRequestChecksum(f.request) });
+};
 
 test("new intake creates readable scope, received status, verified assignment, and one separate comment", async () => {
   const f = fixture(); f.issues.length = 0;
@@ -105,12 +110,118 @@ for (const [name, change, status] of [
   assert.equal(f.productCalls.length, 0); assert.match(f.comments[0].body, /Coordinator maintainers/);
 });
 
-test("merged code waits for deployment evidence and never becomes completed", async () => {
+test("already merged code closes without claiming deployment and preserves its receipt on retry and resubmission", async () => {
   const f = fixture(); f.pr.state = "MERGED";
+  const body = f.issue.body, first = await processOne(f);
+  assert.equal(first.release_authorized, false); assert.equal(first.requests[0].status, "closed");
+  assert.deepEqual(first.requests[0].reasons, ["already-merged"]);
+  assert.equal(f.issue.state, "closed"); assert.equal(f.issue.state_reason, "not_planned");
+  assert.ok(f.issue.labels.includes("status:closed")); assert.ok(f.issue.labels.includes("reason:already-merged"));
+  assert.ok(!f.issue.labels.includes("status:completed")); assert.ok(f.issue.labels.includes("user-note"));
+  assert.equal(f.issue.body, body); assert.equal(f.issue.assignees[0].id, f.actor.id);
+  assert.match(f.comments[0].body, /Deployment has not been verified/);
+  assert.match(f.comments[0].body, /existing authorized release process/);
+  assert.match(f.comments[0].body, /same merged PR again will lead to the same closure/);
+  assert.match(f.comments[0].body, /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/);
+  const writes = issueWrites(f).length;
   await processOne(f);
-  assert.equal(f.issue.state, "open"); assert.ok(f.issue.labels.includes("status:waiting"));
-  assert.ok(f.issue.labels.includes("reason:deployment-unverified"));
-  assert.ok(!f.issue.labels.includes("status:completed")); assert.match(f.comments[0].body, /None currently required/);
+  const saved = await saveOrganizedReleaseRequestIssue(intake(f));
+  assert.equal(saved.issue.created, false); assert.equal(issueWrites(f).length, writes);
+  assert.equal(f.comments.length, 1); assert.equal(f.state().tickets[1].transitions.length, 1);
+  assert.equal(f.state().tickets[1].applied, first.requests[0].transition_id); assert.equal(f.state().lock, null);
+});
+
+test("a waiting request later found merged closes using the same comment and keeps the previous decision", async () => {
+  const f = fixture(); await processOne(f);
+  const previous = structuredClone(f.state().tickets[1].transitions[0]), commentId = f.comments[0].id;
+  f.pr.state = "MERGED";
+  await processOne(f);
+  assert.equal(f.issue.state, "closed"); assert.equal(f.comments.length, 1); assert.equal(f.comments[0].id, commentId);
+  assert.ok(!f.issue.labels.includes("reason:coordinator-incomplete"));
+  assert.deepEqual(f.state().tickets[1].transitions[0], previous);
+  assert.equal(f.state().tickets[1].transitions.length, 2);
+});
+
+test("already merged intake can retire even when omitted prerequisite deployment evidence is unavailable", async () => {
+  const f = fixture(); f.pr.state = "MERGED"; f.request.release_parts[0].deploy_units = ["api"];
+  saveFixtureRequest(f);
+  await processOne(f);
+  assert.equal(f.issue.state, "closed");
+  assert.deepEqual(f.issue.labels.filter(label => label.startsWith("reason:")), ["reason:already-merged"]);
+  const observation = f.state().tickets[1].transitions[0].observation;
+  assert.equal(observation.checks.find(item => item.id === "backend_services").status, "unknown");
+  assert.equal(observation.release_authorized, false);
+});
+
+for (const [name, change] of [
+  ["missing intake proof", f => { f.run.conclusion = "failure"; }],
+  ["unverified PR source", f => { f.pr.headRepository = null; }],
+  ["changing PR state", f => {
+    let reads = 0;
+    f.github.pullRequest = async () => ({ ...structuredClone(f.pr), state: ++reads % 2 ? "OPEN" : "MERGED" });
+  }],
+  ["failed final PR read", f => {
+    let reads = 0;
+    f.github.pullRequest = async () => { if (++reads > 1) throw new Error("PR read unavailable"); return structuredClone(f.pr); };
+  }]
+]) test(`already-merged closure requires proof: ${name}`, async () => {
+  const f = fixture(); f.pr.state = "MERGED"; change(f);
+  await processOne(f);
+  assert.equal(f.issue.state, "open"); assert.ok(!f.issue.labels.includes("reason:already-merged"));
+  assert.equal(f.state().tickets[1].transitions[0].decision.status, "waiting");
+});
+
+for (const state of ["OPEN", "MERGED", "unavailable"]) test(`combined request only retires when every PR is verified merged: companion ${state}`, async () => {
+  const f = fixture(); f.pr.state = "MERGED";
+  f.request.release_parts.push({ id: "frontend", repository: "6529seize-frontend", depends_on: ["backend"],
+    pull_requests: [{ number: 11, branch: "feature/frontend", commit: "f".repeat(40) }] });
+  saveFixtureRequest(f);
+  f.github.pullRequest = async repository => {
+    if (repository === "6529seize-backend") return structuredClone(f.pr);
+    if (state === "unavailable") throw new Error("Companion PR unavailable");
+    return { ...structuredClone(f.pr), number: 11, state, headRefOid: "f".repeat(40), headRefName: "feature/frontend",
+      repository: { nameWithOwner: `6529-Collections/${repository}` }, headRepository: { nameWithOwner: `6529-Collections/${repository}` } };
+  };
+  const report = await processOne(f);
+  assert.equal(f.issue.state, state === "MERGED" ? "closed" : "open");
+  assert.equal(report.requests[0].status, state === "MERGED" ? "closed" : "action-needed");
+  assert.ok(f.issue.labels.includes("reason:already-merged"));
+  if (state !== "MERGED") assert.match(f.comments[0].body, /will not execute only part of this request/);
+});
+
+test("merged closure rechecks its proof after presentation and can resume when the evidence changes", async () => {
+  const f = fixture(); f.pr.state = "MERGED";
+  f.after = async call => { if (call.method === "POST" && call.path === "/issues/1/comments") f.pr.state = "OPEN"; };
+  await assert.rejects(processOne(f), /evidence changed before closure/);
+  assert.equal(f.issue.state, "open"); assert.equal(f.state().tickets[1].applied, null);
+  const run = f.state().lock.run_id;
+  f.after = async () => {};
+  await processInbox({ ...f, resume: run });
+  assert.equal(f.issue.state, "open"); assert.ok(!f.issue.labels.includes("reason:already-merged"));
+  assert.equal(f.comments.length, 1); assert.equal(f.state().tickets[1].transitions.length, 2);
+  assert.equal(f.state().lock, null);
+});
+
+test("a lost already-merged close response resumes without a duplicate decision", async () => {
+  const f = fixture(); f.pr.state = "MERGED"; let failed = false;
+  f.after = async call => { if (!failed && call.method === "PATCH" && call.body.state === "closed") { failed = true; throw new Error("Close response lost"); } };
+  await assert.rejects(processOne(f), /Close response lost/);
+  assert.equal(f.issue.state, "closed");
+  await processInbox({ ...f, resume: f.state().lock.run_id });
+  assert.equal(f.state().tickets[1].transitions.length, 1); assert.equal(f.comments.length, 1);
+  assert.equal(f.state().lock, null);
+});
+
+test("a future execution ownership record stops the processor before it can retire merged code", async () => {
+  const f = fixture(); await processOne(f);
+  const commit = f.objects.get(f.head), tree = f.objects.get(commit.tree), blob = f.objects.get(tree.tree[0].sha);
+  const state = JSON.parse(blob.content);
+  state.tickets[1].execution_owner = { run_id: "future-release-worker" };
+  blob.content = JSON.stringify(state);
+  f.pr.state = "MERGED";
+  const writes = issueWrites(f).length;
+  await assert.rejects(processOne(f), /unsupported ticket history\/ownership/);
+  assert.equal(issueWrites(f).length, writes); assert.equal(f.issue.state, "open");
 });
 
 test("an active intake workflow finishes its own setup before the processor can write", async () => {

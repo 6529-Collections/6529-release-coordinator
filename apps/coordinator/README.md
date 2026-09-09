@@ -228,12 +228,26 @@ The original Issue body is never updated. Unrelated labels and assignees remain.
 An active intake workflow is left to finish its initial setup before processing.
 
 Stable outdated requests close with `reason:outdated-commit` and exact code
-references. Missing proof stays visible. Merged PRs remain waiting for deployment
-evidence. Required-check failures, conflicts, and invalid dependencies identify
+references. Requests whose PRs are all already merged close with
+`reason:already-merged`: the Coordinator will not handle their release, and no
+deployment is claimed. This requires verified intake, matching requested code,
+same-repository source, stable observations of every requested PR, and a fresh
+recheck immediately before closure. Existing outdated-commit decisions take
+precedence when the requested code differs. A request mixing merged and open
+or unverified PRs stays `action-needed` for a scope decision; no subset is executed.
+If deployment is still needed, use the existing authorized release process.
+Resubmitting the same merged PR leads to the same closure. Missing proof stays
+visible. Required-check failures, conflicts, and invalid dependencies identify
 a correction for the submitter. Missing Coordinator capabilities belong to its
 maintainers. The processor currently emits waiting, action-needed, and closed;
 eligible/completed remain reserved until independent release-history and
 execution-ownership evidence can support them. It never calls a merge or deploy API.
+
+This rule applies only to intake before Coordinator release execution. Receipt
+acceptance and inbox processing do not take responsibility for executing a
+release. A future worker must record and respect execution ownership before it
+merges anything; its own merges must never retire work it is already handling.
+Unsupported ownership fields in the journal stop this processor before writes.
 
 Submitters can use GitHub's assignee filter. Where assignment is unavailable,
 the status comment preserves the verified login/ID and points to:
@@ -265,6 +279,11 @@ The fixed GitHub branch `codex/inbox-state` holds only `inbox-state.json` on an
 independent commit history. **Never merge it into main, delete it, or force-push
 it.** It is runtime state, not a source branch. See the
 [storage and trust contract](../../docs/inbox-processing.md#storage-and-trusted-writers).
+
+Policy `2026-09-09.2` adds the `already-merged` reason. Merge and update supported
+processor checkouts before applying it to live tickets. Older processors reject
+unknown journal reasons and stop; do not remove or rewrite recorded reasons to
+make an old checkout run. The read-only inbox reader and public CLI need no change.
 
 Each run acquires a repository-wide lock through a fast-forward-only Git ref
 update. A competing run fails before changing tickets. Each meaningful decision
