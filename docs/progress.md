@@ -18,6 +18,7 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 | Local readiness observations | [PR #18](https://github.com/6529-Collections/6529-release-coordinator/pull/18) merged September 8 at `f2e7f918068181b454e8af277717f2e4f48a3849`. Merge and successful CI were rechecked September 9. | [Readiness guide](../apps/coordinator/README.md#readiness-checks); [successful CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34228394618) at final head `fb7897941fb453c902553378607694b50da72f82`. Public CLI and product code were unchanged; nothing was deployed. |
 | Explicit inbox processing | [PR #21](https://github.com/6529-Collections/6529-release-coordinator/pull/21) merged September 9 at `1240fea37b5d38cc00248feefa77465525d5a5d2`. Updated intake and the first real migration were verified afterward. | [Command guide](../apps/coordinator/README.md#organize-tickets-explicitly), controlled tests #20/#22 and migration evidence below. |
 | Already-merged intake boundary | [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23) merged September 9 at `3ca9fa281db8fa7614f73250022c838a137c8cff`. Scoped processing closed #13 and #16 with `already-merged`. | All 170 tests passed locally and in [CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34330324182). Live readback at 08:49 UTC verified both closures and an empty inbox; details below. |
+| Sandbox merge rehearsals | [PR #26](https://github.com/6529-Collections/6529-release-coordinator/pull/26) merged September 9 at `3dc05203ec97bed20ef3952bc99183954e2b2b5f`. Public sandbox required-check acceptance completed in the follow-up below. | All 216 local tests pass; [15 public sandbox cases](./testing/merge-rehearsal-public-2026-09-09.md) met expectations, including deliberate required CI failure. Real mode remains disabled. |
 
 Both controlled intake tests below ran the central workflow at Coordinator
 commit `9e69d60a64e8d0bbceda9abd9c3ae8df1b77c33f`. This is their evidence
@@ -115,10 +116,11 @@ The owner then narrowed intake: a request whose PRs are all already merged
 should close without claiming deployment. The merged policy was applied to #13
 and #16, and both closures were verified. A deployment-proof checker for retiring these
 requests is deferred; mixed requests remain open for a scope decision.
-The next planned scope is the [sandbox merge rehearsal and testing plan](./merge-rehearsal-testing.md).
-Build and test the private engine with real local Git fixtures, create two
-private sample repositories, run the bounded live PR matrix, and record the
-results. Test manifests remain separate from real inbox receipts. This stage
+The current scope is the [sandbox merge rehearsal and testing plan](./merge-rehearsal-testing.md).
+Its private engine and local Git fixtures are implemented and merged in PR #26.
+Two sample repositories contain the controlled PR matrix; the follow-up below
+completes required-check coverage after making them public. Test manifests
+remain separate from real inbox receipts. This stage
 adds no ticket writes, product changes, npm release, or deployment.
 
 The larger release worker, real-inbox rehearsal integration, execution
@@ -161,11 +163,10 @@ frontend #1-#8 and backend #1-#4. Frontend #6 is deliberately a draft, #7 was
 deliberately closed, and #5 deliberately fails its CI check. There are no
 deployment/publication workflows or fake requests in the real inbox.
 
-**Live acceptance limitation:** GitHub refused branch protection on the private
+**Initial live acceptance limitation (resolved setup below):** GitHub refused branch protection on the private
 repositories with HTTP 403: "Upgrade to GitHub Pro or make this repository
-public to enable this feature." Both remain private. A user decision is pending
-on keeping that coverage blocked or making only these fake-code repositories
-public. No plan upgrade or visibility change was made. The sandbox profile
+public to enable this feature." Both were private during those initial runs;
+no plan upgrade or visibility change was made then. The sandbox profile
 explicitly requires `Sandbox check` to be marked required by GitHub; an optional
 check cannot substitute, so missing enforcement stays unknown in reports.
 
@@ -191,7 +192,41 @@ The final runtime head above then repeated all 15 live cases, with matching
 observations and tree identities and unchanged source state. That repeat is
 recorded in the dated test record and under
 `.release-coordinator/live-rehearsal/2026-09-09T10-25-28-454Z/`. The required-check
-enforcement gap remained unverified; it was not counted as a passing gate.
+enforcement gap remained unverified in those runs; it was not counted as a passing gate.
+
+### Public sandbox required checks, September 9
+
+[PR #27](https://github.com/6529-Collections/6529-release-coordinator/pull/27)
+carries this follow-up; its page records required CI and current merge status.
+
+The user authorized making only the two sample repositories public to complete
+required-check acceptance. Both visibility changes were applied, and independent
+GitHub reads at **10:49 UTC** verified the same pinned repository IDs, admin access,
+and `Sandbox check` from GitHub Actions (app ID `15368`) required on `main` and
+`rehearsal-target` in both repositories. All four protections enforce admins,
+require PRs and resolved conversations, and prohibit force pushes and deletion.
+The profile now pins public visibility; the public CLI, product repository
+allowlist, and disabled real rehearsal profile are unchanged.
+
+Raw protection readback is saved in
+`.release-coordinator/sandbox-public-protection-20260909.json`. The previous
+private-run evidence remains historical.
+
+All **15 live cases met their expectations** from clean runtime commit
+`f34d70a71ee5eb292bef33d0c9b5f17505d3f9c0`, between **10:51:21 and 10:52:42 UTC**:
+seven clean cases passed and eight deliberately invalid cases were blocked.
+The failed sample CI was marked `isRequired: true` and blocked MR-11 despite
+a clean local merge, closing the original live acceptance gap. Before/after
+reads verified unchanged refs, PR state, visibility, and all four protections;
+all created temporary Git workspaces were removed. MR-01/MR-20 repeated the
+same result and tree. The closed fixture remains blocked without check evidence.
+
+The updated live runner asserts protection and clean/failed-check expectations
+without the old account-plan fallback. Three invalid-seed checks passed before
+network access or evidence creation. All **216 automated tests** passed locally;
+the package dry pack still contains nine files. The [public acceptance record](./testing/merge-rehearsal-public-2026-09-09.md)
+records exact revisions, run IDs, trees, and coverage limits. The bounded sandbox
+matrix is complete; real-input integration remains the next separate stage.
 
 ### Rehearsal planning baseline, September 9
 
