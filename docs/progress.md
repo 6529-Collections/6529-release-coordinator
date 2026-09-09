@@ -135,6 +135,12 @@ JSON/text reports. Real mode stops before input reads until its verified-inbox
 adapter is integrated. Existing production repository restrictions and public
 CLI/schema are unchanged.
 
+[PR #26](https://github.com/6529-Collections/6529-release-coordinator/pull/26)
+carries the implementation and documentation; its page records current merge
+status. Required [CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34340135589)
+passed on exact runtime head `a58b450e4f47e61b8b17867a0b6bf23f1a1e0a1e`, using
+Node.js 20, all 216 tests, and the nine-file package dry pack. Publication was skipped.
+
 All **216 local tests passed**: 26 public-package tests and 190 Coordinator
 tests, including 46 new rehearsal tests across the MR matrix. Tests exercise
 real local Git merges, conflicts across individually clean PRs, exact combined
@@ -181,6 +187,11 @@ repository cannot hide a leftover from the first; its two-repository regression
 test is part of the current suite. Input adaptation also preserves multiple
 service parts per repository in the shared engine; the added regression proves
 that later real-inbox integration does not need a second merge algorithm.
+The final runtime head above then repeated all 15 live cases, with matching
+observations and tree identities and unchanged source state. That repeat is
+recorded in the dated test record and under
+`.release-coordinator/live-rehearsal/2026-09-09T10-25-28-454Z/`. The required-check
+enforcement gap remained unverified; it was not counted as a passing gate.
 
 ### Rehearsal planning baseline, September 9
 

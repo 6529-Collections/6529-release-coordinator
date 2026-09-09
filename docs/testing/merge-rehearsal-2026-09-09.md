@@ -93,3 +93,29 @@ Raw JSON/text reports, manifests, snapshots, and check-run links are saved under
 The committed tables retain exact identities and conclusions without relying on ignored files as the only durable record. Local timing/error cases MR-09, MR-10, MR-14, MR-15, MR-17, MR-18, MR-19, and profile boundaries MR-21 remain automated fixture coverage; they are not claimed as live GitHub coverage.
 
 Outstanding: obtain authorized support for branch protection, verify required-check enforcement, and rerun the relevant acceptance cases. Real profile/inbox integration and release execution remain deferred. See [progress](../progress.md) for subsequent local tests, PR/CI, and merge evidence.
+
+## Final implementation rerun
+
+Repeated all 15 live cases from clean commit `a58b450e4f47e61b8b17867a0b6bf23f1a1e0a1e`, from **2026-09-09T10:25:28.455Z to 2026-09-09T10:26:36.510Z**. Every observation and final tree matched the first run. Independent before/after snapshots again confirmed unchanged source state. The private-repository required-check limitation remained visible; no full gate-pass claim was added.
+
+[Required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34340135589) passed on that exact head with Node.js 20: 26 package tests, 190 Coordinator tests, and a nine-file package dry pack. Publication was skipped. [PR #26](https://github.com/6529-Collections/6529-release-coordinator/pull/26) carries the implementation and subsequent documentation; its page owns current merge/check status.
+
+| Case | Final-code run ID |
+| --- | --- |
+| MR-01 | 014a3f4a-c4c9-40ac-acbd-c0a771402ca9 |
+| MR-02 | 226d2bff-57be-4ca8-8d4d-e09c7502a278 |
+| MR-03 | 8758f7ca-a094-4a6a-bc02-8d37b222e3fe |
+| MR-04-alone-a | f4cbe698-b4c7-48ef-94c6-825d88a2a958 |
+| MR-04-alone-b | 2a22f802-fe83-4f4a-b901-04180f068f45 |
+| MR-04 | 330c340a-ad54-43e1-a3a1-b6c9a1c27fe0 |
+| MR-05 | eb9d1411-57d5-4cc1-be90-de9fa20468e3 |
+| MR-06 | 68ea2e77-b7b4-486b-b602-d5efda1b8a1e |
+| MR-07 | e63b3266-60f2-426b-b1d3-f2697e85c93a |
+| MR-11 | 59e43ef3-5f7b-4c22-99a1-3476f5383b72 |
+| MR-13-draft | c289460a-e336-4795-b61d-2a801ed6d233 |
+| MR-13-closed | 30f0ae3d-2d57-48b4-af25-26ed9f35c68a |
+| MR-16 | e209eef0-82c3-4988-ae56-724a8bbcb8da |
+| MR-20 | 38a5c00c-10ae-4a43-918d-0dc6486efc7a |
+| MR-08 | 4f4b97b9-e741-48ef-8ceb-d29757bac78f |
+
+Final rerun raw evidence: `.release-coordinator/live-rehearsal/2026-09-09T10-25-28-454Z/`. The later documentation update does not change the tested runtime code.

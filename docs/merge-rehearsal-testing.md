@@ -295,7 +295,7 @@ URLs are references for authorized readers, not public evidence access.
 - [x] Private engine and manifest/profile validation implemented and documented.
 - [x] The engine takes a shared internal plan; profile selection and input proof
       stay outside it. MR-21 verifies switching boundaries and the disabled real path.
-- [ ] All MR local cases and existing package/Coordinator tests pass in CI.
+- [x] All MR local cases and existing package/Coordinator tests pass in CI.
 - [x] Public package dry-pack contents remain the existing nine files.
 - [ ] Both private repositories and their enforced check rules verified live.
 - [ ] All required MR live cases pass their stated expectations; expected
@@ -303,9 +303,10 @@ URLs are references for authorized readers, not public evidence access.
 - [x] Repeat runs and independent before/after reads confirm no rehearsal writes
       to GitHub and no source checkout changes.
 - [x] Cleanup and error behavior verified, including a clearly reported leftover.
-- [ ] Implementation reviewed and merged through the Coordinator's normal PR
-      checks, with local and CI evidence recorded separately from live results.
-- [ ] Progress and command documentation describe the implemented limits;
+- Integration and current merge status: [PR #26](https://github.com/6529-Collections/6529-release-coordinator/pull/26),
+  using the Coordinator's normal required PR checks. Local/CI and live evidence
+  are recorded separately in progress and the dated test record.
+- [x] Progress and command documentation describe the implemented limits;
       deferred cases are explicitly marked rather than counted as covered.
 
 The [September 9 test record](./testing/merge-rehearsal-2026-09-09.md) records
