@@ -1,3 +1,6 @@
+import { createGitHubReader } from "./github-reader.mjs";
+import { createRehearsalGit } from "./rehearsal-git.mjs";
+import { verifiedInboxEntry, inboxMergePlan, inboxBinding } from "./inbox-merge-plan.mjs";
 import { open, mkdir, writeFile, lstat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,13 +10,15 @@ import { rehearseMerge, rehearsalExitCode, formatRehearsal, safeRehearsalError }
 import { runRehearsalProcess } from "./rehearsal-process.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const help = `Rehearse exact sandbox PR commits using temporary local Git repositories.
+const help = `Rehearse exact PR commits from one verified inbox ticket or a sandbox manifest using temporary local Git repositories.
 
 RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest FILE [--json]
 
-Requires Node.js 20+, Git 2.38+, and authenticated gh with test repository read access.
-Real mode is disabled. Profile selection never enables a GitHub write or release.
-Reports: .release-coordinator/merge-rehearsal/sandbox/<run-id>/report.json
+RELEASE_COORDINATOR_PROFILE=sandbox|real npm run merge:rehearse -- --issue NUMBER --plan FILE [--json]
+
+Requires Node.js 20+, Git 2.38+, and authenticated gh with selected repository read access.
+Real mode requires verified inbox input. Profile selection never enables a GitHub write or release.
+Reports: .release-coordinator/merge-rehearsal/<profile>/<run-id>/report.json
 Exit codes: 0 pass, 1 blocked, 2 unknown/usage/operational failure, 3 stale.
 --help makes no repository reads or writes.
 `;
@@ -32,7 +37,7 @@ export async function readRehearsalManifest(filename) {
 }
 
 export async function saveRehearsalReport(report, outputRoot = root) {
-  if (report.profile !== "sandbox" || !/^[0-9a-f-]{36}$/u.test(report.run_id)) throw new RehearsalError("invalid_report", "Report output identity is invalid.");
+  if (!["sandbox", "real"].includes(report.profile) || !/^[0-9a-f-]{36}$/u.test(report.run_id)) throw new RehearsalError("invalid_report", "Report output identity is invalid.");
   let dir = outputRoot;
   for (const part of [".release-coordinator", "merge-rehearsal", report.profile]) {
     dir = path.join(dir, part);
@@ -61,7 +66,7 @@ async function codeRevision() {
 
 export async function runRehearsalCli(args, {
   env = process.env, load = readRehearsalManifest, githubFactory = createRehearsalGitHub,
-  run = rehearseMerge, save = saveRehearsalReport, revision = codeRevision,
+  run = rehearseMerge, save = saveRehearsalReport, revision = codeRevision, inboxReaderFactory = createGitHubReader,
   stdout = text => process.stdout.write(text), stderr = text => process.stderr.write(text),
   signal, timeout = 180_000
 } = {}) {
@@ -73,13 +78,40 @@ export async function runRehearsalCli(args, {
   signal?.addEventListener("abort", abort, { once: true });
   if (signal?.aborted) controller.abort();
   try {
-    if (![2, 3].includes(args.length) || args[0] !== "--manifest" || !args[1] || args[1].startsWith("--") || (args.length === 3 && args[2] !== "--json")) {
-      throw new RehearsalError("usage", help);
-    }
+    const manifestMode = [2, 3].includes(args.length) && args[0] === "--manifest" && args[1] && !args[1].startsWith("--") && (args.length === 2 || args[2] === "--json");
+    const inboxMode = [4, 5].includes(args.length) && args[0] === "--issue" && /^[1-9][0-9]*$/u.test(args[1]) && Number.isSafeInteger(Number(args[1]))
+      && args[2] === "--plan" && args[3] && !args[3].startsWith("--") && (args.length === 4 || args[4] === "--json");
+    if (!manifestMode && !inboxMode) throw new RehearsalError("usage", help);
     const profile = selectRehearsalProfile(env.RELEASE_COORDINATOR_PROFILE);
-    const plan = sandboxMergePlan(await load(args[1]), profile);
+    if (manifestMode && profile.name !== "sandbox") throw new RehearsalError("sandbox_manifest_only", "Real rehearsals require a verified inbox ticket and an explicit inbox plan.");
+    let plan, get;
+    if (manifestMode) plan = sandboxMergePlan(await load(args[1]), profile);
+    else {
+      const input = await load(args[3]);
+      // Reject crossed profiles before contacting any inbox.
+      if (input?.profile !== profile.name || input?.source !== "inbox-plan" || input?.inbox?.repository_id !== profile.inbox.id
+        || input.inbox.issue_number !== Number(args[1])) throw new RehearsalError("invalid_inbox_plan", "Inbox plan does not match the selected profile and ticket.");
+      get = inboxReaderFactory({ profile });
+      await get.identity?.();
+      plan = inboxMergePlan(input, await verifiedInboxEntry(Number(args[1]), { get, profile }), profile);
+    }
     const github = githubFactory(profile, { signal: controller.signal });
-    const report = await run(plan, { github, signal: controller.signal, revision: await revision() });
+    const report = await run(plan, { github, signal: controller.signal, revision: await revision(),
+      createGit: options => createRehearsalGit({ ...options, repositories: profile.repositories }) });
+    if (inboxMode) {
+      report.inbox = plan.inbox;
+      try {
+        await get.identity?.();
+        const final = inboxBinding(await verifiedInboxEntry(Number(args[1]), { get, profile }), profile);
+        report.inbox_final = final;
+        const stable = JSON.stringify(final) === JSON.stringify(plan.inbox);
+        report.checks.push({ id: "inbox_stability", status: stable ? "pass" : "stale", message: stable ? "The exact ticket receipt and workflow proof match the final read." : "Ticket receipt or workflow proof changed during rehearsal." });
+        if (!stable && !report.operation_errors.length) report.status = "stale";
+      } catch {
+        report.checks.push({ id: "inbox_stability", status: "unknown", message: "The open verified ticket could not be confirmed again; no passing result is available." });
+        report.status = "unknown";
+      }
+    }
     const filename = await save(report);
     stdout(json ? `${JSON.stringify({ ...report, report_file: filename }, null, 2)}\n` : `${formatRehearsal(report)}Report: ${filename}\n`);
     return rehearsalExitCode(report);

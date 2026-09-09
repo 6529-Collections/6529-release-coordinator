@@ -1,8 +1,9 @@
+import { realProfile } from "./profiles.mjs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const executeFile = promisify(execFile);
-const repositories = new Set(["6529seize-frontend", "6529seize-backend"]);
+
 const shaPattern = /^[0-9a-f]{40}$/u;
 export const catalogPath = "src/config/deploy-services.json";
 
@@ -30,7 +31,8 @@ const pullQuery = `query ReadinessPull($repository: String!, $number: Int!, $cur
   }
 }`;
 
-export function createReadinessGitHub({ execute = executeFile } = {}) {
+export function createReadinessGitHub({ execute = executeFile, profile = realProfile } = {}) {
+  const repositories = new Set(Object.values(profile.repositories).map(repo => repo.full_name.split("/")[1]));
   async function api(method, endpoint, fields = []) {
     let stdout;
     try {
@@ -109,7 +111,7 @@ export function createReadinessGitHub({ execute = executeFile } = {}) {
       if (typeof commit !== "string" || !shaPattern.test(commit)) {
         throw new Error("The backend catalog requires an exact commit.");
       }
-      const file = await api("GET", `repos/6529-Collections/6529seize-backend/contents/${catalogPath}?ref=${commit}`);
+      const file = await api("GET", `repos/${profile.repositories.backend.full_name}/contents/${catalogPath}?ref=${commit}`);
       if (file.type !== "file" || file.path !== catalogPath || file.encoding !== "base64"
         || typeof file.content !== "string" || !shaPattern.test(file.sha)) {
         throw new Error("GitHub did not return the backend catalog file at the requested commit.");

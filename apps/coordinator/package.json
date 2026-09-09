@@ -11,6 +11,7 @@
     "inbox:read": "node bin/read-inbox.mjs",
     "inbox:process": "node bin/process-inbox.mjs",
     "readiness:check": "node bin/check-readiness.mjs",
-    "merge:rehearse": "node bin/rehearse-merge.mjs"
+    "merge:rehearse": "node bin/rehearse-merge.mjs",
+    "request:submit": "node bin/submit-request.mjs"
   }
 }

@@ -1,5 +1,6 @@
+import { selectProfile } from "./profiles.mjs";
 import { createGitHubReader } from "./github-reader.mjs";
-import { COORDINATOR_REPOSITORY, formatReport, readInbox } from "./inbox-reader.mjs";
+import { formatReport, readInbox } from "./inbox-reader.mjs";
 
 const help = `Read the open Release Coordinator inbox without changing GitHub.
 
@@ -16,7 +17,7 @@ No merge, deployment, labels, or other GitHub writes occur.
 `;
 
 export async function runCli(args, {
-  get = createGitHubReader(),
+  get, env = process.env,
   stdout = value => process.stdout.write(value),
   stderr = value => process.stderr.write(value)
 } = {}) {
@@ -36,8 +37,12 @@ export async function runCli(args, {
       if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/u.test(submitter ?? "")) { stderr(help); return 2; }
     }
   }
+  let profile;
   try {
-    const report = await readInbox({ get });
+    profile = selectProfile(env.RELEASE_COORDINATOR_PROFILE, { defaultReal: true });
+    get ??= createGitHubReader({ profile });
+    await get.identity?.();
+    const report = await readInbox({ get, profile });
     if (submitter) {
       report.submitter_filter = submitter;
       report.requests = report.requests.filter(entry => entry.github_actor?.login.toLowerCase() === submitter.toLowerCase());
@@ -49,7 +54,7 @@ export async function runCli(args, {
   } catch (error) {
     const failure = {
       mode: "read-only",
-      repository: COORDINATOR_REPOSITORY,
+      repository: profile?.inbox.full_name ?? null, profile: profile?.name ?? null,
       error: `Inbox read failed; no complete report is available. ${error.message}`
     };
     if (json) stdout(`${JSON.stringify(failure, null, 2)}\n`);

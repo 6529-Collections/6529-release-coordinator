@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { realProfile } from "./profiles.mjs";
 import { readInbox, inspectIssue } from "./inbox-reader.mjs";
 import { inspectReadiness } from "./readiness.mjs";
 import { decideTicket, policyVersion } from "./inbox-policy.mjs";
@@ -102,7 +103,7 @@ async function applyTicket({ api, journal, state, run, ticket, number, actor, ve
 }
 
 export async function processInbox({ api, identity, get, github, issueNumber, closeTest = false, resume,
-  now = () => new Date(), journal = createJournal(api), loadInbox = readInbox, inspect = inspectIssue, observe = inspectReadiness }) {
+  now = () => new Date(), profile = realProfile, journal = createJournal(api, profile), loadInbox = readInbox, inspect = inspectIssue, observe = inspectReadiness }) {
   if (issueNumber !== undefined && !isNumber(issueNumber)) throw new Error("Issue number must be a positive integer.");
   if (closeTest && !issueNumber) throw new Error("Test closure requires one explicit Issue number.");
   const actor = await identity();
@@ -114,7 +115,7 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
   let pendingNumber = null;
   try {
     // Complete the listing/proof pass before considering any Issue writes.
-    const inbox = await loadInbox({ get, now });
+    const inbox = await loadInbox({ get, now, profile });
     const numbers = issueNumber ? [issueNumber] : [...new Set([...inbox.requests.map(entry => entry.issue_number), ...Object.keys(state.tickets).map(Number)])].sort((a, b) => a - b);
     const entries = new Map();
     const issues = new Map();
@@ -123,7 +124,7 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
       if (!isNumber(issue.id) || issue.number !== number || issue.pull_request || !["open", "closed"].includes(issue.state) || !Array.isArray(issue.labels)) throw new Error(`Invalid Issue #${number}.`);
       if (!state.tickets[number] && !labelNames(issue).includes("release-request")) throw new Error(`Issue #${number} is not a release request.`);
       issues.set(number, issue);
-      entries.set(number, await inspect(issue, { get }));
+      entries.set(number, await inspect(issue, { get, profile }));
     }
     const all = new Map(inbox.requests.map(entry => [entry.issue_number, entry]));
     for (const [number, entry] of entries) all.set(number, entry);
@@ -150,7 +151,7 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
       }
       if (closeTest && (entry.status !== "valid" || entry.github_actor?.id !== actor.id)) throw new Error("Test closure is limited to the authenticated operator's verified request.");
       if (!recordedTerminal) {
-        const observation = await observe(entry, { github });
+        const observation = await observe(entry, { github, profile });
         const decision = decideTicket(entry, observation, { overlaps: overlapping(entry, [...all.values()].filter(value => issues.get(value.issue_number)?.state !== "closed")), closeTest });
         // Reverify immutable intake before the journaled intent. Readiness itself
         // rereads PR metadata after all catalog/check observations.
@@ -178,15 +179,15 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
         if (recordedTerminal || closeTest) return;
         const freshIssue = await response(api, "GET", `/issues/${number}`);
         if (receiptHash(freshIssue) !== ticket.receipt_hash) throw new Error("Receipt changed before closure.");
-        const freshEntry = await inspect(freshIssue, { get });
-        const freshObservation = await observe(freshEntry, { github });
+        const freshEntry = await inspect(freshIssue, { get, profile });
+        const freshObservation = await observe(freshEntry, { github, profile });
         const fresh = decideTicket(freshEntry, freshObservation);
         if (fresh.status !== "closed" || digest(fresh.reasons) !== digest(latest(ticket).decision.reasons)) throw new Error("PR evidence changed before closure; the intended decision was not applied.");
       } }));
       pendingNumber = null;
     }
     await journal.release(state, run);
-    return { mode: "write", run_id: run.run_id, checked_at: now().toISOString(), release_authorized: false, requests: results };
+    return { mode: "write", profile: profile.name, repository: profile.inbox.full_name, run_id: run.run_id, checked_at: now().toISOString(), release_authorized: false, requests: results };
   } catch (error) {
     // Retain the lock on failure, even on an uncertain API response. Recovery
     // is explicit, after the prior process has stopped; it never uses a timer.

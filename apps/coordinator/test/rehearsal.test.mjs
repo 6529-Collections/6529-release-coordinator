@@ -168,12 +168,12 @@ test("MR-14/MR-21: manifest/profile validation rejects unsafe or mixed inputs be
     const bad = structuredClone(input); mutate(bad);
     assert.throws(() => sandboxMergePlan(bad, f.profile), { code: "invalid_manifest" });
   }
-  for (const value of [undefined, "", "Sandbox", "production", "real"]) assert.throws(() => selectRehearsalProfile(value));
+  for (const value of [undefined, "", "Sandbox", "production"]) assert.throws(() => selectRehearsalProfile(value));
   let accessed = false;
   const output = [];
   const exit = await runRehearsalCli(["--manifest", "fake.json", "--json"], { env: { RELEASE_COORDINATOR_PROFILE: "real" },
     load: async () => { accessed = true; }, stdout: s => output.push(s) });
-  assert.equal(exit, 2); assert.equal(accessed, false); assert.match(output.join(""), /real_not_enabled/u);
+  assert.equal(exit, 2); assert.equal(accessed, false); assert.match(output.join(""), /sandbox_manifest_only/u);
   assert.equal(await runRehearsalCli(["--help"], { stdout: () => {}, load: async () => { throw new Error("must not read"); } }), 0);
 });
 

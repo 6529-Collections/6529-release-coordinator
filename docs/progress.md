@@ -18,7 +18,7 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 | Local readiness observations | [PR #18](https://github.com/6529-Collections/6529-release-coordinator/pull/18) merged September 8 at `f2e7f918068181b454e8af277717f2e4f48a3849`. Merge and successful CI were rechecked September 9. | [Readiness guide](../apps/coordinator/README.md#readiness-checks); [successful CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34228394618) at final head `fb7897941fb453c902553378607694b50da72f82`. Public CLI and product code were unchanged; nothing was deployed. |
 | Explicit inbox processing | [PR #21](https://github.com/6529-Collections/6529-release-coordinator/pull/21) merged September 9 at `1240fea37b5d38cc00248feefa77465525d5a5d2`. Updated intake and the first real migration were verified afterward. | [Command guide](../apps/coordinator/README.md#organize-tickets-explicitly), controlled tests #20/#22 and migration evidence below. |
 | Already-merged intake boundary | [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23) merged September 9 at `3ca9fa281db8fa7614f73250022c838a137c8cff`. Scoped processing closed #13 and #16 with `already-merged`. | All 170 tests passed locally and in [CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34330324182). Live readback at 08:49 UTC verified both closures and an empty inbox; details below. |
-| Sandbox merge rehearsals | [PR #26](https://github.com/6529-Collections/6529-release-coordinator/pull/26) merged September 9 at `3dc05203ec97bed20ef3952bc99183954e2b2b5f`. Public sandbox required-check acceptance completed in the follow-up below. | All 216 local tests pass; [15 public sandbox cases](./testing/merge-rehearsal-public-2026-09-09.md) met expectations, including deliberate required CI failure. Real mode remains disabled. |
+| Sandbox merge rehearsals | [PR #26](https://github.com/6529-Collections/6529-release-coordinator/pull/26) merged September 9 at `3dc05203ec97bed20ef3952bc99183954e2b2b5f`. Public sandbox required-check acceptance completed in the follow-up below. | All 216 local tests pass; [15 public sandbox cases](./testing/merge-rehearsal-public-2026-09-09.md) met expectations, including deliberate required CI failure. Real mode was disabled at that milestone; see the profiled follow-up below. |
 
 Both controlled intake tests below ran the central workflow at Coordinator
 commit `9e69d60a64e8d0bbceda9abd9c3ae8df1b77c33f`. This is their evidence
@@ -133,8 +133,8 @@ The plan was committed as `718eaaa` on
 `514fed01f2c5149eac60a15898b562409479ec1f`. The private `merge:rehearse` command
 now uses one normalized-plan engine, an explicit sandbox profile, pinned
 GitHub repository identities, temporary bare Git repositories, and local
-JSON/text reports. Real mode stops before input reads until its verified-inbox
-adapter is integrated. Existing production repository restrictions and public
+JSON/text reports. At that initial milestone, real mode stopped before input
+reads pending verified-inbox integration. Existing production repository restrictions and public
 CLI/schema are unchanged.
 
 [PR #26](https://github.com/6529-Collections/6529-release-coordinator/pull/26)
@@ -193,6 +193,45 @@ observations and tree identities and unchanged source state. That repeat is
 recorded in the dated test record and under
 `.release-coordinator/live-rehearsal/2026-09-09T10-25-28-454Z/`. The required-check
 enforcement gap remained unverified in those runs; it was not counted as a passing gate.
+
+### Shared profiled inbox implementation, September 9
+
+On branch `codex/profiled-inbox-rehearsal` from verified `main` at
+`c9ff50230caba774b6c7c486b49a9af4f0ef00d7`, the shared sandbox/real input path now
+covers private complete-request submission, workflow intake, receipt verification,
+readiness, explicit processing, separate inbox journals/local records, and a
+one-ticket merge plan. The [profiled inbox guide](./profiled-inbox-testing.md)
+defines the exact boundaries and operator commands.
+
+Created the public [test inbox](https://github.com/6529-Collections/release-coordinator-test-inbox),
+ID `1362580376`. It is a separate fixture repository; sample PRs remain in the
+existing frontend/backend test repositories. Its protected main workflow pins
+Coordinator commit `5cab79f129899d4637cc32103cb167b2f77daac5` and runs the same
+shared intake code as the real workflow.
+Public npm source/schema and installed `0.0.4` behavior remain unchanged.
+
+The initial **232 local automated tests passed** (26 public-package and 206 Coordinator),
+including 16 new profile/inbox tests. They cover both profiles and the shared
+real Git engine, cross-profile rejection, workflow identity, exact PR scope,
+ticket rechecks, retries, and separate state. Three review tests add non-JSON
+GitHub failure coverage for both profiles and a reported local result-save failure;
+the focused profile suite now has 19 passing tests. All **235 tests passed** in
+the full local suite (26 public-package, 209 Coordinator). The public dry pack remains
+nine files.
+
+The [live sandbox record](./testing/profiled-inbox-2026-09-09.md) proves submission
+through the shared workflow to [test ticket #1](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/1),
+receipt reuse without a second workflow/ticket, explicit processing into the
+test journal, and two passing one-ticket rehearsals with identical result trees.
+All sample PR refs and 13 real inbox records remained unchanged. The real state
+journal also remained unchanged. The test ticket stays `status:waiting` with
+`reason:coordinator-incomplete`; the processor does not consume rehearsal reports.
+
+[PR #30](https://github.com/6529-Collections/6529-release-coordinator/pull/30)
+records required CI and merge evidence separately. Its initial runtime's required
+`Check package` run passed. Real-profile live proof is outside this rollout.
+No real inbox processing, product merge, package publication, or deployment was
+performed by this exercise. Multiple-ticket batching remains later work.
 
 ### Public sandbox required checks, September 9
 
