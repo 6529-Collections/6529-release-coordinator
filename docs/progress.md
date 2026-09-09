@@ -17,7 +17,7 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 | Local inbox reader | Implemented in `6af610a`; reader and documentation shared through [PR #14](https://github.com/6529-Collections/6529-release-coordinator/pull/14). Follow the PR for merge and check evidence. | [Reader guide](../apps/coordinator/README.md). All 71 local tests passed: 22 CLI tests and 49 reader tests. No npm release is required for this private application. |
 | Local readiness observations | [PR #18](https://github.com/6529-Collections/6529-release-coordinator/pull/18) merged September 8 at `f2e7f918068181b454e8af277717f2e4f48a3849`. Merge and successful CI were rechecked September 9. | [Readiness guide](../apps/coordinator/README.md#readiness-checks); [successful CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34228394618) at final head `fb7897941fb453c902553378607694b50da72f82`. Public CLI and product code were unchanged; nothing was deployed. |
 | Explicit inbox processing | [PR #21](https://github.com/6529-Collections/6529-release-coordinator/pull/21) merged September 9 at `1240fea37b5d38cc00248feefa77465525d5a5d2`. Updated intake and the first real migration were verified afterward. | [Command guide](../apps/coordinator/README.md#organize-tickets-explicitly), controlled tests #20/#22 and migration evidence below. |
-| Already-merged intake boundary | Policy `2026-09-09.2` is implemented locally; not committed, merged, or applied to live tickets. | All 169 local tests passed. A read-only preview at 08:30 UTC found #13 and #16 would close with `already-merged`; rollout details below. |
+| Already-merged intake boundary | Policy `2026-09-09.2` is implemented in [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23). Follow the PR for current merge and live ticket-closure evidence. | All 169 local tests passed. A read-only preview at 08:30 UTC found #13 and #16 would close with `already-merged`; rollout details below. |
 
 Both controlled intake tests below ran the central workflow at Coordinator
 commit `9e69d60a64e8d0bbceda9abd9c3ae8df1b77c33f`. This is their evidence
@@ -77,7 +77,8 @@ Neither read-only command changes tickets. The separate
 `inbox:process` records decisions and organizes selected tickets. Both updated
 readers select all open `release-request` Issues, including tickets without
 `pending`. The merged intake workflow's `status:received` setup was verified
-with controlled test #22. The newer already-merged closure policy remains local.
+with controlled test #22. The already-merged closure extension is tracked in
+[PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23).
 
 Readiness still lacks a durable completed/cancelled/replaced history source,
 runtime evidence for omitted prerequisites, and an exact execution merge plan.
@@ -111,7 +112,7 @@ request schema are unchanged. The first real migration subsequently organized
 all six existing open tickets; see the dated evidence below.
 
 The owner then narrowed intake: a request whose PRs are all already merged
-should close without claiming deployment. Roll out this local policy before
+should close without claiming deployment. Roll out this policy before
 processing #13 and #16 again. A deployment-proof checker for retiring these
 requests is deferred; mixed requests remain open for a scope decision.
 After this stage, return to the local merge rehearsal. The larger release worker,
@@ -140,7 +141,7 @@ No product branch, npm package, release, or deployment changed.
 
 ### Already-merged policy, September 9
 
-Local policy `2026-09-09.2` closes a request with `status:closed` and
+Policy `2026-09-09.2`, implemented in [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23), closes a request with `status:closed` and
 `reason:already-merged` when every requested PR has matching code, verified
 same-repository source, and stable merged-state observations. A fresh check is
 required immediately before closure. Missing deployment or prerequisite evidence
@@ -162,15 +163,17 @@ changes, lost closure responses, and refusing future execution ownership.
 The public package, schema, read-only commands, and product repositories are unchanged.
 
 A fresh **read-only preview at 08:30 UTC** verified #13 and #16 and proposed
-`closed` / `already-merged` for both. It made zero GitHub writes. The live tickets
-remain waiting; the preview is not evidence of applied closures. Local evidence
+`closed` / `already-merged` for both. It made zero GitHub writes. At that time the
+live tickets remained waiting; the preview is not evidence of applied closures. Local evidence
 is saved under `.release-coordinator/already-merged-policy-20260909/`.
 
-**Rollout still required:** commit and merge this change, update supported
+**Rollout order:** merge this change, update supported
 processor checkouts, then run scoped processing for #13 and #16 with fresh
 evidence. The new reason must reach supported processors before being written
 to live journal history; older code rejects unknown reasons and stops. Do not
 rewrite history or weaken validation to accommodate an old processor.
+Follow PR #23 for the actual merge, checks, and subsequent ticket-application
+evidence; this preview does not claim those later steps completed.
 
 ### Inbox processing evidence, September 9
 
