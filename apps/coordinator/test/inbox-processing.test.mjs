@@ -171,7 +171,7 @@ for (const [name, change] of [
   assert.equal(f.state().tickets[1].transitions[0].decision.status, "waiting");
 });
 
-for (const state of ["OPEN", "MERGED", "unavailable"]) test(`combined request only retires when every PR is verified merged: companion ${state}`, async () => {
+for (const state of ["OPEN", "MERGED", "unavailable", "outdated"]) test(`combined request preserves outdated precedence and requires every PR for merged closure: companion ${state}`, async () => {
   const f = fixture(); f.pr.state = "MERGED";
   f.request.release_parts.push({ id: "frontend", repository: "6529seize-frontend", depends_on: ["backend"],
     pull_requests: [{ number: 11, branch: "feature/frontend", commit: "f".repeat(40) }] });
@@ -179,14 +179,17 @@ for (const state of ["OPEN", "MERGED", "unavailable"]) test(`combined request on
   f.github.pullRequest = async repository => {
     if (repository === "6529seize-backend") return structuredClone(f.pr);
     if (state === "unavailable") throw new Error("Companion PR unavailable");
-    return { ...structuredClone(f.pr), number: 11, state, headRefOid: "f".repeat(40), headRefName: "feature/frontend",
+    return { ...structuredClone(f.pr), number: 11, state: state === "outdated" ? "OPEN" : state,
+      headRefOid: (state === "outdated" ? "e" : "f").repeat(40), headRefName: "feature/frontend",
       repository: { nameWithOwner: `6529-Collections/${repository}` }, headRepository: { nameWithOwner: `6529-Collections/${repository}` } };
   };
   const report = await processOne(f);
-  assert.equal(f.issue.state, state === "MERGED" ? "closed" : "open");
-  assert.equal(report.requests[0].status, state === "MERGED" ? "closed" : "action-needed");
-  assert.ok(f.issue.labels.includes("reason:already-merged"));
-  if (state !== "MERGED") assert.match(f.comments[0].body, /will not execute only part of this request/);
+  const closed = state === "MERGED" || state === "outdated";
+  assert.equal(f.issue.state, closed ? "closed" : "open");
+  assert.equal(report.requests[0].status, closed ? "closed" : "action-needed");
+  if (state === "outdated") assert.deepEqual(report.requests[0].reasons, ["outdated-commit"]);
+  else assert.ok(f.issue.labels.includes("reason:already-merged"));
+  if (!closed) assert.match(f.comments[0].body, /will not execute only part of this request/);
 });
 
 test("merged closure rechecks its proof after presentation and can resume when the evidence changes", async () => {

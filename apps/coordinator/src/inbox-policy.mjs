@@ -26,6 +26,7 @@ export function decideTicket(entry, observation, { overlaps = [], closeTest = fa
   // This processor only organizes intake; it never takes release execution
   // ownership. The journal rejects unsupported ownership fields. A future
   // executor must integrate that ownership before reusing automatic closures.
+  // filter preserves the same PR objects used by includes below to avoid duplicate reasons.
   const merged = observation.pull_requests.filter(pr => find(pr.checks, "pr_state")?.evidence?.state === "MERGED"
     && find(pr.checks, "requested_code")?.status === "pass"
     && find(pr.checks, "source_repository")?.status === "pass"

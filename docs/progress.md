@@ -17,7 +17,7 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 | Local inbox reader | Implemented in `6af610a`; reader and documentation shared through [PR #14](https://github.com/6529-Collections/6529-release-coordinator/pull/14). Follow the PR for merge and check evidence. | [Reader guide](../apps/coordinator/README.md). All 71 local tests passed: 22 CLI tests and 49 reader tests. No npm release is required for this private application. |
 | Local readiness observations | [PR #18](https://github.com/6529-Collections/6529-release-coordinator/pull/18) merged September 8 at `f2e7f918068181b454e8af277717f2e4f48a3849`. Merge and successful CI were rechecked September 9. | [Readiness guide](../apps/coordinator/README.md#readiness-checks); [successful CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34228394618) at final head `fb7897941fb453c902553378607694b50da72f82`. Public CLI and product code were unchanged; nothing was deployed. |
 | Explicit inbox processing | [PR #21](https://github.com/6529-Collections/6529-release-coordinator/pull/21) merged September 9 at `1240fea37b5d38cc00248feefa77465525d5a5d2`. Updated intake and the first real migration were verified afterward. | [Command guide](../apps/coordinator/README.md#organize-tickets-explicitly), controlled tests #20/#22 and migration evidence below. |
-| Already-merged intake boundary | Policy `2026-09-09.2` is implemented in [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23). Follow the PR for current merge and live ticket-closure evidence. | All 169 local tests passed. A read-only preview at 08:30 UTC found #13 and #16 would close with `already-merged`; rollout details below. |
+| Already-merged intake boundary | Policy `2026-09-09.2` is implemented in [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23). Follow the PR for current merge and live ticket-closure evidence. | All 170 local tests passed, including the review follow-up. A read-only preview at 08:30 UTC found #13 and #16 would close with `already-merged`; rollout details below. |
 
 Both controlled intake tests below ran the central workflow at Coordinator
 commit `9e69d60a64e8d0bbceda9abd9c3ae8df1b77c33f`. This is their evidence
@@ -156,10 +156,12 @@ ownership before merging and continue handling its own release afterward. Curren
 processing rejects unsupported ownership records before ticket writes. Existing
 terminal decisions, request receipts, and comment identities remain preserved.
 
-All **169 local tests** passed: 26 package, 51 reader, 55 readiness, and 37
+All **170 local tests** passed: 26 package, 51 reader, 55 readiness, and 38
 processing. Coverage includes all/mixed merged requests, unavailable or moving
 proof, waiting-to-closed history, unchanged retry/resubmission, last-moment proof
-changes, lost closure responses, and refusing future execution ownership.
+changes, lost closure responses, and refusing future execution ownership. The
+review follow-up adds merged-plus-outdated companion coverage, confirming the
+documented outdated-commit precedence without changing the policy.
 The public package, schema, read-only commands, and product repositories are unchanged.
 
 A fresh **read-only preview at 08:30 UTC** verified #13 and #16 and proposed
