@@ -7,7 +7,7 @@ new exact version. See [progress](./progress.md) for what has shipped and
 ## Current boundary
 
 Only `packages/release-request/` is published. The private
-`apps/coordinator/` reader and repository design documents are not included.
+`apps/coordinator/` application and repository design documents are not included.
 The package allowlist includes its own README and license; keep those files
 even though the repository also has a README and license.
 
@@ -21,6 +21,14 @@ These controls are in [publish-release-request.yml](../.github/workflows/publish
 PRs run checks without publishing. The local reader change also makes that
 check run both workspace test suites. Package creation/publication is still
 scoped explicitly to the release-request workspace.
+
+The agreed [inbox-processing stage](./inbox-processing.md) changes central
+intake defaults and ticket handling. It does not require new public CLI input,
+a request-schema change, an npm publication, or consumer upgrades. The workflow
+runs its Issue-creation helper from the Coordinator checkout, so installed
+`0.0.4` clients can keep submitting the same payload. Changes to shared helper
+source may appear in a future package archive; they do not alter an already
+published version or require publishing merely to update central ticket behavior.
 
 ## Publish a new version
 

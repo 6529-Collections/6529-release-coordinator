@@ -220,10 +220,18 @@
               and must never contain secrets.
             </p>
             <p>
-              The local inbox reader checks pending requests against their workflow results.
+              The local inbox reader checks open requests against their workflow results.
               A separate readiness command checks current PR evidence and backend dependency
               order. Both print reports without changing GitHub. Missing release history and
               execution merge proof remain unknown. No release worker exists yet.
+            </p>
+            <p>
+              <strong>Inbox processing:</strong> Organize tickets before the local merge rehearsal.
+              The updated intake sets readable titles, submitter ownership, and initial labels.
+              A separate explicit command records decisions and updates ticket status,
+              reasons, and next actions. The existing read-only commands stay read-only.
+              See the <a href="./docs/inbox-processing.md">ticket contract</a> and
+              <a href="./docs/progress.md">local versus live evidence</a>.
             </p>
             <p>
               Source: <code>packages/release-request/</code>. Product repositories install only

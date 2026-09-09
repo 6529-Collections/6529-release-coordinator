@@ -1,12 +1,13 @@
 import { createGitHubReader } from "./github-reader.mjs";
 import { COORDINATOR_REPOSITORY, formatReport, readInbox } from "./inbox-reader.mjs";
 
-const help = `Read the pending Release Coordinator inbox without changing GitHub.
+const help = `Read the open Release Coordinator inbox without changing GitHub.
 
-Usage: npm run inbox:read -- [--json]
+Usage: npm run inbox:read -- [--json] [--submitter LOGIN]
 
 Requires Node.js 20+ and an authenticated, current GitHub CLI (gh).
   --json  Print the report as JSON.
+  --submitter LOGIN  Filter by verified GitHub submitter, even if unassigned.
   --help  Show this help without contacting GitHub.
 
 Exit codes: 0 = all saved records verified (or inbox empty),
@@ -23,13 +24,26 @@ export async function runCli(args, {
     stdout(help);
     return 0;
   }
-  if (args.length > 1 || (args.length === 1 && args[0] !== "--json")) {
-    stderr(help);
-    return 2;
+  let json = false, submitter;
+  const seen = new Set();
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index];
+    if (seen.has(arg) || !["--json", "--submitter"].includes(arg)) { stderr(help); return 2; }
+    seen.add(arg);
+    if (arg === "--json") json = true;
+    else {
+      submitter = args[++index];
+      if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/u.test(submitter ?? "")) { stderr(help); return 2; }
+    }
   }
-  const json = args[0] === "--json";
   try {
     const report = await readInbox({ get });
+    if (submitter) {
+      report.submitter_filter = submitter;
+      report.requests = report.requests.filter(entry => entry.github_actor?.login.toLowerCase() === submitter.toLowerCase());
+      report.counts = { pending: report.requests.length, valid: report.requests.filter(entry => entry.status === "valid").length,
+        invalid: report.requests.filter(entry => entry.status === "invalid").length, unverified: report.requests.filter(entry => entry.status === "unverified").length };
+    }
     stdout(json ? `${JSON.stringify(report, null, 2)}\n` : formatReport(report));
     return report.counts.invalid || report.counts.unverified ? 1 : 0;
   } catch (error) {

@@ -50,7 +50,7 @@ jobs:
         run: |
           node --input-type=module <<'NODE'
           import { validateReleaseRequest } from "./packages/release-request/src/index.mjs";
-          import { saveReleaseRequestIssue } from "./packages/release-request/src/inbox-issue.mjs";
+          import { saveOrganizedReleaseRequestIssue as saveReleaseRequestIssue } from "./apps/coordinator/src/ticket-presentation.mjs";
 
           const requestId = process.env.REQUEST_ID ?? "";
           const requestText = process.env.REQUEST_JSON ?? "";
@@ -156,6 +156,7 @@ jobs:
               : "GitHub validated the release request and reused its inbox Issue.",
             inbox_issue_number: inbox.issue.number,
             inbox_issue_url: inbox.issue.url,
+            inbox_presentation: inbox.presentation ?? null,
             github: {
               actor: process.env.GITHUB_ACTOR,
               actor_id: process.env.GITHUB_ACTOR_ID,
