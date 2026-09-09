@@ -27,7 +27,7 @@ function list(value, min, max) { requireValue(Array.isArray(value) && value.leng
 const unitName = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,120}$/u.test(value);
 
 // Private manifests never become public release requests or trusted inbox receipts.
-// A future verified-input adapter will produce this same internal plan structure.
+// The verified-inbox adapter produces this same internal plan structure.
 export function sandboxMergePlan(manifest, profile) {
   requireValue(profile?.name === "sandbox" && manifest?.source === "test-manifest", "Test manifests require the sandbox profile and test-manifest source.");
   return normalizeMergePlan(manifest, profile);

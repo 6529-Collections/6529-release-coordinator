@@ -53,6 +53,8 @@ verified receipt. It saves a prepared record before dispatch and a separate
 result. Existing identical receipts, including closed tickets, are reused.
 Duplicate/different request data stops submission. Uncertainty is not permission
 to retry blindly; inspect the prepared record, workflow, and inbox first.
+If saving the result fails, the CLI reports that error and retains the prepared
+record path; a missing local result does not prove intake failed.
 
 Sandbox request JSON adds `"profile": "sandbox"` and uses the actual two test
 repository names in `release_parts[].repository`. The private adapter checks
@@ -125,7 +127,8 @@ workflow validation, receipt verification, real temporary Git merges, exact
 ticket/PR scope, closed-ticket rechecks, hostile or crossed profile input,
 repeated submissions, and separate records/journals. Tests do not contact GitHub.
 
-The sandbox live proof must:
+The [September 9 sandbox acceptance record](./testing/profiled-inbox-2026-09-09.md)
+completes the following live proof:
 
 1. Submit one sample request and verify its actual workflow, actor, ticket, and checksum.
 2. Reuse that receipt on retry without a second ticket.

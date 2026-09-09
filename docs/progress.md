@@ -205,17 +205,33 @@ defines the exact boundaries and operator commands.
 
 Created the public [test inbox](https://github.com/6529-Collections/release-coordinator-test-inbox),
 ID `1362580376`. It is a separate fixture repository; sample PRs remain in the
-existing frontend/backend test repositories. The inbox workflow will pin one
-Coordinator commit and run the same shared intake code as the real workflow.
+existing frontend/backend test repositories. Its protected main workflow pins
+Coordinator commit `5cab79f129899d4637cc32103cb167b2f77daac5` and runs the same
+shared intake code as the real workflow.
 Public npm source/schema and installed `0.0.4` behavior remain unchanged.
 
-All **232 local automated tests passed** (26 public-package and 206 Coordinator),
+The initial **232 local automated tests passed** (26 public-package and 206 Coordinator),
 including 16 new profile/inbox tests. They cover both profiles and the shared
 real Git engine, cross-profile rejection, workflow identity, exact PR scope,
-ticket rechecks, retries, and separate state. The public dry pack remains nine files. Live sandbox acceptance and PR/CI/merge evidence are recorded
-below as completed; real-profile live proof is outside this rollout. No real
-inbox processing, product merge, package publication, or deployment is authorized
-by the sandbox exercise. Multiple-ticket batching remains later work.
+ticket rechecks, retries, and separate state. Three review tests add non-JSON
+GitHub failure coverage for both profiles and a reported local result-save failure;
+the focused profile suite now has 19 passing tests. All **235 tests passed** in
+the full local suite (26 public-package, 209 Coordinator). The public dry pack remains
+nine files.
+
+The [live sandbox record](./testing/profiled-inbox-2026-09-09.md) proves submission
+through the shared workflow to [test ticket #1](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/1),
+receipt reuse without a second workflow/ticket, explicit processing into the
+test journal, and two passing one-ticket rehearsals with identical result trees.
+All sample PR refs and 13 real inbox records remained unchanged. The real state
+journal also remained unchanged. The test ticket stays `status:waiting` with
+`reason:coordinator-incomplete`; the processor does not consume rehearsal reports.
+
+[PR #30](https://github.com/6529-Collections/6529-release-coordinator/pull/30)
+records required CI and merge evidence separately. Its initial runtime's required
+`Check package` run passed. Real-profile live proof is outside this rollout.
+No real inbox processing, product merge, package publication, or deployment was
+performed by this exercise. Multiple-ticket batching remains later work.
 
 ### Public sandbox required checks, September 9
 

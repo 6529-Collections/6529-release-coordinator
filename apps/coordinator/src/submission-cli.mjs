@@ -69,7 +69,10 @@ export async function runSubmissionCli(args, { env = process.env, load = readReh
     return 0;
   } catch (error) {
     const failure = { status: "unknown", profile: profile?.name, release_authorized: false, error: error.message, prepared_record: prepared };
-    if (prepared) await save(profile, `${attempt}.result.json`, failure, root).catch(() => {});
+    if (prepared) {
+      try { await save(profile, `${attempt}.result.json`, failure, root); }
+      catch (recordError) { failure.result_record_error = recordError.message; }
+    }
     if (json) stdout(`${JSON.stringify(failure, null, 2)}\n`); else stderr(`${failure.error}\n`);
     return 2;
   }

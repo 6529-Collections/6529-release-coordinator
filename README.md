@@ -83,7 +83,7 @@ so removing legacy `pending` cannot hide waiting tickets.
 
 The private rehearsal command tries exact PR commits against explicit
 destination commits in temporary local repositories. It shares one engine
-across input profiles; the current milestone enables sandbox input only.
+across sandbox and real profiles. Live acceptance so far uses the sandbox.
 
 ```sh
 RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest PATH_TO_TEST_MANIFEST --json

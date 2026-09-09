@@ -118,6 +118,18 @@ for (const profile of [sandboxProfile, realProfile]) {
     assert.equal((await readInbox({ get: f.get, profile })).counts.invalid, 1);
   });
 
+  test(`${profile.name}: a non-JSON GitHub failure cannot become an accepted receipt`, async () => {
+    const f = receiptFixture(profile);
+    let output = "", calls = 0;
+    const code = await runIntake({ env: f.env, stdout: text => { output += text; }, fetcher: async (_url, options) => {
+      calls++; assert.equal(options.method, "GET");
+      return { status: 503, json: async () => { throw new Error("Non-JSON response"); } };
+    } });
+    const result = JSON.parse(Buffer.from(output.trim().split("=")[1], "base64url").toString());
+    assert.equal(code, 1); assert.equal(calls, 1); assert.equal(result.status, "failed");
+    assert.equal(result.inbox_issue_number, null); assert.match(result.reason, /503/);
+  });
+
   test(`${profile.name}: one verified ticket uses the same real Git rehearsal engine`, async t => {
     const f = await rehearsalFixture(t);
     Object.assign(f.profile, { name: profile.name, inbox: profile.inbox, repositories: profile.repositories });
@@ -153,6 +165,22 @@ test("inbox plans reject changed binding, omitted/extra/substituted PRs, or cont
     pull_requests: [{ number: 2, branch: "feature/two", commit: "d".repeat(40) }] });
   const wrongOrder = planInput(entry, profile, [{ ...input.repositories[0], pull_requests: entry.request.release_parts.flatMap(p => p.pull_requests).reverse() }]);
   assert.throws(() => inboxMergePlan(wrongOrder, entry, profile), /order contradicts/);
+  entry.request.release_parts[1].depends_on = ["missing-part"];
+  const missingDependency = planInput(entry, profile, wrongOrder.repositories);
+  assert.throws(() => inboxMergePlan(missingDependency, entry, profile), error => error.code === "invalid_inbox_plan");
+});
+
+test("submission reports a failed result-record write while retaining the prepared record", async () => {
+  let output = "", saves = 0;
+  const code = await runSubmissionCli(["--input", "request.json", "--json"], {
+    env: { RELEASE_COORDINATOR_PROFILE: "sandbox" }, load: async () => request(sandboxProfile),
+    save: async () => { if (++saves === 1) return "prepared.json"; throw new Error("Disk full"); },
+    submit: async () => { throw new Error("Receipt unavailable"); }, stdout: text => { output += text; }
+  });
+  const result = JSON.parse(output);
+  assert.equal(code, 2); assert.equal(saves, 2); assert.equal(result.status, "unknown");
+  assert.equal(result.prepared_record, "prepared.json"); assert.equal(result.error, "Receipt unavailable");
+  assert.equal(result.result_record_error, "Disk full"); assert.equal(result.release_authorized, false);
 });
 
 test("ticket closure during a rehearsal prevents a pass and still cleans temporary Git data", async t => {
@@ -236,6 +264,13 @@ test("bad profiles/help/crossed inbox plans stop before input, network, or write
       run: never, load: never, submit: never, stdout: () => {}, stderr: () => {} };
     assert.equal(await run(["--help"], opts), 0);
     assert.equal(await run(run === runSubmissionCli ? ["--input", "file"] : [], opts), 2);
+  }
+  for (const args of [[], ["--json"]]) {
+    let output = "";
+    assert.equal(await runReadinessCli(args, { env: { RELEASE_COORDINATOR_PROFILE: "Sandbox" }, get: never,
+      stdout: text => { output += text; }, stderr: text => { output += text; } }), 2);
+    assert.match(output, /Set RELEASE_COORDINATOR_PROFILE to sandbox or real/);
+    assert.doesNotMatch(output, /network availability/);
   }
   assert.equal(await runRehearsalCli(["--issue", "1", "--plan", "file"], { env: { RELEASE_COORDINATOR_PROFILE: "real" },
     load: async () => ({ profile: "sandbox" }), inboxReaderFactory: never, stdout: () => {}, stderr: () => {} }), 2);

@@ -32,8 +32,10 @@ export async function runReadinessCli(args, {
     const report = await checkReadiness({ get, github, profile });
     stdout(json ? `${JSON.stringify(report, null, 2)}\n` : formatReadiness(report));
     return report.counts.pending ? 1 : 0;
-  } catch {
-    const error = "Inbox read failed; no complete readiness report is available. Check GitHub read access and network availability.";
+  } catch (cause) {
+    const error = profile
+      ? "Inbox read failed; no complete readiness report is available. Check GitHub read access and network availability."
+      : cause.message;
     if (json) stdout(`${JSON.stringify({ mode: "read-only", profile: profile?.name ?? null, repository: profile?.inbox.full_name ?? null, release_authorized: false, error }, null, 2)}\n`);
     else stderr(`${error}\n`);
     return 2;

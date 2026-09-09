@@ -76,13 +76,16 @@ changes settings, or writes a comment. PR setup naturally starts the sample CI.
 
 Build one rehearsal engine with two named configuration profiles. The intended
 operator switch is `RELEASE_COORDINATOR_PROFILE=sandbox` or
-`RELEASE_COORDINATOR_PROFILE=real`. Both profiles now support verified inbox plans; the [profiled inbox follow-up](./profiled-inbox-testing.md) defines that path. Sandbox manifests remain a separate input. Require an explicit valid value; missing or unknown values must
+`RELEASE_COORDINATOR_PROFILE=real`. Both profiles now support verified inbox plans;
+the [profiled inbox follow-up](./profiled-inbox-testing.md) defines that path.
+Sandbox manifests remain a separate input. Require an explicit valid value;
+missing or unknown values must
 stop, never fall back to real repositories. Profile selection is separate from
 the request's `staging`/`production` deployment target.
 
 | Profile | Repositories | Input source | Rehearsal behavior |
 | --- | --- | --- | --- |
-| `sandbox` | The two public test repositories | Validated private test manifest | Shared engine; temporary local merges and local reports. |
+| `sandbox` | The two public test repositories | Verified test inbox request plus an explicit plan, or a validated private test manifest | Shared engine; temporary local merges and local reports. |
 | `real` | The two fixed product repositories | Verified real inbox request plus an explicit destination/merge plan | The same engine and report contract; still no remote writes or deployment. |
 
 The selected trusted profile supplies repository names/IDs and read adapters.
@@ -93,18 +96,16 @@ and rewrite it for real repositories. Separate reports and temporary state by
 profile, and never reuse sandbox results as real evidence. No arbitrary
 repository override or mutation permission comes from this environment setting.
 
-The original first milestone enabled `sandbox`. Define and test the shared interface
-and profile boundaries now; until the verified real-input adapter is integrated
-and checked, `real` must stop with a clear unsupported/not-enabled result. The profiled inbox follow-up implements that adapter; real live proof remains separate.
-That one-time integration remains the later step described below. Afterward,
-an operator selects the profile and supplies that profile's valid input; the
-engine needs no changes. An environment change alone cannot promote a test
-manifest into a verified inbox request.
+The original first milestone enabled only `sandbox`. The profiled inbox follow-up
+has now implemented and tested the verified-input adapter for both profiles.
+An operator selects the profile and supplies that profile's valid input; the
+engine needs no changes. Real live proof remains separate. An environment change
+alone cannot promote a test manifest into a verified inbox request.
 
 The current public schema allows only `6529seize-frontend` and
-`6529seize-backend`. The current readiness adapter fixes their owner to
-`6529-Collections`; the reader verifies receipts from the real central inbox.
-Those are intentional boundaries, not test configuration that already exists.
+`6529seize-backend`. The public npm CLI retains that real-only boundary. The
+private Coordinator profile selects the corresponding readiness repositories
+and inbox receipt verifier; sandbox JSON uses separate test names and a marker.
 
 For this stage:
 
@@ -328,20 +329,21 @@ of this plan.
 
 The [profiled inbox follow-up](./profiled-inbox-testing.md) implements the shared
 input integration described below, with sandbox live proof and offline real-profile
-tests. Its current evidence is in progress; actual real-system acceptance remains
+tests. Its [dated acceptance record](./testing/profiled-inbox-2026-09-09.md) records
+the completed sandbox ticket path; actual real-system acceptance remains
 separate from the completed sandbox matrix.
 
-The next integration after this finish line would connect the proven engine to
-verified real inbox inputs and explicitly chosen product destinations. That
-requires its own input trust, report-to-ticket policy, and live read-only proof.
-It must not make current readiness results automatically eligible or take
-execution ownership.
+Both profiles now accept verified inbox inputs and explicitly chosen destination
+plans through the same adapter and engine. The next sandbox extension can define
+how a rehearsal report informs ticket status; that policy is not implemented by
+the input adapter. It must not make current readiness results automatically
+eligible or take execution ownership.
 
-Implement the real profile's verified-input adapter and its acceptance tests,
-then enable the existing profile switch. Prove a real request uses the same
-engine, rejects test manifests, and leaves GitHub unchanged. Real mode must
-not require a second merge implementation. Enabling real rehearsal does not
-enable ticket writes or deployment; either would remain a separate capability.
+Before a real rollout, verify real permissions and repository limits with a
+separately authorized live read-only run. Real mode rejects test manifests and
+requires its own request and destination proof. The profile switch requires no
+second merge implementation. A rehearsal never starts ticket processing or
+deployment; either remains a separate capability.
 
 Actual combined application builds/tests, release ownership, scheduling,
 deployment, runtime prerequisites, recovery, and the unresolved choices in
