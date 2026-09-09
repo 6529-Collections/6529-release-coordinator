@@ -64,8 +64,9 @@ npm run inbox:process
 Use `-- --issue NUMBER` to limit changes to one ticket. Both `inbox:read` and
 `readiness:check` stay read-only. No command merges, builds, or deploys.
 An `already-merged` closure means the Coordinator will not handle that request;
-it does not claim a successful deployment. Mixed merged/open requests stay open
-for a scope decision. Any remaining deployment uses the existing authorized
+it does not claim a successful deployment. A verified merged PR plus an open or
+unverified companion keeps the request open for a scope decision. Missing
+evidence alone can remain waiting. Any remaining deployment uses the existing authorized
 release process; submitting the same merged PR again will not make it eligible.
 [The command guide](./apps/coordinator/README.md#organize-tickets-explicitly)
 explains permissions, retries, and the separate GitHub state branch.

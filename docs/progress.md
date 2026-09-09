@@ -17,7 +17,7 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 | Local inbox reader | Implemented in `6af610a`; reader and documentation shared through [PR #14](https://github.com/6529-Collections/6529-release-coordinator/pull/14). Follow the PR for merge and check evidence. | [Reader guide](../apps/coordinator/README.md). All 71 local tests passed: 22 CLI tests and 49 reader tests. No npm release is required for this private application. |
 | Local readiness observations | [PR #18](https://github.com/6529-Collections/6529-release-coordinator/pull/18) merged September 8 at `f2e7f918068181b454e8af277717f2e4f48a3849`. Merge and successful CI were rechecked September 9. | [Readiness guide](../apps/coordinator/README.md#readiness-checks); [successful CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34228394618) at final head `fb7897941fb453c902553378607694b50da72f82`. Public CLI and product code were unchanged; nothing was deployed. |
 | Explicit inbox processing | [PR #21](https://github.com/6529-Collections/6529-release-coordinator/pull/21) merged September 9 at `1240fea37b5d38cc00248feefa77465525d5a5d2`. Updated intake and the first real migration were verified afterward. | [Command guide](../apps/coordinator/README.md#organize-tickets-explicitly), controlled tests #20/#22 and migration evidence below. |
-| Already-merged intake boundary | Policy `2026-09-09.2` is implemented in [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23). Follow the PR for current merge and live ticket-closure evidence. | All 170 local tests passed, including the review follow-up. A read-only preview at 08:30 UTC found #13 and #16 would close with `already-merged`; rollout details below. |
+| Already-merged intake boundary | [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23) merged September 9 at `3ca9fa281db8fa7614f73250022c838a137c8cff`. Scoped processing closed #13 and #16 with `already-merged`. | All 170 tests passed locally and in [CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34330324182). Live readback at 08:49 UTC verified both closures and an empty inbox; details below. |
 
 Both controlled intake tests below ran the central workflow at Coordinator
 commit `9e69d60a64e8d0bbceda9abd9c3ae8df1b77c33f`. This is their evidence
@@ -112,8 +112,8 @@ request schema are unchanged. The first real migration subsequently organized
 all six existing open tickets; see the dated evidence below.
 
 The owner then narrowed intake: a request whose PRs are all already merged
-should close without claiming deployment. Roll out this policy before
-processing #13 and #16 again. A deployment-proof checker for retiring these
+should close without claiming deployment. The merged policy was applied to #13
+and #16, and both closures were verified. A deployment-proof checker for retiring these
 requests is deferred; mixed requests remain open for a scope decision.
 After this stage, return to the local merge rehearsal. The larger release worker,
 execution permissions, deployment evidence sources, and recovery remain later
@@ -148,8 +148,10 @@ required immediately before closure. Missing deployment or prerequisite evidence
 does not keep such a request open: the Coordinator declines to handle it without
 claiming that it was deployed. The comment directs any remaining deployment to
 the existing authorized release process. Identical merged-PR resubmission leads
-to the same closure. Requests mixing merged and open/unverified PRs stay open
-with a scope decision for the submitter; no subset is executed.
+to the same closure. A verified merged PR plus an open or unverified companion
+keeps the request open with a scope decision for the submitter; no subset is
+executed. Missing product evidence alone can remain waiting when there is no
+verified merged PR.
 
 This is intake disposition, not execution ownership. A future worker must record
 ownership before merging and continue handling its own release afterward. Current
@@ -169,13 +171,28 @@ A fresh **read-only preview at 08:30 UTC** verified #13 and #16 and proposed
 live tickets remained waiting; the preview is not evidence of applied closures. Local evidence
 is saved under `.release-coordinator/already-merged-policy-20260909/`.
 
-**Rollout order:** merge this change, update supported
-processor checkouts, then run scoped processing for #13 and #16 with fresh
-evidence. The new reason must reach supported processors before being written
-to live journal history; older code rejects unknown reasons and stops. Do not
-rewrite history or weaken validation to accommodate an old processor.
-Follow PR #23 for the actual merge, checks, and subsequent ticket-application
-evidence; this preview does not claim those later steps completed.
+**Rollout completed:** PR #23 merged at **08:45 UTC** after required CI passed
+on final head `14181d8cf8ed8f062ea82766453cb89b5c33e883`. CI ran all 170 tests
+and confirmed the public package still contains nine files. Local `main` was
+updated to the merge before any live history used the new reason. Older processor
+checkouts must update before running; they reject unknown reasons and stop. Do
+not rewrite history or weaken validation to accommodate an old processor.
+
+Scoped runs from merged `main` applied `status:closed` + `reason:already-merged`
+to [#13](https://github.com/6529-Collections/6529-release-coordinator/issues/13#issuecomment-5598449115)
+and [#16](https://github.com/6529-Collections/6529-release-coordinator/issues/16#issuecomment-5598458998).
+Run IDs were `c0bf4c06-1b88-45f0-951a-bd7c2c41a4ac` and
+`314d951a-e8bb-4af4-9077-1bb07a52907a`, respectively. Independent readback at
+**08:49 UTC** verified unchanged original receipts/assignees, the same one status
+comment per ticket, and exactly two decisions per ticket: the earlier waiting
+decision and the new closure. Other recorded tickets were unchanged. The reader
+found no open release requests. The journal had no active lock at
+`5d136b76469154083ff79fbeb19478950efec34f`.
+
+Late review clarified documentation only: action-needed requires a verified
+merged PR plus an open/unverified companion; missing evidence alone can remain
+waiting. Runtime behavior was already correct and unchanged by that clarification.
+No release, product deployment, or npm publication was performed during rollout.
 
 ### Inbox processing evidence, September 9
 

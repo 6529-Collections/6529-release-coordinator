@@ -17,7 +17,8 @@ local merge rehearsal. See progress for merge and runtime evidence.
 
 The current intake boundary excludes requests whose PRs are all already merged:
 processing closes them with `already-merged`, without claiming deployment.
-Mixed merged/open requests remain open for a scope decision. Deploying already
+A verified merged PR plus an open or unverified companion keeps the request open
+for a scope decision; missing evidence alone can remain waiting. Deploying already
 merged work uses the existing authorized product release process; a dedicated
 deployment-only request mode is not implemented. A future worker must record
 execution ownership before merging and keep responsibility afterward. Its own
