@@ -16,7 +16,7 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 | Central inbox | The submission workflow validates requests and saves public GitHub Issues. | [Workflow source](../.github/workflows/submit-release-request.yml) and the live intake test below. |
 | Local inbox reader | Implemented in `6af610a`; reader and documentation shared through [PR #14](https://github.com/6529-Collections/6529-release-coordinator/pull/14). Follow the PR for merge and check evidence. | [Reader guide](../apps/coordinator/README.md). All 71 local tests passed: 22 CLI tests and 49 reader tests. No npm release is required for this private application. |
 | Local readiness observations | [PR #18](https://github.com/6529-Collections/6529-release-coordinator/pull/18) merged September 8 at `f2e7f918068181b454e8af277717f2e4f48a3849`. Merge and successful CI were rechecked September 9. | [Readiness guide](../apps/coordinator/README.md#readiness-checks); [successful CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34228394618) at final head `fb7897941fb453c902553378607694b50da72f82`. Public CLI and product code were unchanged; nothing was deployed. |
-| Explicit inbox processing | Implemented on `codex/organize-release-inbox`; awaiting push, review, and merge. | [Command guide](../apps/coordinator/README.md#organize-tickets-explicitly), local tests and controlled GitHub test #20 below. The updated intake workflow still needs a run after merge. |
+| Explicit inbox processing | Implemented in [PR #21](https://github.com/6529-Collections/6529-release-coordinator/pull/21). Follow the PR for current review, merge, and updated-workflow test evidence. | [Command guide](../apps/coordinator/README.md#organize-tickets-explicitly), local tests and controlled GitHub test #20 below. |
 
 Both controlled intake tests below ran the central workflow at Coordinator
 commit `9e69d60a64e8d0bbceda9abd9c3ae8df1b77c33f`. This is their evidence
@@ -102,8 +102,8 @@ processing** stage, captured in [one plan](./inbox-processing.md):
 - Migrate existing tickets and scan all open release requests so waiting tickets
   remain visible. Preserve terminal outcomes and the original request receipt.
 
-**Implemented on `codex/organize-release-inbox`, awaiting push, review, and
-merge.** The private app now includes the write command, initial ticket setup,
+**Implemented in [PR #21](https://github.com/6529-Collections/6529-release-coordinator/pull/21).**
+The private app now includes the write command, initial ticket setup,
 managed presentation, verified submitter lookup, and a GitHub state branch with
 recorded decisions and explicit retry/recovery. The installed public package and
 request schema are unchanged. Only controlled test #20 was processed; existing
@@ -160,16 +160,29 @@ The final check compares existing tickets individually because new intake can
 continue while a scoped test runs; the entire inbox is not a frozen snapshot.
 
 The GitHub test proves the processor's real writes, journal, retry, and closure
-behavior. Initial `status:received` setup by the **updated workflow** is covered
-by local tests; that workflow revision has not been merged or run on GitHub yet.
+behavior. At this test's revision, initial `status:received` setup by the
+**updated workflow** was covered by local tests; it had not been merged or run
+on GitHub. Follow PR #21 for subsequent merge and updated-workflow test evidence.
 Neither product repository was edited, no npm package was published, and nothing
 was merged or deployed. Ignored request/reports are under
 `.release-coordinator/inbox-processing-test-20260909/` in the working checkout.
 
-The next rollout steps are to push/review/merge the implementation, update
-local readers together with the intake workflow, verify one new intake using
-that merged workflow, then authorize a fresh processing run for existing tickets.
+Before processing existing tickets, merge the implementation, update local
+readers together with the intake workflow, and verify one new intake using that
+merged workflow. PR #21 records whether those rollout checks have completed.
+Then authorize a fresh processing run for existing tickets.
 The full inbox migration has deliberately not been run during the controlled test.
+
+### PR #21 review follow-up
+
+The review identified one malformed-option bug: `inbox:read --submitter --json`
+could treat `--json` as a username, read GitHub, and return an empty successful
+report. Submitter validation now rejects leading/trailing hyphens before any
+GitHub read. Regression coverage includes missing/option-like values and valid
+single-character, mixed-case, numeric, and internally hyphenated names. This
+changes only argument validation for the read-only filter.
+The regression reproduced the empty-success bug before the fix; afterward all
+157 local tests passed (26 package, 51 reader, 55 readiness, 25 processing).
 
 ### Readiness evidence, September 8
 

@@ -33,7 +33,7 @@ export async function runCli(args, {
     if (arg === "--json") json = true;
     else {
       submitter = args[++index];
-      if (!/^[a-zA-Z0-9-]+$/u.test(submitter ?? "")) { stderr(help); return 2; }
+      if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/u.test(submitter ?? "")) { stderr(help); return 2; }
     }
   }
   try {

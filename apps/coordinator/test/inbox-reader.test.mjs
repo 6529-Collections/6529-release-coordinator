@@ -334,3 +334,28 @@ test("help and invalid options never read GitHub", async () => {
   assert.equal(await runCli(["--deploy"], client), 2);
   assert.equal(await runCli(["--json", "--json"], client), 2);
 });
+
+test("missing or malformed submitter values show usage without reading GitHub", async () => {
+  for (const args of [["--submitter"], ["--submitter", "--json"], ["--submitter", "--help"],
+    ["--submitter", "-dev"], ["--submitter", "dev-"], ["--json", "--submitter", "--json"]]) {
+    let reads = 0, output = "", errors = "";
+    const code = await runCli(args, { get: async () => { reads++; return []; },
+      stdout: value => { output += value; }, stderr: value => { errors += value; } });
+    assert.equal(code, 2, args.join(" "));
+    assert.equal(reads, 0, args.join(" "));
+    assert.equal(output, "");
+    assert.match(errors, /Usage:/);
+  }
+});
+
+test("submitter filtering accepts letters, digits, internal hyphens, and case differences", async () => {
+  for (const login of ["trusted-user", "TRUSTED-USER", "a", "User42"]) {
+    const client = github(fixture()); let output = "";
+    assert.equal(await runCli(["--submitter", login, "--json"], { ...client,
+      stdout: value => { output += value; }, stderr: () => assert.fail("Valid login rejected") }), 0);
+    const report = JSON.parse(output);
+    assert.equal(report.submitter_filter, login);
+    assert.equal(report.requests.length, login.toLowerCase() === "trusted-user" ? 1 : 0);
+    assert.ok(client.calls.length > 0);
+  }
+});

@@ -66,7 +66,7 @@ Use `-- --issue NUMBER` to limit changes to one ticket. Both `inbox:read` and
 explains permissions, retries, and the separate GitHub state branch.
 [Ticket rules](./docs/inbox-processing.md) own status/reason meanings.
 
-The implementation is local until merged; dated test and rollout evidence is in
+Current merge status, dated test results, and rollout evidence are tracked in
 [progress](./docs/progress.md). CLI input, schema, and the installed public npm
 package stay unchanged. Update local readers together with the intake workflow,
 so removing legacy `pending` cannot hide waiting tickets.
