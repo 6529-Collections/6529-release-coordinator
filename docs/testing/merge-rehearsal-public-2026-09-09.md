@@ -46,7 +46,7 @@ MR-01 and MR-20 produced the same decisions and frontend tree `52ad2d02c1896c65e
 
 ## Local and CI evidence
 
-All **216 existing automated tests passed locally** (26 public-package and 190 Coordinator), and the public package dry pack still contains exactly nine files. Three focused invalid-seed checks also passed: missing backend, missing outdated fixture, and malformed commit, with no GitHub access or evidence directory created. The normal follow-up PR records CI and merge evidence separately.
+All **216 existing automated tests passed locally** (26 public-package and 190 Coordinator), and the public package dry pack still contains exactly nine files. Three focused invalid-seed checks also passed: missing backend, missing outdated fixture, and malformed commit, with no GitHub access or evidence directory created. [PR #27](https://github.com/6529-Collections/6529-release-coordinator/pull/27) records required CI and merge evidence separately.
 
 Raw local evidence:
 

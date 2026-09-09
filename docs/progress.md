@@ -196,6 +196,9 @@ enforcement gap remained unverified in those runs; it was not counted as a passi
 
 ### Public sandbox required checks, September 9
 
+[PR #27](https://github.com/6529-Collections/6529-release-coordinator/pull/27)
+carries this follow-up; its page records required CI and current merge status.
+
 The user authorized making only the two sample repositories public to complete
 required-check acceptance. Both visibility changes were applied, and independent
 GitHub reads at **10:49 UTC** verified the same pinned repository IDs, admin access,
