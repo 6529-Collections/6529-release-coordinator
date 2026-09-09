@@ -323,6 +323,13 @@ RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 Each suitable ticket gets a separate plan; different tickets are not merged
 together. Use `npm run --silent inbox:run` to suppress npm's banner for JSON.
 
+Combining tickets and testing smaller groups after a failure is
+[planned work](../../docs/design.md#proposed-batch-testing-and-selection).
+No batch-selection flags, temporary GitHub PR creation, or combined application
+checks exist in this command. The plan keeps this operator entry point and
+places full checks at the batch level, with evidence-based outcomes for excluded
+tickets. It does not change the command's current permissions or behavior.
+
 The default selection is every open `release-request` Issue plus ticket IDs
 already recorded in the journal, even if someone removed their labels. Both
 legacy `pending` and new statuses are supported. Processing verifies the original

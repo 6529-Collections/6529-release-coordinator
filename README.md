@@ -59,6 +59,22 @@ still tests the merge engine against sample PRs, including deliberate failures.
 Test manifests cannot enter the ticket workflow or either decision journal.
 The public npm package and request schema are unchanged.
 
+## Planned next stage: test a batch of tickets
+
+**Not implemented:** keep the existing checks for each ticket, select complete
+compatible requests, and run normal PR checks on their combined code. Avoid
+another full build/test run per ticket by default. If a batch fails, try smaller
+groups within time/attempt limits, preserving dependencies. Test the final
+selected combination; do not assume separately passing groups work together.
+
+Excluded tickets stay visible with a reason and next action. If A and B pass
+alone but fail together, use a saved priority order to select one independent
+candidate and defer the other. After A reaches `main`, B may need a correction
+to work with that new base. A failed group is not proof every ticket is broken.
+See the [batch design](./docs/design.md#proposed-batch-testing-and-selection),
+[ticket outcomes](./docs/inbox-processing.md#proposed-batch-ticket-outcomes), and
+[sandbox acceptance plan](./docs/merge-rehearsal-testing.md#planned-batch-acceptance).
+
 ## Read-only diagnostics
 
 From this repository, use Node.js 20+ and an authenticated, current GitHub CLI
@@ -106,6 +122,7 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 | Understand the ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
 | Select sandbox or real, submit a request, and run its ticket workflow | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
 | Understand the sandbox merge-rehearsal test matrix and evidence | [Merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) |
+| Review proposed batching, limited retries, and excluded-ticket handling | [Batch design](./docs/design.md#proposed-batch-testing-and-selection) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
 | Review the future release design and unsettled choices | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |

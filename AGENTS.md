@@ -65,7 +65,12 @@ from first principles.
   The plan is not implementation or permission to create external resources.
 - `docs/design.md` contains the proposed execution design and unresolved
   differences with the full process diagram. Settle those choices before
-  implementing release execution.
+  implementing release execution. Its batch-testing section owns the proposed
+  bounded search before release mutations: keep tickets/dependencies whole,
+  test the final exact combination, and never blame every member of a failed
+  group. Batch ticket projections belong in `docs/inbox-processing.md`; planned
+  acceptance cases belong in `docs/merge-rehearsal-testing.md`. These are future
+  requirements, not implemented batch commands or release authorization.
 - CLI, inbox reader, and readiness usage belong in their package/application
   READMEs. The JSON Schema owns the request shape; `release-request-schema.md`
   explains it. Ticket lifecycle fields belong to Coordinator state, not the

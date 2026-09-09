@@ -12,14 +12,14 @@ and one-ticket merge-rehearsal code. All 235 local tests passed, and
 [required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34348455618)
 passed on final head `5c2475801be5114dbb8bd3c9df3d8f454992017d`. The
 [sandbox acceptance record](./testing/profiled-inbox-2026-09-09.md) proves the
-live test-ticket path. The newer combined workflow below is local work on
-`codex/unified-inbox-run`; remote push, CI, and merge remain pending.
+live test-ticket path. The newer combined workflow below is on
+`codex/unified-inbox-run`; review, CI, and merge remain pending.
 
 ## Latest local work: one ticket command
 
-Implemented on `codex/unified-inbox-run`, based on local documentation commit
-`c52c450992c236750223eb031de78498fd4a0fe5`. **This source change is local to this
-branch; remote push, CI, and merge remain pending.** `inbox:run` replaces both old operator entry points. It
+Committed locally as `585366d` on `codex/unified-inbox-run`, based on documentation
+commit `c52c450992c236750223eb031de78498fd4a0fe5`. **This source change is on this
+branch; review, CI, and merge remain pending.** `inbox:run` replaces both old operator entry points. It
 inspects tickets, automatically creates a plan from each suitable ticket and
 the profile-configured current `main` commits, rehearses its exact PRs, and
 updates the same ticket/journal from fresh evidence. There is no operator plan
@@ -38,8 +38,39 @@ execution. This work does not make a passing rehearsal release authorization.
 
 Public npm `0.0.4`, the public schema, product repositories, and intake workflows
 are unchanged. No product merge, build, or deployment ran. The next delivery
-step is pushing this source change for review/CI; release
-execution design and multiple-ticket batching remain separate later work.
+step is review/CI and merge of this branch. The next proposed development
+stage is recorded below; release execution remains separate.
+
+## Planned next stage: batch selection and tests, September 9
+
+**Documentation only; not implemented or tested.** The
+[batch design](./design.md#proposed-batch-testing-and-selection) now puts full
+application checks on the selected combination of tickets, after the existing
+checks for each request. It avoids an extra full build/test run per ticket by
+default. Confirmed combined failures can trigger smaller-group attempts within
+limits, such as 10 to 5 to smaller groups that preserve dependencies. The final selected
+combination must itself pass. No promise is made to find the largest passing set.
+
+Tickets and inseparable dependencies stay whole. Exclusions retain visible
+[reasons and next actions](./inbox-processing.md#proposed-batch-ticket-outcomes).
+When A and B pass separately but fail together, use a saved priority order to
+select one independent candidate and defer the other. Reassess the deferred
+ticket after the selected release; a failure against the new base may then need
+a correction. Group failures, infrastructure problems, and testing limits do
+not automatically make every ticket action-needed.
+
+Next development sequence: first deliver `585366d` through review/CI and merge;
+then implement selection across sandbox tickets and add meaningful sample PR
+checks on their combined code. The [planned acceptance cases](./merge-rehearsal-testing.md#planned-batch-acceptance)
+cover splitting, incompatibility, limits, exact inputs, and ticket presentation.
+Numeric limits, tie-breaking, dependencies between tickets, saved attempt state,
+runner permissions/results, temporary PR cleanup, and batch reason codes still
+need implementation decisions. Both design views now agree on bounded selection
+before release mutations; their listed later execution differences remain open.
+
+This update changes documentation only. Existing single-ticket behavior and its
+255-test/live-sandbox evidence remain the implemented milestone. There is no
+batch executor, combined application CI, product merge, or deployment proof.
 
 ## Implemented and verified
 
@@ -162,10 +193,12 @@ exact PRs. Both profiles share the same implementation; test manifests and
 receipts remain separate from real request evidence.
 
 We can continue developing and testing in the sandbox. The local combined
-workflow now uses fresh rehearsal reports to update the same ticket. Publishing
+workflow now uses fresh rehearsal reports to update the same ticket. Reviewing
 this source change and checking its CI/merge state are the next delivery steps.
-Multiple-ticket batching, real-project live acceptance, the larger release worker,
-execution permissions, deployment evidence sources, and recovery remain later work.
+The [next batch stage](#planned-next-stage-batch-selection-and-tests-september-9)
+is documented but unimplemented. Real-project live acceptance, the larger release
+worker, execution permissions, deployment evidence sources, and recovery remain
+later work.
 
 ### Sandbox rehearsal implementation, September 9
 

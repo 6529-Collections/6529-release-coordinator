@@ -180,6 +180,59 @@ append duplicate decisions/comments. A later failure removes the old passing
 label and retains both meaningful outcomes in history. An interrupted run keeps
 its lock; explicit resume uses the stored plan and fresh evidence.
 
+## Proposed batch ticket outcomes
+
+**Future behavior, not emitted by the current processor.** The
+[batch-selection design](./design.md#proposed-batch-testing-and-selection) adds
+limited splitting of failing groups before release mutations. Current
+`inbox:run` still rehearses one ticket at a time. The outcome descriptions here
+do not add reason codes, change existing labels, or authorize ticket writes.
+Register the reasons and journal policy together when implementing batching.
+
+Leaving a ticket out of a candidate keeps its PRs and Issue open. Keep the entire
+ticket and any inseparable dependency group together. Selection or a passing
+test never means completed; only verified release evidence can support that.
+
+| Evidence for exclusion | Proposed ticket state and next action |
+| --- | --- |
+| A specific required check, code failure, internal/base conflict, or invalid scope is attributable to this ticket | `status:action-needed`; name the exact blocker, evidence, and person/team who can correct it. Fixed code or scope requires a new request. |
+| A and B pass separately but fail together | Leave the excluded independent ticket `status:waiting`; link the chosen candidate, the incompatible request(s), exact versions, and failing attempt. Do not claim either ticket is individually broken. |
+| A request needs another excluded request | `status:waiting`; name the dependency and keep the required group together. |
+| Testing stopped at its time/attempt limit without a conclusive result | `status:waiting`; say that investigation is incomplete and the Coordinator owns the next attempt. |
+| A runner, GitHub read, baseline test, or result verification failed | Usually `status:waiting`; state the infrastructure/evidence problem and bounded retry. If a known correction needs a person, route action-needed to the responsible maintainer, not automatically the submitter. |
+| An inseparable group is incompatible and cannot be divided | `status:action-needed` for a named correction or scope decision; explain the group evidence and any uncertainty about attribution. Never guess one culprit. |
+
+After the selected release finishes, reassess deferred requests against the
+actual current base. In the A/B case, once A is in `main`, B includes A through
+that base. If B still has a confirmed attributable failure, it becomes
+action-needed. Waiting alone is not a fix. Do not keep retrying a known unchanged
+failure without a recorded reason; new code must arrive through a new request.
+
+Before blaming a ticket for a combined test failure, compare the unchanged base
+when needed. A group failure, a pre-existing failure on `main`, or an unavailable
+runner is not proof that every included request introduced a bug. State exactly
+what was tested and what remains unknown. The existing handling of a failed
+required PR check still identifies that check as a blocker; it does not prove
+which author caused it.
+
+Use the same managed status comment, assignment rules, and append-only decision
+history. Show the candidate/attempt, request versions, reason, linked checks or
+conflict paths, next action, action owner, and retry condition. Keep the original
+receipt intact. Unchanged observations must not create duplicate comments.
+For example, before any real merge:
+
+> **Status:** Waiting.
+>
+> **Reason:** B passed separately, but A+B failed test X. A was selected first
+> under the saved request order; this does not prove B is independently broken.
+>
+> **Next action:** The Coordinator will reassess B after A's release finishes.
+> If the failure remains against the new `main`, B will need a correction.
+>
+> **Evidence:** Link both passing attempts and the failing A+B attempt, with
+> exact commits and the test log. Until those results exist, use an incomplete
+> evidence reason instead of this example.
+
 ## What submitters see
 
 Maintain one recognizable Coordinator status comment per ticket. Use stable
