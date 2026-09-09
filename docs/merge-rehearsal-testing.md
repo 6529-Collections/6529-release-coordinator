@@ -3,8 +3,9 @@
 **Scope and acceptance plan, prepared September 9, 2026.** This is the next
 bounded stage after inbox organization. [Progress](./progress.md) records what
 has actually run; [the app guide](../apps/coordinator/README.md) lists commands
-that exist. The command is now implemented locally; live setup/acceptance and
-remote merge are separate milestones in progress.
+that exist. The command is implemented and merged in PR #26; the public sandbox
+follow-up completes live required-check acceptance. Its integration is recorded
+separately in progress.
 
 ## What we will prove
 
@@ -300,7 +301,7 @@ URLs are now public; earlier records describe the visibility observed at their r
 - [x] All MR local cases and existing package/Coordinator tests pass in CI.
 - [x] Public package dry-pack contents remain the existing nine files.
 - [x] Both sample repositories and their enforced check rules verified live.
-- [ ] All required MR live cases pass their stated expectations; expected
+- [x] All required MR live cases pass their stated expectations; expected
       conflicts and failed checks count as successful detection, not green merges.
 - [x] Repeat runs and independent before/after reads confirm no rehearsal writes
       to GitHub and no source checkout changes.
@@ -311,9 +312,12 @@ URLs are now public; earlier records describe the visibility observed at their r
 - [x] Progress and command documentation describe the implemented limits;
       deferred cases are explicitly marked rather than counted as covered.
 
-The [September 9 test record](./testing/merge-rehearsal-2026-09-09.md) records
-15 live runs with correct local expectations and the unverified required-check
-gate. Unchecked acceptance items are not implied complete by those diagnostics.
+The [initial September 9 record](./testing/merge-rehearsal-2026-09-09.md) preserves
+the private-run diagnostics and their missing required-check proof. The
+[public sandbox acceptance record](./testing/merge-rehearsal-public-2026-09-09.md)
+completes that proof: all 15 cases met expectations, with seven passing clean
+cases and eight correctly blocked cases. Locally controlled timing/failure
+cases retain the local coverage stated in the matrix.
 
 Retain the two test repositories and reusable fixtures for later development.
 After recording evidence, close temporary scenario PRs with a test reason when
