@@ -47,8 +47,11 @@ rehearsal. Different tickets are not merged together.
 entry points have been removed. `inbox:read` and `readiness:check` remain read-only
 diagnostics. Submission still uses the public CLI or private `request:submit`.
 
-The command writes only the selected inbox's managed ticket presentation and
-`codex/inbox-state` history. An `already-merged` closure says the Coordinator will
+The command's GitHub writes are limited to the selected inbox's managed ticket
+presentation and `codex/inbox-state` history, where plans are saved before Git
+work. It also creates temporary local Git repositories and saves rehearsal
+reports with requested PR versions and destinations in profile-specific local
+paths before updating the ticket. An `already-merged` closure says the Coordinator will
 not handle that request; it does not claim deployment. Mixed merged/open requests
 remain open for a scope decision. See the
 [command guide](./apps/coordinator/README.md#run-the-ticket-workflow) for permissions,

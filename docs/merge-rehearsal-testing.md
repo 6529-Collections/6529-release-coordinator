@@ -68,9 +68,12 @@ remain `unknown` whenever the profile's named check cannot be verified as requir
 See progress for the separate live acceptance result after this settings change.
 
 The setup step is allowed to seed test branches and open/update test PRs once
-execution is authorized. The rehearsal command itself only reads GitHub and
+execution is authorized. The rehearsal engine itself only reads GitHub and
 fetches Git objects; it never pushes, merges a GitHub PR, dispatches a workflow,
-changes settings, or writes a comment. PR setup naturally starts the sample CI.
+changes settings, or writes a comment. The `inbox:run` command wraps that engine
+with verified-ticket intake, automatic plan generation, and writes to the selected
+inbox's ticket presentation and decision journal. PR setup naturally starts the
+sample CI.
 
 ## Keep the test environment separate
 
@@ -118,8 +121,8 @@ For this stage:
   and commits, merge order, selected services, and part dependencies as needed.
   Validate its shape, duplicates, references, size limits, and dependency cycles.
 - Label its input source `test-manifest` and its mode `sandbox` in every report.
-  It is not a verified intake receipt and cannot enter `inbox:run` or the
-  real decision journal. No fabricated workflow/actor proof is accepted.
+  It is not a verified intake receipt and cannot enter `inbox:run` or either
+  profile's decision journal. No fabricated workflow/actor proof is accepted.
 - Keep GitHub reads behind the selected profile's read adapter. Use the same
   merge engine and shared pure inspection logic; do not make production adapters accept arbitrary
   repositories or caller-supplied API queries to accommodate tests.

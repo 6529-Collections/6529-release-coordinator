@@ -203,8 +203,9 @@ node apps/coordinator/scripts/run-rehearsal-cases.mjs --seed SEED_JSON
 This harness reads the pinned sandbox PRs and writes local reports only. It
 constructs test manifests for the matrix, bypassing ticket intake deliberately
 to exercise individual engine failure cases. It never updates Issues. Operators
-use `inbox:run` with a verified ticket and plan; the old standalone processing
-and rehearsal bins/npm commands are removed.
+use `inbox:run` with a verified ticket; the command generates its plan internally
+and accepts no plan input. The old standalone processing and rehearsal bins/npm
+commands are removed.
 
 The private JSON manifest has these fields (not the public release-request schema):
 
