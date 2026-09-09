@@ -1,7 +1,8 @@
 # Proposed release execution design
 
-**Draft, not implemented release behavior.** The live system submits requests
-and the local app verifies intake and inspects current readiness evidence.
+**Draft, not implemented release behavior.** The live system submits requests;
+the local app verifies intake, inspects readiness, organizes tickets, and
+rehearses merges.
 It does not authorize or execute releases. See [progress](./progress.md) for
 that boundary.
 This document retains the written execution baseline formerly embedded in the
@@ -35,17 +36,23 @@ uses its own GitHub decision journal, not the future worker database.
 ## Bounded stage: sandbox merge rehearsal
 
 The [testing plan](./merge-rehearsal-testing.md) defines local Git fixtures and
-two test GitHub repositories for sample PRs. Its private
-sandbox command tests exact commits, destinations, and merge order, with
-separate evidence for conflicts, CI/review blockers, and changing inputs.
-The command is implemented locally; [progress](./progress.md) distinguishes
-tests, remote integration, and live coverage. It does not consume real inbox requests or
-change ticket decisions, shared branches, builds, or deployments.
+two public test GitHub repositories for sample PRs. The
+[profiled inbox guide](./profiled-inbox-testing.md) adds a separate public test
+inbox and the shared sandbox/real input path. Both profiles accept a verified
+inbox ticket and an explicit destination/merge plan; private test manifests
+remain sandbox-only. The same engine checks exact commits and merge order,
+with separate evidence for conflicts, CI/review blockers, and changing inputs.
 
-This scope requires explicit test destinations and one documented merge method.
+The implementation is merged. The complete path has live sandbox proof and
+offline real-profile tests; real-project live acceptance remains outstanding.
+See [progress](./progress.md) for exact revisions and evidence. A rehearsal
+produces local reports without changing ticket decisions or remote branches,
+building applications, or deploying them.
+
+This scope requires explicit destinations and one documented merge method.
 It does not settle the real release lane, timing of `main` changes, or artifact
-policy below. Connecting rehearsal proof to real inputs and later execution
-requires separate integration and fresh evidence.
+policy below. Connecting rehearsal reports to ticket decisions and later
+execution requires its own policy and evidence.
 
 ## Decisions to settle before execution
 

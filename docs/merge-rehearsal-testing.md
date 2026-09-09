@@ -288,7 +288,7 @@ fixture updates from those measurement windows.
 ## Evidence and completion checklist
 
 Save raw local reports under
-`.release-coordinator/merge-rehearsal/<run-id>/`. Commit reusable fixture
+`.release-coordinator/merge-rehearsal/<profile>/<run-id>/`. Commit reusable fixture
 builders/manifests without credentials; do not rely on ignored local output
 as the only durable acceptance record. Record in progress, or a linked dated
 test record, each case ID, result, Coordinator revision, exact PR/base/head/tree

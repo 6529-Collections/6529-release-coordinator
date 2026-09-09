@@ -2,8 +2,9 @@
 
 The Coordinator is being built to handle releases across the frontend and
 backend. **Request intake is live; local inspection, explicit inbox processing,
-and sandbox merge rehearsals are implemented. Automatic release execution is
-not built yet.**
+and merge rehearsals are implemented. Sandbox and real profiles share the same
+code; the complete ticket-to-rehearsal path has live sandbox proof. Automatic
+release execution is not built yet.**
 
 The public CLI creates a request, validates it, saves local records, and submits
 it to a central GitHub workflow. The workflow saves one public Issue and returns
@@ -47,8 +48,9 @@ npm run readiness:check
 ```
 
 Use `npm run --silent readiness:check -- --json` for JSON. The report separates
-known blockers from missing evidence. It deliberately reports release history
-and an exact execution merge plan as unknown; these are not implemented yet.
+known blockers from missing evidence. It reports release history and execution
+merge proof as unknown: it has no verified release-outcome source and does not
+consume the separate merge-rehearsal reports.
 See [readiness checks](./apps/coordinator/README.md#readiness-checks) for details.
 
 ## Organize the tickets
@@ -63,8 +65,10 @@ npm run inbox:process
 ```
 
 Use `-- --issue NUMBER` to limit changes to one ticket. Both `inbox:read` and
-`readiness:check` stay read-only. No command changes remote branches, builds,
-or deploys; sandbox rehearsals merge only inside temporary local repositories.
+`readiness:check` stay read-only. The processor writes its decision history to
+the selected inbox's `codex/inbox-state` branch. Rehearsals merge only inside
+temporary local repositories. These commands do not merge product branches,
+build applications, or deploy them.
 An `already-merged` closure means the Coordinator will not handle that request;
 it does not claim a successful deployment. A verified merged PR plus an open or
 unverified companion keeps the request open for a scope decision. Missing
@@ -108,7 +112,8 @@ not update tickets or perform a release.
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
 | Understand the ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
-| Build and test the next local merge rehearsal in isolated test repositories | [Merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) |
+| Select sandbox or real, submit to its inbox, and rehearse one verified ticket | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
+| Understand the sandbox merge-rehearsal test matrix and evidence | [Merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
 | Review the future release design and unsettled choices | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |
@@ -124,7 +129,8 @@ in the design document and must be settled before release execution is built.
 - `packages/release-request/`: the small published CLI. Product repositories
   install this package only. Its own README and license are part of the npm
   archive and must remain with it.
-- `apps/coordinator/`: private local inbox inspection and processing. They are not published with the CLI.
+- `apps/coordinator/`: private profiled submission, inbox inspection/processing,
+  and local merge rehearsals. These are not published with the CLI.
 - `.github/workflows/submit-release-request.yml`: validates and saves inbox Issues.
 - `.github/workflows/publish-release-request.yml`: checks the workspaces and
   publishes the CLI through the protected manual publication path.

@@ -350,8 +350,11 @@ application; this policy description does not claim those closures happened.
 - Repeating processing with unchanged facts produces no duplicate comments,
   transitions, or reopened requests. No merge, build, or deployment occurs.
 
-The next stage is defined in the [merge rehearsal testing plan](./merge-rehearsal-testing.md):
-local Git fixtures followed by real sample PRs in two private test repositories.
-It produces local sandbox evidence and does not change this ticket contract.
+The subsequent [merge rehearsal stage](./merge-rehearsal-testing.md) is implemented
+and tested with local Git fixtures and real sample PRs in two public test
+repositories. The [profiled inbox follow-up](./profiled-inbox-testing.md) connects
+one verified ticket to that engine through shared sandbox/real code, with a
+separate public test inbox. Its live acceptance uses the sandbox. Rehearsal
+reports do not yet change ticket decisions or this ticket contract.
 Release execution and independent deployment/prerequisite evidence still need
 their own work.

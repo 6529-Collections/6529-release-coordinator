@@ -5,6 +5,16 @@ package and consumer observations were not all rechecked during this update.
 Runtime behavior comes from code and live evidence. The [ticket contract](./inbox-processing.md) describes the local manual processor;
 [execution design](./design.md) remains future work. There is no running service.
 
+**Latest completed milestone:** [PR #30](https://github.com/6529-Collections/6529-release-coordinator/pull/30)
+merged September 9 at `f53a143a52cba354570716d696fc44d6b2229d49`. Sandbox and real
+profiles now share submission, receipt verification, inspection, processing,
+and one-ticket merge-rehearsal code. All 235 local tests passed, and
+[required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34348455618)
+passed on final head `5c2465801be5114dbb8bd3c9df3d8f454992017d`. The
+[sandbox acceptance record](./testing/profiled-inbox-2026-09-09.md) proves the
+live test-ticket path. Real-project live acceptance and using rehearsal reports
+to update ticket decisions remain separate next steps; neither is release execution.
+
 ## Implemented and verified
 
 | Area | State | Evidence |
@@ -81,9 +91,10 @@ readers select all open `release-request` Issues, including tickets without
 with controlled test #22. The already-merged closure extension is tracked in
 [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23).
 
-Readiness still lacks a durable completed/cancelled/replaced history source,
-runtime evidence for omitted prerequisites, and an exact execution merge plan.
-The checker reports these gaps as unknown, even when individual checks pass.
+Readiness still lacks a verified completed/cancelled/replaced release-history
+source and runtime evidence for omitted prerequisites. It also does not consume
+the separate rehearsal's explicit plan and merge-result reports. The checker
+reports these gaps as unknown, even when individual checks pass.
 
 There is no running Coordinator worker, durable release queue/database,
 GitHub App with merge authority, automatic merge/build/deploy flow, or recovery
@@ -116,15 +127,18 @@ The owner then narrowed intake: a request whose PRs are all already merged
 should close without claiming deployment. The merged policy was applied to #13
 and #16, and both closures were verified. A deployment-proof checker for retiring these
 requests is deferred; mixed requests remain open for a scope decision.
-The current scope is the [sandbox merge rehearsal and testing plan](./merge-rehearsal-testing.md).
-Its private engine and local Git fixtures are implemented and merged in PR #26.
-Two sample repositories contain the controlled PR matrix; the follow-up below
-completes required-check coverage after making them public. Test manifests
-remain separate from real inbox receipts. This stage
-adds no ticket writes, product changes, npm release, or deployment.
+The [sandbox rehearsal matrix](./merge-rehearsal-testing.md) and
+[profiled inbox follow-up](./profiled-inbox-testing.md) are now implemented and
+merged. Two public sample repositories and a separate public test inbox prove
+submission, receipt reuse, explicit processing, and rehearsal of one ticket's
+exact PRs. Both profiles share the same implementation; test manifests and
+receipts remain separate from real request evidence.
 
-The larger release worker, real-inbox rehearsal integration, execution
-permissions, deployment evidence sources, and recovery remain later work.
+We can continue developing and testing in the sandbox. The next integration is
+the policy for using rehearsal reports to update ticket decisions; the current
+processor does not consume those reports. Multiple-ticket batching, real-project
+live acceptance, the larger release worker, execution permissions, deployment
+evidence sources, and recovery remain later work.
 
 ### Sandbox rehearsal implementation, September 9
 
@@ -228,8 +242,13 @@ journal also remained unchanged. The test ticket stays `status:waiting` with
 `reason:coordinator-incomplete`; the processor does not consume rehearsal reports.
 
 [PR #30](https://github.com/6529-Collections/6529-release-coordinator/pull/30)
-records required CI and merge evidence separately. Its initial runtime's required
-`Check package` run passed. Real-profile live proof is outside this rollout.
+merged at `f53a143a52cba354570716d696fc44d6b2229d49` on September 9 at 12:00:22 UTC.
+Its final head `5c2465801be5114dbb8bd3c9df3d8f454992017d` passed
+[required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34348455618)
+and repeated the same live ticket rehearsal successfully in run
+`37191114-423b-4a3f-ace6-7e74a67babad`, with matching result trees and cleanup.
+The PR records that final-runtime confirmation. Real-profile live proof is
+outside this rollout.
 No real inbox processing, product merge, package publication, or deployment was
 performed by this exercise. Multiple-ticket batching remains later work.
 
@@ -531,3 +550,10 @@ inbox-processing stage and its rollout evidence.
 Completed migration checklists and the independent review were combined into
 [one historical record](./history/npm-migration.md). Historical findings and
 unchecked boxes are evidence from that time, not a fresh implementation queue.
+
+The September 9 housekeeping removed the two remaining untracked root copies
+after verifying that all their text was preserved in that history file (only
+heading levels differed). It also corrected older current-state summaries,
+the intake diagram's initial labels, public test-repository descriptions, and
+the profile-specific report path. Dated test reports and migration history
+remain intact; this cleanup changes documentation only.
