@@ -345,7 +345,7 @@ test("CLI verifies intake before readiness and returns JSON with exit 1 for unre
   const result = { status: "submitted", request_id: f.request.request_id, request: f.request, inbox_issue_number: 1,
     inbox_issue_url: `${url}/issues/1`, github: { actor: "dev", actor_id: "456", workflow_run_id: "123", workflow_run_url: workflowUrl } };
   const reads = new Map([
-    [`repos/${coordinator}/issues?state=open&labels=release-request,pending&sort=created&direction=asc&per_page=100&page=1`, [issue]],
+    [`repos/${coordinator}/issues?state=open&labels=release-request&sort=created&direction=asc&per_page=100&page=1`, [issue]],
     [`repos/${coordinator}/actions/runs/123`, run],
     [`repos/${coordinator}/actions/runs/123/attempts/1/jobs?per_page=100&page=1`, { jobs: [{ id: 789, name: "Validate and save request",
       run_id: 123, run_attempt: 1, status: "completed", conclusion: "success",

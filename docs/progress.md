@@ -2,9 +2,8 @@
 
 Last updated: **2026-09-09**. Evidence below carries its own date; the earlier
 package and consumer observations were not all rechecked during this update.
-Runtime behavior comes from code and live evidence. The
-[inbox-processing plan](./inbox-processing.md) and [future execution design](./design.md)
-are not descriptions of running services.
+Runtime behavior comes from code and live evidence. The [ticket contract](./inbox-processing.md) describes the local manual processor;
+[execution design](./design.md) remains future work. There is no running service.
 
 ## Implemented and verified
 
@@ -17,6 +16,7 @@ are not descriptions of running services.
 | Central inbox | The submission workflow validates requests and saves public GitHub Issues. | [Workflow source](../.github/workflows/submit-release-request.yml) and the live intake test below. |
 | Local inbox reader | Implemented in `6af610a`; reader and documentation shared through [PR #14](https://github.com/6529-Collections/6529-release-coordinator/pull/14). Follow the PR for merge and check evidence. | [Reader guide](../apps/coordinator/README.md). All 71 local tests passed: 22 CLI tests and 49 reader tests. No npm release is required for this private application. |
 | Local readiness observations | [PR #18](https://github.com/6529-Collections/6529-release-coordinator/pull/18) merged September 8 at `f2e7f918068181b454e8af277717f2e4f48a3849`. Merge and successful CI were rechecked September 9. | [Readiness guide](../apps/coordinator/README.md#readiness-checks); [successful CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34228394618) at final head `fb7897941fb453c902553378607694b50da72f82`. Public CLI and product code were unchanged; nothing was deployed. |
+| Explicit inbox processing | Implemented on `codex/organize-release-inbox`; awaiting push, review, and merge. | [Command guide](../apps/coordinator/README.md#organize-tickets-explicitly), local tests and controlled GitHub test #20 below. The updated intake workflow still needs a run after merge. |
 
 Both controlled intake tests below ran the central workflow at Coordinator
 commit `9e69d60a64e8d0bbceda9abd9c3ae8df1b77c33f`. This is their evidence
@@ -72,10 +72,11 @@ The separate `readiness:check` adds current PR/check/review observations and
 dependency validation. It uses a fixed GraphQL read query and catalog GETs.
 Neither command chooses the latest wanted request or approves a deployment.
 
-Neither command organizes tickets, writes lifecycle history, changes labels,
-assigns submitters, or closes outdated requests. The current submission workflow
-still initializes `pending`, not the planned `status:received`. Both readers
-still require `pending`; broader selection is part of the next implementation.
+Neither read-only command changes tickets. The separate, locally implemented
+`inbox:process` records decisions and organizes selected tickets. Both updated
+readers select all open `release-request` Issues, including tickets without
+`pending`. The updated intake workflow initializes `status:received`; its
+production runtime proof remains pending merge. See the controlled test below.
 
 Readiness still lacks a durable completed/cancelled/replaced history source,
 runtime evidence for omitted prerequisites, and an exact execution merge plan.
@@ -101,15 +102,74 @@ processing** stage, captured in [one plan](./inbox-processing.md):
 - Migrate existing tickets and scan all open release requests so waiting tickets
   remain visible. Preserve terminal outcomes and the original request receipt.
 
-**Current work is documentation only.** The label scheme, write command, history,
-and migration are not implemented. No tickets were changed, no workflow or CLI
-code was changed, and no processing command was run for this documentation step.
-The plan records the storage, trusted writer, and retry requirements that need
-concrete implementation choices before Issue writes are built.
+**Implemented on `codex/organize-release-inbox`, awaiting push, review, and
+merge.** The private app now includes the write command, initial ticket setup,
+managed presentation, verified submitter lookup, and a GitHub state branch with
+recorded decisions and explicit retry/recovery. The installed public package and
+request schema are unchanged. Only controlled test #20 was processed; existing
+tickets #1, #2, #3, #13, and #16 have not been migrated.
 
 After this stage, return to the local merge rehearsal. The larger release worker,
 execution permissions, deployment evidence sources, and recovery remain later
 work. No npm release or product deployment is required for inbox organization.
+
+### Inbox processing evidence, September 9
+
+The full local suite passed **155 tests** on Node.js 25.6.1: 26 package, 49
+reader, 55 readiness, and 25 processing tests. New coverage includes initial
+received presentation, retries on open/closed Issues, missing and contradictory
+proof, active-intake races, merged-but-unverified code, dependency/overlap reasons,
+assignment failure and stable-identity lookup, resolved reasons, changed closure
+evidence, altered receipts/history, concurrent writers, lost comment/close
+responses, and scoped recovery. No new dependency was added. The npm packing
+dry run still contains exactly the existing nine public CLI files; the private
+processor is not shipped in that package.
+
+The controlled test used the existing submission implementation and the real
+central workflow on `main`, returning request
+`52a4f045-786e-4f34-a8e3-278925a95c74` and
+[Issue #20](https://github.com/6529-Collections/6529-release-coordinator/issues/20).
+[Submission run 34322386066](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34322386066)
+succeeded. This was a test request for already merged backend PR #1978, exact
+head `6a730dbaaf75b00fc5756bf6f05493fafdbd6afb`, staging, `api` and
+`dbMigrationsLoop`. It was not a release or deployment instruction.
+
+The new local `inbox:process -- --issue 20` command applied and verified:
+
+- A readable title, `component:backend`, target/status/reason labels, and
+  assignment to the workflow-verified submitter `simo6529` (ID `209783236`).
+- One [maintained status comment](https://github.com/6529-Collections/6529-release-coordinator/issues/20#issuecomment-5597739390),
+  ID `5597739390`, with reasons, next action, owner, and exact code references.
+- `status:action-needed`: deployment/history proof was missing and the request
+  overlapped with existing ticket #13. It did not choose, modify, or replace #13.
+- An unchanged second processing run issued **zero ticket writes**, retaining
+  the same comment and decision ID.
+- Explicit `--close-test` recorded the authenticated submitter's test decision,
+  closed #20 with `status:closed` + `reason:test`, and removed resolved reasons.
+- [Resubmission run 34322955149](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34322955149)
+  reused closed #20. A further processing run issued **zero ticket writes**.
+
+At **07:18 UTC / 10:18 Tallinn**, readback verified the unchanged original Issue
+body, one comment, correct assignment/labels, and exactly two decision records.
+The state branch contained only test #20 and had no active lock; its verified
+head was `5cd3b1219033856936305b34520b69e7d1572830`.
+Existing tickets #1, #2, #3, #13, and #16 had unchanged title, body, state,
+labels, assignees, and comment counts. Another developer's new ticket #19 arrived
+during testing and remained unprocessed with its original pending presentation.
+The final check compares existing tickets individually because new intake can
+continue while a scoped test runs; the entire inbox is not a frozen snapshot.
+
+The GitHub test proves the processor's real writes, journal, retry, and closure
+behavior. Initial `status:received` setup by the **updated workflow** is covered
+by local tests; that workflow revision has not been merged or run on GitHub yet.
+Neither product repository was edited, no npm package was published, and nothing
+was merged or deployed. Ignored request/reports are under
+`.release-coordinator/inbox-processing-test-20260909/` in the working checkout.
+
+The next rollout steps are to push/review/merge the implementation, update
+local readers together with the intake workflow, verify one new intake using
+that merged workflow, then authorize a fresh processing run for existing tickets.
+The full inbox migration has deliberately not been run during the controlled test.
 
 ### Readiness evidence, September 8
 
@@ -158,7 +218,7 @@ Before implementing release execution, settle the three
 [design disagreements](./design.md#decisions-to-settle-before-execution),
 then define the worker's permissions and durable state.
 
-The new plan provides the proposed disposition rules for old test/pending
+The new plan provides the disposition rules for old test/pending
 requests. The earlier authorized backend-test cleanup changed only test Issue
 #15; it did not dispose of earlier pending requests.
 
@@ -200,7 +260,7 @@ commands belong in the CLI/reader guides, the JSON Schema owns the request
 shape, the inbox-processing plan owns ticket lifecycle rules, and the execution
 design records later choices. The two HTML views show implemented intake/
 inspection and the proposed full release process; both point to the intervening
-planned inbox-processing stage.
+inbox-processing stage and its rollout evidence.
 
 Completed migration checklists and the independent review were combined into
 [one historical record](./history/npm-migration.md). Historical findings and

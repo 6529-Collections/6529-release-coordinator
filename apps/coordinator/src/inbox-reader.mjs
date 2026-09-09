@@ -80,12 +80,12 @@ function requireApiArray(value, description) {
   return value;
 }
 
-async function pendingIssues(get) {
+export async function openIssues(get) {
   const issues = [];
   const seen = new Set();
   for (let page = 1; ; page += 1) {
     const batch = requireApiArray(await get(
-      `${api}/issues?state=open&labels=release-request,pending&sort=created&direction=asc&per_page=${pageSize}&page=${page}`
+      `${api}/issues?state=open&labels=release-request&sort=created&direction=asc&per_page=${pageSize}&page=${page}`
     ), "Issue list");
     for (const issue of batch) {
       if (!issue || !Number.isSafeInteger(issue.number) || issue.number < 1
@@ -96,7 +96,7 @@ async function pendingIssues(get) {
       seen.add(issue.number);
       const labels = issue.labels.map(label => typeof label === "string" ? label : label?.name);
       if (issue.state === "open" && !issue.pull_request
-          && labels.includes("release-request") && labels.includes("pending")) {
+          && labels.includes("release-request")) {
         issues.push(issue);
       }
     }
@@ -115,7 +115,12 @@ async function verifyWorkflow(issue, saved, get) {
     && run.display_title === `Release request ${saved.request.request_id}`
     && /^[0-9a-f]{40}$/u.test(run.head_sha),
   "The linked run is not the expected inbox workflow for this request on main.");
-  requireRecord(run.status === "completed" && run.conclusion === "success",
+  if (run.status !== "completed") {
+    const error = new RecordProblem("The linked intake workflow is still running; wait for it to finish ticket setup.", "unverified");
+    error.intakeInProgress = true;
+    throw error;
+  }
+  requireRecord(run.conclusion === "success",
     "The linked workflow's latest attempt has not completed successfully.", "unverified");
   requireRecord(run.actor?.login === saved.actor && String(run.actor?.id) === saved.actorId,
     "The Issue's GitHub actor does not match the workflow actor.");
@@ -164,7 +169,8 @@ async function verifyWorkflow(issue, saved, get) {
   requireRecord(validateReleaseRequest(result.request).ok
     && releaseRequestChecksum(result.request) === saved.checksum,
   "The saved JSON differs from the request confirmed by the workflow.");
-  return { run_id: saved.runId, attempt: run.run_attempt, url: saved.workflowUrl, head_sha: run.head_sha };
+  return { run_id: saved.runId, attempt: run.run_attempt, url: saved.workflowUrl, head_sha: run.head_sha,
+    ...(result.inbox_presentation ? { presentation: result.inbox_presentation } : {}) };
 }
 
 export async function inspectIssue(issue, { get }) {
@@ -186,6 +192,7 @@ export async function inspectIssue(issue, { get }) {
     entry.status = "valid";
   } catch (error) {
     entry.status = error instanceof RecordProblem ? error.status : "unverified";
+    if (error.intakeInProgress) entry.intake_in_progress = true;
     entry.errors.push(error.message);
   }
   return entry;
@@ -194,7 +201,7 @@ export async function inspectIssue(issue, { get }) {
 export async function readInbox({ get, now = () => new Date() }) {
   // Complete listing before verification, so page/auth failures cannot produce
   // a misleading empty or partially successful inbox report.
-  const issues = await pendingIssues(get);
+  const issues = await openIssues(get);
   const requests = [];
   for (const issue of issues) requests.push(await inspectIssue(issue, { get }));
   const byRequestId = new Map();
@@ -209,7 +216,7 @@ export async function readInbox({ get, now = () => new Date() }) {
     if (group.length < 2) continue;
     for (const entry of group) {
       entry.status = "invalid";
-      entry.errors.push(`The same request ID appears in multiple pending Issues: ${group.map(item => `#${item.issue_number}`).join(", ")}.`);
+      entry.errors.push(`The same request ID appears in multiple open Issues: ${group.map(item => `#${item.issue_number}`).join(", ")}.`);
     }
   }
   return {
@@ -237,10 +244,10 @@ export function formatReport(report) {
   const lines = [
     `Inbox: ${report.repository} (read-only)`,
     `Checked: ${report.checked_at}`,
-    `${report.counts.pending} pending; ${report.counts.valid} valid saved records; ${report.counts.invalid} invalid; ${report.counts.unverified} unverified.`,
+    `${report.counts.pending} open requests; ${report.counts.valid} valid saved records; ${report.counts.invalid} invalid; ${report.counts.unverified} unverified.`,
     "Valid means the saved record matches its workflow proof. Current PR readiness and permission to release are not checked."
   ];
-  if (!report.requests.length) lines.push("No open Issues carry both release-request and pending.");
+  if (!report.requests.length) lines.push("No open Issues carry release-request.");
   for (const entry of report.requests) {
     lines.push("", `#${entry.issue_number} — ${entry.status.toUpperCase()} — ${text(entry.title)}`, entry.issue_url);
     if (entry.request) {

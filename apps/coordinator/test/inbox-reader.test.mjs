@@ -7,7 +7,7 @@ import { runCli } from "../src/cli.mjs";
 
 const api = `repos/${COORDINATOR_REPOSITORY}`;
 const web = `https://github.com/${COORDINATOR_REPOSITORY}`;
-const issuesPath = page => `${api}/issues?state=open&labels=release-request,pending&sort=created&direction=asc&per_page=100&page=${page}`;
+const issuesPath = page => `${api}/issues?state=open&labels=release-request&sort=created&direction=asc&per_page=100&page=${page}`;
 const jobsPath = (page = 1, attempt = 1) => `${api}/actions/runs/123/attempts/${attempt}/jobs?per_page=100&page=${page}`;
 
 function fixture() {
@@ -212,7 +212,7 @@ test("reads every Issue page and excludes closed tests, PRs and missing labels",
   const excluded = [
     { ...data.issue, number: 12, state: "closed", title: "DELIVERY TEST - NO RELEASE" },
     { ...data.issue, number: 13, pull_request: { url: "pull" } },
-    { ...data.issue, number: 14, labels: [{ name: "release-request" }] },
+    { ...data.issue, number: 14, labels: [{ name: "status:waiting" }] },
     { ...data.issue, number: 15, labels: [{ name: "pending" }] }
   ];
   const client = github(data, new Map([[issuesPath(1), firstPage], [issuesPath(2), [...excluded, data.issue]]]));
@@ -236,7 +236,7 @@ test("duplicate request IDs are reported together rather than choosing a release
   const client = github(data, new Map([[issuesPath(1), [data.issue, { ...data.issue, number: 11 }]]]));
   const report = await readInbox(client);
   assert.deepEqual(report.counts, { pending: 2, valid: 0, invalid: 2, unverified: 0 });
-  for (const entry of report.requests) assert.match(entry.errors.join(" "), /multiple pending Issues: #10, #11/);
+  for (const entry of report.requests) assert.match(entry.errors.join(" "), /multiple open Issues: #10, #11/);
 });
 
 test("listing errors, unexpected responses and repeating pages never report an empty inbox", async () => {
@@ -253,7 +253,7 @@ test("listing errors, unexpected responses and repeating pages never report an e
   }
   const report = await readInbox(github(data, new Map([[issuesPath(1), []]])));
   assert.deepEqual(report.counts, { pending: 0, valid: 0, invalid: 0, unverified: 0 });
-  assert.match(formatReport(report), /No open Issues carry both/);
+  assert.match(formatReport(report), /No open Issues carry release-request/);
 });
 
 test("all reads use gh GET against the fixed repository without a shell or request bodies", async () => {

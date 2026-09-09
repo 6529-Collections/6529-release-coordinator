@@ -1,14 +1,14 @@
-# Local Coordinator checks
+# Local Coordinator commands
 
 This private workspace is the first Coordinator application. It reads the saved
 requests in `6529-Collections/6529-release-coordinator` and prints a report.
 It runs manually on your machine and exits. No server, timer, database, or
 deployment worker is started.
 
-The next stage is a separate command that organizes GitHub tickets. Its
-[inbox-processing plan](../../docs/inbox-processing.md) defines labels,
-ownership, reasons, history, and migration. It is not implemented yet; every
-runnable command documented below retains its current read-only behavior.
+`inbox:read` and `readiness:check` are read-only. The separate `inbox:process`
+command writes ticket presentation and durable decision history. Its
+[ticket rules](../../docs/inbox-processing.md) define labels, ownership, reasons,
+and migration. See [progress](../../docs/progress.md) for local versus merged evidence.
 
 ## Run
 
@@ -39,8 +39,8 @@ Help is available with `npm run inbox:read -- --help` and makes no GitHub calls.
 
 ## What gets checked
 
-1. Read every page of **open** Issues with both `release-request` and `pending`.
-   Exclude pull requests, closed Issues, and Issues missing either label.
+1. Read every page of **open** Issues with `release-request`, including waiting and action-needed tickets.
+   Exclude pull requests, closed Issues, and Issues missing that label.
 2. Read the single saved JSON block. Reuse the request package's schema and
    checksum implementation. Check the ID and displayed metadata agree with it.
 3. Read the linked GitHub workflow run from the fixed Coordinator repository.
@@ -52,11 +52,13 @@ Help is available with `npm run inbox:read -- --help` and makes no GitHub calls.
 5. Match the workflow result's Issue number/link, request ID, full request
    checksum, run ID/link, and actor name/ID. Compare the actor with GitHub's run
    metadata. The request's `requested_by` remains supplied text, not proof of
-   identity. Repeated request IDs across pending Issues are reported as invalid.
+   identity. Repeated request IDs across open Issues are reported as invalid.
 
 The report includes the saved PR numbers, branches and full commits, release
 target, database-change answer, part dependencies, backend units and their
 order, and the verified GitHub actor when proof succeeds.
+For JSON compatibility, `counts.pending` now counts all selected open requests;
+it does not require the legacy `pending` label.
 
 ## Results
 
@@ -68,7 +70,7 @@ order, and the verified GitHub actor when proof succeeds.
 
 | Exit code | Meaning |
 | --- | --- |
-| `0` | Every selected record is valid, or a successful scan found no pending Issues. |
+| `0` | Every selected record is valid, or a successful scan found no open request Issues. |
 | `1` | At least one record is invalid or unverified. |
 | `2` | The Issue listing failed or command options were invalid. No complete inbox report is claimed. |
 
@@ -142,10 +144,9 @@ it checks:
 4. **Stable observations.** Read each PR again after the initial PR/catalog
    reads. Changes to its head, base, state, checks, or reviews make the observation
    unknown. API errors and incomplete pagination also leave evidence unknown.
-5. **Overlaps and missing history.** Identify other pending requests for the
+5. **Overlaps and missing history.** Identify other open requests for the
    same PR and target, without choosing one. Report completed, cancelled, and
-   replaced as unknown because no durable Coordinator release-history source
-   exists. Issue closure, labels, PR merge state, and newer requests cannot
+   replaced as unknown because this reader has no verified release-outcome source. Issue closure, labels, PR merge state, and newer requests cannot
    substitute for that history.
 
 An omitted catalog prerequisite stays **unknown** until there is proof that its
@@ -166,7 +167,7 @@ otherwise it reports `unknown`. There is deliberately no overall `ready` result
 while release history and execution merge proof are absent. Both report and
 request objects always have `release_authorized: false`.
 
-Exit codes: **0** means a successful scan found no pending requests, **1** means
+Exit codes: **0** means a successful scan found no open requests, **1** means
 requests have blocked or unknown readiness, and **2** means usage or inbox
 listing failure. Exit 1 is an expected inspection result, not a checker crash.
 An empty inbox is not release authorization either.
@@ -182,7 +183,7 @@ The inbox GitHub adapter allows only a fixed set of Issue/run/job/log endpoints 
 this repository, always with explicit HTTP `GET`, without a shell or request
 body. The reader has no GitHub write action, merge/deploy operation, workflow
 dispatch, scheduler, or local request-record write. It does not call the CLI's
-create/submit/save functions. Its workspace is private and adds no dependencies
+create/submit/save functions. The workspace is private and adds no dependencies
 or files to the published release-request package.
 
 The separate readiness adapter permits only the two fixed product repositories,
@@ -202,23 +203,95 @@ blocks, catalog and graph errors, missing history, conflicting requests,
 pagination races, adapter input boundaries, and the verified-intake-to-readiness
 CLI path. Live evidence is dated separately in the progress record.
 
-## Planned ticket processing
+## Organize tickets explicitly
 
-The proposed `inbox:process` command is not available yet. It will reuse intake
-verification and readiness observations, record a justified ticket decision,
-and apply managed labels, ownership, a maintained status comment, and Issue
-closure where warranted. It will run manually and exit. It does not execute a
-release, and neither existing read-only command will acquire hidden writes.
+This command **writes to GitHub**. It requires an authenticated repository writer
+with Issue and contents write access. It runs on this machine and exits:
 
-The label vocabulary and state rules have one home in the
-[inbox-processing plan](../../docs/inbox-processing.md#status-labels). Report
-observations such as `valid`, `blocked`, and `unknown` are not ticket lifecycle
-states and must not be mapped directly to them. A valid receipt alone does not
-mean eligible; a merged PR alone does not mean completed.
+```sh
+npm run inbox:process
+```
 
-Today both readers require `pending`. The planned coordinated migration will
-make them inspect all open `release-request` tickets, including waiting and
-action-needed tickets, while preserving full workflow proof checks. Do not
-drop `pending` from new intake until supported readers can see the new statuses.
-This document's current command behavior and exit codes remain authoritative
-until that implementation is shipped.
+To limit changes to one ticket or get structured output:
+
+```sh
+npm run inbox:process -- --issue 20
+npm run --silent inbox:process -- --issue 20 --json
+```
+
+The default selection is every open `release-request` Issue plus ticket IDs
+already recorded in the journal, even if someone removed their labels. Both
+legacy `pending` and new statuses are supported. Processing verifies the original
+receipt and current readiness evidence, records its intended decision, applies
+managed labels/title/assignment and one status comment, then verifies the result.
+The original Issue body is never updated. Unrelated labels and assignees remain.
+An active intake workflow is left to finish its initial setup before processing.
+
+Stable outdated requests close with `reason:outdated-commit` and exact code
+references. Missing proof stays visible. Merged PRs remain waiting for deployment
+evidence. Required-check failures, conflicts, and invalid dependencies identify
+a correction for the submitter. Missing Coordinator capabilities belong to its
+maintainers. The processor currently emits waiting, action-needed, and closed;
+eligible/completed remain reserved until independent release-history and
+execution-ownership evidence can support them. It never calls a merge or deploy API.
+
+Submitters can use GitHub's assignee filter. Where assignment is unavailable,
+the status comment preserves the verified login/ID and points to:
+
+```sh
+npm run inbox:read -- --submitter LOGIN
+npm run --silent inbox:read -- --submitter LOGIN --json
+```
+
+This filter matches verified receipt identity, not Issue author or free text.
+Unverified ownership is not guessed. A renamed login is not assigned to a
+different account: assignment requires the recorded stable ID in GitHub's
+assignable-user list. Assignment failure does not lose an accepted request.
+
+An operator may explicitly retire **their own verified test request**:
+
+```sh
+npm run inbox:process -- --issue 20 --close-test
+```
+
+This records `status:closed` and `reason:test`, without a successful-release claim.
+The Issue number must identify the operator's intended test; title/label text
+never grants this authority. General cancellation, replacement, completion,
+and corrections to terminal history have no write command in this version.
+
+### Journal, concurrency, and interrupted runs
+
+The fixed GitHub branch `codex/inbox-state` holds only `inbox-state.json` on an
+independent commit history. **Never merge it into main, delete it, or force-push
+it.** It is runtime state, not a source branch. See the
+[storage and trust contract](../../docs/inbox-processing.md#storage-and-trusted-writers).
+
+Each run acquires a repository-wide lock through a fast-forward-only Git ref
+update. A competing run fails before changing tickets. Each meaningful decision
+has a unique ID, prior decision hash, time, deciding account, policy version,
+verified request/submitter/workflow, observations, and an applied result. The
+intended result and comment identity are saved before Issue writes. Unchanged
+runs create no additional decision or comment, though acquire/release commits
+record that the scan ran. Missing or corrupted state stops processing.
+
+An interrupted run retains its lock and reports its run ID. **Stop the original
+process on its original machine**, ensure no request is still in flight, and wait
+at least 60 seconds before using the reported ID:
+
+```sh
+npm run inbox:process -- --resume RUN_ID
+```
+
+Resume preserves the stored Issue selection and action, rotates lock ownership,
+checks current evidence, and reconciles partial updates. It does not process
+other tickets from a scoped test. There is no automatic timeout, lock stealing,
+or background retry. Never resume while another copy may still be running.
+GitHub Issues do not offer a multi-operation transaction; the journal makes
+partial application explicit and recoverable, not atomic. A maintainer must
+investigate edited receipts, deleted/ambiguous status comments, manual closure
+without known disposition, or externally rewritten state before proceeding.
+
+Processing exit codes: **0** means selected presentations were verified, **1**
+means a ticket was left unchanged for investigation or active intake, and **2**
+means invalid usage or interrupted/partial processing. Help makes no GitHub calls.
+A failure report does not claim all prior writes were rolled back.

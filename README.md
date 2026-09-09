@@ -1,12 +1,12 @@
 # 6529 Release Coordinator
 
 The Coordinator is being built to handle releases across the frontend and
-backend. **Request intake is live; local inbox and readiness checks are
+backend. **Request intake is live; local inspection and explicit inbox processing are
 implemented. Automatic release execution is not built yet.**
 
 The public CLI creates a request, validates it, saves local records, and submits
 it to a central GitHub workflow. The workflow saves one public Issue and returns
-its link. The local reader checks pending Issues against their workflow
+its link. The local reader checks open request Issues against their workflow
 results. The readiness command also inspects current PRs and backend dependency
 order. These commands do not approve or perform a release.
 
@@ -31,7 +31,7 @@ npm run --silent inbox:read -- --json
 ```
 
 The command runs on your machine, reads GitHub, prints a report, and exits.
-It reads open Issues with both `release-request` and `pending`, validates their
+It reads all open `release-request` Issues, including waiting tickets, validates their
 saved JSON, and checks the matching successful workflow evidence. Missing proof
 is reported as unverified; a listing failure is an error rather than an empty
 inbox. **Valid means the saved record is verified, not that the PR is ready to
@@ -50,19 +50,26 @@ known blockers from missing evidence. It deliberately reports release history
 and an exact execution merge plan as unknown; these are not implemented yet.
 See [readiness checks](./apps/coordinator/README.md#readiness-checks) for details.
 
-## Next stage: organize the tickets
+## Organize the tickets
 
-The agreed next step is [inbox processing](./docs/inbox-processing.md), before
-the local merge rehearsal. The submission workflow will initialize readable
-titles, submitter ownership, and status/scope labels. A separate, explicit
-processing command will inspect tickets, maintain reasons and next actions,
-record decisions, and retire clearly outdated requests.
+The separate command below writes managed labels, readable titles, verified
+submitter assignment, one status comment, and durable decisions. It retires
+clearly outdated requests and keeps missing evidence visible with an action owner:
 
-**This is a documented plan, not implemented behavior.** `inbox:read` and
-`readiness:check` remain read-only. The new processing command will run manually
-and exit; it will not merge, build, or deploy. Existing CLI input, schema version,
-and installed npm package can stay unchanged. Existing tickets and reader
-selection must migrate together so waiting tickets remain visible.
+```sh
+npm run inbox:process
+```
+
+Use `-- --issue NUMBER` to limit changes to one ticket. Both `inbox:read` and
+`readiness:check` stay read-only. No command merges, builds, or deploys.
+[The command guide](./apps/coordinator/README.md#organize-tickets-explicitly)
+explains permissions, retries, and the separate GitHub state branch.
+[Ticket rules](./docs/inbox-processing.md) own status/reason meanings.
+
+The implementation is local until merged; dated test and rollout evidence is in
+[progress](./docs/progress.md). CLI input, schema, and the installed public npm
+package stay unchanged. Update local readers together with the intake workflow,
+so removing legacy `pending` cannot hide waiting tickets.
 
 ## Documentation map
 
@@ -71,7 +78,7 @@ selection must migrate together so waiting tickets remain visible.
 | What has shipped, what is local, and what comes next | [Progress](./docs/progress.md) |
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
-| Understand the next ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
+| Understand the ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
 | Review the future release design and unsettled choices | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |
@@ -87,7 +94,7 @@ in the design document and must be settled before release execution is built.
 - `packages/release-request/`: the small published CLI. Product repositories
   install this package only. Its own README and license are part of the npm
   archive and must remain with it.
-- `apps/coordinator/`: private local inbox and readiness checks. They are not published with the CLI.
+- `apps/coordinator/`: private local inbox inspection and processing. They are not published with the CLI.
 - `.github/workflows/submit-release-request.yml`: validates and saves inbox Issues.
 - `.github/workflows/publish-release-request.yml`: checks the workspaces and
   publishes the CLI through the protected manual publication path.

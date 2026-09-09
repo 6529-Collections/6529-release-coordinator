@@ -10,7 +10,7 @@ const prefix = `repos/${COORDINATOR_REPOSITORY}`;
 function allowedPath(path) {
   if (!path.startsWith(`${prefix}/`)) return false;
   const relative = path.slice(prefix.length);
-  return /^\/issues\?state=open&labels=release-request,pending&sort=created&direction=asc&per_page=100&page=[1-9][0-9]*$/u.test(relative)
+  return /^\/issues\?state=open&labels=release-request&sort=created&direction=asc&per_page=100&page=[1-9][0-9]*$/u.test(relative)
     || /^\/actions\/runs\/[1-9][0-9]*$/u.test(relative)
     || /^\/actions\/runs\/[1-9][0-9]*\/attempts\/[1-9][0-9]*\/jobs\?per_page=100&page=[1-9][0-9]*$/u.test(relative)
     || /^\/actions\/jobs\/[1-9][0-9]*\/logs$/u.test(relative);

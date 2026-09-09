@@ -48,7 +48,8 @@ function inspectPull(pr, requested, repository) {
   checks.push(check("pr_state", pr.state === "CLOSED" || pr.isDraft ? "blocked" : pr.state === "MERGED" ? "unknown" : "pass",
     pr.state === "MERGED" ? "PR is already merged. That is not proof of deployment; a further release needs target and history evidence."
       : pr.state === "CLOSED" ? "PR is closed without merging."
-        : pr.isDraft ? "PR is still a draft." : "PR is open and is not a draft."));
+        : pr.isDraft ? "PR is still a draft." : "PR is open and is not a draft.",
+    { state: pr.state, draft: pr.isDraft }));
 
   const open = pr.state === "OPEN" && !pr.isDraft;
   checks.push(check("merge_conflicts", !open ? "unknown" : pr.mergeable === "CONFLICTING" ? "blocked" : pr.mergeable === "MERGEABLE" ? "pass" : "unknown",
@@ -173,7 +174,7 @@ export async function inspectReadiness(entry, { github }) {
     "Only individual PR merges into their own base branches were checked. The execution destination and any combined PR merge need an explicit plan and exact merge-result proof."));
   for (const fact of ["completed", "cancelled", "replaced"]) {
     checks.push(check(`history_${fact}`, "unknown",
-      `Whether this request was ${fact} is unknown: no durable Coordinator release-history source exists. Issue labels, PR state, and newer requests do not prove this.`));
+      `Whether this request was ${fact} is unknown: this reader has no verified release-outcome source. Inbox disposition history, Issue labels, PR state, and newer requests do not prove a release outcome.`));
   }
   result.status = statusOf([...checks, ...result.pull_requests.flatMap(item => item.checks)]);
   return result;

@@ -8,19 +8,19 @@ This document retains the written execution baseline formerly embedded in the
 root README. The [process diagram](../release-coordinator-process.html) is a
 separate step-by-step draft; it currently differs in the ways listed below.
 
-## Next stage before execution
+## Inbox stage before execution
 
-The agreed immediate work is [inbox processing](./inbox-processing.md): central
+The implemented smaller stage is [inbox processing](./inbox-processing.md): central
 intake defaults, clear ticket statuses and reasons, submitter ownership,
 recorded decisions, and migration of existing tickets. This comes before the
-local merge rehearsal. It is documented, not implemented.
+local merge rehearsal. See progress for merge and runtime evidence.
 
-That plan owns the first-processing contract. It keeps the existing CLI input
+That document owns the first-processing contract. It keeps the existing CLI input
 and read-only commands, and introduces a separate explicit command for Issue
 updates. It does not authorize release execution or settle the choices below.
 The full execution design's lane, batch, and worker database should not be
 introduced merely to organize tickets. The smaller processing stage still
-needs durable, trusted decision history of its own.
+uses its own GitHub decision journal, not the future worker database.
 
 ## Decisions to settle before execution
 
@@ -115,7 +115,7 @@ flowchart LR
     GHIN --> INBOX[Public GitHub Issue inbox]
     INBOX --> R[Local read-only inbox reader]
     INBOX --> RC[Local read-only readiness observations]
-    INBOX -. planned next .-> IP[Explicit inbox processing]
+    INBOX --> IP[Explicit inbox processing]
     IP -. planned updates .-> INBOX
     INBOX -. later .-> W[Coordinator worker]
     W --> DB[(Coordinator database)]

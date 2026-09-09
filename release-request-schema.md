@@ -33,17 +33,16 @@ ID, and workflow run. The public inbox Issue stores the request, checksum, and
 that submission metadata. Editable Issue text is not sufficient proof: the
 reader compares it with the expected successful workflow's result.
 
-The central workflow validates the request and creates one Issue with
-`release-request`, `pending`, and target labels. Repeating the same request ID
-and JSON reuses that Issue; different JSON under the same ID is rejected.
-No separate inbox server or stored inbox secret is required.
+The central workflow validates the request and creates one Issue. The inbox
+processing implementation adds readable titles, verified submitter assignment,
+`release-request`, `status:received`, target, and component labels. Repeating the
+same request ID and JSON reuses that Issue, including a closed Issue; different
+JSON under the same ID is rejected. No additional CLI input is required.
 
-The [next inbox-processing stage](./docs/inbox-processing.md) will add readable
-titles, submitter assignment, component labels, and `status:received` at central
-intake. Those defaults are planned; the labels above describe today's code.
-The workflow already knows the verified submitter, and the request already
-contains the target, repositories, PRs, code, and services needed to derive
-the initial presentation. No additional CLI input is required.
+Older workflow revisions use `pending`. Both local readers now select every open
+`release-request` ticket, and explicit processing can migrate older presentation.
+See [ticket rules](./docs/inbox-processing.md) and [rollout evidence](./docs/progress.md)
+for the distinction between local implementation and the live workflow revision.
 
 Ticket status, reason codes, next action/owner, decision history, and replacement
 or completion evidence belong to Coordinator state. They are not additions to

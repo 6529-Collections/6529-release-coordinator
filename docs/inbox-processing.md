@@ -1,9 +1,8 @@
-# Inbox processing plan
+# Inbox processing contract
 
-**Agreed direction, documented September 9, 2026. Not implemented.** This is
-the plan for the next stage: submit a request, then run one command that leaves
-the inbox organized. This documentation change does not change any ticket,
-workflow, CLI, or application behavior.
+**Implemented locally September 9, 2026; see [progress](./progress.md) for test
+and rollout evidence.** Submit a request, then run one explicit command to
+organize its ticket. Release execution remains separate.
 
 This document owns the ticket states, labels, reasons, and first-processing
 rules. [Progress](./progress.md) owns dated implementation and live evidence.
@@ -41,15 +40,14 @@ release ownership, and production-build choices remain unresolved.
 | `inbox:read` and `readiness:check` | Remain read-only. Share the inspection logic with processing, but never apply Issue changes. |
 | Explicit inbox-processing command | Inspect tickets, record decisions, and apply the corresponding labels, status comment, ownership, and Issue state. Run manually and exit. |
 
-The proposed write command is `inbox:process`. **It does not exist yet** and is
-not a command to run from this document. One invocation should inspect and
-process the inbox; users should not need to copy findings from a separate scan.
-It must clearly describe its GitHub writes. It is not a background service.
+The write command is `inbox:process`. One invocation inspects and processes the
+inbox. Its [command guide](../apps/coordinator/README.md#organize-tickets-explicitly)
+describes GitHub writes, selection, and recovery. It is not a background service.
 
-Today the workflow creates `release-request`, `pending`, and target labels;
-titles contain the request UUID. Both readers select only open tickets with
-`release-request` and `pending`. The new defaults and broader selection must
-ship together; labels described below are planned, not current behavior.
+Older workflow revisions create `release-request`, `pending`, and target labels
+with the request UUID as title. The updated workflow creates the defaults below;
+both updated readers select every open `release-request` ticket. Ship these
+changes together and update local readers before dropping legacy `pending`.
 
 ## Initial ticket setup
 
@@ -233,12 +231,54 @@ partly, report it and reconcile against the recorded intended result. Never
 describe an unapplied update as complete. Concurrent runs must not overwrite
 newer decisions or reset terminal outcomes.
 
-The storage mechanism, trusted writer identity, authorization for cancellation/
-replacement, and concurrency/recovery mechanism must be specified before
-implementing writes. They must work across runs and machines; a disposable local
-report, expiring Actions log, or freely editable label alone is insufficient.
-This requirement does not choose the full release worker's future database or
-authorize building that worker.
+### Storage and trusted writers
+
+The first implementation uses the fixed GitHub branch **`codex/inbox-state`**,
+with `inbox-state.json` as its only file and an independent commit history. It
+is never merged into source branches. The state includes a versioned schema,
+repository identity, parent commit, run lock, and per-ticket decisions/application
+results. Decision records form a hash chain. Their receipt binding and previous
+records are checked before use. Git updates never force a ref; two competing
+writers cannot both advance the same parent.
+
+The trusted writer is the authenticated GitHub account with repository write
+permission, verified from `/user` and repository permissions. The account needs
+contents and Issues write access. Each decision records its stable GitHub ID and
+login. Repository administrators and writers remain trusted: hashes detect broken
+records, not a malicious maintainer who can rewrite the entire branch. Preserve
+this branch and its history; deletion cannot be distinguished from first setup
+by a new machine. External state edits or force pushes are outside this protocol.
+
+Acquire the repository-wide journal lock before inspection/Issue changes. Save
+intended decisions and the status-comment identity before applying updates. Save
+and verify the applied result afterward. A failed or uncertain API call keeps
+the lock. Resume is an explicit operator action after stopping the old process
+and allowing in-flight calls to settle, never an automatic lease expiry. It
+preserves the original selection/action and rotates the ownership token. The
+old process checks the current token before every Issue mutation and journal
+advance. GitHub Issue calls are not transactional; do not run a resumed copy
+while the original process may still be alive. The command guide owns the
+recovery procedure and timeout guidance.
+
+The workflow's initial comment identity is bound to its verified result log.
+If a comment POST loses its response, its previously recorded random marker and
+author ID allow recovery; an arbitrary lookalike comment is not adopted. Once
+known, the exact comment ID is retained. Ambiguous, missing, or edited identities
+stop processing for investigation. The processor waits for active intake to
+finish so it cannot race the workflow's initial setup.
+
+Only the verified original submitter may use the explicit `--close-test` action
+for their own test. It records that authenticated decision. General cancellation,
+replacement, completion, and terminal corrections remain reserved; no commands
+for those actions exist yet. No test is inferred from editable request/title text.
+
+`status:eligible` and `status:completed` are also reserved in this first version.
+Unknown earlier release outcomes/active execution ownership currently produce
+`reason:coordinator-incomplete`. This inbox journal proves its own dispositions;
+it is not independent evidence of a prior deployment, cancellation, or worker
+reservation. Unchanged scans create no new transitions/comments; acquire/release
+commits record runs. The single-file journal is intended for this small manual
+inbox; growth beyond GitHub's content API limits must be addressed before scaling.
 
 ## Migration of existing tickets
 
