@@ -5,6 +5,11 @@ requests in `6529-Collections/6529-release-coordinator` and prints a report.
 It runs manually on your machine and exits. No server, timer, database, or
 deployment worker is started.
 
+The next stage is a separate command that organizes GitHub tickets. Its
+[inbox-processing plan](../../docs/inbox-processing.md) defines labels,
+ownership, reasons, history, and migration. It is not implemented yet; every
+runnable command documented below retains its current read-only behavior.
+
 ## Run
 
 Use Node.js 20+ and a current GitHub CLI (`gh`) authenticated to `github.com`.
@@ -196,3 +201,24 @@ Readiness tests additionally cover current-head changes, merge/check/review
 blocks, catalog and graph errors, missing history, conflicting requests,
 pagination races, adapter input boundaries, and the verified-intake-to-readiness
 CLI path. Live evidence is dated separately in the progress record.
+
+## Planned ticket processing
+
+The proposed `inbox:process` command is not available yet. It will reuse intake
+verification and readiness observations, record a justified ticket decision,
+and apply managed labels, ownership, a maintained status comment, and Issue
+closure where warranted. It will run manually and exit. It does not execute a
+release, and neither existing read-only command will acquire hidden writes.
+
+The label vocabulary and state rules have one home in the
+[inbox-processing plan](../../docs/inbox-processing.md#status-labels). Report
+observations such as `valid`, `blocked`, and `unknown` are not ticket lifecycle
+states and must not be mapped directly to them. A valid receipt alone does not
+mean eligible; a merged PR alone does not mean completed.
+
+Today both readers require `pending`. The planned coordinated migration will
+make them inspect all open `release-request` tickets, including waiting and
+action-needed tickets, while preserving full workflow proof checks. Do not
+drop `pending` from new intake until supported readers can see the new statuses.
+This document's current command behavior and exit codes remain authoritative
+until that implementation is shipped.

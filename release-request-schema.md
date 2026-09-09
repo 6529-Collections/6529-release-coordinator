@@ -38,6 +38,20 @@ The central workflow validates the request and creates one Issue with
 and JSON reuses that Issue; different JSON under the same ID is rejected.
 No separate inbox server or stored inbox secret is required.
 
+The [next inbox-processing stage](./docs/inbox-processing.md) will add readable
+titles, submitter assignment, component labels, and `status:received` at central
+intake. Those defaults are planned; the labels above describe today's code.
+The workflow already knows the verified submitter, and the request already
+contains the target, repositories, PRs, code, and services needed to derive
+the initial presentation. No additional CLI input is required.
+
+Ticket status, reason codes, next action/owner, decision history, and replacement
+or completion evidence belong to Coordinator state. They are not additions to
+the public request JSON. Preserve the original JSON, checksum, actor, and
+workflow receipt. Keep `0.000001` unchanged for this stage; mutable status belongs
+in a separate managed comment and history record. Reusing a request must not
+reset or reopen its existing ticket.
+
 The CLI generates `schema_version`, `request_id`, and `created_at`. The agent
 must not include those fields in its input template. A combined frontend/backend
 release is one request with both parts, not two separate requests.

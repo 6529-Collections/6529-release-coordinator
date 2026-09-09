@@ -40,11 +40,18 @@ from first principles.
 - `README.md` is the entry point and documentation index.
 - `docs/progress.md` records dated implementation, merge/publication evidence,
   next steps, and deliberately deferred work.
+- `docs/inbox-processing.md` owns the agreed next-stage ticket workflow,
+  status/reason labels, submitter ownership, history requirements, and migration.
+  It is a plan, not implemented behavior or authorization to change tickets.
+  Keep existing read-only commands read-only; ticket writes belong to a separate
+  explicit processing command. This stage precedes the local merge rehearsal.
 - `docs/design.md` contains the proposed execution design and unresolved
   differences with the full process diagram. Settle those choices before
   implementing release execution.
-- CLI, inbox reader, and readiness usage belong in their package/application READMEs. The JSON
-  Schema owns the request shape; `release-request-schema.md` explains it.
+- CLI, inbox reader, and readiness usage belong in their package/application
+  READMEs. The JSON Schema owns the request shape; `release-request-schema.md`
+  explains it. Ticket lifecycle fields belong to Coordinator state, not the
+  submitter's request JSON.
 - `docs/npm-publishing.md` is the publishing/adoption guide.
 - `docs/history/` holds historical evidence, not current work instructions.
 

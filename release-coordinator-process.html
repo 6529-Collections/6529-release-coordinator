@@ -959,10 +959,18 @@
           <p class="implementation-boundary" role="note">
             <strong>Implemented today:</strong> Frontend and backend record new release intents
             through the public CLI and central GitHub Issue workflow. The local reader verifies
-            pending records and prints a report. Neither step authorizes or executes a release.
+            pending records and the readiness command inspects current PR and dependency evidence.
+            Both print reports without changing tickets or authorizing a release.
             The worker, durable queue, merges, builds, deployments, and recovery described below
             remain proposed work. See <a href="./docs/progress.md">progress and evidence</a> and
             the <a href="./release-coordinator-architecture.html">implemented intake path</a>.
+          </p>
+          <p class="diagram-context">
+            <strong>Planned next, before this release flow:</strong> Organize the inbox with
+            readable tickets, status/reason labels, submitter ownership, and recorded decisions.
+            A separate explicit processing command will apply ticket updates while the current
+            commands stay read-only. This stage precedes the local merge rehearsal and is not
+            implemented yet. See the <a href="./docs/inbox-processing.md">inbox-processing plan</a>.
           </p>
           <p class="diagram-context">
             <strong>Draft differences to settle:</strong> This diagram and the older written
@@ -973,7 +981,8 @@
           <p class="progress-rule" role="note">
             <strong>Planned progress storage:</strong> A future worker will save each release
             step and its result. The local reader currently prints its report and exits;
-            it does not save a release state or start later steps.
+            it does not save a release state or start later steps. The earlier planned inbox
+            processing stage will need its own ticket decision history; it is not an executing release queue.
           </p>
           <article class="story" id="story" aria-label="Release process"></article>
         </div>

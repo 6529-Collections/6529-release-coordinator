@@ -50,6 +50,20 @@ known blockers from missing evidence. It deliberately reports release history
 and an exact execution merge plan as unknown; these are not implemented yet.
 See [readiness checks](./apps/coordinator/README.md#readiness-checks) for details.
 
+## Next stage: organize the tickets
+
+The agreed next step is [inbox processing](./docs/inbox-processing.md), before
+the local merge rehearsal. The submission workflow will initialize readable
+titles, submitter ownership, and status/scope labels. A separate, explicit
+processing command will inspect tickets, maintain reasons and next actions,
+record decisions, and retire clearly outdated requests.
+
+**This is a documented plan, not implemented behavior.** `inbox:read` and
+`readiness:check` remain read-only. The new processing command will run manually
+and exit; it will not merge, build, or deploy. Existing CLI input, schema version,
+and installed npm package can stay unchanged. Existing tickets and reader
+selection must migrate together so waiting tickets remain visible.
+
 ## Documentation map
 
 | Need | Document |
@@ -57,6 +71,7 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 | What has shipped, what is local, and what comes next | [Progress](./docs/progress.md) |
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
+| Understand the next ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
 | Review the future release design and unsettled choices | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |

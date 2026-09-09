@@ -8,6 +8,20 @@ This document retains the written execution baseline formerly embedded in the
 root README. The [process diagram](../release-coordinator-process.html) is a
 separate step-by-step draft; it currently differs in the ways listed below.
 
+## Next stage before execution
+
+The agreed immediate work is [inbox processing](./inbox-processing.md): central
+intake defaults, clear ticket statuses and reasons, submitter ownership,
+recorded decisions, and migration of existing tickets. This comes before the
+local merge rehearsal. It is documented, not implemented.
+
+That plan owns the first-processing contract. It keeps the existing CLI input
+and read-only commands, and introduces a separate explicit command for Issue
+updates. It does not authorize release execution or settle the choices below.
+The full execution design's lane, batch, and worker database should not be
+introduced merely to organize tickets. The smaller processing stage still
+needs durable, trusted decision history of its own.
+
 ## Decisions to settle before execution
 
 These are pre-existing differences, not changes introduced by the inbox reader.
@@ -100,6 +114,9 @@ flowchart LR
     CLI -->|submit| GHIN[Central GitHub submission workflow]
     GHIN --> INBOX[Public GitHub Issue inbox]
     INBOX --> R[Local read-only inbox reader]
+    INBOX --> RC[Local read-only readiness observations]
+    INBOX -. planned next .-> IP[Explicit inbox processing]
+    IP -. planned updates .-> INBOX
     INBOX -. later .-> W[Coordinator worker]
     W --> DB[(Coordinator database)]
 
@@ -155,6 +172,12 @@ logic.
 The first inbox is a set of GitHub Issues in this public repository. One issue
 stores one accepted release request and its trusted submission proof. This is
 enough to collect requests before the Coordinator starts doing release work.
+
+Before release execution, the [inbox-processing plan](./inbox-processing.md)
+adds a separate lifecycle for organizing these tickets. Its statuses and
+decision history must not be confused with an executing release batch. Its
+storage/writer design remains to be specified before implementing Issue writes;
+editable labels alone are not that history.
 
 The inbox is not the full release queue. When the Coordinator starts batching,
 merging, building, and deploying requests, it will use its own database, such as
