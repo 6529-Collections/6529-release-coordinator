@@ -3,7 +3,8 @@ import { realProfile } from "./profiles.mjs";
 import { readInbox, inspectIssue } from "./inbox-reader.mjs";
 import { inspectReadiness } from "./readiness.mjs";
 import { decideTicket, policyVersion } from "./inbox-policy.mjs";
-import { appendDecision, createJournal, digest, receiptHash } from "./inbox-journal.mjs";
+import { coordinateTicket, runPolicyVersion } from "./inbox-rehearsal.mjs";
+import { appendDecision, createJournal, digest, receiptHash, inboxWorkflow } from "./inbox-journal.mjs";
 import { assignSubmitter, comments, desiredLabels, ensureLabels, labelNames, managedLabels,
   response, statusComment, terminal, ticketTitle } from "./ticket-presentation.mjs";
 
@@ -27,8 +28,9 @@ function overlapping(entry, entries) {
       part.pull_requests.some(pr => keys.has(`${part.repository}#${pr.number}`)))).map(other => other.issue_number).sort((a, b) => a - b);
 }
 
-async function applyTicket({ api, journal, state, run, ticket, number, actor, verifyClosure }) {
+async function applyTicket({ api, journal, state, run, ticket, number, actor, verifyClosure, signal }) {
   const writeApi = async call => {
+    signal?.throwIfAborted();
     if (call.method !== "GET") await journal.guard(run);
     return api(call);
   };
@@ -102,12 +104,14 @@ async function applyTicket({ api, journal, state, run, ticket, number, actor, ve
     applied: true, transition_id: record.id, assignment, comment_id: ticket.comment.id };
 }
 
-export async function processInbox({ api, identity, get, github, issueNumber, closeTest = false, resume,
-  now = () => new Date(), profile = realProfile, journal = createJournal(api, profile), loadInbox = readInbox, inspect = inspectIssue, observe = inspectReadiness }) {
+export async function processInbox({ api, identity, get, github, issueNumber, closeTest = false, resume, rehearsal, plan, signal,
+  now = () => new Date(), profile = realProfile, journal = createJournal(api, profile, { workflow: rehearsal ? inboxWorkflow : undefined }), loadInbox = readInbox, inspect = inspectIssue, observe = inspectReadiness }) {
   if (issueNumber !== undefined && !isNumber(issueNumber)) throw new Error("Issue number must be a positive integer.");
   if (closeTest && !issueNumber) throw new Error("Test closure requires one explicit Issue number.");
+  signal?.throwIfAborted();
   const actor = await identity();
-  const scope = resume && issueNumber === undefined && !closeTest ? undefined : { issue_number: issueNumber ?? null, close_test: closeTest };
+  const scope = resume && issueNumber === undefined && !closeTest ? undefined : { issue_number: issueNumber ?? null, close_test: closeTest,
+    ...(rehearsal ? { workflow: inboxWorkflow } : {}) };
   const { state, run } = await journal.acquire(actor, resume, scope);
   issueNumber = run.scope.issue_number ?? undefined;
   closeTest = run.scope.close_test;
@@ -120,6 +124,7 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
     const entries = new Map();
     const issues = new Map();
     for (const number of numbers) {
+      signal?.throwIfAborted();
       const issue = await response(api, "GET", `/issues/${number}`);
       if (!isNumber(issue.id) || issue.number !== number || issue.pull_request || !["open", "closed"].includes(issue.state) || !Array.isArray(issue.labels)) throw new Error(`Invalid Issue #${number}.`);
       if (!state.tickets[number] && !labelNames(issue).includes("release-request")) throw new Error(`Issue #${number} is not a release request.`);
@@ -136,7 +141,9 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
       entry.status = "invalid"; entry.github_actor = null; entry.errors.push("This request ID appears in multiple Issues; maintainers must resolve the identity conflict.");
     }
     for (const number of numbers) {
+      signal?.throwIfAborted();
       const issue = issues.get(number), entry = entries.get(number);
+      let rehearsalResult = { status: "not-run", message: "Recorded terminal ticket; its disposition is preserved." };
       let ticket = state.tickets[number];
       if (entry.intake_in_progress) {
         results.push({ issue_number: number, applied: false, status: "intake-running", message: "Submission workflow is still setting up this ticket; run processing after it finishes." });
@@ -151,8 +158,29 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
       }
       if (closeTest && (entry.status !== "valid" || entry.github_actor?.id !== actor.id)) throw new Error("Test closure is limited to the authenticated operator's verified request.");
       if (!recordedTerminal) {
-        const observation = await observe(entry, { github, profile });
-        const decision = decideTicket(entry, observation, { overlaps: overlapping(entry, [...all.values()].filter(value => issues.get(value.issue_number)?.state !== "closed")), closeTest });
+        let observation = await observe(entry, { github, profile });
+        let decision = decideTicket(entry, observation, { overlaps: overlapping(entry, [...all.values()].filter(value => issues.get(value.issue_number)?.state !== "closed")), closeTest });
+        if (rehearsal) {
+          // Resume retains this run's pinned destinations. The legacy fallback
+          // only continues an already saved v1 run; new callers supply no plan.
+          const stored = run.plans?.[number] ?? (run.scope.workflow === "inbox-run-v1" && run.scope.issue_number === number ? run.scope.merge_plan : undefined);
+          const coordinated = await coordinateTicket({ entry, observation, decision, profile, rehearse: rehearsal,
+            preparePlan: () => stored ? structuredClone(stored) : plan(entry),
+            savePlan: async input => {
+              if (stored) return;
+              signal?.throwIfAborted();
+              const currentIssue = await response(api, "GET", `/issues/${number}`);
+              if (receiptHash(currentIssue) !== receiptHash(issue) || currentIssue.state !== issue.state) throw new Error(`Issue #${number} changed during planning.`);
+              run.plans ??= {};
+              run.plans[number] = structuredClone(input);
+              state.lock.plans = structuredClone(run.plans);
+              await journal.save(state, run, `plan #${number}`);
+            } });
+          signal?.throwIfAborted();
+          await journal.guard(run);
+          decision = coordinated.decision; rehearsalResult = coordinated.result;
+          if (coordinated.evidence) observation = { ...observation, rehearsal: coordinated.evidence };
+        }
         // Reverify immutable intake before the journaled intent. Readiness itself
         // rereads PR metadata after all catalog/check observations.
         const refreshed = await response(api, "GET", `/issues/${number}`);
@@ -167,7 +195,7 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
           || digest(ticket.submitter) !== digest(entry.github_actor) || digest(ticket.workflow) !== digest(entry.workflow));
         if (trusted) { ticket.request = entry.request; ticket.submitter = entry.github_actor; ticket.workflow = entry.workflow; }
         if (bindingChanged || !latest(ticket) || digest(latest(ticket).decision) !== digest(decision)) {
-          appendDecision(ticket, { at: now().toISOString(), actor, run_id: run.run_id, policy_version: policyVersion,
+          appendDecision(ticket, { at: now().toISOString(), actor, run_id: run.run_id, policy_version: rehearsal ? runPolicyVersion : policyVersion,
             decision, observation, previous_status: latest(ticket)?.decision.status ?? null,
             receipt_hash: ticket.receipt_hash, request: ticket.request, submitter: ticket.submitter, workflow: ticket.workflow });
           pendingNumber = number;
@@ -175,7 +203,7 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
         }
       }
       pendingNumber = number;
-      results.push(await applyTicket({ api, journal, state, run, ticket, number, actor, verifyClosure: async () => {
+      const applied = await applyTicket({ api, journal, state, run, ticket, number, actor, signal, verifyClosure: async () => {
         if (recordedTerminal || closeTest) return;
         const freshIssue = await response(api, "GET", `/issues/${number}`);
         if (receiptHash(freshIssue) !== ticket.receipt_hash) throw new Error("Receipt changed before closure.");
@@ -183,9 +211,11 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
         const freshObservation = await observe(freshEntry, { github, profile });
         const fresh = decideTicket(freshEntry, freshObservation);
         if (fresh.status !== "closed" || digest(fresh.reasons) !== digest(latest(ticket).decision.reasons)) throw new Error("PR evidence changed before closure; the intended decision was not applied.");
-      } }));
+      } });
+      results.push({ ...applied, ...(rehearsal ? { rehearsal: rehearsalResult } : {}) });
       pendingNumber = null;
     }
+    signal?.throwIfAborted();
     await journal.release(state, run);
     return { mode: "write", profile: profile.name, repository: profile.inbox.full_name, run_id: run.run_id, checked_at: now().toISOString(), release_authorized: false, requests: results };
   } catch (error) {

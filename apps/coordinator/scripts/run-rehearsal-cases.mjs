@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { runRehearsalCli } from "../src/rehearsal-cli.mjs";
+import { runRehearsalFixture } from "../src/rehearsal-runner.mjs";
 import { sandboxRepositories, isSha, isBranch } from "../src/rehearsal-plan.mjs";
 
 if (process.argv.length !== 4 || process.argv[2] !== "--seed") throw new Error("Usage: node apps/coordinator/scripts/run-rehearsal-cases.mjs --seed SEED_JSON");
@@ -98,7 +98,7 @@ for (const [caseId, parts, expected] of cases) {
   const filename = path.join(directory, `${caseId}.manifest.json`);
   await writeFile(filename, JSON.stringify(input(caseId, parts), null, 2));
   let output = "";
-  const code = await runRehearsalCli(["--manifest", filename, "--json"], { env: { RELEASE_COORDINATOR_PROFILE: "sandbox" }, stdout: value => { output += value; } });
+  const code = await runRehearsalFixture(["--manifest", filename, "--json"], { env: { RELEASE_COORDINATOR_PROFILE: "sandbox" }, stdout: value => { output += value; } });
   const report = JSON.parse(output);
   await writeFile(path.join(directory, `${caseId}.result.json`), output);
   assert.equal(report.release_authorized, false);

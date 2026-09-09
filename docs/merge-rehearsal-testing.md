@@ -68,9 +68,12 @@ remain `unknown` whenever the profile's named check cannot be verified as requir
 See progress for the separate live acceptance result after this settings change.
 
 The setup step is allowed to seed test branches and open/update test PRs once
-execution is authorized. The rehearsal command itself only reads GitHub and
+execution is authorized. The rehearsal engine itself only reads GitHub and
 fetches Git objects; it never pushes, merges a GitHub PR, dispatches a workflow,
-changes settings, or writes a comment. PR setup naturally starts the sample CI.
+changes settings, or writes a comment. The `inbox:run` command wraps that engine
+with verified-ticket intake, automatic plan generation, and writes to the selected
+inbox's ticket presentation and decision journal. PR setup naturally starts the
+sample CI.
 
 ## Keep the test environment separate
 
@@ -85,8 +88,8 @@ the request's `staging`/`production` deployment target.
 
 | Profile | Repositories | Input source | Rehearsal behavior |
 | --- | --- | --- | --- |
-| `sandbox` | The two public test repositories | Verified test inbox request plus an explicit plan, or a validated private test manifest | Shared engine; temporary local merges and local reports. |
-| `real` | The two fixed product repositories | Verified real inbox request plus an explicit destination/merge plan | The same engine and report contract; still no remote writes or deployment. |
+| `sandbox` | The two public test repositories | Verified test inbox request with an automatically generated plan, or a validated private test manifest | Shared engine; temporary local merges and local reports. |
+| `real` | The two fixed product repositories | Verified real inbox request with an automatically generated plan | The same engine and report contract; still no remote writes or deployment. |
 
 The selected trusted profile supplies repository names/IDs and read adapters.
 Its input adapter produces the same internal merge-plan structure, retaining
@@ -118,8 +121,8 @@ For this stage:
   and commits, merge order, selected services, and part dependencies as needed.
   Validate its shape, duplicates, references, size limits, and dependency cycles.
 - Label its input source `test-manifest` and its mode `sandbox` in every report.
-  It is not a verified intake receipt and cannot enter `inbox:process` or the
-  real decision journal. No fabricated workflow/actor proof is accepted.
+  It is not a verified intake receipt and cannot enter `inbox:run` or either
+  profile's decision journal. No fabricated workflow/actor proof is accepted.
 - Keep GitHub reads behind the selected profile's read adapter. Use the same
   merge engine and shared pure inspection logic; do not make production adapters accept arbitrary
   repositories or caller-supplied API queries to accommodate tests.
@@ -134,10 +137,11 @@ inbox or claim that local manifests prove submission works.
 
 ## Rehearsal behavior to implement
 
-Command name: `merge:rehearse`, in the private Coordinator workspace.
-Runnable flags are in the app guide. It runs manually on the local
-machine, saves a report under the ignored `.release-coordinator/` directory,
-and exits. Automated fixture tests must run offline in the existing test suite.
+The engine is now part of the single operator command `inbox:run`, with a
+verified ticket and automatically generated plan. Its old standalone command has been removed.
+The original manifest-based matrix below remains available through the developer
+fixture harness described in the app guide; it reads sandbox PRs and writes
+local evidence only. Automated fixture tests run offline in the existing suite.
 
 1. Validate the sandbox profile and manifest before accessing repositories.
    Require one explicit destination per repository. Never infer a branch from
@@ -288,7 +292,7 @@ fixture updates from those measurement windows.
 ## Evidence and completion checklist
 
 Save raw local reports under
-`.release-coordinator/merge-rehearsal/<run-id>/`. Commit reusable fixture
+`.release-coordinator/merge-rehearsal/<profile>/<run-id>/`. Commit reusable fixture
 builders/manifests without credentials; do not rely on ignored local output
 as the only durable acceptance record. Record in progress, or a linked dated
 test record, each case ID, result, Coordinator revision, exact PR/base/head/tree
@@ -333,20 +337,79 @@ tests. Its [dated acceptance record](./testing/profiled-inbox-2026-09-09.md) rec
 the completed sandbox ticket path; actual real-system acceptance remains
 separate from the completed sandbox matrix.
 
-Both profiles now accept verified inbox inputs and explicitly chosen destination
-plans through the same adapter and engine. The next sandbox extension can define
-how a rehearsal report informs ticket status; that policy is not implemented by
-the input adapter. It must not make current readiness results automatically
-eligible or take execution ownership.
+Both profiles now accept verified inbox inputs and automatically generated
+destination plans through the same adapter and engine. The combined `inbox:run`
+workflow already uses fresh rehearsal results to update the same ticket. That
+does not make current readiness results eligible or take execution ownership.
+The next proposed sandbox stage below groups multiple tickets and tests their
+combined code; that is not implemented by the existing input adapter or runner.
 
 Before a real rollout, verify real permissions and repository limits with a
 separately authorized live read-only run. Real mode rejects test manifests and
 requires its own request and destination proof. The profile switch requires no
 second merge implementation. A rehearsal never starts ticket processing or
-deployment; either remains a separate capability.
+deployment on its own; the existing `inbox:run` command coordinates rehearsal
+with ticket processing, while deployment remains absent.
 
 Actual combined application builds/tests, release ownership, scheduling,
 deployment, runtime prerequisites, recovery, and the unresolved choices in
 [the execution design](./design.md#decisions-to-settle-before-execution) remain
 outside this stage. The sandbox can be extended for those tests later, but the
 success of this plan does not count as that later evidence.
+
+## Planned batch acceptance
+
+**Next-stage plan recorded September 9, 2026; every case below is unimplemented
+and unrun.** This section follows the
+[batch-selection design](./design.md#proposed-batch-testing-and-selection) and
+[proposed ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes).
+It does not change the completed MR matrix or its dated evidence above.
+
+Start after the current one-ticket command is reviewed, checked, and merged.
+Keep using the two existing sample repositories and separate sandbox inbox.
+First add selection across several real sandbox tickets, preserving existing
+initial checks. Then add small sample programs and meaningful required PR checks
+and run those checks against selected combined candidates. The current sample
+check only passes or deliberately fails when `FAIL_CHECK` exists; it proves the
+check gate, not application correctness or a passing-alone/failing-together bug.
+
+Use independent requests without database changes first. Select whole tickets
+and validated dependency groups. Define the trusted representation of dependencies
+between tickets before adding those fixtures; the public schema does not already
+provide it. Keep the shared profile/engine direction, but only the sandbox's
+temporary branches, PRs, checks, ticket projection, and owned trial state are in
+this next live stage. The current operator command does not have those new
+repository-write capabilities. Configure isolated test runners and define result
+verification, durable attempts/limits, interruption handling, and cleanup before
+running the new workflow. Merely reading a workflow name is not proof its required
+checks ran against the intended combined commit.
+
+Create a deterministic sample incompatibility: A and B each pass their normal
+checks against the same baseline; A+B merges without a Git conflict but fails a
+meaningful test. Record the exact code and all three check results. Separate
+passing groups must never be used as a substitute for testing their union.
+
+| Case | Expected evidence |
+| --- | --- |
+| BA-01: Several compatible requests | One initial full combined check run per affected repository, beyond ordinary source-PR CI; no extra full run for each ticket by default. Exact final candidate passes. |
+| BA-02: Obvious initial blocker | Existing check/version/scope/merge gates exclude the whole ticket with a reason before expensive combined tests. |
+| BA-03: One reproducible failing independent ticket | A failing larger batch is divided within limits, a valid passing candidate survives, and the attributable blocker is recorded only where supported. |
+| BA-04: Both halves pass but their union fails | Do not assume passing groups work together or invent a culprit. Retain a verified candidate using the saved priority and explain the incompatible combination. |
+| BA-05: A/B incompatibility and changed base | A passes, B passes, A+B fails. B waits when A is selected. In an isolated fixture simulate A becoming the base; B's subsequent attributable failure becomes action-needed. Baseline-only failure must not be blamed on B. No actual sandbox `main` merge is needed. |
+| BA-06: One ticket contains multiple frontend/backend PRs | Splitting never drops a part, PR, or selected service from a ticket. Rebuild each candidate's complete service plan. |
+| BA-07: Requests must ship together | Required groups remain whole; missing/ambiguous dependency proof prevents selection. An inseparable incompatibility gets a group correction/scope reason. |
+| BA-08: Changed candidate inputs | Changed base, PR commit, membership, order, scope, or required workflow configuration cannot inherit a pass from different inputs. Source-head movement never silently replaces the accepted version. |
+| BA-09: Search reaches a limit | Stop at the configured attempt/time limits. Preserve a verified candidate if present; otherwise none proceeds. Untested/excluded tickets stay visible with incomplete-investigation reasons. |
+| BA-10: Infrastructure or evidence failure | Runner outage, pending/missing result, baseline failure, and unavailable proof do not become individual code blame or automatic group splitting. Bounded retries and maintainer ownership are recorded. |
+| BA-11: Repeat or resume | Preserve priority, attempts, saved inputs, budget and comment identities. Unchanged observations do not duplicate decisions/comments; inconsistent or unknown state stops safely. |
+| BA-12: Temporary PR/check lifecycle | Verify owned branches/PRs, expected check identities and combined commits, missing/skipped required-check rejection, clean completion and interruption cleanup. Temporary PRs never merge; source PRs/branches remain unchanged. |
+| BA-13: Profile and release boundaries | Mixed profiles/targets, real inbox writes, unsupported database groups, deployment/publication jobs, and release authorization are outside the sandbox run and rejected or explicitly held. |
+
+Record expected/actual outcome, exact inputs, selected and excluded ticket IDs,
+candidate/parent attempt, priority, budget, workflow/check links, original/final
+ticket presentation, and cleanup for each case. Separate local fixture proof from
+live GitHub proof. The finish line is a bounded search that returns a directly
+tested candidate or an honest no-candidate result, with correct visible outcomes
+for every deferred request. It is not proof of the largest possible batch or of
+release readiness. Stop before product merges, shared-environment mutations,
+deployment, and the unresolved execution choices.

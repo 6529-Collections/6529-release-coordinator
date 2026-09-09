@@ -1,7 +1,8 @@
 # Proposed release execution design
 
-**Draft, not implemented release behavior.** The live system submits requests
-and the local app verifies intake and inspects current readiness evidence.
+**Draft, not implemented release behavior.** The live system submits requests;
+the local app verifies intake, inspects readiness, organizes tickets, and
+rehearses merges.
 It does not authorize or execute releases. See [progress](./progress.md) for
 that boundary.
 This document retains the written execution baseline formerly embedded in the
@@ -12,8 +13,9 @@ separate step-by-step draft; it currently differs in the ways listed below.
 
 The implemented smaller stage is [inbox processing](./inbox-processing.md): central
 intake defaults, clear ticket statuses and reasons, submitter ownership,
-recorded decisions, and migration of existing tickets. This comes before the
-local merge rehearsal. See progress for merge and runtime evidence.
+recorded decisions, and migration of existing tickets. `inbox:run` now joins
+initial inspection, local rehearsal, and ticket updates in one manual process.
+See progress for local, merge, and runtime evidence.
 
 The current intake boundary excludes requests whose PRs are all already merged:
 processing closes them with `already-merged`, without claiming deployment.
@@ -26,7 +28,7 @@ merge must not trigger this intake closure rule. Inbox receipt acceptance and
 ticket processing are not execution ownership.
 
 That document owns the first-processing contract. It keeps the existing CLI input
-and read-only commands, and introduces a separate explicit command for Issue
+and read-only commands; `inbox:run` combines inspection, rehearsal, and Issue
 updates. It does not authorize release execution or settle the choices below.
 The full execution design's lane, batch, and worker database should not be
 introduced merely to organize tickets. The smaller processing stage still
@@ -35,17 +37,179 @@ uses its own GitHub decision journal, not the future worker database.
 ## Bounded stage: sandbox merge rehearsal
 
 The [testing plan](./merge-rehearsal-testing.md) defines local Git fixtures and
-two test GitHub repositories for sample PRs. Its private
-sandbox command tests exact commits, destinations, and merge order, with
-separate evidence for conflicts, CI/review blockers, and changing inputs.
-The command is implemented locally; [progress](./progress.md) distinguishes
-tests, remote integration, and live coverage. It does not consume real inbox requests or
-change ticket decisions, shared branches, builds, or deployments.
+two public test GitHub repositories for sample PRs. The
+[profiled inbox guide](./profiled-inbox-testing.md) adds a separate public test
+inbox and the shared sandbox/real input path. Both profiles accept a verified
+inbox ticket and generate the destination/merge plan internally; private test manifests
+remain sandbox-only. The same engine checks exact commits and merge order,
+with separate evidence for conflicts, CI/review blockers, and changing inputs.
 
-This scope requires explicit test destinations and one documented merge method.
+The original profiled engine is merged and has live sandbox proof. The new
+combined command uses its fresh reports to update the same ticket, with distinct
+passed/blocked/unknown/stale outcomes. Real-project live acceptance remains
+outstanding. See [progress](./progress.md) for exact implementation, test, and
+merge evidence. No product branches change and no builds or deployments run.
+
+This scope requires explicit destinations and one documented merge method.
 It does not settle the real release lane, timing of `main` changes, or artifact
-policy below. Connecting rehearsal proof to real inputs and later execution
-requires separate integration and fresh evidence.
+policy below. The ticket contract now owns rehearsal outcomes; later release
+execution still requires its own decisions and evidence.
+
+## Proposed batch testing and selection
+
+**Direction recorded September 9, 2026; not implemented.** Today `inbox:run`
+processes each ticket separately, reads existing PR checks, and tries local Git
+merges. It does not combine different tickets, run application checks on their
+combined code, or open temporary PRs. The next development stage stays in the
+two sample repositories and test inbox. Extend the same operator workflow;
+do not add a separate operator command or manual plan file.
+
+### Where the expensive checks belong
+
+Keep the initial checks for each ticket: verify intake, exact PR versions,
+existing required checks and reviews, scope, dependencies, and local merges.
+Ordinary PR CI still runs in the source repositories. Do not add another full
+build/test run for every ticket by default before testing their combined batch.
+
+Select compatible, complete requests, combine their exact code, and run each
+affected repository's normal required PR checks on that combined result. A
+temporary PR per affected repository is the proposed way to trigger these checks
+on isolated GitHub Actions runners. The Coordinator reads the results and links
+them to the inbox tickets. Temporary PRs are not merged. Their ownership,
+cleanup, required workflow triggers, and permissions must be defined before
+implementation. Passing frontend and backend checks separately does not prove
+that the applications work together; that needs explicit integration coverage.
+
+```mermaid
+flowchart TD
+    A[Inspect each ticket and existing PR checks] --> B[Select complete compatible requests]
+    B --> C[Save exact inputs and try the combined batch]
+    C --> D{Merge and required checks pass?}
+    D -->|Yes| E[Record this exact passing candidate]
+    D -->|Code conflict or test failure| F[Divide into smaller complete groups within limits]
+    F --> C
+    D -->|Runner problem or missing proof| G[Record uncertainty and retry within limits]
+    F -->|Limit reached| H[Keep a verified candidate if one exists and explain deferred tickets]
+```
+
+A recorded passing candidate is not release approval or a completed ticket.
+Release ownership, final checks, and authorization remain separate requirements.
+
+### Keep complete requests and use a predictable order
+
+- A ticket is the smallest selectable unit. Its frontend/backend PRs, services,
+  target, and dependencies stay together. Never release a successful subset of
+  one ticket because another part failed.
+- Requests that must ship together form an indivisible group. Split only where
+  all required dependencies remain satisfied. The current public schema names
+  dependencies within a request, not a general graph between inbox tickets;
+  the trusted representation of relationships between tickets is still to be
+  designed. Do not invent dependencies or resolve overlapping PR versions by age.
+- Proposed priority is oldest suitable verified request first. Dependencies take
+  precedence. Save the order, its trusted source, and exclusions so retries do
+  not pick a different winner by chance. Exact tie-breaking is an implementation
+  decision to record before coding.
+- Preserve target and database-safety boundaries. The first sandbox selection
+  stage uses requests without database changes and does not mix deployment
+  targets. A database-changing or inseparable group is not broken apart to
+  obtain a passing result. Broader database batching remains a separate decision.
+
+### Divide a failing batch within limits
+
+Try the selected batch first. On a confirmed code/test failure or merge conflict,
+divide it into smaller groups of complete tickets and required dependencies.
+For ten independent requests, this could mean five plus five, then two plus
+three inside a failing half. These numbers are an example, not fixed settings.
+Dependency groups may require unequal divisions or prevent division entirely.
+
+Keep passing groups as candidates and investigate failing groups within saved
+attempt and elapsed-time limits. Rebuild the requested services and dependency
+order for every candidate. Try adding compatible groups in the saved priority
+order when the budget permits. The final selected combination must itself pass
+all required checks; separate passing groups cannot simply be joined and called
+passing. This finds useful work that can proceed, without promising the largest
+possible batch or searching every subset.
+
+At the limit, preserve the evidence for a verified passing candidate, if one
+exists. Requests without a conclusive result remain waiting with an explicit
+next action. If no candidate has passed, nothing is ready to continue. A runner
+outage, timeout, unavailable result, or uncertain save is not a code failure and
+must not trigger splitting to identify a faulty request. Retry infrastructure failures within
+their own limit; stop safely if state or cleanup cannot be verified.
+
+Record each attempt before starting it: original selection, candidate membership,
+exclusions, parent attempt, dependency groups/order, exact inputs, test plan, and
+remaining budget. Save workflow identities, links, results, and cleanup afterward.
+Resuming must preserve those inputs and limits. Do not retest an identical
+candidate merely to consume another attempt; any evidence reuse requires the
+same complete inputs and fresh required gates. Current `inbox:run` still runs
+fresh rehearsals; this paragraph is a future batch-search requirement.
+
+### When A and B pass alone but fail together
+
+This proves an incompatibility, not that both tickets are broken. If they are
+independent, keep the earlier suitable passing candidate under the saved order.
+For example, choose A and leave B waiting with the exact A+B test failure and a
+link to A. If they must ship together, hold the whole group for a correction or
+scope decision. Do not select half of that group.
+
+Once A is actually in `main`, B's next candidate includes A through the new base.
+Waiting for a later batch does not remove that incompatibility. Recheck B against
+the actual new base. If a specific code failure remains attributable to B's
+addition, mark B action-needed with the evidence and correction owner. Choosing
+B first could require A to be adjusted instead; the selected order is a policy,
+not proof of which author made a mistake.
+
+### Evidence belongs to the code that was tested
+
+Save the starting `main` commits, request identities/checksums, exact PR commits,
+membership, dependency and merge order, selected services/target, combined results,
+and required workflow/test configuration for each attempt. All candidates in one
+search use the same saved starting commits and requested PR versions.
+
+If A+B+C passed, adding D might break it; removing B might remove something A
+or C needs. Updating a PR or starting from a changed `main` can also change the
+code. A changed candidate needs its own matching evidence. The old result remains
+true for its old inputs; it does not prove the new candidate. Never silently
+substitute a new PR head into an accepted request. Corrected code needs a new
+request under the current intake contract.
+
+Before future execution changes `main`, verify the selected inputs and required
+gates again. If the base or request evidence moved, stop that execution attempt
+and reconcile before preparing and testing a new candidate. Do not carry over a
+passing label as permission to merge different code.
+
+### Excluded tickets and failure attribution
+
+The [proposed ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes)
+own how these results appear in the inbox. Exclusion alone never closes a PR or
+ticket, marks a request failed, or claims completion. A failed group does not
+justify assigning the same code failure to every member.
+
+Record a specific action-needed blocker only with evidence: a required check on
+an exact requested PR, an internal/base merge conflict, an invalid request, or a
+reproducible failure attributable to the ticket with its required dependencies.
+If the unchanged base also fails the same test, do not claim the ticket introduced
+it. If only an inseparable group has been tested, name the group and unresolved
+attribution instead of guessing one culprit. Infrastructure and evidence problems
+belong to the responsible maintainer, not automatically to the submitter.
+
+### Next sandbox milestone
+
+First share the committed one-ticket workflow through review/CI and merge.
+Then define and implement selection across several sandbox tickets, keeping the
+existing ticket checks. Add small sample programs and meaningful PR checks to
+the two test repositories, then run those checks on selected combined candidates.
+Use the [planned batch acceptance cases](./merge-rehearsal-testing.md#planned-batch-acceptance)
+to prove splitting, attribution, deferred-ticket handling, and exact-input rules.
+No product merge, deployment, npm publication, or automatic release ownership is
+part of that sandbox milestone.
+
+Before implementation, specify maximum batch/attempt/time limits, deterministic
+tie-breaking, trusted dependencies between tickets, batch journal/lock/resume
+storage, temporary PR/branch ownership and cleanup, GitHub runner permissions,
+and verified workflow-result matching. Select and register new batch reason codes
+with the journal compatibility rules. This design update implements none of them.
 
 ## Decisions to settle before execution
 
@@ -140,8 +304,8 @@ flowchart LR
     GHIN --> INBOX[Public GitHub Issue inbox]
     INBOX --> R[Local read-only inbox reader]
     INBOX --> RC[Local read-only readiness observations]
-    INBOX --> IP[Explicit inbox processing]
-    IP -. planned updates .-> INBOX
+    INBOX --> IP[inbox:run - inspect and rehearse]
+    IP -->|record reasons and result| INBOX
     INBOX -. later .-> W[Coordinator worker]
     W --> DB[(Coordinator database)]
 
@@ -201,8 +365,8 @@ enough to collect requests before the Coordinator starts doing release work.
 Before release execution, the [inbox-processing plan](./inbox-processing.md)
 adds a separate lifecycle for organizing these tickets. Its statuses and
 decision history must not be confused with an executing release batch. Its
-storage/writer design remains to be specified before implementing Issue writes;
-editable labels alone are not that history.
+durable history lives on the inbox repository's independent `codex/inbox-state`
+branch; editable labels alone are not that history.
 
 The inbox is not the full release queue. When the Coordinator starts batching,
 merging, building, and deploying requests, it will use its own database, such as
@@ -273,7 +437,8 @@ When a batch reaches the front of the queue, the Coordinator:
 
 1. reserves the global release lane;
 2. freezes the exact pull request versions and current `main` versions;
-3. combines and tests the full batch on temporary branches;
+3. combines and tests candidates on temporary branches, using the bounded
+   selection rules above before choosing one exact passing batch;
 4. checks the pull requests, approvals, CI, dependencies, and `main` again;
 5. moves the tested result to `main`;
 6. keeps the lane until the release or recovery is complete.
@@ -421,10 +586,13 @@ The newer PR head belongs to another request.
 
 ### Merge conflict or failed preflight
 
-No release build is produced. The request becomes `NEEDS_HUMAN` with the
-exact PR and blocker. Because `main`, staging, and production did not change,
-the Coordinator releases the lane. Dependent work stays blocked, but unrelated
-waiting work may continue in a later batch.
+Before `main` or a shared deployment environment changes, apply the bounded
+batch-selection rules above. A confirmed code conflict or failing combined check
+may lead to a smaller passing candidate. Save each attempt; leave excluded
+tickets waiting or action-needed according to evidence. Never declare every
+member broken because the group failed. No release is authorized by these tests.
+If nothing passes within the limits, stop with recorded reasons. Keep ownership
+while work or state is uncertain; release it only after safe cleanup and saving.
 
 ### Partial cross-repository merge
 
@@ -448,8 +616,9 @@ Do not validate the release. Move to recovery. A non-database batch may restore
 the last working staging builds when every safety check passes. A
 database-changing batch waits for a person.
 
-Version one does not search for a smaller passing batch. The failed batch stops
-with a clear reason.
+After staging or another shared release state has changed, do not search for a
+smaller batch as a recovery shortcut. Stop with a clear reason and recover the
+recorded release. Bounded splitting belongs to pre-release candidate testing only.
 
 ### Production failure
 
@@ -488,6 +657,8 @@ Version one should include:
 
 - exact frontend and backend PR submission;
 - explicit dependencies and deployment order;
+- bounded batch selection and combined PR checks before release mutations;
+- visible reasons and next actions for every excluded ticket;
 - one durable database queue;
 - one global release lane;
 - GitHub-enforced protected `main` branches;
@@ -504,7 +675,8 @@ Version one should include:
 
 - automatic PR discovery;
 - large automatic release trains;
-- automatic search for a smaller passing batch;
+- exhaustive search for the largest passing batch;
+- splitting a release after shared state changed instead of recovering it;
 - more than one active release batch;
 - automatic recovery after a database change;
 - pretending cross-repository merges are atomic;
@@ -517,6 +689,7 @@ Version one should include:
 - when the GitHub Issue inbox should move into the Coordinator database;
 - GitHub App permissions and emergency access;
 - maximum release size;
+- the batch implementation choices listed under the next sandbox milestone;
 - exact merge implementation and repository rules;
 - database change commands and version proof;
 - gradual rollout support;

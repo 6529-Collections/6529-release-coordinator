@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { realProfile } from "./profiles.mjs";
 import { stateBranch, stateFile } from "./coordinator-github.mjs";
-import { response, statuses, reasons } from "./ticket-presentation.mjs";
+import { response, statuses, reasons, rehearsalStatuses } from "./ticket-presentation.mjs";
 
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -11,11 +11,14 @@ function canonical(value) {
 export const digest = value => createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
 export const receiptHash = issue => digest({ id: issue.id, number: issue.number, body: issue.body });
 const validSha = value => typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
+export const inboxWorkflow = "inbox-run-v2";
+const workflows = ["inbox-run-v1", inboxWorkflow];
 
 export function validateJournal(state, profile = realProfile) {
   if (state?.schema !== 1 || state.repository !== profile.inbox.full_name || !state.tickets
     || !Number.isSafeInteger(state.revision) || state.revision < 0
-    || Object.keys(state).some(key => !["schema", "repository", "revision", "parent", "lock", "tickets"].includes(key))) throw new Error("Unsupported or corrupt inbox journal.");
+    || Object.keys(state).some(key => !["schema", "repository", "revision", "parent", "lock", "tickets", "workflow"].includes(key))
+    || state.workflow !== undefined && !workflows.includes(state.workflow)) throw new Error("Unsupported or corrupt inbox journal.");
   if (state.lock && (!state.lock.run_id || !state.lock.token || !state.lock.actor?.id)) throw new Error("Invalid inbox lock.");
   for (const [number, ticket] of Object.entries(state.tickets)) {
     if (!/^[1-9][0-9]*$/u.test(number) || !Number.isSafeInteger(ticket.issue_id)
@@ -28,6 +31,8 @@ export function validateJournal(state, profile = realProfile) {
         || !statuses.includes(record.decision?.status) || !Array.isArray(record.decision.reasons)
         || record.decision.reasons.some(reason => !reasons.includes(reason.code))
         || (["waiting", "action-needed", "closed"].includes(record.decision.status) && !record.decision.reasons.length)) throw new Error("Broken decision history; no ticket updates are safe.");
+      if (record.decision.rehearsal && (!rehearsalStatuses.includes(record.decision.rehearsal.status)
+        || typeof record.decision.rehearsal.message !== "string")) throw new Error("Invalid rehearsal decision history.");
       previous = hash;
     }
     if (ticket.applied && !ticket.transitions.some(t => t.id === ticket.applied)) throw new Error("Unknown applied transition.");
@@ -47,7 +52,8 @@ export function appendDecision(ticket, record) {
   return transition;
 }
 
-export function createJournal(api, profile = realProfile) {
+export function createJournal(api, profile = realProfile, { workflow } = {}) {
+  if (workflow !== undefined && !workflows.includes(workflow)) throw new Error("Unsupported inbox workflow.");
   let snapshot;
   const read = async () => {
     const ref = await api({ method: "GET", path: `/git/ref/heads/${stateBranch}` });
@@ -80,11 +86,16 @@ export function createJournal(api, profile = realProfile) {
     async acquire(actor, resume, scope) {
       snapshot = await read();
       const state = structuredClone(snapshot.state);
+      if (state.workflow && state.workflow !== workflow && !(state.workflow === "inbox-run-v1" && workflow === inboxWorkflow)) throw new Error("This inbox requires the combined inbox:run workflow; do not use an older processor.");
       if (state.lock && state.lock.run_id !== resume) throw new Error(`Inbox is locked by run ${state.lock.run_id}. Stop that process before explicitly resuming it.`);
       if (resume && (!state.lock || state.lock.run_id !== resume)) throw new Error("That interrupted run is not the current inbox lock.");
       if (resume && scope && digest(scope) !== digest(state.lock.scope)) throw new Error("Resume must preserve the interrupted run's Issue selection and action.");
       const run = { run_id: resume ?? randomUUID(), token: randomUUID(), actor, started_at: new Date().toISOString(),
-        scope: resume ? state.lock.scope : scope };
+        scope: resume ? state.lock.scope : scope,
+        ...(workflow === inboxWorkflow ? { plans: resume ? structuredClone(state.lock.plans ?? {}) : {} } : {}) };
+      // Older checkouts reject this top-level field before any writes, even
+      // when a passing decision has no new reason code. Preserve all history.
+      if (workflow) state.workflow = workflow;
       state.lock = run;
       await write(state, `${resume ? "resume" : "acquire"} ${run.run_id}`);
       return { run, state: structuredClone(snapshot.state) };

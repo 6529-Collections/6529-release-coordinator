@@ -226,22 +226,35 @@
               execution merge proof remain unknown. No release worker exists yet.
             </p>
             <p>
-              <strong>Inbox processing:</strong> Organize tickets before the local merge rehearsal.
-              The updated intake sets readable titles, submitter ownership, and initial labels.
-              A separate explicit command records decisions and updates ticket status,
-              reasons, and next actions. The existing read-only commands stay read-only.
+              <strong>One ticket workflow:</strong> Run <code>inbox:run</code> with a
+              profile and ticket. It checks the saved request and handles initial blockers,
+              creates the merge plan from the ticket and configured destinations,
+              tries suitable PRs locally, and updates that same ticket
+              with reasons and a rehearsal result. The original receipt stays intact.
               See the <a href="./docs/inbox-processing.md">ticket contract</a> and
               <a href="./docs/progress.md">local versus live evidence</a>.
             </p>
             <p>
+              <strong>Passing is still pre-release:</strong> The ticket shows
+              <code>rehearsal:passed</code> and waits for future execution. Sandbox and
+              real profiles share the same code. No product merge, build, or deployment
+              runs. See the <a href="./docs/profiled-inbox-testing.md">profile guide</a>.
+            </p>
+            <p>
+              <strong>Planned next:</strong> Combine several complete tickets, test that batch,
+              and divide confirmed failures within limits. Excluded tickets keep clear reasons
+              and next actions. This is not implemented by the current one-ticket workflow.
+              See the <a href="./docs/design.md#proposed-batch-testing-and-selection">batch design</a>.
+            </p>
+            <p>
               Source: <code>packages/release-request/</code>. Product repositories install only
-              <code>@6529-collections/release-request</code>. The private reader lives separately
+              <code>@6529-collections/release-request</code>. The private Coordinator lives separately
               in <code>apps/coordinator/</code> and is not installed by product repositories.
             </p>
             <p>
               Dated versions, merge state, tests, and next work:
               <a href="./docs/progress.md">progress</a> ·
-              <a href="./apps/coordinator/README.md">reader guide</a>.
+              <a href="./apps/coordinator/README.md">local Coordinator guide</a>.
             </p>
             <p>
               Contract: <a href="./packages/release-request/release-request.schema.json">schema</a> ·
@@ -303,7 +316,7 @@
         },
         inbox: {
           title: "Save in the inbox",
-          text: "After validation, the live inbox workflow creates one public GitHub Issue in this repository. It uses GitHub's short-lived workflow token with permission to write Issues. The Issue stores the request ID, exact validated JSON, checksum, GitHub actor, actor ID, workflow run, time, and accepted result. It starts with release-request, pending, and target labels. The CLI returns the request ID, Issue number, and Issue link. The same request reuses the same Issue; the same ID with different JSON fails. Invalid submissions stay in the local run and workflow log and create no Issue. This saves a release intent, not approval to execute it. Release requests must not contain secrets.",
+          text: "After validation, the live inbox workflow creates one public GitHub Issue in this repository. It uses GitHub's short-lived workflow token with permission to write Issues. The Issue stores the request ID, exact validated JSON, checksum, GitHub actor, actor ID, workflow run, time, and accepted result. Initial setup adds release-request, status:received, target, and component labels, a readable title, submitter assignment when available, and one status comment. A presentation failure is reported for repair by the processor. The CLI returns the request ID, Issue number, and Issue link. The same request reuses the same Issue; the same ID with different JSON fails. Invalid submissions stay in the local run and workflow log and create no Issue. This saves a release intent, not approval to execute it. Release requests must not contain secrets.",
         },
         read: {
           title: "Inspect the inbox locally",

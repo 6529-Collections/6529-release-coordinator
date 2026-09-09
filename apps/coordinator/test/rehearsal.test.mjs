@@ -6,7 +6,7 @@ import { rehearsalFixture, sampleCatalog } from "./rehearsal-fixture.mjs";
 import { selectRehearsalProfile, sandboxMergePlan, RehearsalError } from "../src/rehearsal-plan.mjs";
 import { createRehearsalGit } from "../src/rehearsal-git.mjs";
 import { runRehearsalProcess } from "../src/rehearsal-process.mjs";
-import { runRehearsalCli, readRehearsalManifest, saveRehearsalReport } from "../src/rehearsal-cli.mjs";
+import { runRehearsalFixture, readRehearsalManifest, saveRehearsalReport } from "../src/rehearsal-runner.mjs";
 import { formatRehearsal, rehearsalExitCode, rehearseMerge } from "../src/rehearsal.mjs";
 
 async function single(t, role = "frontend", files = { "feature.txt": "new\n" }) {
@@ -171,10 +171,10 @@ test("MR-14/MR-21: manifest/profile validation rejects unsafe or mixed inputs be
   for (const value of [undefined, "", "Sandbox", "production"]) assert.throws(() => selectRehearsalProfile(value));
   let accessed = false;
   const output = [];
-  const exit = await runRehearsalCli(["--manifest", "fake.json", "--json"], { env: { RELEASE_COORDINATOR_PROFILE: "real" },
+  const exit = await runRehearsalFixture(["--manifest", "fake.json", "--json"], { env: { RELEASE_COORDINATOR_PROFILE: "real" },
     load: async () => { accessed = true; }, stdout: s => output.push(s) });
   assert.equal(exit, 2); assert.equal(accessed, false); assert.match(output.join(""), /sandbox_manifest_only/u);
-  assert.equal(await runRehearsalCli(["--help"], { stdout: () => {}, load: async () => { throw new Error("must not read"); } }), 0);
+  assert.equal(await runRehearsalFixture(["--help"], { stdout: () => {}, load: async () => { throw new Error("must not read"); } }), 0);
 });
 
 test("MR-15: unavailable objects remain unknown and preserve cleanup", async t => {
@@ -223,7 +223,7 @@ test("MR-18: failed report writes happen after cleanup and are operational error
   const { f, input } = await single(t);
   let saved;
   let output = "";
-  const exit = await runRehearsalCli(["--manifest", "fixture", "--json"], {
+  const exit = await runRehearsalFixture(["--manifest", "fixture", "--json"], {
     env: { RELEASE_COORDINATOR_PROFILE: "sandbox" }, load: async () => input,
     githubFactory: () => f.github, revision: async () => ({ commit: "fixture", dirty: false }),
     run: async () => f.run(input), save: async report => { saved = report; throw new Error("private token"); },

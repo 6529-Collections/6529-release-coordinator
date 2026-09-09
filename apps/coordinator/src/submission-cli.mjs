@@ -4,7 +4,7 @@ import { createGitHubReader } from "./github-reader.mjs";
 import { readInbox } from "./inbox-reader.mjs";
 import { executeGitHub } from "./coordinator-github.mjs";
 import { releaseRequestChecksum } from "../../../packages/release-request/src/inbox-issue.mjs";
-import { readRehearsalManifest } from "./rehearsal-cli.mjs";
+import { readRehearsalManifest } from "./rehearsal-runner.mjs";
 import { saveProfileRecord } from "./profile-records.mjs";
 
 const help = `Submit a complete request JSON to one explicitly selected inbox.

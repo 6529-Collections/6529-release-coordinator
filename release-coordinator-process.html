@@ -968,9 +968,18 @@
           <p class="diagram-context">
             <strong>Inbox organization, before this release flow:</strong> Organize the inbox with
             readable tickets, status/reason labels, submitter ownership, and recorded decisions.
-            A separate explicit processing command applies ticket updates while the inspection
-            commands stay read-only. This locally implemented stage precedes the merge rehearsal.
+            The single <code>inbox:run</code> command checks tickets, rehearses suitable exact
+            PRs, and records the result on the same ticket. Inspection commands remain read-only.
             See the <a href="./docs/inbox-processing.md">ticket contract</a> and progress for rollout evidence.
+          </p>
+          <p class="diagram-context">
+            <strong>Planned batching:</strong> Keep initial checks for each ticket, then test
+            a selected batch. Divide confirmed failures within limits while keeping tickets
+            and required dependencies whole. Excluded tickets keep a reason and next action;
+            a failed combination does not make every request broken. See the
+            <a href="./docs/design.md#proposed-batch-testing-and-selection">batch rules</a>
+            and <a href="./docs/inbox-processing.md#proposed-batch-ticket-outcomes">ticket outcomes</a>.
+            Batch selection and combined application checks are not implemented yet.
           </p>
           <p class="diagram-context">
             <strong>Draft differences to settle:</strong> This diagram and the older written
@@ -982,7 +991,7 @@
             <strong>Planned progress storage:</strong> A future worker will save each release
             step and its result. The local reader currently prints its report and exits;
             it does not save a release state or start later steps. The inbox
-            processing command has its own ticket decision journal; it is not an executing release queue.
+            <code>inbox:run</code> workflow has its own ticket decision journal; it is not an executing release queue.
           </p>
           <article class="story" id="story" aria-label="Release process"></article>
         </div>
@@ -1016,7 +1025,7 @@
           why:
             "The release must use only the listed pull requests and exact commits. This keeps incomplete work and unexpected code out of the release.",
           failure:
-            "If any pull request is not ready or has the wrong commit, the whole request is rejected. The reason is saved, and the release does not start."
+            "The whole request stays out of candidate testing until its initial gates pass. Pending checks or unavailable evidence wait. A specific check failure, conflict, or invalid scope gets a named correction and owner. A moved commit follows the existing exact-request intake rules; newer code is never substituted silently. Save the evidence and next action without treating every blocker as an author mistake."
         },
         {
           title: "Check recovery safety",
@@ -1039,18 +1048,18 @@
         {
           title: "Create the batch plan",
           story:
-            "Accepted requests are loaded in waiting-list order. The oldest request starts the batch. All pull requests inside one request stay together. If the oldest request changes the database, no other request is added. Otherwise, the remaining requests are checked in order. A request with a database change stays waiting for its own batch. A request also stays waiting when the configured batch limit has been reached. For each other request, its full pull-request list and backend service plan are tried in the batch. The service lists are combined with the dependency rules from the backend service catalog. The final service order must have no loop. If the order is valid, the whole request stays in the batch. If adding a request would create a loop in this batch's service order, the request stays waiting. The reason is saved. It can be tried again in another batch. The final request list, pull-request list, release scope, service list, and service order are saved. No code is merged or deployed in this step.",
+            "Suitable verified requests are considered in a saved priority order, proposed as oldest suitable first. Dependencies take precedence. Every ticket stays whole, including its frontend and backend PRs and selected services. Requests that must ship together stay in one group. The representation of dependencies between tickets must be defined before implementation. Targets must be compatible, and overlapping PR versions are not resolved by age. The initial sandbox stage uses requests without database changes. Database-changing work stays separate; an inseparable group is never split to make it pass. The combined service order must be valid. Save the proposed members, groups, order, configured size and attempt/time limits, and reasons for exclusions. No main branch or deployment changes.",
           why:
-            "This creates one clear plan for the release. Waiting-list order keeps the process fair. The batch limit keeps the release manageable. Database changes stay separate so recovery does not affect unrelated work. Checking the service order prevents an impossible deployment plan.",
+            "A predictable order decides which compatible work is considered first. Complete tickets and dependency groups prevent partial releases. Explicit limits keep the search bounded, and reasons keep excluded work visible.",
           failure:
             "If the waiting list or saved request data cannot be read, no batch starts. The requests stay waiting, and the reason is saved."
         },
         {
           title: "Freeze the batch",
           story:
-            "A batch record is created with its own ID. The included release requests are added in their planned order. For every pull request, its repository, number, and exact commit are saved. The record says whether the frontend, backend, or both will change. It also says whether the database will change. For backend changes, the services and their deployment order are saved. The exact commit currently on each main branch is saved. This is where the batch starts. All batch data is saved together. The batch is marked as frozen only when the full save succeeds. Its requests, commits, services, and order cannot change after it is frozen. Later pull-request commits are not added.",
+            "Save the candidate ID, request identities and checksums, exact PR commits, starting main commits, target, selected services, dependency and merge order, and required test configuration. Save the priority and search limits as well. All candidates in this search use the same starting main commits and requested versions. Each changed membership becomes a separate linked attempt; do not overwrite a frozen record. The candidate is frozen only when its complete save succeeds. Later PR commits are never added silently.",
           why:
-            "The same exact code and plan must be tested and deployed. Freezing the batch prevents later changes from entering the release.",
+            "Tests prove the combination they ran. Adding a request, removing a needed change, or updating a PR or main can produce different code. A changed candidate needs matching evidence of its own.",
           failure:
             "If the batch cannot be created or saved, no code is changed. The accepted requests stay waiting, and the reason is saved."
         },
@@ -1061,32 +1070,32 @@
           why:
             "Temporary branches provide a safe place to combine the batch. Merge conflicts are found without changing main.",
           failure:
-            "The exact problem is saved. If a temporary branch cannot be created, the batch stops. If pull requests conflict, a batch without database changes tries a smaller batch. A database-changing batch stops. Main stays unchanged."
-        },
-        {
-          title: "Try a smaller batch",
-          story:
-            "This step runs only when the database does not change. The failed batch and its saved problem are loaded. Every release request stays whole. Smaller groups are created by leaving out one or more requests. If a request is removed, any request that depends on it is removed too. The largest groups are tried first. The frontend, backend, and service plan are rebuilt for each group. The new service order must have no loop. Fresh temporary branches are created for the group. Its exact pull-request commits are merged. The normal frontend and backend checks run on the temporary branches. The included requests, excluded requests, merge result, check results, and failure reason are saved for every attempt. The largest group that passes is used. A new frozen batch is created for that group and linked to the failed batch. Requests left out are marked as blocked, and the reason is saved.",
-          why:
-            "A conflict in one request should not stop other independent requests. Dependencies stay together so we do not release only part of a change. Rebuilding the service plan prevents the smaller batch from deploying services it no longer needs. Saved results show what can continue and what must be fixed.",
-          failure:
-            "If no smaller group can be merged and tested, the batch stops. The failed attempts and reasons are saved. All requests in the batch stay blocked until they are fixed. Main stays unchanged."
+            "Save the exact problem. A confirmed conflict may enter the bounded smaller-group step before full checks. A branch-creation or evidence failure is an infrastructure problem, not proof that the requests conflict. Retry only within its limit and stop if state or cleanup is uncertain. Database-changing or inseparable requests are never broken apart. Main stays unchanged."
         },
         {
           title: "Test the full batch",
           story:
-            "The frozen batch is loaded. It shows whether the frontend, backend, or both changed. The temporary branch for each changed repository is loaded. GitHub runs that repository's normal pull-request checks on the temporary branch. The Coordinator waits for every check to finish. Each check name, link, and result are saved. If both repositories changed, both sets of checks must pass. The batch passes only when every check passes. These checks can include the normal build, type checks, linting, and automated tests.",
+            "Run the affected repositories' normal required PR checks on the exact combined candidate. The proposed mechanism is one owned temporary PR per affected repository, with isolated GitHub Actions runners. These PRs are never merged. Verify each required check's identity, tested commit, link, and result before saving a pass. Missing or skipped required checks do not count as success. If frontend and backend changed, both sets must pass; separate checks do not prove cross-application behavior without explicit integration coverage. Normal source-PR CI remains in place. Do not add another full build/test run per ticket by default. Close the owned temporary PRs and clean up their branches with recorded results.",
           why:
             "Pull requests may work alone but break when used together. Testing the full batch finds these problems before main changes.",
           failure:
-            "If a check fails or its result is unclear, the problem is saved. A batch without database changes tries a smaller batch. A database-changing batch stops. Main stays unchanged."
+            "A confirmed code/test failure can enter the bounded smaller-group step. An unavailable runner or unclear result gets a bounded infrastructure retry, not code blame. A pre-existing failure on the unchanged base does not prove that a request introduced it. Uncertain result storage or cleanup stops continuation. Main and shared environments stay unchanged."
+        },
+        {
+          title: "Try smaller groups within limits",
+          story:
+            "This conditional step runs only after a confirmed pre-release merge or test failure, within the allowed database and dependency boundaries. Divide complete groups, for example ten independent requests into five and five, then a failing half into two and three. Keep passing candidates and investigate failures within the saved attempt/time budget. Rebuild scope and service order for each attempt. The final selected combination must itself pass; joining passing halves is not proof. If A and B pass alone but fail together, use saved priority to retain one independent passing candidate. The other stays waiting with the incompatibility evidence. If they must ship together, hold the whole group for a correction. Save every attempt, exclusion, next action, and owner. Do not search every subset or promise the largest passing batch.",
+          why:
+            "Useful work can continue without marking every member of a failed group as broken. Excluded PRs and tickets stay open. After A reaches main, B's next candidate includes A; if B still has a confirmed attributable failure, B becomes action-needed. Waiting alone is not a fix. This selection step is not release authorization or a completed ticket.",
+          failure:
+            "At the limit, keep a verified passing candidate if one exists. Otherwise nothing proceeds. Untested requests and infrastructure problems remain waiting with reasons. Name a correction only where evidence supports it, and preserve uncertainty about group failures. Unknown state or cleanup stops safely. Do not split a release after main or a shared environment has changed; follow recovery instead."
         },
         {
           title: "Confirm release readiness",
           story:
             "The frozen batch is loaded. Every pull request and its saved commit are read from it. Each pull request is loaded from GitHub. It must still be open and not a draft. Its current commit must match the commit saved in the batch. GitHub shows which approvals and checks are required. Those approvals and checks must still pass. The pull request must still have no merge conflicts. The current main commit is read from each changed repository. It must match the main commit saved when the batch started. Every result is saved. The release continues only when every check passes.",
           why:
-            "The release must use the exact code that passed testing. If a pull request or main changed, the tested result is no longer safe to use.",
+            "The release must use the exact code that passed testing. If a PR, main, or required test configuration changed, the old result remains evidence for its old inputs only. It cannot authorize a different combination.",
           failure:
             "If a pull request is no longer ready or main has changed, the reason is saved. The batch stops, and main stays unchanged."
         },

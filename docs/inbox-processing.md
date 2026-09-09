@@ -2,7 +2,8 @@
 
 **Implemented locally September 9, 2026; see [progress](./progress.md) for test
 and rollout evidence.** Submit a request, then run one explicit command to
-organize its ticket. Release execution remains separate.
+inspect its ticket, rehearse suitable exact PRs, and record the result on that
+same ticket. Release execution remains separate.
 
 This document owns the ticket states, labels, reasons, and first-processing
 rules. [Progress](./progress.md) owns dated implementation and live evidence.
@@ -21,13 +22,13 @@ Clear outdated requests and requests whose PRs are all already merged leave the
 active inbox with a recorded reason. Other requests that need evidence stay
 visible. Closing a ticket never silently claims that a release happened.
 
-The scope is intake defaults, ticket inspection, status updates, decision
-history, and migration of existing tickets. Keep the installed CLI `0.0.4`
+The scope is intake defaults, ticket inspection, local merge rehearsal, status
+updates, decision history, and migration of existing tickets. Keep the installed CLI `0.0.4`
 input and request schema `0.000001` unchanged. No new npm release or frontend/
 backend installation is needed for this scope.
 
-Do not implement the merge rehearsal, release worker, scheduling, merges,
-builds, deployments, or recovery as part of this stage. No ticket status or
+The rehearsal only merges in temporary local repositories. The release worker,
+scheduling, product merges, builds, deployments, and recovery remain later work. No ticket status or
 label authorizes release execution. The execution design's unresolved branch,
 release ownership, and production-build choices remain unresolved.
 
@@ -38,10 +39,11 @@ release ownership, and production-build choices remain unresolved.
 | Public CLI | Continue sending the existing exact request. It does not supply trusted identity, lifecycle status, or release authorization. |
 | Central submission workflow and Issue-creation helper | Verify the request, identify the GitHub submitter, and create a consistently organized ticket. Preserve an existing ticket on a retry. |
 | `inbox:read` and `readiness:check` | Remain read-only. Share the inspection logic with processing, but never apply Issue changes. |
-| Explicit inbox-processing command | Inspect tickets, record decisions, and apply the corresponding labels, status comment, ownership, and Issue state. Run manually and exit. |
+| `inbox:run` | Inspect tickets, generate a plan from the ticket and configured destinations, rehearse its exact PRs, save evidence, and apply labels, status comment, assignment, and Issue state. Run manually and exit. |
 
-The write command is `inbox:process`. One invocation inspects and processes the
-inbox. Its [command guide](../apps/coordinator/README.md#organize-tickets-explicitly)
+The write command is `inbox:run`. It requires an explicit sandbox/real profile.
+The command automatically creates a separate plan for each suitable ticket. Its
+[command guide](../apps/coordinator/README.md#run-the-ticket-workflow)
 describes GitHub writes, selection, and recovery. It is not a background service.
 
 Older workflow revisions create `release-request`, `pending`, and target labels
@@ -119,6 +121,12 @@ explanation. Reasons are not permissions.
 | `reason:prerequisite-unverified` | Obtain the required deployed state of an omitted prerequisite; do not add or deploy a service automatically. |
 | `reason:coordinator-incomplete` | Name the missing Coordinator capability. The action belongs to Coordinator maintainers, not automatically to the submitter. |
 | `reason:overlapping-requests` | Explain which requests overlap and what decision is needed. Do not select the newest by timestamp. |
+| `reason:merge-plan-required` | Historical manual-plan reason, retained only to read old decisions; no longer emitted. |
+| `reason:merge-plan-invalid` | Resolve a request/order that the Coordinator cannot turn into a valid rehearsal plan. |
+| `reason:merge-plan-unavailable` | Restore the configured destination or missing GitHub evidence so the Coordinator can prepare its plan. |
+| `reason:rehearsal-blocked` | Resolve the recorded combined conflict or other stable rehearsal blocker. |
+| `reason:rehearsal-unverified` | Restore missing evidence or report storage, then rerun. |
+| `reason:rehearsal-stale` | Inspect changed inputs, refresh the plan where appropriate, then rerun. |
 | `reason:cancelled` | Close after an authorized cancellation is recorded. |
 | `reason:replaced` | Close with an explicit replacement request link and recorded replacement decision. |
 | `reason:test` | Close a confirmed test after its purpose is complete. Editable title text alone does not establish this. |
@@ -131,6 +139,99 @@ both component labels.
 The processor owns its registered labels, not arbitrary user-created labels.
 It must not remove unrelated labels or use them as proof of an outcome.
 The legacy `pending` label is replaced only through the migration below.
+
+## Rehearsal outcome
+
+The same command first applies the initial gates below. Terminal/outdated,
+already-merged, overlapping, draft, failed-check, review, identity, and other
+initial blockers do not enter rehearsal. Unknown per-PR service catalogs may
+be resolved by the exact combined catalog; unknown runtime prerequisites cannot.
+For suitable tickets, the Coordinator generates a plan from the saved request
+and current `main` commits selected by trusted profile configuration. It uses
+the shared dependency sorter and keeps PR order within each part. It never
+drops a requested PR or guesses an unavailable destination. Invalid scope/order
+gets `merge-plan-invalid`; unavailable configuration/evidence gets
+`merge-plan-unavailable`. No operator plan file is needed.
+
+For nonterminal tickets, use one managed outcome label, separate from lifecycle:
+
+| Label | Meaning |
+| --- | --- |
+| `rehearsal:not-run` | Initial evidence or an invalid generated plan prevented rehearsal. |
+| `rehearsal:passed` | Exact planned merges and observed gates passed; cleanup and report saving succeeded. |
+| `rehearsal:blocked` | Stable evidence demonstrates a conflict or another blocker. |
+| `rehearsal:unknown` | Evidence, cleanup, or report saving could not be verified. |
+| `rehearsal:stale` | Inputs changed during the rehearsal. |
+
+The single maintained comment shows findings, exact destinations, resulting
+trees, and the plan fingerprint. A blocked rehearsal is action-needed; unknown
+or stale evidence waits. Passing rehearsal still waits for independent release
+history/ownership and future execution. It never produces eligible/completed,
+claims a tested build, or authorizes a release.
+
+Only freshly generated reports enter this policy. Reverify the receipt before
+and after rehearsal, recheck PRs/destinations, and save the report before recording
+passing ticket evidence. On meaningful change, the journal stores the plan,
+receipt bindings, report hash and revision, findings, cleanup, and exact results.
+Before Git begins, each generated plan is also saved under its ticket number in
+the run lock. An uncertain save prevents rehearsal and ticket writes.
+Unchanged repeated runs still rehearse afresh and save local reports, but do not
+append duplicate decisions/comments. A later failure removes the old passing
+label and retains both meaningful outcomes in history. An interrupted run keeps
+its lock; explicit resume uses the stored plan and fresh evidence.
+
+## Proposed batch ticket outcomes
+
+**Future behavior, not emitted by the current processor.** The
+[batch-selection design](./design.md#proposed-batch-testing-and-selection) adds
+limited splitting of failing groups before release mutations. Current
+`inbox:run` still rehearses one ticket at a time. The outcome descriptions here
+do not add reason codes, change existing labels, or authorize ticket writes.
+Register the reasons and journal policy together when implementing batching.
+
+Leaving a ticket out of a candidate keeps its PRs and Issue open. Keep the entire
+ticket and any inseparable dependency group together. Selection or a passing
+test never means completed; only verified release evidence can support that.
+
+| Evidence for exclusion | Proposed ticket state and next action |
+| --- | --- |
+| A specific required check, code failure, internal/base conflict, or invalid scope is attributable to this ticket | `status:action-needed`; name the exact blocker, evidence, and person/team who can correct it. Fixed code or scope requires a new request. |
+| A and B pass separately but fail together | Leave the excluded independent ticket `status:waiting`; link the chosen candidate, the incompatible request(s), exact versions, and failing attempt. Do not claim either ticket is individually broken. |
+| A request needs another excluded request | `status:waiting`; name the dependency and keep the required group together. |
+| Testing stopped at its time/attempt limit without a conclusive result | `status:waiting`; say that investigation is incomplete and the Coordinator owns the next attempt. |
+| A runner, GitHub read, baseline test, or result verification failed | Usually `status:waiting`; state the infrastructure/evidence problem and bounded retry. If a known correction needs a person, route action-needed to the responsible maintainer, not automatically the submitter. |
+| An inseparable group is incompatible and cannot be divided | `status:action-needed` for a named correction or scope decision; explain the group evidence and any uncertainty about attribution. Never guess one culprit. |
+
+After the selected release finishes, reassess deferred requests against the
+actual current base. In the A/B case, once A is in `main`, B includes A through
+that base. If B still has a confirmed attributable failure, it becomes
+action-needed. Waiting alone is not a fix. Do not keep retrying a known unchanged
+failure without a recorded reason; new code must arrive through a new request.
+
+Before blaming a ticket for a combined test failure, compare the unchanged base
+when needed. A group failure, a pre-existing failure on `main`, or an unavailable
+runner is not proof that every included request introduced a bug. State exactly
+what was tested and what remains unknown. The existing handling of a failed
+required PR check still identifies that check as a blocker; it does not prove
+which author caused it.
+
+Use the same managed status comment, assignment rules, and append-only decision
+history. Show the candidate/attempt, request versions, reason, linked checks or
+conflict paths, next action, action owner, and retry condition. Keep the original
+receipt intact. Unchanged observations must not create duplicate comments.
+For example, before any real merge:
+
+> **Status:** Waiting.
+>
+> **Reason:** B passed separately, but A+B failed test X. A was selected first
+> under the saved request order; this does not prove B is independently broken.
+>
+> **Next action:** The Coordinator will reassess B after A's release finishes.
+> If the failure remains against the new `main`, B will need a correction.
+>
+> **Evidence:** Link both passing attempts and the failing A+B attempt, with
+> exact commits and the test log. Until those results exist, use an incomplete
+> evidence reason instead of this example.
 
 ## What submitters see
 
@@ -294,9 +395,10 @@ for their own test. It records that authenticated decision. General cancellation
 replacement, completion, and terminal corrections remain reserved; no commands
 for those actions exist yet. No test is inferred from editable request/title text.
 
-The `already-merged` registry addition requires policy `2026-09-09.2` or newer.
-Merge the change and update supported processor checkouts before writing that
-reason to live history. Older processors reject unknown reasons and stop safely;
+The combined workflow uses policy `2026-09-09.4`. It upgrades the journal to
+`workflow: "inbox-run-v2"` without changing prior decisions. Older
+checkouts reject this field before writes, even if a pass adds no new reason.
+Once that marker is recorded, use a checkout supporting the combined workflow. Older processors reject unknown reasons and stop safely;
 update the checkout rather than rewriting history. No public CLI upgrade is needed.
 
 `status:eligible` and `status:completed` are also reserved in this first version.
@@ -350,8 +452,8 @@ application; this policy description does not claim those closures happened.
 - Repeating processing with unchanged facts produces no duplicate comments,
   transitions, or reopened requests. No merge, build, or deployment occurs.
 
-The next stage is defined in the [merge rehearsal testing plan](./merge-rehearsal-testing.md):
-local Git fixtures followed by real sample PRs in two private test repositories.
-It produces local sandbox evidence and does not change this ticket contract.
-Release execution and independent deployment/prerequisite evidence still need
-their own work.
+The [merge engine](./merge-rehearsal-testing.md) and
+[profiled inbox](./profiled-inbox-testing.md) now feed the same ticket workflow.
+The local implementation and its acceptance evidence are recorded in
+[progress](./progress.md). Release execution and independent deployment/prerequisite
+evidence still need their own work.

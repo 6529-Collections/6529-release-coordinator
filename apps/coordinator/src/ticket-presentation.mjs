@@ -2,11 +2,14 @@ import { randomUUID } from "node:crypto";
 import { saveReleaseRequestIssue } from "../../../packages/release-request/src/inbox-issue.mjs";
 
 export const statuses = ["received", "waiting", "action-needed", "eligible", "completed", "closed"];
+export const rehearsalStatuses = ["not-run", "passed", "blocked", "unknown", "stale"];
 export const reasons = ["outdated-commit", "already-merged", "checks-pending", "checks-failed", "merge-conflict", "review-required",
   "invalid-dependencies", "request-unverified", "deployment-unverified", "prerequisite-unverified",
-  "coordinator-incomplete", "overlapping-requests", "cancelled", "replaced", "test"];
+  "coordinator-incomplete", "overlapping-requests", "cancelled", "replaced", "test",
+  "merge-plan-required", "merge-plan-invalid", "merge-plan-unavailable", "rehearsal-blocked", "rehearsal-unverified", "rehearsal-stale"];
 export const managedLabels = new Set(["release-request", "pending", "target:staging", "target:production",
-  "component:frontend", "component:backend", ...statuses.map(s => `status:${s}`), ...reasons.map(s => `reason:${s}`)]);
+  "component:frontend", "component:backend", ...statuses.map(s => `status:${s}`), ...reasons.map(s => `reason:${s}`),
+  ...rehearsalStatuses.map(s => `rehearsal:${s}`)]);
 export const labelNames = issue => issue.labels.map(label => typeof label === "string" ? label : label.name);
 export const terminal = decision => ["closed", "completed"].includes(decision.status);
 const clean = text => String(text).replace(/[\p{Cc}\p{Cf}]/gu, " ");
@@ -27,7 +30,8 @@ export function desiredLabels(issue, decision, request) {
   const scope = request ? [`target:${request.target}`, ...new Set(request.release_parts.map(part =>
     `component:${["6529seize-backend", "release-coordinator-test-backend"].includes(part.repository) ? "backend" : "frontend"}`))] : [];
   return [...new Set([...preserved, "release-request", `status:${decision.status}`, ...scope,
-    ...decision.reasons.map(reason => `reason:${reason.code}`)])].sort();
+    ...decision.reasons.map(reason => `reason:${reason.code}`),
+    ...(decision.rehearsal ? [`rehearsal:${decision.rehearsal.status}`] : [])])].sort();
 }
 
 export async function ensureLabels(api, names) {
@@ -77,6 +81,16 @@ export function statusComment({ decision, actor, at, submitter, request, number,
   for (const reason of decision.reasons) {
     lines.push(`- **${reason.code}:** ${prose(reason.message)} ${prose(reason.action ?? "")}`);
     if (reason.evidence) lines.push(`  Evidence: ${prose(JSON.stringify(reason.evidence))}`);
+  }
+  if (decision.rehearsal) {
+    const rehearsal = decision.rehearsal;
+    lines.push("", `**Merge rehearsal:** ${prose(rehearsal.status)}. ${prose(rehearsal.message)}`);
+    for (const finding of rehearsal.findings ?? []) {
+      lines.push(`- ${prose(finding.role ?? "Request")}${finding.pr_number ? ` PR #${finding.pr_number}` : ""}: ${prose(finding.message)}`);
+      if (finding.evidence?.conflicts?.length) lines.push(`  Conflict paths: ${prose(JSON.stringify(finding.evidence.conflicts))}`);
+    }
+    for (const repo of rehearsal.repositories ?? []) lines.push(`- ${prose(repo.role)} destination: \`${repo.destination.branch}\` at \`${repo.destination.commit}\`; result tree: \`${repo.final_tree ?? "unavailable"}\`.`);
+    if (rehearsal.plan_hash) lines.push(`Plan fingerprint: \`${rehearsal.plan_hash}\`.`);
   }
   if (request) {
     lines.push("", `**Target:** ${request.target}; **Request:** ${request.request_id}`);

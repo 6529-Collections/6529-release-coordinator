@@ -1,7 +1,10 @@
 import { validateReleaseRequest } from "../../../packages/release-request/src/index.mjs";
 
 const repository = (full_name, id, required_checks = []) => Object.freeze({ full_name, id, private: false, required_checks: Object.freeze(required_checks) });
-const profile = (name, inbox, repositories) => Object.freeze({ name, inbox, workflow: "submit-release-request.yml", branch: "main", repositories: Object.freeze(repositories) });
+// Rehearsal destinations only: capturing main does not authorize changing it
+// or choose the future release executor's branch/deployment policy.
+const profile = (name, inbox, repositories) => Object.freeze({ name, inbox, workflow: "submit-release-request.yml", branch: "main",
+  rehearsal_destinations: Object.freeze({ frontend: "main", backend: "main" }), repositories: Object.freeze(repositories) });
 export const realProfile = profile("real", repository("6529-Collections/6529-release-coordinator", 1346244762), {
   frontend: repository("6529-Collections/6529seize-frontend", 579004979),
   backend: repository("6529-Collections/6529seize-backend", 579003578)
