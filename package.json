@@ -11,6 +11,7 @@
     "inbox:read": "node apps/coordinator/bin/read-inbox.mjs",
     "inbox:process": "node apps/coordinator/bin/process-inbox.mjs",
     "readiness:check": "node apps/coordinator/bin/check-readiness.mjs",
+    "merge:rehearse": "node apps/coordinator/bin/rehearse-merge.mjs",
     "test": "npm test --workspaces --if-present"
   }
 }

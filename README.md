@@ -1,8 +1,9 @@
 # 6529 Release Coordinator
 
 The Coordinator is being built to handle releases across the frontend and
-backend. **Request intake is live; local inspection and explicit inbox processing are
-implemented. Automatic release execution is not built yet.**
+backend. **Request intake is live; local inspection, explicit inbox processing,
+and sandbox merge rehearsals are implemented. Automatic release execution is
+not built yet.**
 
 The public CLI creates a request, validates it, saves local records, and submits
 it to a central GitHub workflow. The workflow saves one public Issue and returns
@@ -62,7 +63,8 @@ npm run inbox:process
 ```
 
 Use `-- --issue NUMBER` to limit changes to one ticket. Both `inbox:read` and
-`readiness:check` stay read-only. No command merges, builds, or deploys.
+`readiness:check` stay read-only. No command changes remote branches, builds,
+or deploys; sandbox rehearsals merge only inside temporary local repositories.
 An `already-merged` closure means the Coordinator will not handle that request;
 it does not claim a successful deployment. A verified merged PR plus an open or
 unverified companion keeps the request open for a scope decision. Missing
@@ -77,17 +79,24 @@ Current merge status, dated test results, and rollout evidence are tracked in
 package stay unchanged. Update local readers together with the intake workflow,
 so removing legacy `pending` cannot hide waiting tickets.
 
-## Next: test merge rehearsals
+## Rehearse sandbox merges locally
 
-The next planned stage tries exact PR commits against explicit destination
-commits in temporary local repositories. First test real Git with local
-fixtures, then use real sample PRs in two private GitHub test repositories.
+The private rehearsal command tries exact PR commits against explicit
+destination commits in temporary local repositories. It shares one engine
+across input profiles; the current milestone enables sandbox input only.
+
+```sh
+RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest PATH_TO_TEST_MANIFEST --json
+```
+
+Use the [command guide](./apps/coordinator/README.md#sandbox-merge-rehearsal)
+for the manifest shape, report paths, and limits. Real mode is explicitly
+disabled until its verified-inbox adapter has been integrated and checked.
 The [merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) defines
 the separate sandbox inputs, implementation steps, test cases, and finish line.
-One engine will serve sandbox and real repository profiles; real mode needs
-its verified-inbox integration before the configuration switch can enable it.
-The command and test repositories have not been created by this planning step.
-This stage produces local evidence; it does not update tickets or perform a release.
+Local tests and live GitHub acceptance are separate milestones recorded in
+[progress](./docs/progress.md). This command produces local evidence; it does
+not update tickets or perform a release.
 
 ## Documentation map
 

@@ -1,9 +1,10 @@
 # Merge rehearsal and test repository plan
 
-**Planned, not implemented. Prepared September 9, 2026.** This is the next
+**Scope and acceptance plan, prepared September 9, 2026.** This is the next
 bounded stage after inbox organization. [Progress](./progress.md) records what
 has actually run; [the app guide](../apps/coordinator/README.md) lists commands
-that exist. The proposed rehearsal command below does not exist yet.
+that exist. The command is now implemented locally; live setup/acceptance and
+remote merge are separate milestones in progress.
 
 ## What we will prove
 
@@ -66,8 +67,8 @@ changes settings, or writes a comment. PR setup naturally starts the sample CI.
 
 Build one rehearsal engine with two named configuration profiles. The intended
 operator switch is `RELEASE_COORDINATOR_PROFILE=sandbox` or
-`RELEASE_COORDINATOR_PROFILE=real`. This is a proposed setting, not a working
-option today. Require an explicit valid value; missing or unknown values must
+`RELEASE_COORDINATOR_PROFILE=real`. Sandbox mode is implemented; real mode
+explicitly stops until its integration is ready. Require an explicit valid value; missing or unknown values must
 stop, never fall back to real repositories. Profile selection is separate from
 the request's `staging`/`production` deployment target.
 
@@ -124,8 +125,8 @@ inbox or claim that local manifests prove submission works.
 
 ## Rehearsal behavior to implement
 
-Proposed command name: `merge:rehearse`, in the private Coordinator workspace.
-Document runnable flags only after they exist. It runs manually on the local
+Command name: `merge:rehearse`, in the private Coordinator workspace.
+Runnable flags are in the app guide. It runs manually on the local
 machine, saves a report under the ignored `.release-coordinator/` directory,
 and exits. Automated fixture tests must run offline in the existing test suite.
 
@@ -140,8 +141,9 @@ and exits. Automated fixture tests must run offline in the existing test suite.
    history, or access failures are unknown evidence, not merge conflicts.
 4. Start from each recorded destination commit. Merge PR commits sequentially
    in the explicit manifest order, using one documented Git merge method.
-   For the first version use ordinary non-fast-forward merges with the `ort`
-   strategy; record Git version and strategy. Do not switch strategies or
+   The first version uses `ort` through Git's merge-tree operation and writes
+   temporary two-parent commits in bare repositories, without a checkout.
+   Record Git version and strategy. Do not switch strategies or
    choose another order to make a failed case pass. Validate part dependencies
    separately; service deployment order does not invent PR merge order.
 5. Keep frontend and backend repositories separate. Record every intermediate

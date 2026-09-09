@@ -32,13 +32,14 @@ The full execution design's lane, batch, and worker database should not be
 introduced merely to organize tickets. The smaller processing stage still
 uses its own GitHub decision journal, not the future worker database.
 
-## Next bounded stage: sandbox merge rehearsal
+## Bounded stage: sandbox merge rehearsal
 
 The [testing plan](./merge-rehearsal-testing.md) defines local Git fixtures and
-two proposed private GitHub repositories containing sample PRs. Its private
-sandbox command will test exact commits, destinations, and merge order, with
+two test GitHub repositories for sample PRs. Its private
+sandbox command tests exact commits, destinations, and merge order, with
 separate evidence for conflicts, CI/review blockers, and changing inputs.
-It is planned, not implemented. It does not consume real inbox requests or
+The command is implemented locally; [progress](./progress.md) distinguishes
+tests, remote integration, and live coverage. It does not consume real inbox requests or
 change ticket decisions, shared branches, builds, or deployments.
 
 This scope requires explicit test destinations and one documented merge method.

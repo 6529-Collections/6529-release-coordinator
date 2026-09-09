@@ -124,6 +124,50 @@ adds no ticket writes, product changes, npm release, or deployment.
 The larger release worker, real-inbox rehearsal integration, execution
 permissions, deployment evidence sources, and recovery remain later work.
 
+### Sandbox rehearsal implementation, September 9
+
+The plan was committed as `718eaaa` on
+`codex/sandbox-merge-rehearsal`, branched from freshly verified `main` at
+`514fed01f2c5149eac60a15898b562409479ec1f`. The private `merge:rehearse` command
+now uses one normalized-plan engine, an explicit sandbox profile, pinned
+GitHub repository identities, temporary bare Git repositories, and local
+JSON/text reports. Real mode stops before input reads until its verified-inbox
+adapter is integrated. Existing production repository restrictions and public
+CLI/schema are unchanged.
+
+All **215 local tests passed**: 26 public-package tests and 189 Coordinator
+tests, including 45 new rehearsal tests across the MR matrix. Tests exercise
+real local Git merges, conflicts across individually clean PRs, exact combined
+catalogs, changing/missing evidence, profile boundaries, interrupted and partial
+operations, resource limits, and cleanup. The public package dry pack still
+contains exactly nine files. This is local test evidence; CI and remote merge
+are separate milestones.
+
+Created both private test repositories with verified admin/read access:
+
+- [Frontend sandbox](https://github.com/6529-Collections/release-coordinator-test-frontend),
+  repository ID `1362504370`, baseline `5e5d27c5bfee263259e15eb9dee0ad0ea89c0e53`.
+- [Backend sandbox](https://github.com/6529-Collections/release-coordinator-test-backend),
+  repository ID `1362505082`, baseline `33dc26417355f53b8ba94f1d20c9bd9e3779edaa`.
+
+They contain only sample files, a dependency-free CI check, and controlled PRs:
+frontend #1-#8 and backend #1-#4. Frontend #6 is deliberately a draft, #7 was
+deliberately closed, and #5 deliberately fails its CI check. There are no
+deployment/publication workflows or fake requests in the real inbox.
+
+**Live acceptance limitation:** GitHub refused branch protection on the private
+repositories with HTTP 403: "Upgrade to GitHub Pro or make this repository
+public to enable this feature." Both remain private. A user decision is pending
+on keeping that coverage blocked or making only these fake-code repositories
+public. No plan upgrade or visibility change was made. The sandbox profile
+explicitly requires `Sandbox check` to be marked required by GitHub; an optional
+check cannot substitute, so missing enforcement stays unknown in reports.
+
+Seed/setup evidence is under
+`.release-coordinator/rehearsal-setup-20260909/`. Live merge-case execution and
+independent before/after verification are the next verification step. Their
+results are not implied by completed fixture creation or passing local tests.
+
 ### Rehearsal planning baseline, September 9
 
 Before this documentation update, local `main`, freshly fetched `origin/main`,
@@ -145,10 +189,10 @@ This update is documentation only. No rehearsal command, test repository,
 sample PR, or test execution is claimed. The prior 170-test results above are
 implementation evidence from the earlier work, not new tests of this plan.
 Documentation checks passed for all seven changed/new guides, 52 local links,
-the 21 scenario IDs, and whitespace. The planning edits are local and uncommitted;
-there is no new remote documentation merge to report.
-Repository creation, implementation, and live exercises begin only in a
-subsequently authorized execution step.
+the 21 scenario IDs, and whitespace. At that planning checkpoint the edits were
+local and uncommitted. The owner subsequently authorized execution; the plan
+commit and implementation evidence are recorded above. This paragraph preserves
+the planning baseline rather than claiming those later steps had already run.
 
 ### Merged intake and real migration, September 9
 

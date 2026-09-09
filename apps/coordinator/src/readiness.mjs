@@ -8,8 +8,8 @@ const mergeStates = ["BEHIND", "BLOCKED", "CLEAN", "DIRTY", "DRAFT", "HAS_HOOKS"
 const check = (id, status, message, evidence) => ({ id, status, message, ...(evidence === undefined ? {} : { evidence }) });
 const statusOf = checks => checks.some(item => item.status === "blocked") ? "blocked" : "unknown";
 
-function validatePull(pr, repository, number) {
-  if (!pr || pr.number !== number || pr.repository?.nameWithOwner !== `6529-Collections/${repository}`
+export function validatePull(pr, repository, number, fullName = `6529-Collections/${repository}`) {
+  if (!pr || pr.number !== number || pr.repository?.nameWithOwner !== fullName
     || typeof pr.headRefOid !== "string" || !sha.test(pr.headRefOid)
     || typeof pr.baseRefOid !== "string" || !sha.test(pr.baseRefOid)
     || typeof pr.headRefName !== "string" || !pr.headRefName
@@ -37,14 +37,14 @@ function requiredCheckStatus(item) {
   return "unknown";
 }
 
-function inspectPull(pr, requested, repository) {
+export function inspectPull(pr, requested, repository, fullName = `6529-Collections/${repository}`) {
   const checks = [];
   const exact = pr.headRefOid === requested.commit && pr.headRefName === requested.branch;
   checks.push(check("requested_code", exact ? "pass" : "blocked",
     exact ? "The PR still names the requested branch and exact commit." : "The request is outdated: the PR branch or commit differs. This does not prove cancellation or replacement.",
     { requested_commit: requested.commit, current_commit: pr.headRefOid, requested_branch: requested.branch, current_branch: pr.headRefName }));
-  checks.push(check("source_repository", pr.headRepository?.nameWithOwner === `6529-Collections/${repository}` ? "pass" : "unknown",
-    pr.headRepository?.nameWithOwner === `6529-Collections/${repository}` ? "PR source is the named product repository." : "A deleted or fork source cannot be bound to this request's repository with the available evidence."));
+  checks.push(check("source_repository", pr.headRepository?.nameWithOwner === fullName ? "pass" : "unknown",
+    pr.headRepository?.nameWithOwner === fullName ? "PR source is the named product repository." : "A deleted or fork source cannot be bound to this request's repository with the available evidence."));
   checks.push(check("pr_state", pr.state === "CLOSED" || pr.isDraft ? "blocked" : pr.state === "MERGED" ? "unknown" : "pass",
     pr.state === "MERGED" ? "PR is already merged. That is not proof of deployment; a further release needs target and history evidence."
       : pr.state === "CLOSED" ? "PR is closed without merging."
@@ -82,7 +82,7 @@ function inspectPull(pr, requested, repository) {
   return checks;
 }
 
-function fingerprint(pr) {
+export function fingerprint(pr) {
   return JSON.stringify({ ...pr, checks: [...pr.checks].sort((a, b) => a.id.localeCompare(b.id)) });
 }
 
