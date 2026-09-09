@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { saveReleaseRequestIssue } from "../../../packages/release-request/src/inbox-issue.mjs";
 
 export const statuses = ["received", "waiting", "action-needed", "eligible", "completed", "closed"];
-export const reasons = ["outdated-commit", "checks-pending", "checks-failed", "merge-conflict", "review-required",
+export const reasons = ["outdated-commit", "already-merged", "checks-pending", "checks-failed", "merge-conflict", "review-required",
   "invalid-dependencies", "request-unverified", "deployment-unverified", "prerequisite-unverified",
   "coordinator-incomplete", "overlapping-requests", "cancelled", "replaced", "test"];
 export const managedLabels = new Set(["release-request", "pending", "target:staging", "target:production",

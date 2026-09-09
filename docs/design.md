@@ -15,6 +15,15 @@ intake defaults, clear ticket statuses and reasons, submitter ownership,
 recorded decisions, and migration of existing tickets. This comes before the
 local merge rehearsal. See progress for merge and runtime evidence.
 
+The current intake boundary excludes requests whose PRs are all already merged:
+processing closes them with `already-merged`, without claiming deployment.
+Mixed merged/open requests remain open for a scope decision. Deploying already
+merged work uses the existing authorized product release process; a dedicated
+deployment-only request mode is not implemented. A future worker must record
+execution ownership before merging and keep responsibility afterward. Its own
+merge must not trigger this intake closure rule. Inbox receipt acceptance and
+ticket processing are not execution ownership.
+
 That document owns the first-processing contract. It keeps the existing CLI input
 and read-only commands, and introduces a separate explicit command for Issue
 updates. It does not authorize release execution or settle the choices below.

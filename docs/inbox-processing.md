@@ -17,9 +17,9 @@ After a processing run, a submitter can scan their open tickets and answer:
 - Why is it waiting, or what needs fixing?
 - Who needs to act next, and what should they do?
 
-Clear outdated requests leave the active inbox with a recorded reason. Requests
-that need evidence stay visible. Closing a ticket never silently claims that a
-release happened.
+Clear outdated requests and requests whose PRs are all already merged leave the
+active inbox with a recorded reason. Other requests that need evidence stay
+visible. Closing a ticket never silently claims that a release happened.
 
 The scope is intake defaults, ticket inspection, status updates, decision
 history, and migration of existing tickets. Keep the installed CLI `0.0.4`
@@ -108,6 +108,7 @@ explanation. Reasons are not permissions.
 | Reason | Typical action |
 | --- | --- |
 | `reason:outdated-commit` | Retire a verified request whose requested commit no longer matches its PR. Include requested and observed commits. |
+| `reason:already-merged` | Retire a verified request when all its exact PRs were already merged before Coordinator execution. A mixed merged/open or unverified request stays action-needed for a scope decision. Deployment is not verified or claimed. |
 | `reason:checks-pending` | Wait for required checks; recheck on the next processing run. |
 | `reason:checks-failed` | Identify the failed required checks and the person who can fix them. |
 | `reason:merge-conflict` | Identify the PR/base evidence and the correction needed. |
@@ -146,21 +147,23 @@ identity for that comment, not a search for arbitrary matching text. Show:
 | Evidence | Relevant request, PR, checks, workflow/deployment links, exact commits, and target. |
 | Last decision | Time and the person or trusted process responsible for the latest meaningful change. |
 
-Example for backend ticket #13, based on the September 9 observation:
+Example for backend ticket #13 under the already-merged policy, if a fresh
+inspection still verifies its exact PR as merged:
 
-> **Status:** Waiting
+> **Status:** Closed — already merged
 >
-> **Why:** The PR is merged, but its staging deployment and the required state
-> of `dbMigrationsLoop` are not verified.
+> **Why:** This PR was already merged before Coordinator release execution.
+> The Coordinator will not handle this request. Deployment has not been verified.
 >
-> **Next action:** Obtain evidence for the requested code and prerequisite.
+> **Next action:** If deployment is still needed, use the existing authorized
+> release process. Submitting the same merged PR again leads to the same closure.
 >
-> **Action owner:** Coordinator maintainers.
+> **Action owner:** Submitter.
 >
-> **Submitter action:** None currently required.
+> **Submitter action:** Arrange the existing release process if deployment is needed.
 >
-> **Evidence:** Request #13, backend PR #1978, requested commit and pinned
-> catalog; deployment evidence is still missing.
+> **Evidence:** Request #13, backend PR #1978, matching requested branch/commit,
+> same-repository source, and stable merged-state observations.
 
 Assigning the verified submitter makes an Assignee filter useful even though
 the workflow created the Issue. Keep submitter assignment separate from the
@@ -194,15 +197,23 @@ without turning each poll into a new ticket conversation.
    Do not call them replaced unless an explicit replacement relationship is
    established. Respect any recorded terminal or active execution ownership;
    later execution must not have its frozen request retired by a routine scan.
-5. Put unresolved evidence in waiting, or a concrete human correction in
+5. Retire a request with `already-merged` when every requested PR has verified
+   matching code, same-repository source, and stable merged-state observations.
+   Recheck closure evidence before closing. No deployment, prerequisite state,
+   or previous release outcome is inferred. Existing outdated-commit handling
+   takes precedence when code differs. Mixed merged/open or unverified requests
+   stay action-needed: use the existing authorized release process for the whole
+   release, or submit corrected open-PR scope with required dependencies accounted
+   for. Do not execute a subset or instruct an identical merged-PR resubmission.
+6. Put unresolved evidence in waiting, or a concrete human correction in
    action-needed, and name the owner. A missing Coordinator feature is not a
-   submitter failure. Merged PRs with an unknown release outcome remain waiting.
-6. Mark eligible only when the required initial checks support candidacy and
+   submitter failure. Unverified or unstable merge evidence cannot close a ticket.
+7. Mark eligible only when the required initial checks support candidacy and
    there is no unresolved first-processing blocker or recorded terminal outcome.
    The full readiness report may still have unknown later-stage checks, such
    as combined-merge proof. Do not map report statuses directly to labels or
    infer eligibility from a valid receipt alone.
-7. Record the decision before presenting it as applied, then update only the
+8. Record the decision before presenting it as applied, then update only the
    managed ticket presentation and Issue state. Verify the applied result and
    report any partial failure for reconciliation on the next run.
 
@@ -211,6 +222,13 @@ cancelled. Initial processing history can record its own new decisions; it must
 not invent earlier outcomes. `status:completed` is reserved until a supported
 source proves the exact release outcome. The first implementation need not be
 able to complete existing releases in order to organize the inbox honestly.
+
+The already-merged rule applies before Coordinator release execution, including
+to tickets previously marked received/waiting/action-needed. These are intake
+states, not execution ownership. No executor exists in this version. A future
+worker must record ownership before merging and retain responsibility after
+its own merge; this intake rule must not abandon that work. Unknown ownership
+fields in the journal already stop the current processor before ticket writes.
 
 ## Decision history and safe retries
 
@@ -272,6 +290,11 @@ for their own test. It records that authenticated decision. General cancellation
 replacement, completion, and terminal corrections remain reserved; no commands
 for those actions exist yet. No test is inferred from editable request/title text.
 
+The `already-merged` registry addition requires policy `2026-09-09.2` or newer.
+Merge the change and update supported processor checkouts before writing that
+reason to live history. Older processors reject unknown reasons and stop safely;
+update the checkout rather than rewriting history. No public CLI upgrade is needed.
+
 `status:eligible` and `status:completed` are also reserved in this first version.
 Unknown earlier release outcomes/active execution ownership currently produce
 `reason:coordinator-incomplete`. This inbox journal proves its own dispositions;
@@ -298,11 +321,11 @@ one coordinated change:
    and migration must not reopen them or reset their status. Existing closed
    tickets without trusted disposition history are not automatically completed.
 
-The September 9 scan suggests #1, #2, and #3 would become
-`status:closed` + `reason:outdated-commit`. #13 and #16 would stay open as
-`status:waiting`, with the specific missing-evidence reasons. These are dated
-migration candidates, not instructions to mutate those Issues without a fresh
-check. No ticket migration was performed while writing this plan.
+The September 9 migration closed #1, #2, #3, and #19 as outdated and left #13
+and #16 waiting under policy `2026-09-09.1`. Policy `2026-09-09.2` can close the
+remaining two with `already-merged` after rollout and a fresh confirming check.
+The earlier waiting decisions stay in history. See progress for actual live
+application; this policy description does not claim those closures happened.
 
 ## Implementation finish line
 
@@ -314,7 +337,7 @@ check. No ticket migration was performed while writing this plan.
 - Both read-only commands remain read-only and continue to include open waiting
   tickets after the legacy-label migration.
 - Automated tests cover initial intake, retries on open and closed tickets,
-  outdated closure, incomplete/contradictory proof, merged-but-unverified cases,
+  outdated/already-merged closure, mixed requests, incomplete/contradictory proof,
   reasons resolving, assignment failure, history integrity, concurrent/partial
   updates, and migration without lost or duplicate tickets.
 - An authorized controlled GitHub test verifies actual labels, assignment,

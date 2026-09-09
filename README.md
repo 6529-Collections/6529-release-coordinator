@@ -54,7 +54,8 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 
 The separate command below writes managed labels, readable titles, verified
 submitter assignment, one status comment, and durable decisions. It retires
-clearly outdated requests and keeps missing evidence visible with an action owner:
+clearly outdated requests and requests whose PRs are all already merged. It keeps
+other missing evidence visible with an action owner:
 
 ```sh
 npm run inbox:process
@@ -62,6 +63,10 @@ npm run inbox:process
 
 Use `-- --issue NUMBER` to limit changes to one ticket. Both `inbox:read` and
 `readiness:check` stay read-only. No command merges, builds, or deploys.
+An `already-merged` closure means the Coordinator will not handle that request;
+it does not claim a successful deployment. Mixed merged/open requests stay open
+for a scope decision. Any remaining deployment uses the existing authorized
+release process; submitting the same merged PR again will not make it eligible.
 [The command guide](./apps/coordinator/README.md#organize-tickets-explicitly)
 explains permissions, retries, and the separate GitHub state branch.
 [Ticket rules](./docs/inbox-processing.md) own status/reason meanings.

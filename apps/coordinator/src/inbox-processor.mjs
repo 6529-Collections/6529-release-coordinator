@@ -181,7 +181,7 @@ export async function processInbox({ api, identity, get, github, issueNumber, cl
         const freshEntry = await inspect(freshIssue, { get });
         const freshObservation = await observe(freshEntry, { github });
         const fresh = decideTicket(freshEntry, freshObservation);
-        if (fresh.status !== "closed" || digest(fresh.reasons) !== digest(latest(ticket).decision.reasons)) throw new Error("Outdated-commit evidence changed before closure; the intended decision was not applied.");
+        if (fresh.status !== "closed" || digest(fresh.reasons) !== digest(latest(ticket).decision.reasons)) throw new Error("PR evidence changed before closure; the intended decision was not applied.");
       } }));
       pendingNumber = null;
     }
