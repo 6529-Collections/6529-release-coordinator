@@ -4,9 +4,10 @@
 
 This is a standalone project for designing and implementing a new release
 coordinator from the ground up. Request submission, local inbox inspection,
-read-only readiness observations, explicit inbox processing, and local
-merge rehearsals from sandbox manifests or one verified inbox ticket are implemented; release execution remains
-a design. Readiness observations never authorize a release.
+read-only readiness observations, and one manual `inbox:run` workflow are
+implemented. That workflow inspects tickets, rehearses suitable exact PRs, and
+updates the same ticket and journal. Release execution remains a design;
+a passing rehearsal never authorizes it.
 
 It is intended to coordinate releases across:
 
@@ -45,8 +46,12 @@ from first principles.
   status/reason labels, submitter ownership, history requirements, and migration.
   Check `docs/progress.md` for local implementation versus merged/runtime proof.
   Documentation alone does not authorize changing tickets.
-  Keep existing read-only commands read-only; ticket writes belong to a separate
-  explicit processing command. This stage precedes the local merge rehearsal.
+  Keep existing read-only commands read-only. Ticket inspection, rehearsal, and
+  presentation use the single explicit `inbox:run` command. Require a named
+  profile. Generate each ticket's plan from its scope/dependencies and trusted
+  rehearsal destination configuration; save pinned inputs before Git work.
+  Never require operator plan files or import saved reports.
+  Preserve `codex/inbox-state` and its workflow marker; older writers must stop.
 - `docs/profiled-inbox-testing.md` owns the shared sandbox/real profile switch,
   isolated test inbox, complete-request submission, receipt boundaries, separate
   journals/reports, and one-ticket rehearsal plan. Public npm remains real-only.

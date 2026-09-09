@@ -9,9 +9,8 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "inbox:read": "node bin/read-inbox.mjs",
-    "inbox:process": "node bin/process-inbox.mjs",
+    "inbox:run": "node bin/run-inbox.mjs",
     "readiness:check": "node bin/check-readiness.mjs",
-    "merge:rehearse": "node bin/rehearse-merge.mjs",
     "request:submit": "node bin/submit-request.mjs"
   }
 }

@@ -5,15 +5,41 @@ package and consumer observations were not all rechecked during this update.
 Runtime behavior comes from code and live evidence. The [ticket contract](./inbox-processing.md) describes the local manual processor;
 [execution design](./design.md) remains future work. There is no running service.
 
-**Latest completed milestone:** [PR #30](https://github.com/6529-Collections/6529-release-coordinator/pull/30)
+**Latest merged milestone:** [PR #30](https://github.com/6529-Collections/6529-release-coordinator/pull/30)
 merged September 9 at `f53a143a52cba354570716d696fc44d6b2229d49`. Sandbox and real
 profiles now share submission, receipt verification, inspection, processing,
 and one-ticket merge-rehearsal code. All 235 local tests passed, and
 [required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34348455618)
-passed on final head `5c2465801be5114dbb8bd3c9df3d8f454992017d`. The
+passed on final head `5c2475801be5114dbb8bd3c9df3d8f454992017d`. The
 [sandbox acceptance record](./testing/profiled-inbox-2026-09-09.md) proves the
-live test-ticket path. Real-project live acceptance and using rehearsal reports
-to update ticket decisions remain separate next steps; neither is release execution.
+live test-ticket path. The newer combined workflow below is local work on
+`codex/unified-inbox-run`; remote push, CI, and merge remain pending.
+
+## Latest local work: one ticket command
+
+Implemented on `codex/unified-inbox-run`, based on local documentation commit
+`c52c450992c236750223eb031de78498fd4a0fe5`. **This source change is local to this
+branch; remote push, CI, and merge remain pending.** `inbox:run` replaces both old operator entry points. It
+inspects tickets, automatically creates a plan from each suitable ticket and
+the profile-configured current `main` commits, rehearses its exact PRs, and
+updates the same ticket/journal from fresh evidence. There is no operator plan
+file. Missing configuration or evidence gets a clear reason. Read-only diagnostics
+remain available.
+
+All **255 local tests passed** (26 package, 229 Coordinator). The simpler
+command passed twice on live sandbox ticket #1 with no supplied plan file.
+Each generated plan was saved before Git. Both runs preserved the same ticket,
+comment, and two historical decisions, and left all sample PRs/branches and the
+real inbox/journal unchanged. The journal upgraded to `inbox-run-v2`, preserving
+history and preventing old writers from replacing the new run format. See the
+[automatic planning evidence](./testing/unified-inbox-2026-09-09.md#automatic-planning-follow-up).
+The ticket remains waiting for independent release-history/ownership and future
+execution. This work does not make a passing rehearsal release authorization.
+
+Public npm `0.0.4`, the public schema, product repositories, and intake workflows
+are unchanged. No product merge, build, or deployment ran. The next delivery
+step is pushing this source change for review/CI; release
+execution design and multiple-ticket batching remain separate later work.
 
 ## Implemented and verified
 
@@ -26,7 +52,7 @@ to update ticket decisions remain separate next steps; neither is release execut
 | Central inbox | The submission workflow validates requests and saves public GitHub Issues. | [Workflow source](../.github/workflows/submit-release-request.yml) and the live intake test below. |
 | Local inbox reader | Implemented in `6af610a`; reader and documentation shared through [PR #14](https://github.com/6529-Collections/6529-release-coordinator/pull/14). Follow the PR for merge and check evidence. | [Reader guide](../apps/coordinator/README.md). All 71 local tests passed: 22 CLI tests and 49 reader tests. No npm release is required for this private application. |
 | Local readiness observations | [PR #18](https://github.com/6529-Collections/6529-release-coordinator/pull/18) merged September 8 at `f2e7f918068181b454e8af277717f2e4f48a3849`. Merge and successful CI were rechecked September 9. | [Readiness guide](../apps/coordinator/README.md#readiness-checks); [successful CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34228394618) at final head `fb7897941fb453c902553378607694b50da72f82`. Public CLI and product code were unchanged; nothing was deployed. |
-| Explicit inbox processing | [PR #21](https://github.com/6529-Collections/6529-release-coordinator/pull/21) merged September 9 at `1240fea37b5d38cc00248feefa77465525d5a5d2`. Updated intake and the first real migration were verified afterward. | [Command guide](../apps/coordinator/README.md#organize-tickets-explicitly), controlled tests #20/#22 and migration evidence below. |
+| Explicit inbox processing | [PR #21](https://github.com/6529-Collections/6529-release-coordinator/pull/21) merged September 9 at `1240fea37b5d38cc00248feefa77465525d5a5d2`. Updated intake and the first real migration were verified afterward. | [Command guide](../apps/coordinator/README.md#run-the-ticket-workflow), controlled tests #20/#22 and migration evidence below. |
 | Already-merged intake boundary | [PR #23](https://github.com/6529-Collections/6529-release-coordinator/pull/23) merged September 9 at `3ca9fa281db8fa7614f73250022c838a137c8cff`. Scoped processing closed #13 and #16 with `already-merged`. | All 170 tests passed locally and in [CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34330324182). Live readback at 08:49 UTC verified both closures and an empty inbox; details below. |
 | Sandbox merge rehearsals | [PR #26](https://github.com/6529-Collections/6529-release-coordinator/pull/26) merged September 9 at `3dc05203ec97bed20ef3952bc99183954e2b2b5f`. Public sandbox required-check acceptance completed in the follow-up below. | All 216 local tests pass; [15 public sandbox cases](./testing/merge-rehearsal-public-2026-09-09.md) met expectations, including deliberate required CI failure. Real mode was disabled at that milestone; see the profiled follow-up below. |
 
@@ -84,8 +110,9 @@ The separate `readiness:check` adds current PR/check/review observations and
 dependency validation. It uses a fixed GraphQL read query and catalog GETs.
 Neither command chooses the latest wanted request or approves a deployment.
 
-Neither read-only command changes tickets. The separate
-`inbox:process` records decisions and organizes selected tickets. Both updated
+Neither read-only command changes tickets. The local `inbox:run` combines
+inspection, rehearsal, and ticket decisions. Its old separate operator commands
+have been removed. Both updated
 readers select all open `release-request` Issues, including tickets without
 `pending`. The merged intake workflow's `status:received` setup was verified
 with controlled test #22. The already-merged closure extension is tracked in
@@ -93,8 +120,8 @@ with controlled test #22. The already-merged closure extension is tracked in
 
 Readiness still lacks a verified completed/cancelled/replaced release-history
 source and runtime evidence for omitted prerequisites. It also does not consume
-the separate rehearsal's explicit plan and merge-result reports. The checker
-reports these gaps as unknown, even when individual checks pass.
+rehearsal plans or merge-result reports. The write workflow consumes fresh
+rehearsal evidence separately. The read-only checker reports these gaps as unknown, even when individual checks pass.
 
 There is no running Coordinator worker, durable release queue/database,
 GitHub App with merge authority, automatic merge/build/deploy flow, or recovery
@@ -134,11 +161,11 @@ submission, receipt reuse, explicit processing, and rehearsal of one ticket's
 exact PRs. Both profiles share the same implementation; test manifests and
 receipts remain separate from real request evidence.
 
-We can continue developing and testing in the sandbox. The next integration is
-the policy for using rehearsal reports to update ticket decisions; the current
-processor does not consume those reports. Multiple-ticket batching, real-project
-live acceptance, the larger release worker, execution permissions, deployment
-evidence sources, and recovery remain later work.
+We can continue developing and testing in the sandbox. The local combined
+workflow now uses fresh rehearsal reports to update the same ticket. Publishing
+this source change and checking its CI/merge state are the next delivery steps.
+Multiple-ticket batching, real-project live acceptance, the larger release worker,
+execution permissions, deployment evidence sources, and recovery remain later work.
 
 ### Sandbox rehearsal implementation, September 9
 
@@ -243,7 +270,7 @@ journal also remained unchanged. The test ticket stays `status:waiting` with
 
 [PR #30](https://github.com/6529-Collections/6529-release-coordinator/pull/30)
 merged at `f53a143a52cba354570716d696fc44d6b2229d49` on September 9 at 12:00:22 UTC.
-Its final head `5c2465801be5114dbb8bd3c9df3d8f454992017d` passed
+Its final head `5c2475801be5114dbb8bd3c9df3d8f454992017d` passed
 [required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34348455618)
 and repeated the same live ticket rehearsal successfully in run
 `37191114-423b-4a3f-ace6-7e74a67babad`, with matching result trees and cleanup.

@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { buildReleaseRequestIssueBody, releaseRequestChecksum } from "../../../packages/release-request/src/inbox-issue.mjs";
-import { COORDINATOR_REPOSITORY } from "../src/inbox-reader.mjs";
 import { stateBranch, stateFile } from "../src/coordinator-github.mjs";
+import { realProfile } from "../src/profiles.mjs";
 
-export function fixture() {
-  const repository = COORDINATOR_REPOSITORY, web = `https://github.com/${repository}`;
+export function fixture(profile = realProfile) {
+  const repository = profile.inbox.full_name, web = `https://github.com/${repository}`;
   const actor = { login: "trusted-user", id: 456 };
-  const request = { schema_version: "0.000001", request_id: "22222222-2222-4222-8222-222222222222",
+  const request = { schema_version: "0.000001", ...(profile.name === "sandbox" ? { profile: "sandbox" } : {}), request_id: "22222222-2222-4222-8222-222222222222",
     created_at: "2026-09-09T07:00:00.000Z", requested_by: "Not the trusted identity", target: "staging", database_change: "no",
-    release_parts: [{ id: "backend", repository: "6529seize-backend", pull_requests: [{ number: 10, branch: "feature/test", commit: "a".repeat(40) }],
+    release_parts: [{ id: "backend", repository: profile.repositories.backend.full_name.split("/")[1], pull_requests: [{ number: 10, branch: "feature/test", commit: "a".repeat(40) }],
       depends_on: [], deploy_units: ["api", "dbMigrationsLoop"], deploy_dependencies: [] }] };
   const issue = { id: 1001, number: 1, title: `Release request ${request.request_id}`, state: "open", labels: ["release-request", "pending", "target:staging", "user-note"],
     assignees: [], user: actor, html_url: `${web}/issues/1`, body: buildReleaseRequestIssueBody({ request, checksum: releaseRequestChecksum(request),
@@ -16,13 +16,13 @@ export function fixture() {
   const required = { __typename: "CheckRun", id: "build", name: "Build", status: "COMPLETED", conclusion: "SUCCESS", isRequired: true };
   const pr = { number: 10, state: "OPEN", isDraft: false, headRefOid: "a".repeat(40), headRefName: "feature/test",
     baseRefOid: "b".repeat(40), baseRefName: "main", mergeable: "MERGEABLE", mergeStateStatus: "CLEAN", reviewDecision: "APPROVED",
-    repository: { nameWithOwner: "6529-Collections/6529seize-backend" }, headRepository: { nameWithOwner: "6529-Collections/6529seize-backend" }, checks: [required] };
-  const result = { status: "submitted", request_id: request.request_id, request: structuredClone(request), inbox_issue_number: 1, inbox_issue_url: issue.html_url,
+    repository: { nameWithOwner: profile.repositories.backend.full_name }, headRepository: { nameWithOwner: profile.repositories.backend.full_name }, checks: [required] };
+  const result = { status: "submitted", ...(profile.name === "sandbox" ? { profile: "sandbox" } : {}), request_id: request.request_id, request: structuredClone(request), inbox_issue_number: 1, inbox_issue_url: issue.html_url,
     github: { actor: actor.login, actor_id: String(actor.id), workflow_run_id: "123", workflow_run_url: `${web}/actions/runs/123` } };
   const run = { id: 123, repository: { full_name: repository }, head_repository: { full_name: repository }, path: ".github/workflows/submit-release-request.yml",
     event: "workflow_dispatch", head_branch: "main", head_sha: "c".repeat(40), html_url: `${web}/actions/runs/123`, display_title: `Release request ${request.request_id}`,
     status: "completed", conclusion: "success", actor, run_attempt: 1 };
-  const f = { actor, request, issue, required, pr, result, run, issues: [issue], calls: [], productCalls: [], comments: [], labels: new Set(issue.labels),
+  const f = { profile, actor, request, issue, required, pr, result, run, issues: [issue], calls: [], productCalls: [], comments: [], labels: new Set(issue.labels),
     eligible: [actor], head: null, objects: new Map(), nextId: 2000, before: async () => {}, after: async () => {} };
   const clone = structuredClone;
   f.get = async path => {

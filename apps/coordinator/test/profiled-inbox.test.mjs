@@ -12,14 +12,14 @@ import { runIntake } from "../src/intake.mjs";
 import { submitProfileRequest, runSubmissionCli, dispatchRequest } from "../src/submission-cli.mjs";
 import { saveProfileRecord } from "../src/profile-records.mjs";
 import { verifiedInboxEntry, inboxBinding, inboxMergePlan } from "../src/inbox-merge-plan.mjs";
-import { runRehearsalCli, saveRehearsalReport } from "../src/rehearsal-cli.mjs";
+import { rehearseInboxTicket, saveRehearsalReport } from "../src/rehearsal-runner.mjs";
 import { rehearseMerge } from "../src/rehearsal.mjs";
 import { rehearsalFixture } from "./rehearsal-fixture.mjs";
 import { createJournal, validateJournal } from "../src/inbox-journal.mjs";
 import { createCoordinatorGitHub } from "../src/coordinator-github.mjs";
 import { runCli } from "../src/cli.mjs";
 import { runReadinessCli } from "../src/readiness-cli.mjs";
-import { runProcessingCli } from "../src/processing-cli.mjs";
+import { runInboxRunCli } from "../src/inbox-run-cli.mjs";
 
 function request(profile, pulls = [{ number: 1, branch: "feature/test", commit: "a".repeat(40) }]) {
   return { schema_version: "0.000001", ...(profile.name === "sandbox" ? { profile: "sandbox" } : {}),
@@ -138,12 +138,12 @@ for (const profile of [sandboxProfile, realProfile]) {
     const entry = await verifiedInboxEntry(1, { get: receipt.get, profile });
     const input = planInput(entry, profile, [{ role: "frontend", destination: { branch: "main", commit: f.repositories.frontend.base }, pull_requests: [pull] }]);
     let report;
-    const code = await runRehearsalCli(["--issue", "1", "--plan", "plan.json", "--json"], {
-      env: { RELEASE_COORDINATOR_PROFILE: profile.name }, load: async () => input, inboxReaderFactory: () => receipt.get, githubFactory: () => f.github,
+    await rehearseInboxTicket(entry, input, {
+      profile, get: receipt.get, githubFactory: () => f.github,
       run: (plan, options) => rehearseMerge(plan, { ...options, createGit: f.createGit }), revision: async () => ({ commit: "f".repeat(40), dirty: false }),
       save: async value => { report = value; return "fixture-report"; }, stdout: () => {}
     });
-    assert.equal(code, 0); assert.equal(report.status, "pass"); assert.equal(report.input_source, "verified-inbox");
+    assert.equal(report.status, "pass"); assert.equal(report.input_source, "verified-inbox");
     assert.equal(report.profile, profile.name); assert.equal(report.inbox.repository_id, profile.inbox.id);
     assert.equal(report.checks.find(c => c.id === "inbox_stability").status, "pass");
     assert.equal(report.cleanup.status, "removed"); assert.equal(report.release_authorized, false);
@@ -191,11 +191,11 @@ test("ticket closure during a rehearsal prevents a pass and still cleans tempora
   const entry = await verifiedInboxEntry(1, { get: receipt.get, profile });
   const input = planInput(entry, profile, [{ role: "frontend", destination: { branch: "main", commit: f.repositories.frontend.base }, pull_requests: [pull] }]);
   let report;
-  const code = await runRehearsalCli(["--issue", "1", "--plan", "plan.json"], { env: { RELEASE_COORDINATOR_PROFILE: "sandbox" },
-    load: async () => input, inboxReaderFactory: () => receipt.get, githubFactory: () => f.github, revision: async () => ({}),
+  await rehearseInboxTicket(entry, input, { profile,
+    get: receipt.get, githubFactory: () => f.github, revision: async () => ({}),
     run: async (plan, options) => { const result = await rehearseMerge(plan, { ...options, createGit: f.createGit }); receipt.issue.state = "closed"; return result; },
     save: async value => { report = value; return "fixture-report"; }, stdout: () => {} });
-  assert.equal(code, 2); assert.equal(report.status, "unknown"); assert.equal(report.cleanup.status, "removed");
+  assert.equal(report.status, "unknown"); assert.equal(report.cleanup.status, "removed");
   assert.equal(report.checks.find(c => c.id === "inbox_stability").status, "unknown");
 });
 
@@ -259,7 +259,7 @@ test("submission dispatch has a fixed workflow/ref and sends request text only t
 
 test("bad profiles/help/crossed inbox plans stop before input, network, or writes", async () => {
   const never = async () => assert.fail("must not run");
-  for (const run of [runCli, runReadinessCli, runProcessingCli, runSubmissionCli]) {
+  for (const run of [runCli, runReadinessCli, runInboxRunCli, runSubmissionCli]) {
     const opts = { env: { RELEASE_COORDINATOR_PROFILE: "typo" }, get: never, client: { request: never, identity: never }, github: {},
       run: never, load: never, submit: never, stdout: () => {}, stderr: () => {} };
     assert.equal(await run(["--help"], opts), 0);
@@ -272,6 +272,6 @@ test("bad profiles/help/crossed inbox plans stop before input, network, or write
     assert.match(output, /Set RELEASE_COORDINATOR_PROFILE to sandbox or real/);
     assert.doesNotMatch(output, /network availability/);
   }
-  assert.equal(await runRehearsalCli(["--issue", "1", "--plan", "file"], { env: { RELEASE_COORDINATOR_PROFILE: "real" },
-    load: async () => ({ profile: "sandbox" }), inboxReaderFactory: never, stdout: () => {}, stderr: () => {} }), 2);
+  assert.equal(await runInboxRunCli(["--issue", "1", "--plan", "file"], { env: { RELEASE_COORDINATOR_PROFILE: "real" },
+    load: async () => ({ profile: "sandbox" }), get: never, run: never, stdout: () => {}, stderr: () => {} }), 2);
 });

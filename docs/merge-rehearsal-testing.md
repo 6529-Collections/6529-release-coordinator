@@ -85,8 +85,8 @@ the request's `staging`/`production` deployment target.
 
 | Profile | Repositories | Input source | Rehearsal behavior |
 | --- | --- | --- | --- |
-| `sandbox` | The two public test repositories | Verified test inbox request plus an explicit plan, or a validated private test manifest | Shared engine; temporary local merges and local reports. |
-| `real` | The two fixed product repositories | Verified real inbox request plus an explicit destination/merge plan | The same engine and report contract; still no remote writes or deployment. |
+| `sandbox` | The two public test repositories | Verified test inbox request with an automatically generated plan, or a validated private test manifest | Shared engine; temporary local merges and local reports. |
+| `real` | The two fixed product repositories | Verified real inbox request with an automatically generated plan | The same engine and report contract; still no remote writes or deployment. |
 
 The selected trusted profile supplies repository names/IDs and read adapters.
 Its input adapter produces the same internal merge-plan structure, retaining
@@ -118,7 +118,7 @@ For this stage:
   and commits, merge order, selected services, and part dependencies as needed.
   Validate its shape, duplicates, references, size limits, and dependency cycles.
 - Label its input source `test-manifest` and its mode `sandbox` in every report.
-  It is not a verified intake receipt and cannot enter `inbox:process` or the
+  It is not a verified intake receipt and cannot enter `inbox:run` or the
   real decision journal. No fabricated workflow/actor proof is accepted.
 - Keep GitHub reads behind the selected profile's read adapter. Use the same
   merge engine and shared pure inspection logic; do not make production adapters accept arbitrary
@@ -134,10 +134,11 @@ inbox or claim that local manifests prove submission works.
 
 ## Rehearsal behavior to implement
 
-Command name: `merge:rehearse`, in the private Coordinator workspace.
-Runnable flags are in the app guide. It runs manually on the local
-machine, saves a report under the ignored `.release-coordinator/` directory,
-and exits. Automated fixture tests must run offline in the existing test suite.
+The engine is now part of the single operator command `inbox:run`, with a
+verified ticket and automatically generated plan. Its old standalone command has been removed.
+The original manifest-based matrix below remains available through the developer
+fixture harness described in the app guide; it reads sandbox PRs and writes
+local evidence only. Automated fixture tests run offline in the existing suite.
 
 1. Validate the sandbox profile and manifest before accessing repositories.
    Require one explicit destination per repository. Never infer a branch from

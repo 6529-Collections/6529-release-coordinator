@@ -1,15 +1,14 @@
 # Local Coordinator commands
 
-This private workspace is the first Coordinator application. Its inbox commands
-read saved requests in `6529-Collections/6529-release-coordinator`; its sandbox
-rehearsal reads a separate private test manifest and sample GitHub PRs.
-It runs manually on your machine and exits. No server, timer, database, or
-deployment worker is started.
+This private workspace runs manually on your machine and exits. `inbox:run`
+checks requests, rehearses a suitable ticket's exact PRs, and updates that same
+ticket with reasons and evidence. Select `sandbox` or `real` explicitly.
+Start with [Run the ticket workflow](#run-the-ticket-workflow) below.
+No server, timer, or deployment worker is started.
 
-`inbox:read` and `readiness:check` are read-only. The separate `inbox:process`
-command writes ticket presentation and durable decision history. Its
+`inbox:read` and `readiness:check` remain read-only diagnostics. The
 [ticket rules](../../docs/inbox-processing.md) define labels, ownership, reasons,
-and migration. See [progress](../../docs/progress.md) for local versus merged evidence.
+and history. See [progress](../../docs/progress.md) for local versus merged evidence.
 
 ## Run
 
@@ -182,28 +181,30 @@ its exact plan and authorization. The unresolved execution design remains in
 
 The [profiled inbox guide](../../docs/profiled-inbox-testing.md) owns the shared
 configuration, request formats, submission command, separate journals/reports,
-and one-ticket rehearsal plan. New `request:submit` and rehearsal commands
-require `RELEASE_COORDINATOR_PROFILE=sandbox` or `real`. Existing inbox/readiness/
-processing commands retain their real default and honor an explicit profile.
+and one-ticket rehearsal plan. `request:submit` and `inbox:run` require
+`RELEASE_COORDINATOR_PROFILE=sandbox` or `real`. Read-only inbox/readiness
+commands retain their real default and honor an explicit profile.
 The installed npm CLI keeps its existing real-only behavior.
 
-## Sandbox merge rehearsal
+## Merge engine and fixture tests
 
-Run a separate sandbox rehearsal with Node.js 20+, Git 2.38+, and authenticated
-`gh` with read access to the pinned test repositories:
+The ticket workflow below uses Node.js 20+, Git 2.38+, and authenticated `gh`
+with read access to the selected PR repositories. The two public sample
+repositories have their names, IDs, visibility, and required checks pinned in
+trusted configuration. A profile does not grant GitHub permissions.
 
-The two sample repositories are public so their required GitHub checks can be
-enforced on the current account plan. The trusted profile pins that visibility
-along with their exact names and IDs; this does not enable product repositories.
+Offline engine and workflow tests run in `npm test`. For developers rerunning
+the live sample matrix from an existing verified seed, the fixture harness is:
 
 ```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest PATH_TO_TEST_MANIFEST --json
+node apps/coordinator/scripts/run-rehearsal-cases.mjs --seed SEED_JSON
 ```
 
-`--help` reads and writes nothing. The profile is mandatory; unknown or missing
-values stop. `real` requires a verified inbox ticket and explicit plan;
-`--manifest` remains sandbox-only. A profile never turns test data into a trusted request
-or authorizes a GitHub mutation. Existing commands and public CLI/schema are unchanged.
+This harness reads the pinned sandbox PRs and writes local reports only. It
+constructs test manifests for the matrix, bypassing ticket intake deliberately
+to exercise individual engine failure cases. It never updates Issues. Operators
+use `inbox:run` with a verified ticket and plan; the old standalone processing
+and rehearsal bins/npm commands are removed.
 
 The private JSON manifest has these fields (not the public release-request schema):
 
@@ -237,15 +238,15 @@ tree was tested. Gates for one base branch do not prove another destination.
 | `2` | Unknown evidence, invalid input, or an operational/report/cleanup failure. |
 | `3` | PR, destination, checks, reviews, or state changed during the run. |
 
-The command saves JSON and readable text under
-`.release-coordinator/merge-rehearsal/sandbox/<run-id>/` in this checkout.
+The shared runner saves JSON and readable text under
+`.release-coordinator/merge-rehearsal/<profile>/<run-id>/` in this checkout.
 Each run gets a new directory; old evidence is never overwritten. Reports name
-the Coordinator commit and tracked dirty state. Temporary Git storage is removed
+the Coordinator commit and dirty state, including untracked runtime files. Temporary Git storage is removed
 before final report writing. A failed cleanup reports its exact owned path;
 inspect that path before manually removing it. Abruptly killing the process
 may leave an owned `6529-rehearsal-*` directory; there is no automatic sweep.
 
-Current limits: 30 seconds per subprocess, three minutes per CLI run, 16 MiB
+Current limits: 30 seconds per subprocess, three minutes per rehearsal, 16 MiB
 per process output/report, and a monitored 128 MiB temporary-storage budget.
 Git configuration is isolated; hooks, custom drivers, filters, submodules, and
 repository scripts are not run. Active `.gitattributes` rules and gitlinks are
@@ -283,21 +284,44 @@ blocks, catalog and graph errors, missing history, conflicting requests,
 pagination races, adapter input boundaries, and the verified-intake-to-readiness
 CLI path. Live evidence is dated separately in the progress record.
 
-## Organize tickets explicitly
+## Run the ticket workflow
 
-This command **writes to GitHub**. It requires an authenticated repository writer
-with Issue and contents write access. It runs on this machine and exits:
-
-```sh
-npm run inbox:process
-```
-
-To limit changes to one ticket or get structured output:
+`inbox:run` **writes to the selected GitHub inbox**. It requires an authenticated
+inbox writer with Issue and contents write access, plus read access to the
+selected PR repositories. Run the complete current process for one ticket:
 
 ```sh
-npm run inbox:process -- --issue 20
-npm run --silent inbox:process -- --issue 20 --json
+RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --json
 ```
+
+Use `real` for the real configuration with a real receipt. The command verifies
+the receipt and current PR evidence, handles obvious blockers, creates and saves
+the ticket's merge plan, rehearses its exact PRs, saves the report, then records
+and applies its decision to the same ticket. There is no operator plan file.
+
+The ticket supplies scope and dependencies. Trusted profile configuration names
+`main` as the rehearsal destination for each repository, for either release
+target. The planner reads and verifies its current commit, uses dependency order,
+and preserves PR order inside each ticket part. It keeps all requested parts,
+PR versions, and backend services. See
+[automatic planning](../../docs/profiled-inbox-testing.md#automatic-plan-for-each-ticket).
+
+Initial blockers skip planning/rehearsal. Missing destination configuration or
+GitHub evidence gets `reason:merge-plan-unavailable`; an impossible generated
+scope/order gets `reason:merge-plan-invalid`. The comment explains what failed.
+A pass adds `rehearsal:passed`, with exact destinations and resulting trees.
+The ticket still waits for future release execution. Combined code has not been
+built or deployed. Conflicts, unknown evidence, and changed inputs retain their
+separate rehearsal reasons. Saved reports cannot be imported.
+
+Omit the ticket selector to process all selected tickets through the same flow:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
+```
+
+Each suitable ticket gets a separate plan; different tickets are not merged
+together. Use `npm run --silent inbox:run` to suppress npm's banner for JSON.
 
 The default selection is every open `release-request` Issue plus ticket IDs
 already recorded in the journal, even if someone removed their labels. Both
@@ -347,7 +371,7 @@ assignable-user list. Assignment failure does not lose an accepted request.
 An operator may explicitly retire **their own verified test request**:
 
 ```sh
-npm run inbox:process -- --issue 20 --close-test
+RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --close-test
 ```
 
 This records `status:closed` and `reason:test`, without a successful-release claim.
@@ -362,15 +386,17 @@ independent commit history. **Never merge it into main, delete it, or force-push
 it.** It is runtime state, not a source branch. See the
 [storage and trust contract](../../docs/inbox-processing.md#storage-and-trusted-writers).
 
-Policy `2026-09-09.2` adds the `already-merged` reason. Merge and update supported
-processor checkouts before applying it to live tickets. Older processors reject
-unknown journal reasons and stop; do not remove or rewrite recorded reasons to
-make an old checkout run. The read-only inbox reader and public CLI need no change.
+Policy `2026-09-09.4` generates plans internally. The journal marker is now
+`workflow: "inbox-run-v2"`. First use upgrades a legacy/v1 journal without
+rewriting its decisions. Old writers reject v2 before changes. Keep the marker
+and history intact; use current code instead of removing unfamiliar fields or
+reasons. Read-only diagnostics and the public CLI do not change.
 
 Each run acquires a repository-wide lock through a fast-forward-only Git ref
 update. A competing run fails before changing tickets. Each meaningful decision
 has a unique ID, prior decision hash, time, deciding account, policy version,
 verified request/submitter/workflow, observations, and an applied result. The
+generated plan for each ticket is saved under the run lock before Git work. The
 intended result and comment identity are saved before Issue writes. Unchanged
 runs create no additional decision or comment, though acquire/release commits
 record that the scan ran. Missing or corrupted state stops processing.
@@ -380,11 +406,16 @@ process on its original machine**, ensure no request is still in flight, and wai
 at least 60 seconds before using the reported ID:
 
 ```sh
-npm run inbox:process -- --resume RUN_ID
+RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --resume RUN_ID
 ```
 
-Resume preserves the stored Issue selection and action, rotates lock ownership,
-checks current evidence, and reconciles partial updates. It does not process
+Resume preserves the stored Issue selection, action, and already saved plans,
+rotates lock ownership, checks current evidence, and reconciles partial updates.
+It does not silently advance pinned destination commits. A new run captures
+current destinations; a ticket not yet planned in an interrupted run is planned
+when reached. A legacy interrupted run retains its previously recorded plan. A
+nonterminal ticket is rehearsed afresh; an old passing report is never reused.
+Do not combine `--resume` with `--issue` or `--close-test`. It does not process
 other tickets from a scoped test. There is no automatic timeout, lock stealing,
 or background retry. Never resume while another copy may still be running.
 GitHub Issues do not offer a multi-operation transaction; the journal makes
@@ -392,7 +423,13 @@ partial application explicit and recoverable, not atomic. A maintainer must
 investigate edited receipts, deleted/ambiguous status comments, manual closure
 without known disposition, or externally rewritten state before proceeding.
 
-Processing exit codes: **0** means selected presentations were verified, **1**
-means a ticket was left unchanged for investigation or active intake, and **2**
-means invalid usage or interrupted/partial processing. Help makes no GitHub calls.
-A failure report does not claim all prior writes were rolled back.
+| Exit | Ticket workflow result |
+| --- | --- |
+| `0` | All selected tickets have verified presentation and are closed/preserved or have a saved passing rehearsal. Waiting for future execution is still expected after a pass. |
+| `1` | A selected ticket has a blocker or awaits initial evidence. |
+| `2` | Usage error, unavailable planning evidence, unknown rehearsal, unverified presentation, or interrupted/partial processing. |
+| `3` | Rehearsal evidence changed during the run; no current pass is claimed. |
+
+Code 2 takes precedence, then 3, then 1. Help makes no GitHub calls. A failure
+report does not claim all prior writes were rolled back. A pass is an observation
+of exact inputs, not release authorization or a reservation of product branches.

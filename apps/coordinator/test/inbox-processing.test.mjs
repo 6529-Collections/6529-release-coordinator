@@ -5,7 +5,7 @@ import { processInbox } from "../src/inbox-processor.mjs";
 import { createJournal, validateJournal } from "../src/inbox-journal.mjs";
 import { saveOrganizedReleaseRequestIssue } from "../src/ticket-presentation.mjs";
 import { createCoordinatorGitHub } from "../src/coordinator-github.mjs";
-import { runProcessingCli } from "../src/processing-cli.mjs";
+import { runInboxRunCli } from "../src/inbox-run-cli.mjs";
 import { readInbox } from "../src/inbox-reader.mjs";
 import { runCli } from "../src/cli.mjs";
 import { buildReleaseRequestIssueBody, releaseRequestChecksum } from "../../../packages/release-request/src/inbox-issue.mjs";
@@ -386,6 +386,6 @@ test("write adapter uses fixed gh arguments and stdin JSON; identity requires re
 
 test("processing help and bad options never contact GitHub", async () => {
   const opts = { run: async () => assert.fail("must not run"), stdout: () => {}, stderr: () => {} };
-  assert.equal(await runProcessingCli(["--help"], opts), 0);
-  for (const args of [["--deploy"], ["--issue", "../1"], ["--close-test"], ["--json", "--json"], ["--resume", "invalid"]]) assert.equal(await runProcessingCli(args, opts), 2);
+  assert.equal(await runInboxRunCli(["--help"], opts), 0);
+  for (const args of [["--deploy"], ["--issue", "../1"], ["--close-test"], ["--json", "--json"], ["--resume", "invalid"]]) assert.equal(await runInboxRunCli(args, opts), 2);
 });

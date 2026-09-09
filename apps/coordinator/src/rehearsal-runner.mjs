@@ -10,19 +10,6 @@ import { rehearseMerge, rehearsalExitCode, formatRehearsal, safeRehearsalError }
 import { runRehearsalProcess } from "./rehearsal-process.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const help = `Rehearse exact PR commits from one verified inbox ticket or a sandbox manifest using temporary local Git repositories.
-
-RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest FILE [--json]
-
-RELEASE_COORDINATOR_PROFILE=sandbox|real npm run merge:rehearse -- --issue NUMBER --plan FILE [--json]
-
-Requires Node.js 20+, Git 2.38+, and authenticated gh with selected repository read access.
-Real mode requires verified inbox input. Profile selection never enables a GitHub write or release.
-Reports: .release-coordinator/merge-rehearsal/<profile>/<run-id>/report.json
-Exit codes: 0 pass, 1 blocked, 2 unknown/usage/operational failure, 3 stale.
---help makes no repository reads or writes.
-`;
-
 export async function readRehearsalManifest(filename) {
   const handle = await open(filename, "r");
   try {
@@ -54,7 +41,7 @@ export async function saveRehearsalReport(report, outputRoot = root) {
   return path.join(dir, "report.json");
 }
 
-async function codeRevision() {
+export async function codeRevision() {
   const env = { PATH: process.env.PATH, HOME: process.env.HOME, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null" };
   const commit = (await runRehearsalProcess("git", ["rev-parse", "HEAD"], { cwd: root, env })).stdout.trim();
   const unstaged = await runRehearsalProcess("git", ["diff", "--quiet"], { cwd: root, env, allowedCodes: [0, 1] });
@@ -64,45 +51,25 @@ async function codeRevision() {
   return { commit, dirty: unstaged.code !== 0 || staged.code !== 0 || added.stdout.trim() !== "" };
 }
 
-export async function runRehearsalCli(args, {
-  env = process.env, load = readRehearsalManifest, githubFactory = createRehearsalGitHub,
-  run = rehearseMerge, save = saveRehearsalReport, revision = codeRevision, inboxReaderFactory = createGitHubReader,
-  stdout = text => process.stdout.write(text), stderr = text => process.stderr.write(text),
+export async function runMergePlan(plan, {
+  profile, get, githubFactory = createRehearsalGitHub,
+  run = rehearseMerge, save = saveRehearsalReport, revision = codeRevision,
   signal, timeout = 180_000
 } = {}) {
-  if (args.length === 1 && args[0] === "--help") { stdout(help); return 0; }
-  const json = args.includes("--json");
   const controller = new AbortController();
   const abort = () => controller.abort();
   const timer = setTimeout(abort, timeout);
   signal?.addEventListener("abort", abort, { once: true });
   if (signal?.aborted) controller.abort();
   try {
-    const manifestMode = [2, 3].includes(args.length) && args[0] === "--manifest" && args[1] && !args[1].startsWith("--") && (args.length === 2 || args[2] === "--json");
-    const inboxMode = [4, 5].includes(args.length) && args[0] === "--issue" && /^[1-9][0-9]*$/u.test(args[1]) && Number.isSafeInteger(Number(args[1]))
-      && args[2] === "--plan" && args[3] && !args[3].startsWith("--") && (args.length === 4 || args[4] === "--json");
-    if (!manifestMode && !inboxMode) throw new RehearsalError("usage", help);
-    const profile = selectRehearsalProfile(env.RELEASE_COORDINATOR_PROFILE);
-    if (manifestMode && profile.name !== "sandbox") throw new RehearsalError("sandbox_manifest_only", "Real rehearsals require a verified inbox ticket and an explicit inbox plan.");
-    let plan, get;
-    if (manifestMode) plan = sandboxMergePlan(await load(args[1]), profile);
-    else {
-      const input = await load(args[3]);
-      // Reject crossed profiles before contacting any inbox.
-      if (input?.profile !== profile.name || input?.source !== "inbox-plan" || input?.inbox?.repository_id !== profile.inbox.id
-        || input.inbox.issue_number !== Number(args[1])) throw new RehearsalError("invalid_inbox_plan", "Inbox plan does not match the selected profile and ticket.");
-      get = inboxReaderFactory({ profile });
-      await get.identity?.();
-      plan = inboxMergePlan(input, await verifiedInboxEntry(Number(args[1]), { get, profile }), profile);
-    }
     const github = githubFactory(profile, { signal: controller.signal });
     const report = await run(plan, { github, signal: controller.signal, revision: await revision(),
       createGit: options => createRehearsalGit({ ...options, repositories: profile.repositories }) });
-    if (inboxMode) {
+    if (plan.inbox) {
       report.inbox = plan.inbox;
       try {
         await get.identity?.();
-        const final = inboxBinding(await verifiedInboxEntry(Number(args[1]), { get, profile }), profile);
+        const final = inboxBinding(await verifiedInboxEntry(plan.inbox.issue_number, { get, profile }), profile);
         report.inbox_final = final;
         const stable = JSON.stringify(final) === JSON.stringify(plan.inbox);
         report.checks.push({ id: "inbox_stability", status: stable ? "pass" : "stale", message: stable ? "The exact ticket receipt and workflow proof match the final read." : "Ticket receipt or workflow proof changed during rehearsal." });
@@ -112,13 +79,34 @@ export async function runRehearsalCli(args, {
         report.status = "unknown";
       }
     }
-    const filename = await save(report);
-    stdout(json ? `${JSON.stringify({ ...report, report_file: filename }, null, 2)}\n` : `${formatRehearsal(report)}Report: ${filename}\n`);
+    return { ...report, report_file: await save(report) };
+  } finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); }
+}
+
+export async function rehearseInboxTicket(entry, input, { profile, get = createGitHubReader({ profile }), ...options }) {
+  await get.identity?.();
+  const fresh = await verifiedInboxEntry(entry.issue_number, { get, profile });
+  if (JSON.stringify(inboxBinding(fresh, profile)) !== JSON.stringify(inboxBinding(entry, profile))) {
+    throw new RehearsalError("changed_receipt", "Ticket proof changed before rehearsal; inspect it again.");
+  }
+  const plan = inboxMergePlan(input, fresh, profile);
+  return runMergePlan(plan, { ...options, profile, get });
+}
+
+// Developer fixture harness only: no ticket input or Issue-writing mode.
+export async function runRehearsalFixture(args, { env = process.env, load = readRehearsalManifest,
+  stdout = text => process.stdout.write(text), ...options } = {}) {
+  if (args.length === 1 && args[0] === "--help") { stdout("Sandbox fixture harness: --manifest FILE [--json]\n"); return 0; }
+  try {
+    if (![2, 3].includes(args.length) || args[0] !== "--manifest" || !args[1] || args[1].startsWith("--")
+      || args.length === 3 && args[2] !== "--json") throw new RehearsalError("usage", "Fixture harness requires --manifest FILE [--json].");
+    const profile = selectRehearsalProfile(env.RELEASE_COORDINATOR_PROFILE);
+    if (profile.name !== "sandbox") throw new RehearsalError("sandbox_manifest_only", "Fixture harness only accepts sandbox manifests.");
+    const report = await runMergePlan(sandboxMergePlan(await load(args[1]), profile), { ...options, profile });
+    stdout(args.includes("--json") ? `${JSON.stringify(report, null, 2)}\n` : formatRehearsal(report));
     return rehearsalExitCode(report);
   } catch (error) {
-    const problem = safeRehearsalError(error);
-    const result = { status: "unknown", release_authorized: false, error: problem };
-    if (json) stdout(`${JSON.stringify(result, null, 2)}\n`); else stderr(`${problem.message}\n`);
+    stdout(`${JSON.stringify({ status: "unknown", release_authorized: false, error: safeRehearsalError(error) })}\n`);
     return 2;
-  } finally { clearTimeout(timer); signal?.removeEventListener("abort", abort); }
+  }
 }

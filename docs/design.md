@@ -13,8 +13,9 @@ separate step-by-step draft; it currently differs in the ways listed below.
 
 The implemented smaller stage is [inbox processing](./inbox-processing.md): central
 intake defaults, clear ticket statuses and reasons, submitter ownership,
-recorded decisions, and migration of existing tickets. This comes before the
-local merge rehearsal. See progress for merge and runtime evidence.
+recorded decisions, and migration of existing tickets. `inbox:run` now joins
+initial inspection, local rehearsal, and ticket updates in one manual process.
+See progress for local, merge, and runtime evidence.
 
 The current intake boundary excludes requests whose PRs are all already merged:
 processing closes them with `already-merged`, without claiming deployment.
@@ -39,20 +40,20 @@ The [testing plan](./merge-rehearsal-testing.md) defines local Git fixtures and
 two public test GitHub repositories for sample PRs. The
 [profiled inbox guide](./profiled-inbox-testing.md) adds a separate public test
 inbox and the shared sandbox/real input path. Both profiles accept a verified
-inbox ticket and an explicit destination/merge plan; private test manifests
+inbox ticket and generate the destination/merge plan internally; private test manifests
 remain sandbox-only. The same engine checks exact commits and merge order,
 with separate evidence for conflicts, CI/review blockers, and changing inputs.
 
-The implementation is merged. The complete path has live sandbox proof and
-offline real-profile tests; real-project live acceptance remains outstanding.
-See [progress](./progress.md) for exact revisions and evidence. A rehearsal
-produces local reports without changing ticket decisions or remote branches,
-building applications, or deploying them.
+The original profiled engine is merged and has live sandbox proof. The new
+combined command uses its fresh reports to update the same ticket, with distinct
+passed/blocked/unknown/stale outcomes. Real-project live acceptance remains
+outstanding. See [progress](./progress.md) for exact implementation, test, and
+merge evidence. No product branches change and no builds or deployments run.
 
 This scope requires explicit destinations and one documented merge method.
 It does not settle the real release lane, timing of `main` changes, or artifact
-policy below. Connecting rehearsal reports to ticket decisions and later
-execution requires its own policy and evidence.
+policy below. The ticket contract now owns rehearsal outcomes; later release
+execution still requires its own decisions and evidence.
 
 ## Decisions to settle before execution
 
@@ -147,8 +148,8 @@ flowchart LR
     GHIN --> INBOX[Public GitHub Issue inbox]
     INBOX --> R[Local read-only inbox reader]
     INBOX --> RC[Local read-only readiness observations]
-    INBOX --> IP[Explicit inbox processing]
-    IP -. planned updates .-> INBOX
+    INBOX --> IP[inbox:run - inspect and rehearse]
+    IP -->|record reasons and result| INBOX
     INBOX -. later .-> W[Coordinator worker]
     W --> DB[(Coordinator database)]
 
@@ -208,8 +209,8 @@ enough to collect requests before the Coordinator starts doing release work.
 Before release execution, the [inbox-processing plan](./inbox-processing.md)
 adds a separate lifecycle for organizing these tickets. Its statuses and
 decision history must not be confused with an executing release batch. Its
-storage/writer design remains to be specified before implementing Issue writes;
-editable labels alone are not that history.
+durable history lives on the inbox repository's independent `codex/inbox-state`
+branch; editable labels alone are not that history.
 
 The inbox is not the full release queue. When the Coordinator starts batching,
 merging, building, and deploying requests, it will use its own database, such as

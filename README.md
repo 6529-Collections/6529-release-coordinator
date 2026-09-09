@@ -1,10 +1,10 @@
 # 6529 Release Coordinator
 
 The Coordinator is being built to handle releases across the frontend and
-backend. **Request intake is live; local inspection, explicit inbox processing,
-and merge rehearsals are implemented. Sandbox and real profiles share the same
-code; the complete ticket-to-rehearsal path has live sandbox proof. Automatic
-release execution is not built yet.**
+backend. **Request intake is live. One local command now checks a ticket,
+rehearses its suitable PRs, and updates that same ticket with the result.
+Sandbox and real profiles share the same code. Automatic release execution
+is not built yet.**
 
 The public CLI creates a request, validates it, saves local records, and submits
 it to a central GitHub workflow. The workflow saves one public Issue and returns
@@ -16,7 +16,50 @@ Frontend and backend release-recording integrations are merged. Current
 versions, exact PR/commit evidence, local-versus-remote state, tests, and remaining
 work are tracked in [Progress and next steps](./docs/progress.md).
 
-## Read the inbox locally
+## Run the ticket workflow
+
+Use one command with an explicit profile and ticket:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --json
+```
+
+It runs this sequence on your machine and exits:
+
+1. Verify the saved ticket and inspect its PRs, checks, reviews, and dependencies.
+2. Retire clearly outdated or already-merged requests; give other blockers a reason.
+3. For a suitable ticket, create and save its merge plan from the ticket and current configured destinations, then try its exact PRs in temporary local Git repositories.
+4. Save the result and update the same ticket's labels, status comment, and decision history.
+
+A passing rehearsal adds `rehearsal:passed`. The ticket still waits for the future
+release worker; nothing has been built or deployed. Conflicts and missing evidence
+get visible reasons and next actions. Repeating unchanged work rechecks the facts
+without adding duplicate comments or decisions.
+
+The ticket already supplies the exact PRs, services, target, and dependencies.
+The Coordinator creates the rehearsal plan itself. Both profiles currently test
+against each repository's current `main`; this does not change `main` or choose
+a deployment policy. See the [profiled inbox guide](./docs/profiled-inbox-testing.md).
+Omit `--issue` to process the inbox, giving each suitable ticket its own plan and
+rehearsal. Different tickets are not merged together.
+
+`inbox:run` replaces the old `inbox:process` and `merge:rehearse` commands; those
+entry points have been removed. `inbox:read` and `readiness:check` remain read-only
+diagnostics. Submission still uses the public CLI or private `request:submit`.
+
+The command writes only the selected inbox's managed ticket presentation and
+`codex/inbox-state` history. An `already-merged` closure says the Coordinator will
+not handle that request; it does not claim deployment. Mixed merged/open requests
+remain open for a scope decision. See the
+[command guide](./apps/coordinator/README.md#run-the-ticket-workflow) for permissions,
+exit codes and recovery, and [ticket rules](./docs/inbox-processing.md) for labels.
+
+The developer [fixture harness](./apps/coordinator/README.md#merge-engine-and-fixture-tests)
+still tests the merge engine against sample PRs, including deliberate failures.
+Test manifests cannot enter the ticket workflow or either decision journal.
+The public npm package and request schema are unchanged.
+
+## Read-only diagnostics
 
 From this repository, use Node.js 20+ and an authenticated, current GitHub CLI
 (`gh`). Install dependencies if needed, then run one scan:
@@ -53,57 +96,6 @@ merge proof as unknown: it has no verified release-outcome source and does not
 consume the separate merge-rehearsal reports.
 See [readiness checks](./apps/coordinator/README.md#readiness-checks) for details.
 
-## Organize the tickets
-
-The separate command below writes managed labels, readable titles, verified
-submitter assignment, one status comment, and durable decisions. It retires
-clearly outdated requests and requests whose PRs are all already merged. It keeps
-other missing evidence visible with an action owner:
-
-```sh
-npm run inbox:process
-```
-
-Use `-- --issue NUMBER` to limit changes to one ticket. Both `inbox:read` and
-`readiness:check` stay read-only. The processor writes its decision history to
-the selected inbox's `codex/inbox-state` branch. Rehearsals merge only inside
-temporary local repositories. These commands do not merge product branches,
-build applications, or deploy them.
-An `already-merged` closure means the Coordinator will not handle that request;
-it does not claim a successful deployment. A verified merged PR plus an open or
-unverified companion keeps the request open for a scope decision. Missing
-evidence alone can remain waiting. Any remaining deployment uses the existing authorized
-release process; submitting the same merged PR again will not make it eligible.
-[The command guide](./apps/coordinator/README.md#organize-tickets-explicitly)
-explains permissions, retries, and the separate GitHub state branch.
-[Ticket rules](./docs/inbox-processing.md) own status/reason meanings.
-
-Current merge status, dated test results, and rollout evidence are tracked in
-[progress](./docs/progress.md). CLI input, schema, and the installed public npm
-package stay unchanged. Update local readers together with the intake workflow,
-so removing legacy `pending` cannot hide waiting tickets.
-
-## Rehearse sandbox merges locally
-
-The private rehearsal command tries exact PR commits against explicit
-destination commits in temporary local repositories. It shares one engine
-across sandbox and real profiles. Live acceptance so far uses the sandbox.
-
-```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest PATH_TO_TEST_MANIFEST --json
-```
-
-For the verified ticket path and the shared sandbox/real switch, see the
-[profiled inbox guide](./docs/profiled-inbox-testing.md).
-
-Use the [command guide](./apps/coordinator/README.md#sandbox-merge-rehearsal)
-for the manifest shape, report paths, and limits. Real mode requires a verified inbox ticket and an explicit destination plan; test manifests remain sandbox-only.
-The [merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) defines
-the separate sandbox inputs, implementation steps, test cases, and finish line.
-Local tests and live GitHub acceptance are separate milestones recorded in
-[progress](./docs/progress.md). This command produces local evidence; it does
-not update tickets or perform a release.
-
 ## Documentation map
 
 | Need | Document |
@@ -112,7 +104,7 @@ not update tickets or perform a release.
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
 | Understand the ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
-| Select sandbox or real, submit to its inbox, and rehearse one verified ticket | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
+| Select sandbox or real, submit a request, and run its ticket workflow | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
 | Understand the sandbox merge-rehearsal test matrix and evidence | [Merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
@@ -129,8 +121,8 @@ in the design document and must be settled before release execution is built.
 - `packages/release-request/`: the small published CLI. Product repositories
   install this package only. Its own README and license are part of the npm
   archive and must remain with it.
-- `apps/coordinator/`: private profiled submission, inbox inspection/processing,
-  and local merge rehearsals. These are not published with the CLI.
+- `apps/coordinator/`: private profiled submission, read-only diagnostics, and the combined
+  ticket workflow. These are not published with the CLI.
 - `.github/workflows/submit-release-request.yml`: validates and saves inbox Issues.
 - `.github/workflows/publish-release-request.yml`: checks the workspaces and
   publishes the CLI through the protected manual publication path.

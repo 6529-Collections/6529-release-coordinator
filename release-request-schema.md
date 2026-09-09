@@ -137,6 +137,16 @@ valid. A missing prerequisite requires deployment evidence; it is not silently
 added. Conflicting catalog definitions require the exact combined merge result.
 Schema validation itself checks structure, not catalog membership or graph safety.
 
+## Local rehearsal planning
+
+The ticket already supplies the requested code, selected services, target, and
+part dependencies. `inbox:run` uses those fields to generate its own rehearsal
+plan. It orders parts by their dependencies and keeps PR array order within each
+part. Trusted Coordinator configuration supplies the destination branches;
+GitHub supplies their current commits. No separate plan file is submitted.
+See [automatic planning](./docs/profiled-inbox-testing.md#automatic-plan-for-each-ticket)
+for the current local test policy. This does not authorize release execution.
+
 ## What the schema checks now
 
 The JSON Schema checks required fields, allowed repository and target names,

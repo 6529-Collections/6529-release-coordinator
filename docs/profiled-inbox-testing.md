@@ -1,10 +1,10 @@
-# Profiled inbox and one-ticket rehearsal
+# Profiled inbox and one-command ticket workflow
 
-This stage connects a verified ticket to the existing merge engine. Sandbox and
-real configurations use the same intake, receipt verification, readiness,
-processing, and rehearsal code. Only sandbox live execution is part of this
-rollout. Multiple-ticket batching, release ownership, builds, deployments,
-and rehearsal-driven ticket decisions remain later work.
+Sandbox and real configurations use the same intake, receipt verification,
+readiness, local merge engine, and ticket updates. `inbox:run` joins inspection,
+rehearsal, and presentation into one manual run. Multiple-ticket merge batches,
+release ownership, builds, and deployments remain later work. See
+[progress](./progress.md) for local, live sandbox, and remote merge evidence.
 
 ## Trusted configuration
 
@@ -20,6 +20,7 @@ credential through a request. An unknown name stops without falling back.
 | Submission workflow | `submit-release-request.yml` on inbox `main` | Same workflow name/ref in the real inbox |
 | Receipt checks | Selected inbox, successful workflow/attempt, request checksum, ticket number and GitHub actor | Same checks |
 | State journal | `codex/inbox-state` in the test inbox repository | Existing state branch in the real inbox repository |
+| Rehearsal destination | Current `main` of each selected test repository | Current `main` of each selected product repository |
 | Local submissions | `.release-coordinator/profiles/sandbox/submissions/` | `.release-coordinator/profiles/real/submissions/` |
 | Rehearsal reports | `.release-coordinator/merge-rehearsal/sandbox/` | `.release-coordinator/merge-rehearsal/real/` |
 
@@ -45,7 +46,7 @@ describe a new request.
 RELEASE_COORDINATOR_PROFILE=sandbox npm run request:submit -- --input REQUEST_JSON --json
 RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:read -- --json
 RELEASE_COORDINATOR_PROFILE=sandbox npm run readiness:check -- --json
-RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --issue NUMBER --plan PLAN_JSON --json
+RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --json
 ```
 
 `request:submit` explicitly dispatches intake and waits up to five minutes for
@@ -67,58 +68,70 @@ The installed public npm CLI `0.0.4` retains its existing real-only behavior.
 This stage does not publish or require a new npm version. The new profile-aware
 submission command belongs to the private Coordinator workspace.
 
-`request:submit` and `merge:rehearse` require an explicit profile. Existing
-`inbox:read`, `readiness:check`, and `inbox:process` keep their real default for
-backward compatibility, but honor an explicitly selected sandbox profile.
-Use an explicit setting during sandbox work. `--help` performs no reads/writes.
+`request:submit` and `inbox:run` require an explicit profile. The read-only
+`inbox:read` and `readiness:check` retain their real default and honor an explicit
+sandbox profile. `--help` performs no reads or writes.
 
-Ticket processing remains a separate explicit write command:
+`inbox:run --issue NUMBER` verifies and inspects the ticket, skips rehearsal for
+initial blockers, and otherwise creates a plan and tries its exact PRs locally.
+It saves the generated plan in the journal before starting Git, then saves the
+report before publishing the result in the same ticket's comment and labels.
+A pass adds `rehearsal:passed`; the lifecycle stays waiting for independent
+execution/history evidence. A combined conflict adds `reason:rehearsal-blocked`.
+Unknown and changed evidence get distinct reasons. A pass never authorizes release.
+
+Omit the ticket number to process all selected tickets:
 
 ```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:process -- --issue NUMBER --json
+RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 ```
 
-It uses the same existing ticket policy and its own inbox journal. A passing
-rehearsal does not change ticket status or authorize a release.
+Every suitable ticket gets its own generated plan and rehearsal. Different
+tickets are not merged together. The old manual plan input and separate
+processing/rehearsal commands have been removed. Diagnostics stay read-only.
 
-## Explicit plan for one verified ticket
+## Automatic plan for each ticket
 
-The plan names the ticket binding and exact destination/merge order. It cannot
-add, omit, duplicate, or change any requested PR. Request part dependencies must
-agree with the order. Multi-part requests in one repository retain their service
-dependencies; a repository order that cannot satisfy the parts is rejected.
+The submitter's ticket already provides the exact PR versions, target, selected
+services, and dependencies. The Coordinator adds only the details needed for a
+repeatable local test:
 
-```json
-{
-  "schema_version": "1",
-  "profile": "sandbox",
-  "source": "inbox-plan",
-  "inbox": {
-    "repository_id": 1362580376,
-    "issue_number": 1,
-    "request_id": "REQUEST_UUID_FROM_RECEIPT",
-    "checksum": "REQUEST_CHECKSUM_FROM_RECEIPT"
-  },
-  "repositories": [
-    {
-      "role": "frontend",
-      "destination": { "branch": "main", "commit": "FULL_DESTINATION_COMMIT" },
-      "pull_requests": [
-        { "number": 1, "branch": "EXACT_REQUESTED_BRANCH", "commit": "FULL_REQUESTED_COMMIT" }
-      ]
-    }
-  ]
-}
-```
+1. Verify the receipt and dependency graph. Keep every requested PR and service.
+2. Use the shared deterministic dependency sorter to order parts and repositories.
+   Dependencies come first; PRs inside a part retain their submitted array order.
+   Independent parts use the sorter's stable queue order from the ticket.
+3. Read the current commit of each profile-configured rehearsal destination.
+   Both profiles explicitly configure `main` for frontend and backend. This is
+   a rehearsal setting for both staging/production requests, not a deployment
+   destination or a decision about when the future executor changes `main`.
+4. Verify repository name, numeric ID, visibility, branch, and full commit.
+   No repository/branch override is accepted from a request or command argument.
+5. Validate the complete generated plan against the ticket again. Preserve
+   existing size, PR-count, scope, and dependency limits. Interleaving repository
+   dependencies that this engine cannot represent produce a clear blocker.
+6. Save the plan under the journal lock before temporary Git work. Recheck the
+   ticket before saving and before/after rehearsal; recheck PRs and destinations.
 
-Placeholders above are explanatory, not runnable fixture values. The shared
-`inboxBinding`/`inboxMergePlan` helpers construct and verify the binding. The
-reader verifies current workflow proof before any merge and again afterward.
-The engine rechecks PRs/destinations/checks as before. A changed proof is stale;
-a closed, missing, invalid, or unreadable ticket on recheck prevents a pass.
-Reports retain both receipt observations, the exact PR/destination trees, and
-`release_authorized: false`. Existing `--manifest` input remains sandbox-only
-and can never stand in for verified inbox input.
+Missing configuration or destination evidence produces `merge-plan-unavailable`.
+Invalid scope/order produces `merge-plan-invalid`. The command does not guess,
+drop PRs, try alternate orders until one passes, or ask for another plan file.
+A failed or uncertain plan save stops before Git and retains the run lock.
+
+Explicit `--resume RUN_ID` keeps the selection and plans already saved by that
+run, and rehearses against fresh observations of those pinned inputs. It cannot
+reuse an old passing report or silently replace the pinned destination commit.
+Starting a new run captures current destination commits. See the
+[recovery procedure](../apps/coordinator/README.md#journal-concurrency-and-interrupted-runs).
+
+Plans remain internal evidence: the journal stores the ticket/request binding,
+exact PR order and destinations; full reports record their resulting trees.
+The journal's `inbox-run-v2` marker prevents older writers from overwriting the
+new run format. A legacy interrupted v1 run retains its already recorded scope
+and plan on explicit resume.
+
+Developer test manifests remain sandbox-only fixture inputs. They cannot enter
+the ticket workflow or either decision journal. The public request schema and
+installed npm CLI are unchanged.
 
 ## Verification and finish line
 
@@ -127,7 +140,7 @@ workflow validation, receipt verification, real temporary Git merges, exact
 ticket/PR scope, closed-ticket rechecks, hostile or crossed profile input,
 repeated submissions, and separate records/journals. Tests do not contact GitHub.
 
-The [September 9 sandbox acceptance record](./testing/profiled-inbox-2026-09-09.md)
+The earlier [September 9 sandbox acceptance record](./testing/profiled-inbox-2026-09-09.md)
 completes the following live proof:
 
 1. Submit one sample request and verify its actual workflow, actor, ticket, and checksum.
@@ -138,7 +151,7 @@ completes the following live proof:
 
 Record the source pin, local runtime revision, fixture commits, receipt and
 workflow URLs, report results, and separate CI/merge evidence in progress.
-Stop at this finish line. Switching the new Coordinator commands to `real`
+The combined workflow has its own [acceptance record](./testing/unified-inbox-2026-09-09.md). Switching the new Coordinator commands to `real`
 requires only the named configuration once installed, but permissions, product
 repository limits, and the first real live run still need verification. Offline
 real-profile tests are not real-system runtime proof.

@@ -968,8 +968,8 @@
           <p class="diagram-context">
             <strong>Inbox organization, before this release flow:</strong> Organize the inbox with
             readable tickets, status/reason labels, submitter ownership, and recorded decisions.
-            A separate explicit processing command applies ticket updates while the inspection
-            commands stay read-only. This locally implemented stage precedes the merge rehearsal.
+            The single <code>inbox:run</code> command checks tickets, rehearses suitable exact
+            PRs, and records the result on the same ticket. Inspection commands remain read-only.
             See the <a href="./docs/inbox-processing.md">ticket contract</a> and progress for rollout evidence.
           </p>
           <p class="diagram-context">
@@ -982,7 +982,7 @@
             <strong>Planned progress storage:</strong> A future worker will save each release
             step and its result. The local reader currently prints its report and exits;
             it does not save a release state or start later steps. The inbox
-            processing command has its own ticket decision journal; it is not an executing release queue.
+            <code>inbox:run</code> workflow has its own ticket decision journal; it is not an executing release queue.
           </p>
           <article class="story" id="story" aria-label="Release process"></article>
         </div>
