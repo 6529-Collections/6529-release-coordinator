@@ -183,6 +183,10 @@ its exact plan and authorization. The unresolved execution design remains in
 Run a separate sandbox rehearsal with Node.js 20+, Git 2.38+, and authenticated
 `gh` with read access to the pinned test repositories:
 
+The two sample repositories are public so their required GitHub checks can be
+enforced on the current account plan. The trusted profile pins that visibility
+along with their exact names and IDs; this does not enable product repositories.
+
 ```sh
 RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest PATH_TO_TEST_MANIFEST --json
 ```

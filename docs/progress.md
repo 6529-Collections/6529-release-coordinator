@@ -115,10 +115,11 @@ The owner then narrowed intake: a request whose PRs are all already merged
 should close without claiming deployment. The merged policy was applied to #13
 and #16, and both closures were verified. A deployment-proof checker for retiring these
 requests is deferred; mixed requests remain open for a scope decision.
-The next planned scope is the [sandbox merge rehearsal and testing plan](./merge-rehearsal-testing.md).
-Build and test the private engine with real local Git fixtures, create two
-private sample repositories, run the bounded live PR matrix, and record the
-results. Test manifests remain separate from real inbox receipts. This stage
+The current scope is the [sandbox merge rehearsal and testing plan](./merge-rehearsal-testing.md).
+Its private engine and local Git fixtures are implemented and merged in PR #26.
+Two sample repositories contain the controlled PR matrix; the follow-up below
+completes required-check coverage after making them public. Test manifests
+remain separate from real inbox receipts. This stage
 adds no ticket writes, product changes, npm release, or deployment.
 
 The larger release worker, real-inbox rehearsal integration, execution
@@ -161,11 +162,10 @@ frontend #1-#8 and backend #1-#4. Frontend #6 is deliberately a draft, #7 was
 deliberately closed, and #5 deliberately fails its CI check. There are no
 deployment/publication workflows or fake requests in the real inbox.
 
-**Live acceptance limitation:** GitHub refused branch protection on the private
+**Initial live acceptance limitation (resolved setup below):** GitHub refused branch protection on the private
 repositories with HTTP 403: "Upgrade to GitHub Pro or make this repository
-public to enable this feature." Both remain private. A user decision is pending
-on keeping that coverage blocked or making only these fake-code repositories
-public. No plan upgrade or visibility change was made. The sandbox profile
+public to enable this feature." Both were private during those initial runs;
+no plan upgrade or visibility change was made then. The sandbox profile
 explicitly requires `Sandbox check` to be marked required by GitHub; an optional
 check cannot substitute, so missing enforcement stays unknown in reports.
 
@@ -191,7 +191,23 @@ The final runtime head above then repeated all 15 live cases, with matching
 observations and tree identities and unchanged source state. That repeat is
 recorded in the dated test record and under
 `.release-coordinator/live-rehearsal/2026-09-09T10-25-28-454Z/`. The required-check
-enforcement gap remained unverified; it was not counted as a passing gate.
+enforcement gap remained unverified in those runs; it was not counted as a passing gate.
+
+### Public sandbox required checks, September 9
+
+The user authorized making only the two sample repositories public to complete
+required-check acceptance. Both visibility changes were applied, and independent
+GitHub reads at **10:49 UTC** verified the same pinned repository IDs, admin access,
+and `Sandbox check` from GitHub Actions (app ID `15368`) required on `main` and
+`rehearsal-target` in both repositories. All four protections enforce admins,
+require PRs and resolved conversations, and prohibit force pushes and deletion.
+The profile now pins public visibility; the public CLI, product repository
+allowlist, and disabled real rehearsal profile are unchanged.
+
+Raw protection readback is saved in
+`.release-coordinator/sandbox-public-protection-20260909.json`. The previous
+private-run evidence remains historical. Live acceptance will be rerun from a
+clean commit with the updated profile before this follow-up is counted complete.
 
 ### Rehearsal planning baseline, September 9
 

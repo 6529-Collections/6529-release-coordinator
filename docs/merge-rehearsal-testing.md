@@ -13,7 +13,7 @@ explicit order, can Git combine those changes in temporary local repositories?
 Can the Coordinator distinguish a clean result, a real conflict, and evidence
 that is missing or has changed?
 
-Use real Git for local tests, then real GitHub PRs in two small private test
+Use real Git for local tests, then real GitHub PRs in two small public test
 repositories. Fake refers to their sample content; their branches, commits,
 PRs, and CI checks are real. An empty production inbox does not prevent testing.
 
@@ -25,7 +25,7 @@ correctness, runtime prerequisites, deployment, or permission to release.
 | Phase | Work | Evidence required before proceeding |
 | --- | --- | --- |
 | 1. Local implementation | Add the private input contract, isolated Git runner, report, and local fixtures. | Automated cases below pass using real temporary Git repositories. Existing tests still pass. |
-| 2. GitHub setup | Create the two private repositories, sample content, required CI check, and controlled PRs. | Exact repository identities, access, private visibility, rules, PR links, and check results recorded. |
+| 2. GitHub setup | Create the two sample repositories, sample content, required CI check, and controlled PRs. | Exact repository identities, access, public visibility, rules, PR links, and check results recorded. |
 | 3. Live rehearsal | Run the same engine against the real test PRs, including deliberate failures and updates. | Each required live case has an expected and actual result, exact commits, and saved evidence. |
 | 4. Review and handoff | Repeat unchanged cases, verify boundaries and cleanup, update documentation, and integrate through normal PR checks. | Local and live results recorded separately; remaining limitations explicit; Coordinator implementation merged into `main`. |
 
@@ -59,10 +59,12 @@ Require the check on the tested destination branches, disable force pushes,
 and verify the rules are actually enforced. Private repository rules and
 Actions availability must be checked during setup; if unavailable, record the
 blocked live coverage rather than describing an ordinary check as required.
-This account limitation occurred during setup. Local merge diagnostics may
-continue, but clean merges remain `unknown` while the profile's named check is
-not enforced. Full live acceptance requires resolving that limitation; changing
-visibility or buying plan features is a separate owner decision.
+This account limitation occurred during the initial private setup. On September 9,
+the user authorized making only these two sample repositories public. Their
+pinned profile now expects public visibility, and `Sandbox check` is enforced
+on both `main` and `rehearsal-target` in each repository. Clean merges still
+remain `unknown` whenever the profile's named check cannot be verified as required.
+See progress for the separate live acceptance result after this settings change.
 
 The setup step is allowed to seed test branches and open/update test PRs once
 execution is authorized. The rehearsal command itself only reads GitHub and
@@ -80,7 +82,7 @@ the request's `staging`/`production` deployment target.
 
 | Profile | Repositories | Input source | Rehearsal behavior |
 | --- | --- | --- | --- |
-| `sandbox` | The two private test repositories | Validated private test manifest | Shared engine; temporary local merges and local reports. |
+| `sandbox` | The two public test repositories | Validated private test manifest | Shared engine; temporary local merges and local reports. |
 | `real` | The two fixed product repositories | Verified real inbox request plus an explicit destination/merge plan | The same engine and report contract; still no remote writes or deployment. |
 
 The selected trusted profile supplies repository names/IDs and read adapters.
@@ -289,15 +291,15 @@ Save raw local reports under
 builders/manifests without credentials; do not rely on ignored local output
 as the only durable acceptance record. Record in progress, or a linked dated
 test record, each case ID, result, Coordinator revision, exact PR/base/head/tree
-identities, check-run links, timestamp, and any limitation. Private repository
-URLs are references for authorized readers, not public evidence access.
+identities, check-run links, timestamp, and any limitation. The sample repository
+URLs are now public; earlier records describe the visibility observed at their run time.
 
 - [x] Private engine and manifest/profile validation implemented and documented.
 - [x] The engine takes a shared internal plan; profile selection and input proof
       stay outside it. MR-21 verifies switching boundaries and the disabled real path.
 - [x] All MR local cases and existing package/Coordinator tests pass in CI.
 - [x] Public package dry-pack contents remain the existing nine files.
-- [ ] Both private repositories and their enforced check rules verified live.
+- [x] Both sample repositories and their enforced check rules verified live.
 - [ ] All required MR live cases pass their stated expectations; expected
       conflicts and failed checks count as successful detection, not green merges.
 - [x] Repeat runs and independent before/after reads confirm no rehearsal writes

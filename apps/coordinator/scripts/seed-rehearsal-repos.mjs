@@ -82,7 +82,7 @@ for (const { role, identity } of roles) {
     seed.repositories[role] = { ...prior, ...identity };
   } else {
   await git(["init", "-b", "main"]);
-  await files({ "README.md": `# Coordinator test ${role}\n\nPrivate sample code for merge rehearsals. No deployments or real release requests.\n`,
+  await files({ "README.md": `# Coordinator test ${role}\n\nSample code for merge rehearsals. No deployments or real release requests.\n`,
     "shared.txt": "original\n", ".github/workflows/sandbox-check.yml": workflow,
     "scripts/check.mjs": 'import { existsSync } from "node:fs";\nif (existsSync("FAIL_CHECK")) throw new Error("Deliberate sandbox CI failure");\nconsole.log("Sandbox sample check passed");\n',
     ...(role === "backend" ? { "src/config/deploy-services.json": json(catalog()) } : {}) });

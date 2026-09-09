@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
 export const sandboxRepositories = Object.freeze({
-  frontend: Object.freeze({ full_name: "6529-Collections/release-coordinator-test-frontend", id: 1362504370, private: true, required_checks: Object.freeze(["Sandbox check"]) }),
-  backend: Object.freeze({ full_name: "6529-Collections/release-coordinator-test-backend", id: 1362505082, private: true, required_checks: Object.freeze(["Sandbox check"]) })
+  frontend: Object.freeze({ full_name: "6529-Collections/release-coordinator-test-frontend", id: 1362504370, private: false, required_checks: Object.freeze(["Sandbox check"]) }),
+  backend: Object.freeze({ full_name: "6529-Collections/release-coordinator-test-backend", id: 1362505082, private: false, required_checks: Object.freeze(["Sandbox check"]) })
 });
 export const maxManifestBytes = 64 * 1024;
 export const isSha = value => typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);

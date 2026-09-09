@@ -6,11 +6,33 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { runRehearsalCli } from "../src/rehearsal-cli.mjs";
-import { sandboxRepositories } from "../src/rehearsal-plan.mjs";
+import { sandboxRepositories, isSha, isBranch } from "../src/rehearsal-plan.mjs";
 
 if (process.argv.length !== 4 || process.argv[2] !== "--seed") throw new Error("Usage: node apps/coordinator/scripts/run-rehearsal-cases.mjs --seed SEED_JSON");
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const seed = JSON.parse(await readFile(process.argv[3], "utf8"));
+let seed;
+try {
+  seed = JSON.parse(await readFile(process.argv[3], "utf8"));
+  assert.equal(seed.version, 1);
+  for (const [role, identity] of Object.entries(sandboxRepositories)) {
+    const repo = seed.repositories?.[role];
+    assert.equal(repo?.id, identity.id); assert.equal(repo?.full_name, identity.full_name);
+    assert.equal(repo?.private, identity.private);
+    assert.ok(isSha(repo.base) && isSha(repo.target));
+    const names = role === "frontend"
+      ? ["clean-a", "clean-b", "conflict-a", "conflict-b", "ci-failure", "draft", "closed", "outdated"]
+      : ["catalog-a", "catalog-b", "conflict-a", "conflict-b"];
+    for (const name of names) {
+      const pull = repo.pulls?.[name];
+      assert.ok(Number.isSafeInteger(pull?.number) && pull.number > 0);
+      assert.ok(isBranch(pull.branch) && isSha(pull.commit));
+      assert.ok(pull.current_commit === undefined || isSha(pull.current_commit));
+    }
+  }
+} catch {
+  process.stderr.write("Invalid or incomplete sandbox seed. Verify or resume the recorded setup before running live acceptance.\n");
+  process.exit(2);
+}
 const directory = path.join(root, ".release-coordinator", "live-rehearsal", new Date().toISOString().replace(/[:.]/gu, "-"));
 await mkdir(directory, { recursive: true });
 const exec = promisify(execFile);
@@ -26,8 +48,18 @@ async function snapshot() {
     const branches = JSON.parse((await exec("gh", args(`repos/${identity.full_name}/branches?per_page=100`))).stdout);
     const pulls = JSON.parse((await exec("gh", args(`repos/${identity.full_name}/pulls?state=all&per_page=100`))).stdout);
     assert.ok(branches.length < 100 && pulls.length < 100);
+    const protection = {};
+    for (const branch of ["main", "rehearsal-target"]) {
+      const rule = JSON.parse((await exec("gh", args(`repos/${identity.full_name}/branches/${branch}/protection`))).stdout);
+      assert.equal(rule.enforce_admins?.enabled, true);
+      assert.equal(rule.allow_force_pushes?.enabled, false); assert.equal(rule.allow_deletions?.enabled, false);
+      assert.equal(rule.required_conversation_resolution?.enabled, true);
+      assert.equal(rule.required_pull_request_reviews?.required_approving_review_count, 0);
+      assert.deepEqual(rule.required_status_checks?.checks, [{ context: "Sandbox check", app_id: 15368 }]);
+      protection[branch] = rule;
+    }
     result[role] = {
-      id: repo.id, private: repo.private,
+      id: repo.id, private: repo.private, protection,
       branches: branches.map(b => ({ name: b.name, commit: b.commit.sha })).sort((a, b) => a.name.localeCompare(b.name)),
       pulls: pulls.map(p => ({ number: p.number, state: p.state, draft: p.draft, head: p.head.sha, base: p.base.sha,
         title: p.title, body: p.body, comments: p.comments, merged_at: p.merged_at })).sort((a, b) => a.number - b.number)
@@ -77,7 +109,8 @@ for (const [caseId, parts, expected] of cases) {
   const enforcementMissing = checks.some(c => c.id === "configured_required_check" && c.status !== "pass");
   if (expected === "clean") {
     assert.ok(report.repositories.every(repo => repo.final_tree), `${caseId}: expected every local merge to succeed`);
-    assert.equal(report.status, enforcementMissing ? "unknown" : "pass");
+    assert.equal(enforcementMissing, false, `${caseId}: required check must be observable after public setup`);
+    assert.equal(report.status, "pass");
   } else if (expected === "conflict") {
     assert.ok(report.repositories.some(repo => repo.merges.some(m => m.status === "blocked" && m.conflicts.length)));
     assert.equal(report.status, "blocked");
@@ -87,7 +120,9 @@ for (const [caseId, parts, expected] of cases) {
     assert.equal(checks.find(c => c.id === "requested_code").status, "blocked"); assert.equal(report.status, "blocked");
   } else {
     assert.ok(report.repositories[0].initial.pulls[0].checks.some(c => c.name === "Sandbox check" && c.conclusion === "FAILURE"));
-    assert.equal(report.status, enforcementMissing ? "unknown" : "blocked");
+    assert.equal(enforcementMissing, false, `${caseId}: failed check must be required by GitHub`);
+    assert.equal(checks.find(c => c.id === "required_checks").status, "blocked");
+    assert.equal(report.status, "blocked");
   }
   if (caseId === "MR-20") {
     const first = JSON.parse(await readFile(path.join(directory, "MR-01.result.json"), "utf8"));
@@ -95,12 +130,12 @@ for (const [caseId, parts, expected] of cases) {
     assert.equal(report.status, first.status);
   }
   const result = { case_id: caseId, expected, observed: report.status, exit_code: code,
-    local_expectation: "pass", required_gate_coverage: enforcementMissing ? "blocked-account-plan" : "verified",
+    local_expectation: "pass", required_gate_coverage: enforcementMissing ? "not-observable-for-input" : "verified",
     run_id: report.run_id, revision: report.revision, report_file: report.report_file,
     trees: report.repositories.map(r => ({ role: r.role, tree: r.final_tree })) };
   evidence.cases.push(result);
   await writeFile(path.join(directory, "summary.json"), JSON.stringify(evidence, null, 2));
-  process.stdout.write(`${caseId}: ${report.status}; local expectation passed${enforcementMissing ? "; required enforcement unavailable" : ""}\n`);
+  process.stdout.write(`${caseId}: ${report.status}; expectation passed${enforcementMissing ? "; required check not observable for this input" : ""}\n`);
 }
 evidence.after = await snapshot();
 assert.deepEqual(evidence.after, evidence.before, "Rehearsal must leave sandbox branches and PR state unchanged.");
