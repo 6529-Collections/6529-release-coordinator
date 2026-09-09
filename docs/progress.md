@@ -91,9 +91,9 @@ procedures. Recording a release intent is observation only.
 
 ## Current scope and later work
 
-The owner has chosen to organize the inbox before building the local merge
-rehearsal. The agreed scope is the complete **submit a request -> first inbox
-processing** stage, captured in [one plan](./inbox-processing.md):
+The complete **submit a request -> first inbox processing** stage was chosen
+before the merge rehearsal and is now implemented and exercised live. Its
+[contract](./inbox-processing.md) covers:
 
 - Keep public CLI input and schema unchanged.
 - Initialize new tickets centrally with readable titles, verified submitter
@@ -115,9 +115,109 @@ The owner then narrowed intake: a request whose PRs are all already merged
 should close without claiming deployment. The merged policy was applied to #13
 and #16, and both closures were verified. A deployment-proof checker for retiring these
 requests is deferred; mixed requests remain open for a scope decision.
-After this stage, return to the local merge rehearsal. The larger release worker,
-execution permissions, deployment evidence sources, and recovery remain later
-work. No npm release or product deployment is required for inbox organization.
+The next planned scope is the [sandbox merge rehearsal and testing plan](./merge-rehearsal-testing.md).
+Build and test the private engine with real local Git fixtures, create two
+private sample repositories, run the bounded live PR matrix, and record the
+results. Test manifests remain separate from real inbox receipts. This stage
+adds no ticket writes, product changes, npm release, or deployment.
+
+The larger release worker, real-inbox rehearsal integration, execution
+permissions, deployment evidence sources, and recovery remain later work.
+
+### Sandbox rehearsal implementation, September 9
+
+The plan was committed as `718eaaa` on
+`codex/sandbox-merge-rehearsal`, branched from freshly verified `main` at
+`514fed01f2c5149eac60a15898b562409479ec1f`. The private `merge:rehearse` command
+now uses one normalized-plan engine, an explicit sandbox profile, pinned
+GitHub repository identities, temporary bare Git repositories, and local
+JSON/text reports. Real mode stops before input reads until its verified-inbox
+adapter is integrated. Existing production repository restrictions and public
+CLI/schema are unchanged.
+
+[PR #26](https://github.com/6529-Collections/6529-release-coordinator/pull/26)
+carries the implementation and documentation; its page records current merge
+status. Required [CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34340135589)
+passed on exact runtime head `a58b450e4f47e61b8b17867a0b6bf23f1a1e0a1e`, using
+Node.js 20, all 216 tests, and the nine-file package dry pack. Publication was skipped.
+
+All **216 local tests passed**: 26 public-package tests and 190 Coordinator
+tests, including 46 new rehearsal tests across the MR matrix. Tests exercise
+real local Git merges, conflicts across individually clean PRs, exact combined
+catalogs, changing/missing evidence, profile boundaries, interrupted and partial
+operations, resource limits, and cleanup. The public package dry pack still
+contains exactly nine files. This is local test evidence; CI and remote merge
+are separate milestones.
+
+Created both private test repositories with verified admin/read access:
+
+- [Frontend sandbox](https://github.com/6529-Collections/release-coordinator-test-frontend),
+  repository ID `1362504370`, baseline `5e5d27c5bfee263259e15eb9dee0ad0ea89c0e53`.
+- [Backend sandbox](https://github.com/6529-Collections/release-coordinator-test-backend),
+  repository ID `1362505082`, baseline `33dc26417355f53b8ba94f1d20c9bd9e3779edaa`.
+
+They contain only sample files, a dependency-free CI check, and controlled PRs:
+frontend #1-#8 and backend #1-#4. Frontend #6 is deliberately a draft, #7 was
+deliberately closed, and #5 deliberately fails its CI check. There are no
+deployment/publication workflows or fake requests in the real inbox.
+
+**Live acceptance limitation:** GitHub refused branch protection on the private
+repositories with HTTP 403: "Upgrade to GitHub Pro or make this repository
+public to enable this feature." Both remain private. A user decision is pending
+on keeping that coverage blocked or making only these fake-code repositories
+public. No plan upgrade or visibility change was made. The sandbox profile
+explicitly requires `Sandbox check` to be marked required by GitHub; an optional
+check cannot substitute, so missing enforcement stays unknown in reports.
+
+All **15 live cases** met their local merge/input expectations from clean
+Coordinator commit `ee8fd94c2537e5e78bd1e351e4eed1c8c8207885`, between
+10:15:49 and 10:16:55 UTC. Required-check acceptance remains incomplete:
+clean merges reported `unknown`, while demonstrated conflicts and inactive/
+outdated inputs reported `blocked`. The failed sample CI was observed, but
+could not prove required-failure enforcement while protection was unavailable.
+Independent before/after snapshots verified unchanged sandbox branch commits
+and PR state. All run-owned temporary Git directories were removed.
+
+[The dated test record](./testing/merge-rehearsal-2026-09-09.md) retains exact
+fixture commits, PR/check links, run IDs, result trees, and coverage limits.
+Raw evidence is under `.release-coordinator/rehearsal-setup-20260909/` and
+`.release-coordinator/live-rehearsal/2026-09-09T10-15-49-009Z/`. A subsequent
+local review tightened the rare setup-failure cleanup path so a second
+repository cannot hide a leftover from the first; its two-repository regression
+test is part of the current suite. Input adaptation also preserves multiple
+service parts per repository in the shared engine; the added regression proves
+that later real-inbox integration does not need a second merge algorithm.
+The final runtime head above then repeated all 15 live cases, with matching
+observations and tree identities and unchanged source state. That repeat is
+recorded in the dated test record and under
+`.release-coordinator/live-rehearsal/2026-09-09T10-25-28-454Z/`. The required-check
+enforcement gap remained unverified; it was not counted as a passing gate.
+
+### Rehearsal planning baseline, September 9
+
+Before this documentation update, local `main`, freshly fetched `origin/main`,
+and GitHub's live `main` all matched
+`514fed01f2c5149eac60a15898b562409479ec1f` (the PR #24 merge). There were no
+uncommitted tracked implementation changes. The two older untracked root npm
+planning/review documents were left untouched; they are not current instructions.
+
+The new plan defines one shared rehearsal engine with explicit sandbox/real
+profiles, the private sandbox input boundary, exact destination and
+merge behavior, two proposed repository names, phased setup, automated/live
+test matrix, evidence requirements, and a bounded finish line. The README,
+app guide, ticket contract, design, and agent documentation map link to it.
+The first milestone enables sandbox operation. The real profile will use the
+same engine once its verified-inbox adapter has separate integration proof;
+an environment change alone cannot make a test manifest trusted.
+
+This update is documentation only. No rehearsal command, test repository,
+sample PR, or test execution is claimed. The prior 170-test results above are
+implementation evidence from the earlier work, not new tests of this plan.
+Documentation checks passed for all seven changed/new guides, 52 local links,
+the 21 scenario IDs, and whitespace. At that planning checkpoint the edits were
+local and uncommitted. The owner subsequently authorized execution; the plan
+commit and implementation evidence are recorded above. This paragraph preserves
+the planning baseline rather than claiming those later steps had already run.
 
 ### Merged intake and real migration, September 9
 

@@ -10,6 +10,7 @@
     "test": "node --test test/*.test.mjs",
     "inbox:read": "node bin/read-inbox.mjs",
     "inbox:process": "node bin/process-inbox.mjs",
-    "readiness:check": "node bin/check-readiness.mjs"
+    "readiness:check": "node bin/check-readiness.mjs",
+    "merge:rehearse": "node bin/rehearse-merge.mjs"
   }
 }

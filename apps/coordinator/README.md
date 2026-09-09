@@ -1,7 +1,8 @@
 # Local Coordinator commands
 
-This private workspace is the first Coordinator application. It reads the saved
-requests in `6529-Collections/6529-release-coordinator` and prints a report.
+This private workspace is the first Coordinator application. Its inbox commands
+read saved requests in `6529-Collections/6529-release-coordinator`; its sandbox
+rehearsal reads a separate private test manifest and sample GitHub PRs.
 It runs manually on your machine and exits. No server, timer, database, or
 deployment worker is started.
 
@@ -176,6 +177,72 @@ These are observations, not an atomic snapshot, reservation, or GitHub lock.
 Facts can change immediately after the last read. Future execution must recheck
 its exact plan and authorization. The unresolved execution design remains in
 [design](../../docs/design.md); this checker does not settle it.
+
+## Sandbox merge rehearsal
+
+Run a separate sandbox rehearsal with Node.js 20+, Git 2.38+, and authenticated
+`gh` with read access to the pinned test repositories:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest PATH_TO_TEST_MANIFEST --json
+```
+
+`--help` reads and writes nothing. The profile is mandatory; unknown or missing
+values stop. `real` is explicitly disabled until the verified real-inbox adapter
+is integrated and tested. A profile never turns test data into a trusted request
+or authorizes a GitHub mutation. Existing commands and public CLI/schema are unchanged.
+
+The private JSON manifest has these fields (not the public release-request schema):
+
+| Field | Meaning |
+| --- | --- |
+| `schema_version`, `source`, `profile` | Exact values `"1"`, `"test-manifest"`, `"sandbox"`. |
+| `case_id`, `target` | A short case identifier and `staging` or `production` for dependency observations. |
+| `repositories` | One or two unique frontend/backend roles, in explicit dependency order. |
+| Repository `role`, `depends_on` | `frontend` or `backend`; dependencies must name earlier roles. Names, IDs, and expected visibility come from the trusted profile. |
+| Repository `destination` | Explicit `branch` and full 40-character `commit`; no inferred staging branch. |
+| Repository `pull_requests` | Ordered list of `{number, branch, commit}` records with exact commits. At most ten per repository. |
+| Backend `deploy_units`, `deploy_dependencies` | Selected service names and additional `{before, after}` edges. Both fields are required for backend. |
+
+Unknown fields, duplicates, unsafe refs, invalid dependency order, and manifests
+over 64 KiB are rejected. No repository URL, credential, arbitrary API request,
+or executable command can come from the manifest. The test matrix and fixture
+setup are described in the [testing plan](../../docs/merge-rehearsal-testing.md).
+
+The engine rechecks GitHub after trying the exact commits in the declared order.
+It uses Git's `ort` merge-tree operation and temporary two-parent commits in
+fresh bare repositories. Nothing is checked out or executed from PR content.
+Reports include intermediate/final trees, separate CI/review facts, conflicts,
+the combined backend catalog, observation changes, cleanup, and
+`release_authorized: false`. CI on individual PRs does not prove the combined
+tree was tested. Gates for one base branch do not prove another destination.
+
+| Exit | Result |
+| --- | --- |
+| `0` | All requested rehearsal observations passed for this exact snapshot. |
+| `1` | Stable evidence demonstrates a blocker. |
+| `2` | Unknown evidence, invalid input, or an operational/report/cleanup failure. |
+| `3` | PR, destination, checks, reviews, or state changed during the run. |
+
+The command saves JSON and readable text under
+`.release-coordinator/merge-rehearsal/sandbox/<run-id>/` in this checkout.
+Each run gets a new directory; old evidence is never overwritten. Reports name
+the Coordinator commit and tracked dirty state. Temporary Git storage is removed
+before final report writing. A failed cleanup reports its exact owned path;
+inspect that path before manually removing it. Abruptly killing the process
+may leave an owned `6529-rehearsal-*` directory; there is no automatic sweep.
+
+Current limits: 30 seconds per subprocess, three minutes per CLI run, 16 MiB
+per process output/report, and a monitored 128 MiB temporary-storage budget.
+Git configuration is isolated; hooks, custom drivers, filters, submodules, and
+repository scripts are not run. Active `.gitattributes` rules and gitlinks are
+conservatively unsupported and leave an explicit unknown result. These limits
+are part of later product-repository integration, not proof it already works.
+
+Local fixture tests run offline in `npm test`. The live test setup script is a
+separate explicit mutation tool for empty, pinned sandbox repositories; it is
+never invoked by this command or the test suite. See [progress](../../docs/progress.md)
+for actual repository setup, protection availability, and live acceptance evidence.
 
 ## Read-only boundary and tests
 

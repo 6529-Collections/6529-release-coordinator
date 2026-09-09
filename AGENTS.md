@@ -4,7 +4,8 @@
 
 This is a standalone project for designing and implementing a new release
 coordinator from the ground up. Request submission, local inbox inspection,
-read-only readiness observations, and explicit inbox processing are implemented; release execution remains
+read-only readiness observations, explicit inbox processing, and local sandbox
+merge rehearsals are implemented; release execution remains
 a design. Readiness observations never authorize a release.
 
 It is intended to coordinate releases across:
@@ -46,6 +47,12 @@ from first principles.
   Documentation alone does not authorize changing tickets.
   Keep existing read-only commands read-only; ticket writes belong to a separate
   explicit processing command. This stage precedes the local merge rehearsal.
+- `docs/merge-rehearsal-testing.md` owns the sandbox rehearsal scope,
+  its test repositories, test matrix, and finish line. Check progress for local
+  implementation, live coverage, and GitHub account limitations.
+  Keep test manifests separate from verified inbox requests; do not widen the
+  public schema or production repository allowlist to accommodate test fixtures.
+  The plan is not implementation or permission to create external resources.
 - `docs/design.md` contains the proposed execution design and unresolved
   differences with the full process diagram. Settle those choices before
   implementing release execution.
