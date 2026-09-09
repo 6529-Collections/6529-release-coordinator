@@ -108,7 +108,7 @@ explanation. Reasons are not permissions.
 | Reason | Typical action |
 | --- | --- |
 | `reason:outdated-commit` | Retire a verified request whose requested commit no longer matches its PR. Include requested and observed commits. |
-| `reason:already-merged` | Retire a verified request when all its exact PRs were already merged before Coordinator execution. A mixed merged/open or unverified request stays action-needed for a scope decision. Deployment is not verified or claimed. |
+| `reason:already-merged` | Retire a verified request when all its exact PRs were already merged before Coordinator execution. A verified merged PR plus an open or unverified companion keeps the request action-needed for a scope decision. Unverified evidence alone does not trigger this reason. Deployment is not verified or claimed. |
 | `reason:checks-pending` | Wait for required checks; recheck on the next processing run. |
 | `reason:checks-failed` | Identify the failed required checks and the person who can fix them. |
 | `reason:merge-conflict` | Identify the PR/base evidence and the correction needed. |
@@ -201,13 +201,17 @@ without turning each poll into a new ticket conversation.
    matching code, same-repository source, and stable merged-state observations.
    Recheck closure evidence before closing. No deployment, prerequisite state,
    or previous release outcome is inferred. Existing outdated-commit handling
-   takes precedence when code differs. Mixed merged/open or unverified requests
-   stay action-needed: use the existing authorized release process for the whole
+   takes precedence when code differs. A request with at least one verified
+   merged PR and an open or unverified companion stays action-needed: use the
+   existing authorized release process for the whole
    release, or submit corrected open-PR scope with required dependencies accounted
    for. Do not execute a subset or instruct an identical merged-PR resubmission.
 6. Put unresolved evidence in waiting, or a concrete human correction in
    action-needed, and name the owner. A missing Coordinator feature is not a
    submitter failure. Unverified or unstable merge evidence cannot close a ticket.
+   With no verified merged PR, missing product evidence alone can remain waiting
+   with `reason:coordinator-incomplete`; missing intake proof uses
+   `reason:request-unverified`.
 7. Mark eligible only when the required initial checks support candidacy and
    there is no unresolved first-processing blocker or recorded terminal outcome.
    The full readiness report may still have unknown later-stage checks, such

@@ -233,8 +233,10 @@ references. Requests whose PRs are all already merged close with
 deployment is claimed. This requires verified intake, matching requested code,
 same-repository source, stable observations of every requested PR, and a fresh
 recheck immediately before closure. Existing outdated-commit decisions take
-precedence when the requested code differs. A request mixing merged and open
-or unverified PRs stays `action-needed` for a scope decision; no subset is executed.
+precedence when the requested code differs. A request combining a verified
+merged PR with an open or unverified companion stays `action-needed` for a scope
+decision; no subset is executed. Without a verified merged PR, missing product
+evidence alone can remain `waiting` with `reason:coordinator-incomplete`.
 If deployment is still needed, use the existing authorized release process.
 Resubmitting the same merged PR leads to the same closure. Missing proof stays
 visible. Required-check failures, conflicts, and invalid dependencies identify
