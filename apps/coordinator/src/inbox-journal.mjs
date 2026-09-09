@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { COORDINATOR_REPOSITORY } from "./inbox-reader.mjs";
+import { realProfile } from "./profiles.mjs";
 import { stateBranch, stateFile } from "./coordinator-github.mjs";
 import { response, statuses, reasons } from "./ticket-presentation.mjs";
 
@@ -12,8 +12,8 @@ export const digest = value => createHash("sha256").update(JSON.stringify(canoni
 export const receiptHash = issue => digest({ id: issue.id, number: issue.number, body: issue.body });
 const validSha = value => typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
 
-export function validateJournal(state) {
-  if (state?.schema !== 1 || state.repository !== COORDINATOR_REPOSITORY || !state.tickets
+export function validateJournal(state, profile = realProfile) {
+  if (state?.schema !== 1 || state.repository !== profile.inbox.full_name || !state.tickets
     || !Number.isSafeInteger(state.revision) || state.revision < 0
     || Object.keys(state).some(key => !["schema", "repository", "revision", "parent", "lock", "tickets"].includes(key))) throw new Error("Unsupported or corrupt inbox journal.");
   if (state.lock && (!state.lock.run_id || !state.lock.token || !state.lock.actor?.id)) throw new Error("Invalid inbox lock.");
@@ -47,17 +47,17 @@ export function appendDecision(ticket, record) {
   return transition;
 }
 
-export function createJournal(api) {
+export function createJournal(api, profile = realProfile) {
   let snapshot;
   const read = async () => {
     const ref = await api({ method: "GET", path: `/git/ref/heads/${stateBranch}` });
-    if (ref.status === 404) return { sha: null, state: { schema: 1, repository: COORDINATOR_REPOSITORY, revision: 0, parent: null, lock: null, tickets: {} } };
+    if (ref.status === 404) return { sha: null, state: { schema: 1, repository: profile.inbox.full_name, revision: 0, parent: null, lock: null, tickets: {} } };
     if (ref.status !== 200 || !validSha(ref.data?.object?.sha)) throw new Error("Inbox state branch is unavailable.");
     const head = ref.data.object.sha;
     const commit = await response(api, "GET", `/git/commits/${head}`);
     const file = await response(api, "GET", `/contents/${stateFile}?ref=${head}`);
     if (file.type !== "file" || file.path !== stateFile || file.encoding !== "base64") throw new Error("Inbox state file is invalid.");
-    const state = validateJournal(JSON.parse(Buffer.from(file.content, "base64").toString("utf8")));
+    const state = validateJournal(JSON.parse(Buffer.from(file.content, "base64").toString("utf8")), profile);
     if (!Array.isArray(commit.parents) || commit.parents.length !== (state.parent ? 1 : 0)
       || state.parent && commit.parents[0].sha !== state.parent) throw new Error("Inbox state ancestry does not match its journal.");
     return { sha: head, state };
@@ -65,7 +65,7 @@ export function createJournal(api) {
   const write = async (state, message) => {
     const prior = snapshot.sha;
     state.parent = prior; state.revision = snapshot.state.revision + 1;
-    validateJournal(state);
+    validateJournal(state, profile);
     const blob = await response(api, "POST", "/git/blobs", { content: `${JSON.stringify(state)}\n`, encoding: "utf-8" }, 201);
     const tree = await response(api, "POST", "/git/trees", { tree: [{ path: stateFile, mode: "100644", type: "blob", sha: blob.sha }] }, 201);
     const commit = await response(api, "POST", "/git/commits", { message: `Inbox journal: ${message}`, tree: tree.sha, parents: prior ? [prior] : [] }, 201);

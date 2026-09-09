@@ -1,26 +1,24 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { COORDINATOR_REPOSITORY } from "../../../packages/release-request/src/github-submission.mjs";
+import { realProfile } from "./profiles.mjs";
 
 const executeFile = promisify(execFile);
-const prefix = `repos/${COORDINATOR_REPOSITORY}`;
+
 
 // No caller-supplied host, repository, command, or HTTP method reaches gh.
 // Keep this allowlist limited to the reader's Issue and workflow evidence.
-function allowedPath(path) {
+function allowedPath(path, prefix) {
   if (!path.startsWith(`${prefix}/`)) return false;
   const relative = path.slice(prefix.length);
-  return /^\/issues\?state=open&labels=release-request&sort=created&direction=asc&per_page=100&page=[1-9][0-9]*$/u.test(relative)
+  return /^\/issues\?state=(?:open|all)&labels=release-request&sort=created&direction=asc&per_page=100&page=[1-9][0-9]*$/u.test(relative)
     || /^\/actions\/runs\/[1-9][0-9]*$/u.test(relative)
     || /^\/actions\/runs\/[1-9][0-9]*\/attempts\/[1-9][0-9]*\/jobs\?per_page=100&page=[1-9][0-9]*$/u.test(relative)
     || /^\/actions\/jobs\/[1-9][0-9]*\/logs$/u.test(relative);
 }
 
-export function createGitHubReader({ execute = executeFile } = {}) {
-  return async function get(path) {
-    if (!allowedPath(path)) {
-      throw new Error("The inbox reader refused an unsupported GitHub endpoint.");
-    }
+export function createGitHubReader({ execute = executeFile, profile = realProfile } = {}) {
+  const prefix = `repos/${profile.inbox.full_name}`;
+  async function read(path) {
     const isLog = path.endsWith("/logs");
     const args = [
       "api", "--hostname", "github.com", "--method", "GET", path,
@@ -59,5 +57,17 @@ export function createGitHubReader({ execute = executeFile } = {}) {
     } catch {
       throw new Error(`GitHub returned unreadable JSON for ${path}.`);
     }
+  }
+  const get = async path => {
+    if (!allowedPath(path, prefix)) throw new Error("The inbox reader refused an unsupported GitHub endpoint.");
+    return read(path);
   };
+  get.identity = async () => {
+    const repo = await read(prefix);
+    if (repo.id !== profile.inbox.id || repo.full_name !== profile.inbox.full_name || repo.private !== profile.inbox.private) {
+      throw new Error("Inbox repository identity or visibility does not match the selected profile.");
+    }
+    return repo;
+  };
+  return get;
 }

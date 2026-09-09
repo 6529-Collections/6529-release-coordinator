@@ -25,9 +25,9 @@ const destinationQuery = `query RehearsalDestination($owner: String!, $name: Str
 export function createRehearsalGitHub(profile, { execute = runRehearsalProcess, signal } = {}) {
   function identity(role) {
     const repo = profile?.repositories?.[role];
-    if (profile?.name !== "sandbox" || !["frontend", "backend"].includes(role)
+    if (!["sandbox", "real"].includes(profile?.name) || !["frontend", "backend"].includes(role)
       || !Number.isSafeInteger(repo?.id) || repo.id <= 0
-      || typeof repo.private !== "boolean" || repo.full_name !== `6529-Collections/release-coordinator-test-${role}`) {
+      || typeof repo.private !== "boolean" || repo.full_name !== `6529-Collections/${profile.name === "sandbox" ? "release-coordinator-test" : "6529seize"}-${role}`) {
       throw new RehearsalError("unbound_repository", "Sandbox repository identity has not been provisioned and pinned.");
     }
     return repo;

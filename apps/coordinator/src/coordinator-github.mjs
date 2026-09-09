@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { COORDINATOR_REPOSITORY } from "./inbox-reader.mjs";
+import { realProfile } from "./profiles.mjs";
 import { managedLabels } from "./ticket-presentation.mjs";
 
 export const stateBranch = "codex/inbox-state";
 export const stateFile = "inbox-state.json";
-const prefix = `repos/${COORDINATOR_REPOSITORY}`;
+
 const sha = value => typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
 const keys = (body, allowed) => body && Object.keys(body).every(key => allowed.includes(key));
 
@@ -56,7 +56,8 @@ export function executeGitHub(args, body) {
   });
 }
 
-export function createCoordinatorGitHub({ execute = executeGitHub } = {}) {
+export function createCoordinatorGitHub({ execute = executeGitHub, profile = realProfile } = {}) {
+  const prefix = `repos/${profile.inbox.full_name}`;
   const call = async (method, path, body) => {
     const args = ["api", "--hostname", "github.com", "--method", method, path, "--include",
       "--header", "Accept: application/vnd.github+json", "--header", "X-GitHub-Api-Version: 2022-11-28"];
@@ -77,7 +78,7 @@ export function createCoordinatorGitHub({ execute = executeGitHub } = {}) {
       const user = await call("GET", "user");
       const repo = await call("GET", prefix);
       if (user.status !== 200 || !Number.isSafeInteger(user.data?.id) || !/^[a-zA-Z0-9-]+$/u.test(user.data?.login)
-        || repo.status !== 200 || repo.data?.full_name !== COORDINATOR_REPOSITORY || repo.data?.permissions?.push !== true) {
+        || repo.status !== 200 || repo.data?.full_name !== profile.inbox.full_name || repo.data?.id !== profile.inbox.id || repo.data?.private !== profile.inbox.private || repo.data?.permissions?.push !== true) {
         throw new Error("Processing requires an authenticated repository writer with Issue and contents write access.");
       }
       return { login: user.data.login, id: String(user.data.id) };

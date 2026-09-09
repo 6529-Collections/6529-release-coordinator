@@ -89,9 +89,11 @@ across input profiles; the current milestone enables sandbox input only.
 RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest PATH_TO_TEST_MANIFEST --json
 ```
 
+For the verified ticket path and the shared sandbox/real switch, see the
+[profiled inbox guide](./docs/profiled-inbox-testing.md).
+
 Use the [command guide](./apps/coordinator/README.md#sandbox-merge-rehearsal)
-for the manifest shape, report paths, and limits. Real mode is explicitly
-disabled until its verified-inbox adapter has been integrated and checked.
+for the manifest shape, report paths, and limits. Real mode requires a verified inbox ticket and an explicit destination plan; test manifests remain sandbox-only.
 The [merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) defines
 the separate sandbox inputs, implementation steps, test cases, and finish line.
 Local tests and live GitHub acceptance are separate milestones recorded in

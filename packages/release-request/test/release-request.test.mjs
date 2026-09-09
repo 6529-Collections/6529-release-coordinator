@@ -291,7 +291,8 @@ test("the central workflow has the narrow Issue permission and request lock", as
     workflow,
     /group: release-request-inbox-\$\{\{ inputs\.request_id \}\}/u
   );
-  assert.match(workflow, /saveReleaseRequestIssue/u);
+  assert.match(workflow, /run: node apps\/coordinator\/bin\/save-inbox-request\.mjs/u);
+  assert.match(workflow, /RELEASE_COORDINATOR_PROFILE: real/u);
   assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/u);
 });
 

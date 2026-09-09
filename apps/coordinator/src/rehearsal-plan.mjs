@@ -1,9 +1,7 @@
 import { createHash } from "node:crypto";
 
-export const sandboxRepositories = Object.freeze({
-  frontend: Object.freeze({ full_name: "6529-Collections/release-coordinator-test-frontend", id: 1362504370, private: false, required_checks: Object.freeze(["Sandbox check"]) }),
-  backend: Object.freeze({ full_name: "6529-Collections/release-coordinator-test-backend", id: 1362505082, private: false, required_checks: Object.freeze(["Sandbox check"]) })
-});
+import { sandboxProfile, selectProfile } from "./profiles.mjs";
+export const sandboxRepositories = sandboxProfile.repositories;
 export const maxManifestBytes = 64 * 1024;
 export const isSha = value => typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
 export const isBranch = value => typeof value === "string" && value.length <= 200
@@ -16,9 +14,8 @@ export class RehearsalError extends Error {
 }
 
 export function selectRehearsalProfile(value) {
-  if (value === "real") throw new RehearsalError("real_not_enabled", "Real mode is disabled until verified inbox integration is implemented and tested.");
-  if (value !== "sandbox") throw new RehearsalError("invalid_profile", "Set RELEASE_COORDINATOR_PROFILE explicitly to sandbox. There is no default profile.");
-  return { name: "sandbox", repositories: sandboxRepositories };
+  try { return selectProfile(value); }
+  catch (error) { throw new RehearsalError("invalid_profile", error.message); }
 }
 
 function requireValue(ok, message) { if (!ok) throw new RehearsalError("invalid_manifest", message); }
@@ -32,10 +29,14 @@ const unitName = value => typeof value === "string" && /^[A-Za-z0-9_-]{1,120}$/u
 // Private manifests never become public release requests or trusted inbox receipts.
 // A future verified-input adapter will produce this same internal plan structure.
 export function sandboxMergePlan(manifest, profile) {
-  requireValue(profile?.name === "sandbox", "Test manifests require the sandbox profile.");
+  requireValue(profile?.name === "sandbox" && manifest?.source === "test-manifest", "Test manifests require the sandbox profile and test-manifest source.");
+  return normalizeMergePlan(manifest, profile);
+}
+
+export function normalizeMergePlan(manifest, profile) {
   requireValue(Buffer.byteLength(JSON.stringify(manifest) ?? "") <= maxManifestBytes, "Manifest exceeds 64 KiB.");
   object(manifest, ["schema_version", "source", "profile", "case_id", "target", "repositories"]);
-  requireValue(manifest.schema_version === "1" && manifest.source === "test-manifest" && manifest.profile === profile.name, "Manifest version, source, or profile does not match sandbox input.");
+  requireValue(manifest.schema_version === "1" && ["test-manifest", "verified-inbox"].includes(manifest.source) && manifest.profile === profile.name, "Manifest version, source, or profile does not match sandbox input.");
   requireValue(typeof manifest.case_id === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/u.test(manifest.case_id), "Invalid test case ID.");
   requireValue(["staging", "production"].includes(manifest.target), "A rehearsal requires an explicit deployment target for dependency observations.");
   list(manifest.repositories, 1, 2);
@@ -68,7 +69,7 @@ export function sandboxMergePlan(manifest, profile) {
     return { ...structuredClone(repo), identity: { ...profile.repositories[repo.role] } };
   });
   return {
-    version: 1, profile: profile.name, input_source: "test-manifest", case_id: manifest.case_id,
+    version: 1, profile: profile.name, input_source: manifest.source, case_id: manifest.case_id,
     input_hash: createHash("sha256").update(JSON.stringify(manifest)).digest("hex"),
     target: manifest.target, repositories,
     // Adapt sandbox roles for the existing pure dependency inspector. A future

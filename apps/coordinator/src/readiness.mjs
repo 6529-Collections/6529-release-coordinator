@@ -1,4 +1,4 @@
-import { validateReleaseRequest } from "../../../packages/release-request/src/index.mjs";
+import { realProfile, validateProfileRequest, canonicalRequest } from "./profiles.mjs";
 import { readInbox } from "./inbox-reader.mjs";
 import { catalogServices, catalogSignature, inspectPartGraph, inspectServiceGraph } from "./readiness-dependencies.mjs";
 import { catalogPath } from "./readiness-github.mjs";
@@ -118,14 +118,14 @@ async function inspectCatalogs(request, github, checks) {
   }
 }
 
-export async function inspectReadiness(entry, { github }) {
+export async function inspectReadiness(entry, { github, profile = realProfile }) {
   const result = {
     issue_number: entry.issue_number, issue_url: entry.issue_url,
     request_id: entry.request?.request_id ?? null, target: entry.request?.target ?? null,
     status: "unknown", release_authorized: false, checks: [], pull_requests: []
   };
   const checks = result.checks;
-  if (entry.status !== "valid" || !validateReleaseRequest(entry.request).ok) {
+  if (entry.status !== "valid" || !validateProfileRequest(entry.request, profile).ok) {
     checks.push(check("saved_record", entry.status === "invalid" ? "blocked" : "unknown",
       "Saved request proof did not pass; no product readiness reads were attempted.", { errors: entry.errors }));
     result.status = statusOf(checks);
@@ -133,7 +133,7 @@ export async function inspectReadiness(entry, { github }) {
   }
   const request = entry.request;
   checks.push(check("saved_record", "pass", "Saved request matches its submission workflow proof."));
-  const graph = inspectPartGraph(request);
+  const graph = inspectPartGraph(canonicalRequest(request, profile));
   checks.push(check("release_parts", graph.status, graph.errors.join(" ") || "Release-part IDs and PRs are unique; dependencies exist and contain no cycle.", { declared_part_order: graph.order }));
 
   const observed = [];
@@ -152,7 +152,7 @@ export async function inspectReadiness(entry, { github }) {
       }
     }
   }
-  if (graph.status === "pass") await inspectCatalogs(request, github, checks);
+  if (graph.status === "pass") await inspectCatalogs(canonicalRequest(request, profile), github, checks);
   else checks.push(check("backend_services", "unknown", "Service ordering was not evaluated because the release-part graph is invalid."));
 
   // Re-read after catalog and other PR reads. Never silently switch the
@@ -180,10 +180,10 @@ export async function inspectReadiness(entry, { github }) {
   return result;
 }
 
-export async function checkReadiness({ get, github, now = () => new Date(), loadInbox = readInbox }) {
-  const inbox = await loadInbox({ get, now });
+export async function checkReadiness({ get, github, now = () => new Date(), profile = realProfile, loadInbox = readInbox }) {
+  const inbox = await loadInbox({ get, now, profile });
   const requests = [];
-  for (const entry of inbox.requests) requests.push(await inspectReadiness(entry, { github }));
+  for (const entry of inbox.requests) requests.push(await inspectReadiness(entry, { github, profile }));
   for (let index = 0; index < inbox.requests.length; index += 1) {
     const entry = inbox.requests[index];
     if (entry.status !== "valid") continue;
@@ -195,7 +195,7 @@ export async function checkReadiness({ get, github, now = () => new Date(), load
       "Other pending requests name the same PR and target. No request was chosen or marked replaced.", { issue_numbers: overlaps }));
   }
   return {
-    mode: "read-only", repository: inbox.repository, checked_at: now().toISOString(),
+    mode: "read-only", profile: profile.name, repository: inbox.repository, checked_at: now().toISOString(),
     inbox_checked_at: inbox.checked_at, release_authorized: false,
     counts: { pending: requests.length, blocked: requests.filter(item => item.status === "blocked").length,
       unknown: requests.filter(item => item.status === "unknown").length }, requests

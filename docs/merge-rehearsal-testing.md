@@ -76,8 +76,7 @@ changes settings, or writes a comment. PR setup naturally starts the sample CI.
 
 Build one rehearsal engine with two named configuration profiles. The intended
 operator switch is `RELEASE_COORDINATOR_PROFILE=sandbox` or
-`RELEASE_COORDINATOR_PROFILE=real`. Sandbox mode is implemented; real mode
-explicitly stops until its integration is ready. Require an explicit valid value; missing or unknown values must
+`RELEASE_COORDINATOR_PROFILE=real`. Both profiles now support verified inbox plans; the [profiled inbox follow-up](./profiled-inbox-testing.md) defines that path. Sandbox manifests remain a separate input. Require an explicit valid value; missing or unknown values must
 stop, never fall back to real repositories. Profile selection is separate from
 the request's `staging`/`production` deployment target.
 
@@ -94,9 +93,9 @@ and rewrite it for real repositories. Separate reports and temporary state by
 profile, and never reuse sandbox results as real evidence. No arbitrary
 repository override or mutation permission comes from this environment setting.
 
-The first milestone enables `sandbox`. Define and test the shared interface
+The original first milestone enabled `sandbox`. Define and test the shared interface
 and profile boundaries now; until the verified real-input adapter is integrated
-and checked, `real` must stop with a clear unsupported/not-enabled result.
+and checked, `real` must stop with a clear unsupported/not-enabled result. The profiled inbox follow-up implements that adapter; real live proof remains separate.
 That one-time integration remains the later step described below. Afterward,
 an operator selects the profile and supplies that profile's valid input; the
 engine needs no changes. An environment change alone cannot promote a test
@@ -271,7 +270,7 @@ failures remain local so they are deterministic, not dependent on a lucky race.
 | MR-18 | Timeout, interruption, fetch failure, merge conflict, report-write failure, and cleanup failure | Owned resources handled; failure and any leftover path reported accurately. | Local |
 | MR-19 | Hooks/configuration/filter/driver tricks, unsafe arguments, or secret-bearing tool errors | No unexpected executable runs, shell interpretation, or secret disclosure. | Local |
 | MR-20 | Run an unchanged manifest twice | Same decisions and result trees; no GitHub writes or source branch/index changes. | Local + Live |
-| MR-21 | Select either profile, omit/misspell the setting, or pass an input/report from the other profile | Both supported adapters use the same engine; no fallback, cross-profile proof reuse, or extra permissions. Until real integration exists, `real` stops explicitly. | Local; live real-profile acceptance belongs to later integration |
+| MR-21 | Select either profile, omit/misspell the setting, or pass an input/report from the other profile | Both supported adapters use the same engine; no fallback, cross-profile proof reuse, or extra permissions. Real mode rejects test manifests and requires verified inbox input (implemented in the profiled inbox follow-up). | Local; live real-profile acceptance belongs to later integration |
 
 For MR-04, create both PR branches from the same baseline and edit the same
 single line to different values. For MR-05, change that line on the separate
@@ -297,7 +296,7 @@ URLs are now public; earlier records describe the visibility observed at their r
 
 - [x] Private engine and manifest/profile validation implemented and documented.
 - [x] The engine takes a shared internal plan; profile selection and input proof
-      stay outside it. MR-21 verifies switching boundaries and the disabled real path.
+      stay outside it. MR-21 verifies switching boundaries; the profiled inbox follow-up adds real-profile fixture acceptance.
 - [x] All MR local cases and existing package/Coordinator tests pass in CI.
 - [x] Public package dry-pack contents remain the existing nine files.
 - [x] Both sample repositories and their enforced check rules verified live.
@@ -326,6 +325,11 @@ known fixture refs available for reproduction. No repository deletion is part
 of this plan.
 
 ## Later work remains separate
+
+The [profiled inbox follow-up](./profiled-inbox-testing.md) implements the shared
+input integration described below, with sandbox live proof and offline real-profile
+tests. Its current evidence is in progress; actual real-system acceptance remains
+separate from the completed sandbox matrix.
 
 The next integration after this finish line would connect the proven engine to
 verified real inbox inputs and explicitly chosen product destinations. That

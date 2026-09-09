@@ -178,6 +178,15 @@ Facts can change immediately after the last read. Future execution must recheck
 its exact plan and authorization. The unresolved execution design remains in
 [design](../../docs/design.md); this checker does not settle it.
 
+## Profiled inbox and submission
+
+The [profiled inbox guide](../../docs/profiled-inbox-testing.md) owns the shared
+configuration, request formats, submission command, separate journals/reports,
+and one-ticket rehearsal plan. New `request:submit` and rehearsal commands
+require `RELEASE_COORDINATOR_PROFILE=sandbox` or `real`. Existing inbox/readiness/
+processing commands retain their real default and honor an explicit profile.
+The installed npm CLI keeps its existing real-only behavior.
+
 ## Sandbox merge rehearsal
 
 Run a separate sandbox rehearsal with Node.js 20+, Git 2.38+, and authenticated
@@ -192,8 +201,8 @@ RELEASE_COORDINATOR_PROFILE=sandbox npm run merge:rehearse -- --manifest PATH_TO
 ```
 
 `--help` reads and writes nothing. The profile is mandatory; unknown or missing
-values stop. `real` is explicitly disabled until the verified real-inbox adapter
-is integrated and tested. A profile never turns test data into a trusted request
+values stop. `real` requires a verified inbox ticket and explicit plan;
+`--manifest` remains sandbox-only. A profile never turns test data into a trusted request
 or authorizes a GitHub mutation. Existing commands and public CLI/schema are unchanged.
 
 The private JSON manifest has these fields (not the public release-request schema):

@@ -376,7 +376,7 @@ test("write adapter uses fixed gh arguments and stdin JSON; identity requires re
   const client = createCoordinatorGitHub({ execute: async (args, body) => {
     calls.push({ args, body });
     if (args[5] === "user") return 'HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n\r\n{"id":456,"login":"dev"}';
-    if (args[5] === "repos/6529-Collections/6529-release-coordinator") return 'HTTP/2.0 200 OK\nContent-Type: application/json\n\n{"full_name":"6529-Collections/6529-release-coordinator","permissions":{"push":true}}';
+    if (args[5] === "repos/6529-Collections/6529-release-coordinator") return 'HTTP/2.0 200 OK\nContent-Type: application/json\n\n{"full_name":"6529-Collections/6529-release-coordinator","id":1346244762,"private":false,"permissions":{"push":true}}';
     return 'HTTP/2.0 200 OK\nContent-Type: application/json\n\n{}';
   } });
   assert.deepEqual(await client.identity(), { login: "dev", id: "456" });

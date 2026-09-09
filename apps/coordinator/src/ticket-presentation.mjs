@@ -14,7 +14,7 @@ const prose = text => clean(text).replace(/[\\`*_{}\[\]<>#|]/gu, "\\$&").replace
 
 export function ticketTitle(request) {
   return `${request.target === "staging" ? "Staging" : "Production"} · ${request.release_parts.map(part => {
-    const component = part.repository === "6529seize-backend" ? "backend" : "frontend";
+    const component = ["6529seize-backend", "release-coordinator-test-backend"].includes(part.repository) ? "backend" : "frontend";
     return `${component} ${part.pull_requests.map(pr => `PR #${pr.number}`).join(", ")}${part.deploy_units ? ` · ${part.deploy_units.join(", ")}` : ""}`;
   }).join(" + ")}`.slice(0, 240);
 }
@@ -25,7 +25,7 @@ export function desiredLabels(issue, decision, request) {
   const preserved = labelNames(issue).filter(name => !managedLabels.has(name)
     || (!request && /^(target|component):/u.test(name)));
   const scope = request ? [`target:${request.target}`, ...new Set(request.release_parts.map(part =>
-    `component:${part.repository === "6529seize-backend" ? "backend" : "frontend"}`))] : [];
+    `component:${["6529seize-backend", "release-coordinator-test-backend"].includes(part.repository) ? "backend" : "frontend"}`))] : [];
   return [...new Set([...preserved, "release-request", `status:${decision.status}`, ...scope,
     ...decision.reasons.map(reason => `reason:${reason.code}`)])].sort();
 }

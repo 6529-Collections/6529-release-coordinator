@@ -1,13 +1,11 @@
-import { validateReleaseRequest } from "../../../packages/release-request/src/index.mjs";
+import { realProfile, validateProfileRequest } from "./profiles.mjs";
 import { releaseRequestChecksum } from "../../../packages/release-request/src/inbox-issue.mjs";
 import {
-  COORDINATOR_REPOSITORY,
-  SUBMISSION_WORKFLOW
+  COORDINATOR_REPOSITORY
 } from "../../../packages/release-request/src/github-submission.mjs";
 
 export { COORDINATOR_REPOSITORY };
-const api = `repos/${COORDINATOR_REPOSITORY}`;
-const web = `https://github.com/${COORDINATOR_REPOSITORY}`;
+
 const pageSize = 100;
 
 class RecordProblem extends Error {
@@ -27,7 +25,8 @@ function oneMatch(text, expression, description) {
   return matches[0][1];
 }
 
-export function parseSavedIssue(issue) {
+export function parseSavedIssue(issue, profile = realProfile) {
+  const web = `https://github.com/${profile.inbox.full_name}`;
   requireRecord(typeof issue.body === "string" && issue.body.length <= 65_536,
     "The Issue body is missing or exceeds the inbox format limit.");
   const body = issue.body.replaceAll("\r\n", "\n");
@@ -43,7 +42,7 @@ export function parseSavedIssue(issue) {
   } catch {
     throw new RecordProblem("The saved release request is not valid JSON.");
   }
-  const validation = validateReleaseRequest(request);
+  const validation = validateProfileRequest(request, profile);
   requireRecord(validation.ok,
     `The saved request does not match the schema: ${validation.errors.map(error => `${error.location}: ${error.message}`).join("; ")}`);
   requireRecord(request.request_id === requestId, "The request ID marker does not match the JSON request ID.");
@@ -80,12 +79,13 @@ function requireApiArray(value, description) {
   return value;
 }
 
-export async function openIssues(get) {
+export async function openIssues(get, profile = realProfile, includeClosed = false) {
+  const api = `repos/${profile.inbox.full_name}`;
   const issues = [];
   const seen = new Set();
   for (let page = 1; ; page += 1) {
     const batch = requireApiArray(await get(
-      `${api}/issues?state=open&labels=release-request&sort=created&direction=asc&per_page=${pageSize}&page=${page}`
+      `${api}/issues?state=${includeClosed ? "all" : "open"}&labels=release-request&sort=created&direction=asc&per_page=${pageSize}&page=${page}`
     ), "Issue list");
     for (const issue of batch) {
       if (!issue || !Number.isSafeInteger(issue.number) || issue.number < 1
@@ -95,7 +95,7 @@ export async function openIssues(get) {
       if (seen.has(issue.number)) throw new Error("GitHub repeated an Issue across pages; run the inbox scan again.");
       seen.add(issue.number);
       const labels = issue.labels.map(label => typeof label === "string" ? label : label?.name);
-      if (issue.state === "open" && !issue.pull_request
+      if ((includeClosed || issue.state === "open") && !issue.pull_request
           && labels.includes("release-request")) {
         issues.push(issue);
       }
@@ -104,13 +104,15 @@ export async function openIssues(get) {
   }
 }
 
-async function verifyWorkflow(issue, saved, get) {
+async function verifyWorkflow(issue, saved, get, profile) {
+  const api = `repos/${profile.inbox.full_name}`;
+  const web = `https://github.com/${profile.inbox.full_name}`;
   const run = await get(`${api}/actions/runs/${saved.runId}`);
   requireRecord(run && String(run.id) === saved.runId
-    && run.repository?.full_name === COORDINATOR_REPOSITORY
-    && run.head_repository?.full_name === COORDINATOR_REPOSITORY
-    && run.path === `.github/workflows/${SUBMISSION_WORKFLOW}`
-    && run.event === "workflow_dispatch" && run.head_branch === "main"
+    && run.repository?.full_name === profile.inbox.full_name
+    && run.head_repository?.full_name === profile.inbox.full_name
+    && run.path === `.github/workflows/${profile.workflow}`
+    && run.event === "workflow_dispatch" && run.head_branch === profile.branch
     && run.html_url === saved.workflowUrl
     && run.display_title === `Release request ${saved.request.request_id}`
     && /^[0-9a-f]{40}$/u.test(run.head_sha),
@@ -159,6 +161,7 @@ async function verifyWorkflow(issue, saved, get) {
     throw new RecordProblem("The workflow's saved-request result is unreadable.", "unverified");
   }
   requireRecord(result?.status === "submitted"
+    && (result.profile === undefined ? profile.name === "real" : result.profile === profile.name)
     && result.request_id === saved.request.request_id
     && result.inbox_issue_number === issue.number
     && result.inbox_issue_url === `${web}/issues/${issue.number}`
@@ -166,16 +169,17 @@ async function verifyWorkflow(issue, saved, get) {
     && result.github?.workflow_run_url === saved.workflowUrl
     && result.github?.actor === saved.actor && result.github?.actor_id === saved.actorId,
   "The workflow result does not confirm this exact Issue, request ID, and GitHub actor.");
-  requireRecord(validateReleaseRequest(result.request).ok
+  requireRecord(validateProfileRequest(result.request, profile).ok
     && releaseRequestChecksum(result.request) === saved.checksum,
   "The saved JSON differs from the request confirmed by the workflow.");
   return { run_id: saved.runId, attempt: run.run_attempt, url: saved.workflowUrl, head_sha: run.head_sha,
     ...(result.inbox_presentation ? { presentation: result.inbox_presentation } : {}) };
 }
 
-export async function inspectIssue(issue, { get }) {
+export async function inspectIssue(issue, { get, profile = realProfile }) {
+  const web = `https://github.com/${profile.inbox.full_name}`;
   const entry = {
-    issue_number: issue.number,
+    issue_number: issue.number, issue_state: issue.state,
     issue_url: `${web}/issues/${issue.number}`,
     title: issue.title,
     status: "unverified",
@@ -185,9 +189,9 @@ export async function inspectIssue(issue, { get }) {
     errors: []
   };
   try {
-    const saved = parseSavedIssue(issue);
+    const saved = parseSavedIssue(issue, profile);
     entry.request = saved.request;
-    entry.workflow = await verifyWorkflow(issue, saved, get);
+    entry.workflow = await verifyWorkflow(issue, saved, get, profile);
     entry.github_actor = { login: saved.actor, id: saved.actorId };
     entry.status = "valid";
   } catch (error) {
@@ -198,12 +202,12 @@ export async function inspectIssue(issue, { get }) {
   return entry;
 }
 
-export async function readInbox({ get, now = () => new Date() }) {
+export async function readInbox({ get, now = () => new Date(), profile = realProfile, includeClosed = false }) {
   // Complete listing before verification, so page/auth failures cannot produce
   // a misleading empty or partially successful inbox report.
-  const issues = await openIssues(get);
+  const issues = await openIssues(get, profile, includeClosed);
   const requests = [];
-  for (const issue of issues) requests.push(await inspectIssue(issue, { get }));
+  for (const issue of issues) requests.push(await inspectIssue(issue, { get, profile }));
   const byRequestId = new Map();
   for (const entry of requests) {
     if (!entry.request) continue;
@@ -221,7 +225,7 @@ export async function readInbox({ get, now = () => new Date() }) {
   }
   return {
     mode: "read-only",
-    repository: COORDINATOR_REPOSITORY,
+    repository: profile.inbox.full_name, profile: profile.name,
     checked_at: now().toISOString(),
     counts: {
       pending: requests.length,
