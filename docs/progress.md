@@ -6,6 +6,42 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 [execution design](./design.md) remains future work. There is no always-on release
 worker; each manual run exits after its work.
 
+## Sandbox batch implementation, September 10
+
+The service extension merged in [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
+at `02fb6a645a4dd40d909f8346e06eba7057a01333`; this batch work started from that clean main.
+Local branch `codex/bounded-sandbox-batches` extends the same `inbox:run` command.
+Without `--issue`, sandbox runs finish cheap ticket/scope/database and Git conflict
+filtering before normal CI on temporary combined PRs and combined service checks.
+`--issue` keeps the one-ticket path, including supported database changes.
+
+The implementation saves whole tickets, exact inputs, deterministic Issue-number
+order, temporary PR identities, attempts and cleanup in `inbox-run-v4`, preserving
+v3 service history. Limits are 10 tickets, 10 PRs per repository, 40 combined Git
+attempts, 12 candidate check rounds and 45 minutes to start new rounds. Only
+confirmed code failures with a passing unchanged baseline trigger splitting.
+Every selected final combination has its own passing evidence; excluded tickets
+retain reasons, ownership and check links. No source PR is merged or altered.
+
+The full local `npm run check` passed **347 tests on Node 24.19.0**, lint,
+formatting, workflow policy, packed CLI/schema smoke checks and source preservation.
+The 33 new tests include actual temporary Git repositories, cheap-before-expensive
+ordering, splitting and attribution, limits, repeat/resume, GitHub identity and
+cleanup verification, and the complete inbox/journal/presentation path.
+Live [sandbox acceptance](./testing/batch-2026-09-10.md) verified a compatible
+pair, a repeat with no duplicate tests/comments/decisions, and an A/B pair whose
+combined code fails while each complete ticket passes alone. The bounded search
+selected #11 and left #12 waiting as incompatible after exactly three candidate
+rounds. Recovery reused existing PRs after a GitHub server error and after fixing
+an overly strict check of descriptions appended by CodeRabbit. All eight trial
+PRs were closed unmerged, temporary refs removed, and all source heads and
+protected refs were unchanged. Source delivery is limited to the local branch;
+this is not PR CI, a merge, package publication or deployment.
+
+Cross-ticket must-ship-together declarations remain unsupported; inseparable work
+belongs in one complete ticket. Database-changing batches, real adapters and
+release execution remain future work.
+
 **Baseline before the sandbox service extension:** [PR #40](https://github.com/6529-Collections/6529-release-coordinator/pull/40)
 merged September 10 at `430cae629fac12fe78a57bc57e00d3ef411c6742`.
 The unified `inbox:run` workflow and this repository's code checks are on `main`.
@@ -137,7 +173,8 @@ This fixture models order, baseline upgrades and data/output checks. It does not
 prove AWS deployment, real database change detection, persistent service health,
 existing-runtime prerequisites or real rollback. Missing prerequisites remain
 held. Source delivery through normal PR checks and merge precedes bounded batches
-of complete requests without database changes. No batch command exists yet.
+of complete requests without database changes. This historical snapshot predates
+the batch implementation recorded above; no separate batch command was added.
 
 ## Documentation alignment, September 10
 
@@ -205,7 +242,7 @@ a product deployment or a repeat of the complete live ticket matrix.
 
 ## Planned later stage: batch selection and tests, September 9
 
-**Documentation only; not implemented or tested.** The
+**Historical September 9 plan; see the September 10 implementation above.** The
 [batch design](./design.md#proposed-batch-testing-and-selection) now puts full
 application checks on the selected combination of tickets, after the existing
 checks for each request. It avoids an extra full build/test run per ticket by
@@ -362,9 +399,9 @@ workflow uses fresh rehearsal reports to update the same ticket. The Coordinator
 code-check delivery is tracked above.
 The [service/database stage](#sandbox-services-and-database-september-10) is
 implemented with local and live acceptance evidence; its Coordinator source
-delivery is tracked above. The later
-[batch stage](#planned-later-stage-batch-selection-and-tests-september-9) remains
-documented but unimplemented. Real-project live acceptance, the larger release
+delivery is tracked above. The
+[batch stage](#sandbox-batch-implementation-september-10) now has a local
+implementation and its own acceptance record. Real-project live acceptance, the larger release
 worker, execution permissions, deployment evidence sources, and recovery remain
 later work.
 

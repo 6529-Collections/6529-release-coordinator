@@ -11,11 +11,17 @@ import path from "node:path";
 import { sampleFiles, databaseCandidate } from "./fixtures.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { publishFixturePr } from "./fixture-pr.mjs";
-if (process.argv[2] !== "--create-sample-prs" || process.argv.length !== 3)
+if (
+  !["--create-sample-prs", "--create-batch-prs"].includes(process.argv[2]) ||
+  process.argv.length !== 3
+)
   throw new Error(
-    "Explicit --create-sample-prs required; creates only sandbox branches and PRs."
+    "Explicit --create-sample-prs or --create-batch-prs required; creates only sandbox branches and PRs."
   );
-const root = path.resolve(".release-coordinator/service-development");
+const batchMode = process.argv[2] === "--create-batch-prs";
+const root = path.resolve(
+  `.release-coordinator/${batchMode ? "batch" : "service"}-development`
+);
 await mkdir(root, { recursive: true });
 const recordFile = path.join(root, "case-prs.json");
 let record;
@@ -27,50 +33,83 @@ try {
 }
 const baseline = sampleFiles(),
   upgrade = databaseCandidate();
-const cases = {
-  frontend: {
-    role: "frontend",
-    files: {
-      "src/render.mjs":
-        baseline.frontend["src/render.mjs"] +
-        "// Sandbox integration candidate.\n"
+const cases = batchMode
+  ? {
+      a_backend: {
+        role: "backend",
+        files: {
+          "src/api.mjs":
+            "export function run({ row }) { return { id: row.id, value: row.value, batch_flag: true }; }\n"
+        }
+      },
+      a_frontend: {
+        role: "frontend",
+        files: { "docs/batch-a.md": "Batch A companion.\n" }
+      },
+      b_backend: {
+        role: "backend",
+        files: { "docs/batch-b.md": "Batch B companion.\n" }
+      },
+      b_frontend: {
+        role: "frontend",
+        files: {
+          "src/render.mjs":
+            "export function run({ payload }) { if (payload.batch_flag) throw new Error('Controlled A+B incompatibility'); return `Value: ${payload.value}`; }\n"
+        }
+      },
+      c_backend: {
+        role: "backend",
+        files: { "docs/batch-c.md": "Independent compatible batch C.\n" }
+      },
+      c_frontend: {
+        role: "frontend",
+        files: { "docs/batch-c.md": "Independent compatible batch C.\n" }
+      }
     }
-  },
-  no: {
-    role: "backend",
-    files: {
-      "src/worker.mjs":
-        baseline.backend["src/worker.mjs"] +
-        "// No release-specific database change.\n"
-    }
-  },
-  yes: { role: "backend", files: upgrade.backend },
-  schema: {
-    role: "backend",
-    files: {
-      "src/entities/item.json": upgrade.backend["src/entities/item.json"],
-      "src/worker.mjs": upgrade.backend["src/worker.mjs"]
-    }
-  },
-  partial: {
-    role: "backend",
-    files: {
-      "src/data/change.json":
-        JSON.stringify(
-          { id: "baseline", increment: 0, fail_after_schema: true },
-          null,
-          2
-        ) + "\n"
-    }
-  },
-  api: {
-    role: "backend",
-    files: {
-      "src/api.mjs":
-        "export function run({ row }) { if ('display_value' in row) throw new Error('Controlled incompatibility with schema 2'); return { id: row.id, value: row.value }; }\n"
-    }
-  }
-};
+  : {
+      frontend: {
+        role: "frontend",
+        files: {
+          "src/render.mjs":
+            baseline.frontend["src/render.mjs"] +
+            "// Sandbox integration candidate.\n"
+        }
+      },
+      no: {
+        role: "backend",
+        files: {
+          "src/worker.mjs":
+            baseline.backend["src/worker.mjs"] +
+            "// No release-specific database change.\n"
+        }
+      },
+      yes: { role: "backend", files: upgrade.backend },
+      schema: {
+        role: "backend",
+        files: {
+          "src/entities/item.json": upgrade.backend["src/entities/item.json"],
+          "src/worker.mjs": upgrade.backend["src/worker.mjs"]
+        }
+      },
+      partial: {
+        role: "backend",
+        files: {
+          "src/data/change.json":
+            JSON.stringify(
+              { id: "baseline", increment: 0, fail_after_schema: true },
+              null,
+              2
+            ) + "\n"
+        }
+      },
+      api: {
+        role: "backend",
+        files: {
+          "src/api.mjs":
+            "export function run({ row }) { if ('display_value' in row) throw new Error('Controlled incompatibility with schema 2'); return { id: row.id, value: row.value }; }\n"
+        }
+      }
+    };
 for (const [name, value] of Object.entries(cases)) {
   if (record[name]?.url) {
     console.log(`${name}: already recorded ${record[name].url}`);
@@ -89,7 +128,7 @@ for (const [name, value] of Object.entries(cases)) {
   )
     throw new Error("Sandbox identity/access changed.");
   let entry = record[name];
-  const branch = `codex/services-case-${name}`;
+  const branch = `codex/${batchMode ? "batch" : "services"}-case-${name}`;
   if (
     entry &&
     (entry.role !== value.role ||
@@ -128,10 +167,18 @@ for (const [name, value] of Object.entries(cases)) {
     ]);
     const base = git(["rev-parse", "HEAD"]);
     git(["checkout", "-b", branch]);
-    for (const [file, text] of Object.entries(value.files))
+    for (const [file, text] of Object.entries(value.files)) {
+      await mkdir(path.dirname(path.join(directory, file)), {
+        recursive: true
+      });
       await writeFile(path.join(directory, file), text);
+    }
     git(["add", "--", ...Object.keys(value.files)]);
-    git(["commit", "-m", `Add service acceptance fixture: ${name}`]);
+    git([
+      "commit",
+      "-m",
+      `Add ${batchMode ? "batch" : "service"} acceptance fixture: ${name}`
+    ]);
     const commit = git(["rev-parse", "HEAD"]);
     entry = {
       role: value.role,
@@ -154,8 +201,8 @@ for (const [name, value] of Object.entries(cases)) {
   const body = {
     head: branch,
     base: "main",
-    title: `Service acceptance fixture: ${name}`,
-    body: "Controlled sample for one-ticket service/database acceptance. Normal required application checks must pass before Coordinator execution. This PR is retained as test input; it is not a product release."
+    title: `${batchMode ? "Batch" : "Service"} acceptance fixture: ${name}`,
+    body: `Controlled sample for ${batchMode ? "combined-ticket batch" : "one-ticket service/database"} acceptance. Normal required application checks must pass before Coordinator execution. This PR is retained as test input; it is not a product release.`
   };
   const completed = await publishFixturePr(entry, {
     save: async (value) => {

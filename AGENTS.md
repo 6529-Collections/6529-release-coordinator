@@ -8,6 +8,8 @@ read-only readiness observations, and one manual `inbox:run` workflow are
 implemented. That workflow inspects tickets, rehearses suitable exact PRs, runs
 supported sandbox service/database checks, and updates the same ticket and
 journal. See progress for local implementation versus merged and live evidence.
+Unscoped sandbox runs select whole tickets together, finish cheap conflict
+filtering before expensive combined PR/service checks, and record deferred tickets.
 Release execution remains a design; passing checks never authorize it.
 
 It is intended to coordinate releases across:
@@ -64,7 +66,7 @@ from first principles.
   evidence. Check progress for offline versus actual live acceptance.
 - `docs/merge-rehearsal-testing.md` owns the sandbox rehearsal scope,
   its test repositories, test matrices, and finish lines. The current sandbox stage
-  tests one ticket's services and database behavior before future multi-ticket batching.
+  tests one ticket's services/database behavior and bounded no-database-change batches.
   Its service/database section owns the small programs, temporary MySQL baseline,
   declared-versus-observed database answer, ordered steps, retry/stop evidence,
   and cleanup. Keep the shared Coordinator logic and explicit profile boundary;
@@ -74,15 +76,18 @@ from first principles.
   public schema or production repository allowlist to accommodate test fixtures.
   Documentation is not permission to create external resources. Keep the runtime
   bundle identical to its source, verify its fixed branch/commit, and preserve
-  service attempts in the v3 journal before dispatch.
+  service and batch attempts in the v4 journal before dispatch.
 - `docs/design.md` contains the proposed execution design and unresolved
   differences with the full process diagram. Settle those choices before
-  implementing release execution. Its batch-testing section owns the proposed
-  bounded search before release mutations: keep tickets/dependencies whole,
+  implementing release execution. Its batch-testing section owns the bounded
+  search before release mutations: keep tickets/dependencies whole,
   test the final exact combination, and never blame every member of a failed
   group. Batch ticket projections belong in `docs/inbox-processing.md`; planned
-  acceptance cases belong in `docs/merge-rehearsal-testing.md`. These are future
-  requirements, not implemented batch commands or release authorization.
+  acceptance cases belong in `docs/merge-rehearsal-testing.md`. These are sandbox
+  requirements for sandbox batching, not release authorization. The current
+  sandbox adapter supports self-contained tickets only; cross-ticket dependency
+  declarations and database-changing batches remain deferred. Keep cheap
+  filtering before expensive checks, preserve owned trial cleanup and fixed budgets.
 - CLI, inbox reader, and readiness usage belong in their package/application
   READMEs. The JSON Schema owns the request shape; `release-request-schema.md`
   explains it. Ticket lifecycle fields belong to Coordinator state, not the

@@ -361,9 +361,31 @@ that the requested code failed.
 `real` retains inspection/Git rehearsal and reports services as `not-run`.
 
 [Combining tickets](../../docs/design.md#proposed-batch-testing-and-selection)
-is still future work. There are no batch-selection flags or per-candidate GitHub
-PR creation in this command. Later full checks belong at the batch level by
-default, starting with requests without database changes.
+is now the default for an unscoped **sandbox** run:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
+```
+
+The command completes cheap intake/scope/database and Git conflict filtering
+before creating temporary PRs for normal required CI, then runs the combined
+sample services. Each ticket must be self-contained, target staging and have a
+verified no-database-change answer. Inseparable work belongs in one ticket;
+cross-ticket dependency declarations are not supported yet.
+
+The account also needs contents/PR write access to both sample repositories.
+Only owned `codex/batch-trial-<UUID>` PRs/branches are created and cleaned up; source
+PRs and main are not changed. Limits are 10 tickets, 10 PRs per repository,
+40 combined Git attempts, 12 candidate check rounds and 45 minutes to start new
+rounds. Pending or interrupted attempts retain the inbox lock and their owned
+identities for explicit `--resume`; stop the previous process first. Completed
+identical candidates reuse their evidence after fresh input checks and re-reading
+the actual GitHub CI/service results. This starts no new CI; missing or changed
+proof stops reuse.
+
+`batch:passed` means that exact selected group passed. Excluded tickets remain
+visible with `batch:waiting` or `batch:blocked`, reasons and links. A+B failing
+does not mark both tickets broken. No passing result authorizes a release.
 
 The default selection is every open `release-request` Issue plus ticket IDs
 already recorded in the journal, even if someone removed their labels. Both
@@ -428,9 +450,9 @@ independent commit history. **Never merge it into main, delete it, or force-push
 it.** It is runtime state, not a source branch. See the
 [storage and trust contract](../../docs/inbox-processing.md#storage-and-trusted-writers).
 
-Policy `2026-09-10.1` generates Git and supported sandbox service plans internally. The journal marker is now
-`workflow: "inbox-run-v3"`. First use upgrades a legacy/v1/v2 journal without
-rewriting its decisions. Older writers reject the v3 marker before changes. Keep the marker
+Policy `2026-09-10.2` generates Git, sandbox service and batch plans internally. The journal marker is now
+`workflow: "inbox-run-v4"`. First use upgrades a legacy/v1/v2/v3 journal without
+rewriting its decisions or service history. Older writers reject the v4 marker before changes. Keep the marker
 and history intact; use current code instead of removing unfamiliar fields or
 reasons. Read-only diagnostics and the public CLI do not change.
 

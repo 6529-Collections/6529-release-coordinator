@@ -42,7 +42,20 @@ export const reasons = [
   "database-declaration-mismatch",
   "service-checks-failed",
   "service-checks-unverified",
-  "service-checks-stale"
+  "service-checks-stale",
+  "batch-selected",
+  "batch-ticket-failed",
+  "batch-incompatible",
+  "batch-limit",
+  "batch-deferred",
+  "batch-unsupported"
+];
+export const batchStatuses = [
+  "passed",
+  "blocked",
+  "waiting",
+  "unknown",
+  "stale"
 ];
 export const managedLabels = new Set([
   "release-request",
@@ -54,7 +67,8 @@ export const managedLabels = new Set([
   ...statuses.map((s) => `status:${s}`),
   ...reasons.map((s) => `reason:${s}`),
   ...rehearsalStatuses.map((s) => `rehearsal:${s}`),
-  ...rehearsalStatuses.map((s) => `services:${s}`)
+  ...rehearsalStatuses.map((s) => `services:${s}`),
+  ...batchStatuses.map((s) => `batch:${s}`)
 ]);
 export const labelNames = (issue) =>
   issue.labels.map((label) => (typeof label === "string" ? label : label.name));
@@ -107,7 +121,8 @@ export function desiredLabels(issue, decision, request) {
       ...scope,
       ...decision.reasons.map((reason) => `reason:${reason.code}`),
       ...(decision.rehearsal ? [`rehearsal:${decision.rehearsal.status}`] : []),
-      ...(decision.services ? [`services:${decision.services.status}`] : [])
+      ...(decision.services ? [`services:${decision.services.status}`] : []),
+      ...(decision.batch ? [`batch:${decision.batch.status}`] : [])
     ])
   ].sort();
 }
@@ -267,6 +282,40 @@ export function statusComment({
       );
     if (services.plan_hash)
       lines.push(`Service plan fingerprint: ${prose(services.plan_hash)}.`);
+  }
+  if (decision.batch) {
+    const batch = decision.batch;
+    lines.push(
+      "",
+      `**Combined batch:** ${prose(batch.status)}. ${prose(batch.message)}`
+    );
+    if (batch.fingerprint)
+      lines.push(`Batch fingerprint: ${prose(batch.fingerprint)}.`);
+    if (batch.selected)
+      lines.push(
+        `Selected tickets: ${batch.selected.map((number) => `#${number}`).join(", ") || "none"}.`
+      );
+    for (const attempt of batch.evidence ?? []) {
+      lines.push(
+        `- Attempt ${prose(attempt.attempt_id)}: ${prose(attempt.phase)} ${prose(attempt.status)}; tickets ${attempt.tickets.map((number) => `#${number}`).join(", ")}.`
+      );
+      for (const check of attempt.checks ?? [])
+        lines.push(
+          `  ${prose(check.role)}: ${prose(check.workflow)}; commit ${prose(check.commit)}; tree ${prose(check.tree)}.`
+        );
+      if (attempt.services?.workflow?.url)
+        lines.push(
+          `  Service checks: ${prose(attempt.services.workflow.url)}.`
+        );
+      if (attempt.baseline?.workflow?.url)
+        lines.push(
+          `  Unchanged baseline: ${prose(attempt.baseline.workflow.url)}.`
+        );
+      for (const conflict of attempt.conflicts ?? [])
+        lines.push(
+          `  ${prose(conflict.role)} conflicts: ${prose(JSON.stringify(conflict.paths))}.`
+        );
+    }
   }
   if (request) {
     lines.push(

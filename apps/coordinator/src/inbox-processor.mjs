@@ -248,6 +248,7 @@ export async function processInbox({
   resume,
   rehearsal,
   services,
+  batch,
   plan,
   signal,
   now = () => new Date(),
@@ -277,18 +278,33 @@ export async function processInbox({
   issueNumber = run.scope.issue_number ?? undefined;
   closeTest = run.scope.close_test;
   const results = [];
+  const preparedTickets = [];
+  const batching =
+    batch &&
+    profile.name === "sandbox" &&
+    !issueNumber &&
+    !closeTest &&
+    run.scope.workflow === inboxWorkflow;
+  let batchResult;
   let pendingNumber = null;
   try {
     // Complete the listing/proof pass before considering any Issue writes.
     const inbox = await loadInbox({ get, now, profile });
-    const numbers = issueNumber
-      ? [issueNumber]
-      : [
-          ...new Set([
-            ...inbox.requests.map((entry) => entry.issue_number),
-            ...Object.keys(state.tickets).map(Number)
-          ])
-        ].sort((a, b) => a - b);
+    const numbers =
+      run.ticket_numbers ??
+      (issueNumber
+        ? [issueNumber]
+        : [
+            ...new Set([
+              ...inbox.requests.map((entry) => entry.issue_number),
+              ...Object.keys(state.tickets).map(Number)
+            ])
+          ].sort((a, b) => a - b));
+    if (batching && !run.ticket_numbers) {
+      run.ticket_numbers = numbers;
+      state.lock.ticket_numbers = numbers;
+      await journal.save(state, run, "save complete batch scan selection");
+    }
     const entries = new Map();
     const issues = new Map();
     for (const number of numbers) {
@@ -340,6 +356,7 @@ export async function processInbox({
         message: "Recorded terminal ticket; its disposition is preserved."
       };
       let serviceResult;
+      let observation, decision, coordinated;
       let ticket = state.tickets[number];
       if (entry.intake_in_progress) {
         results.push({
@@ -378,8 +395,8 @@ export async function processInbox({
           "Test closure is limited to the authenticated operator's verified request."
         );
       if (!recordedTerminal) {
-        let observation = await observe(entry, { github, profile });
-        let decision = decideTicket(entry, observation, {
+        observation = await observe(entry, { github, profile });
+        decision = decideTicket(entry, observation, {
           overlaps: overlapping(
             entry,
             [...all.values()].filter(
@@ -397,7 +414,7 @@ export async function processInbox({
             run.scope.issue_number === number
               ? run.scope.merge_plan
               : undefined);
-          const coordinated = await coordinateTicket({
+          coordinated = await coordinateTicket({
             entry,
             observation,
             decision,
@@ -429,7 +446,7 @@ export async function processInbox({
           rehearsalResult = coordinated.result;
           if (coordinated.evidence)
             observation = { ...observation, rehearsal: coordinated.evidence };
-          if (services) {
+          if (services && !batching) {
             const checked = await services({
               entry,
               rehearsal: coordinated,
@@ -486,6 +503,75 @@ export async function processInbox({
             serviceResult = checked.result;
           }
         }
+      }
+      preparedTickets.push({
+        number,
+        issue,
+        entry,
+        ticket,
+        recordedTerminal,
+        observation,
+        decision,
+        coordinated,
+        rehearsalResult,
+        serviceResult,
+        input: run.plans?.[number]
+      });
+    }
+    if (batching) {
+      batchResult = await batch({
+        items: preparedTickets,
+        state,
+        run,
+        profile,
+        signal,
+        guard: () => journal.guard(run),
+        save: (message) => journal.save(state, run, message),
+        verify: async () => {
+          for (const item of preparedTickets.filter(
+            (value) => value.coordinated?.report?.status === "pass"
+          )) {
+            const fresh = await response(api, "GET", `/issues/${item.number}`);
+            if (
+              receiptHash(fresh) !== receiptHash(item.issue) ||
+              fresh.state !== "open"
+            )
+              return false;
+            const entry = await inspect(fresh, { get, profile });
+            if (
+              digest(entry.request) !== digest(item.entry.request) ||
+              digest(entry.workflow) !== digest(item.entry.workflow) ||
+              digest(entry.github_actor) !== digest(item.entry.github_actor)
+            )
+              return false;
+            const observation = await observe(entry, { github, profile });
+            if (
+              !canRehearse(
+                entry,
+                observation,
+                decideTicket(entry, observation)
+              ) ||
+              digest(await plan(entry)) !== digest(item.input)
+            )
+              return false;
+          }
+          return true;
+        }
+      });
+    }
+    for (const item of preparedTickets) {
+      const {
+        number,
+        issue,
+        entry,
+        recordedTerminal,
+        observation,
+        decision,
+        rehearsalResult,
+        serviceResult
+      } = item;
+      let { ticket } = item;
+      if (!recordedTerminal) {
         // Reverify immutable intake before the journaled intent. Readiness itself
         // rereads PR metadata after all catalog/check observations.
         const refreshed = await response(api, "GET", `/issues/${number}`);
@@ -580,7 +666,8 @@ export async function processInbox({
       results.push({
         ...applied,
         ...(rehearsal ? { rehearsal: rehearsalResult } : {}),
-        ...(serviceResult ? { services: serviceResult } : {})
+        ...(serviceResult ? { services: serviceResult } : {}),
+        ...(decision?.batch ? { batch: decision.batch } : {})
       });
       pendingNumber = null;
     }
@@ -593,7 +680,8 @@ export async function processInbox({
       run_id: run.run_id,
       checked_at: now().toISOString(),
       release_authorized: false,
-      requests: results
+      requests: results,
+      ...(batchResult ? { batch: batchResult } : {})
     };
   } catch (error) {
     // Retain the lock on failure, even on an uncertain API response. Recovery

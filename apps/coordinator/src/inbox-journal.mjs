@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { realProfile } from "./profiles.mjs";
 import { stateBranch, stateFile } from "./coordinator-github.mjs";
+import { validateBatchHistory } from "./batch-state.mjs";
 import {
   serviceStatuses,
   validateServicePlan,
@@ -10,7 +11,8 @@ import {
   response,
   statuses,
   reasons,
-  rehearsalStatuses
+  rehearsalStatuses,
+  batchStatuses
 } from "./ticket-presentation.mjs";
 
 function canonical(value) {
@@ -31,8 +33,13 @@ export const receiptHash = (issue) =>
   digest({ id: issue.id, number: issue.number, body: issue.body });
 const validSha = (value) =>
   typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
-export const inboxWorkflow = "inbox-run-v3";
-const workflows = ["inbox-run-v1", "inbox-run-v2", inboxWorkflow];
+export const inboxWorkflow = "inbox-run-v4";
+const workflows = [
+  "inbox-run-v1",
+  "inbox-run-v2",
+  "inbox-run-v3",
+  inboxWorkflow
+];
 
 export function validateJournal(state, profile = realProfile) {
   if (
@@ -51,7 +58,8 @@ export function validateJournal(state, profile = realProfile) {
           "lock",
           "tickets",
           "workflow",
-          "service_attempts"
+          "service_attempts",
+          "batches"
         ].includes(key)
     ) ||
     (state.workflow !== undefined && !workflows.includes(state.workflow))
@@ -64,7 +72,7 @@ export function validateJournal(state, profile = realProfile) {
     throw new Error("Invalid inbox lock.");
   if (state.service_attempts !== undefined) {
     if (
-      state.workflow !== inboxWorkflow ||
+      !["inbox-run-v3", inboxWorkflow].includes(state.workflow) ||
       !state.service_attempts ||
       Array.isArray(state.service_attempts) ||
       Object.keys(state.service_attempts).length > 1000
@@ -90,6 +98,11 @@ export function validateJournal(state, profile = realProfile) {
       if (attempt.result)
         verifyServiceReport(attempt.result.report, attempt.plan, attempt.id);
     }
+  }
+  if (state.batches !== undefined) {
+    if (state.workflow !== inboxWorkflow)
+      throw new Error("Batch history requires the current inbox writer.");
+    validateBatchHistory(state.batches, profile);
   }
   for (const [number, ticket] of Object.entries(state.tickets)) {
     if (
@@ -144,9 +157,17 @@ export function validateJournal(state, profile = realProfile) {
         record.decision.services &&
         (!serviceStatuses.includes(record.decision.services.status) ||
           typeof record.decision.services.message !== "string" ||
-          state.workflow !== inboxWorkflow)
+          !["inbox-run-v3", inboxWorkflow].includes(state.workflow))
       )
         throw new Error("Invalid service decision history.");
+      if (
+        record.decision.batch &&
+        (state.workflow !== inboxWorkflow ||
+          profile.name !== "sandbox" ||
+          !batchStatuses.includes(record.decision.batch.status) ||
+          typeof record.decision.batch.message !== "string")
+      )
+        throw new Error("Invalid batch decision history.");
       previous = hash;
     }
     if (
@@ -294,8 +315,9 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
         state.workflow &&
         state.workflow !== workflow &&
         !(
-          ["inbox-run-v1", "inbox-run-v2"].includes(state.workflow) &&
-          workflow === inboxWorkflow
+          ["inbox-run-v1", "inbox-run-v2", "inbox-run-v3"].includes(
+            state.workflow
+          ) && workflow === inboxWorkflow
         )
       )
         throw new Error(
@@ -318,7 +340,15 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
         started_at: new Date().toISOString(),
         scope: resume ? state.lock.scope : scope,
         ...(workflow === inboxWorkflow
-          ? { plans: resume ? structuredClone(state.lock.plans ?? {}) : {} }
+          ? {
+              plans: resume ? structuredClone(state.lock.plans ?? {}) : {},
+              ...(resume && state.lock.batch_fingerprint
+                ? { batch_fingerprint: state.lock.batch_fingerprint }
+                : {}),
+              ...(resume && state.lock.ticket_numbers
+                ? { ticket_numbers: structuredClone(state.lock.ticket_numbers) }
+                : {})
+            }
           : {})
       };
       // Older checkouts reject this top-level field before any writes, even

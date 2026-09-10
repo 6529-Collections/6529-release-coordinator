@@ -191,7 +191,7 @@ its lock; explicit resume uses the stored plan and fresh evidence.
 [one-ticket sandbox stage](./merge-rehearsal-testing.md#service-and-database-acceptance)
 comes before batching. Reuse the managed comment, submitter ownership, and
 decision history and original request/receipt. The sandbox writer uses
-`inbox-run-v3`; older writers must stop. The journal's `service_attempts` map saves
+`inbox-run-v4` (service attempts were introduced in v3); older writers must stop. The journal's `service_attempts` map saves
 exact plans and attempts before dispatch and retains verified results for retries.
 
 Managed labels are `services:not-run`, `services:passed`, `services:blocked`,
@@ -220,16 +220,29 @@ would require a person; temporary-resource cleanup is not successful recovery.
 
 ## Proposed batch ticket outcomes
 
-**Future behavior, not emitted by the current processor.** The
-[batch-selection design](./design.md#proposed-batch-testing-and-selection) adds
-limited splitting of failing groups before release mutations. Current
-`inbox:run` still rehearses one ticket at a time. The outcome descriptions here
-do not add reason codes, change existing labels, or authorize ticket writes.
-Register the reasons and journal policy together when implementing batching.
-This stage follows the service/database acceptance above, reusing its meaningful
-sample checks. Initial multi-ticket batches still exclude database-changing or
-unresolved-database requests; leave them waiting for the appropriate capability
-with a clear reason rather than marking them broken or silently skipping them.
+**Implemented for unscoped sandbox runs; see [progress](./progress.md) for evidence.**
+The [batch-selection policy](./design.md#proposed-batch-testing-and-selection)
+finishes cheap intake, scope, database and Git filtering before new combined
+PR/service checks. `--issue` retains one-ticket handling. Initial batching only
+supports self-contained staging requests with verified no-database-change scope.
+Cross-ticket dependency declarations remain future work; inseparable changes
+must be submitted as one complete ticket.
+
+`inbox-run-v4` adds `batches` history without rewriting prior decisions or service
+attempts. New managed labels are `batch:passed`, `batch:blocked`, `batch:waiting`,
+`batch:unknown` and `batch:stale`. Reasons are `batch-selected`,
+`batch-ticket-failed`, `batch-incompatible`, `batch-limit`, `batch-deferred` and
+`batch-unsupported`; the existing database-declaration-mismatch reason is reused.
+A selected passing group stays `status:waiting`, never completed or eligible for
+release execution. Excluded tickets retain the same comment, reasons, action
+owner, exact group/attempt and check links. Unknown results never blame a submitter.
+Reusing a saved group requires fresh input checks and a fresh read of its actual
+GitHub CI/service evidence. Missing or changed proof stops reuse; a cached journal
+result alone is insufficient. This verification starts no new CI.
+
+The general future outcomes below also cover capabilities beyond this first
+stage, including cross-ticket dependency groups and reassessment after a real
+release. Those capabilities are not implied by the new sandbox labels.
 
 Leaving a ticket out of a candidate keeps its PRs and Issue open. Keep the entire
 ticket and any inseparable dependency group together. Selection or a passing
@@ -437,8 +450,8 @@ for their own test. It records that authenticated decision. General cancellation
 replacement, completion, and terminal corrections remain reserved; no commands
 for those actions exist yet. No test is inferred from editable request/title text.
 
-The combined workflow uses policy `2026-09-09.4`. It upgrades the journal to
-`workflow: "inbox-run-v3"` without changing prior decisions; v1/v2 journals upgrade on an authorized write. Older
+The combined workflow uses policy `2026-09-10.2`. It upgrades the journal to
+`workflow: "inbox-run-v4"` without changing prior decisions or service attempts; v1/v2/v3 journals upgrade on an authorized write. Older
 checkouts reject this field before writes, even if a pass adds no new reason.
 Once that marker is recorded, use a checkout supporting the combined workflow. Older processors reject unknown reasons and stop safely;
 update the checkout rather than rewriting history. No public CLI upgrade is needed.

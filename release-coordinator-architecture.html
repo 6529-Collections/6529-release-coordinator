@@ -249,10 +249,11 @@
               up afterward. Database answers, failures, and retries have recorded evidence;
               see the <a href="./docs/merge-rehearsal-testing.md#service-and-database-acceptance">service/database guide</a>.
               <a href="./docs/progress.md#sandbox-source-delivery-september-10">Source delivery</a>
-              records the Coordinator PR and CI separately from these sample tests. The next
-              development stage is <a href="./docs/design.md#proposed-batch-testing-and-selection">testing batches</a>
+              records the Coordinator PR and CI separately from these sample tests. Unscoped sandbox runs now support
+              <a href="./docs/design.md#proposed-batch-testing-and-selection">testing batches</a>
               without database changes, keeping excluded tickets visible with reasons.
-              Batching remains unimplemented.
+              Cheap scope and Git filtering finish before temporary PR checks and combined service tests.
+              See progress for local versus live batch evidence.
             </p>
             <p>
               Source: <code>packages/release-request/</code>. Product repositories install only
