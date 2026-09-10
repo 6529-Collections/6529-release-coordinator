@@ -5,5 +5,5 @@ export const sandboxServiceRuntime = Object.freeze({
   repository_id: 1362505082,
   workflow: "sandbox-service-check.yml",
   ref: "codex/sandbox-services-runtime-v1",
-  commit: "18d33510d925b0e5ce30168e888cc7586f532749"
+  commit: "49d92ac76c9bf91520c82010afbae7f9e0fdbb39"
 });

@@ -186,10 +186,22 @@ changing, or oversized results stay unverified. Fixture preparation also saves
 its exact branch before push/PR creation and reconciles a lost PR response.
 The command guide now states the GitHub CLI 2.97.0 minimum for service logs.
 All 42 focused tests and the full **314-test Node 24.19.0 check** passed locally
-after these changes. Runtime synchronization is tracked separately in sample
-[frontend PR #11](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/11)
-and [backend PR #13](https://github.com/6529-Collections/release-coordinator-test-backend/pull/13);
-the configured pin must match the verified merged runtime before Coordinator merge.
+after these changes. A read-only GitHub check at 11:36 UTC recovered and verified
+the original passing run `34456463421` using the updated actor/time-filtered query;
+it issued no dispatch. The seven original live ticket cases remain dated evidence
+at their original runtime pin, rather than new runs of every review edge case.
+
+Runtime synchronization completed separately in sample
+[frontend PR #11](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/11),
+merged at `b2a43d5a362116a371aae86aa17d23be146cf1f6`, and
+[backend PR #13](https://github.com/6529-Collections/release-coordinator-test-backend/pull/13),
+merged at `49d92ac76c9bf91520c82010afbae7f9e0fdbb39` on September 10.
+Both passed `Sandbox check` and CodeRabbit before merge. Each changes only the
+shared report-step guard; all five bundled runtime files were compared with the
+Coordinator source and matched in both merged trees. The fixed backend runtime
+branch was advanced without force and read back at `49d92ac`; the Coordinator
+configuration now pins that full commit. This is sample-runtime delivery, not
+a product deployment or a repeat of the complete live ticket matrix.
 
 ## Planned later stage: batch selection and tests, September 9
 
