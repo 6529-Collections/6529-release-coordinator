@@ -21,6 +21,9 @@ work are tracked in [Progress and next steps](./docs/progress.md).
 
 Use one command with an explicit profile and ticket:
 
+Sandbox service checks require GitHub CLI 2.97.0 or later; see the
+[command requirements](./apps/coordinator/README.md#run-the-ticket-workflow).
+
 ```sh
 RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --json
 ```

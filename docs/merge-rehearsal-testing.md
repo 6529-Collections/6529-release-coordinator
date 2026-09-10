@@ -536,6 +536,10 @@ code alone does not establish a ticket defect.
 `inbox-run-v3` saves the exact service plan and unique attempt before dispatch.
 A lost dispatch response is reconciled, never blindly repeated. Subsequent runs
 reverify the same workflow result; changed inputs require a different plan.
+Lookup filters by the saved actor and creation time with a five-minute clock-skew
+margin, and verifies complete pagination up to GitHub's 1,000-run search limit.
+Incomplete, changing, or oversized results stay unverified; they never authorize
+another dispatch or imply a missing run.
 A ten-minute job limit, bounded MySQL probes, 15-second program limits and bounded
 controller polling keep uncertain attempts visible for explicit reconciliation.
 The result must match the runtime, actor, workflow job, attempt, exact plan,
@@ -596,6 +600,9 @@ CI stays offline; sample repository PR CI runs the shared temporary MySQL checks
 `prepare-cases.mjs --create-sample-prs` is a developer setup utility for the fixed
 sandbox repositories, not a second inbox command. Its recorded PRs remain source
 fixtures and never become verified tickets without normal submission.
+Preparation saves its exact branch and commit before pushing or creating the PR.
+A retry reuses that owned checkout/commit and looks up an existing PR before
+creating one; ambiguous, closed, or changed PRs require explicit reconciliation.
 
 The initial executor requires all four sample steps. An omitted prerequisite is
 held; proving a pre-existing service can satisfy it remains unimplemented.

@@ -331,6 +331,9 @@ answer, saves its plan and unique attempt, and dispatches the pinned backend
 workflow. The GitHub account needs Actions dispatch access to the test backend
 and read access to its jobs/logs, in addition to the existing inbox permissions.
 No local Docker installation is needed for `inbox:run`.
+Sandbox service logs require GitHub CLI **2.97.0 or later** because the reader
+uses `gh api --allow-escape-sequences` ([upstream release](https://github.com/cli/cli/releases/tag/v2.97.0)).
+Raw logs stay in memory and are never printed to the operator's terminal.
 
 The job runs isolated temporary MySQL and sample programs in the test backend
 repository's GitHub Actions runner. It uses fake data and removes the owned

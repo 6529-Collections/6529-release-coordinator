@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fixtureServicePlan, databaseCandidate } from "../sandbox/fixtures.mjs";
+import {
+  fixtureServicePlan,
+  databaseCandidate,
+  sampleFiles
+} from "../sandbox/fixtures.mjs";
 import { serviceFixture, serviceAdapter } from "./service-fixture.mjs";
 import {
   executeServiceSteps,
@@ -122,6 +126,39 @@ test("SD-04: omitted, cyclic, and reordered dependencies cannot execute", () => 
     after: "worker"
   });
   assert.throws(() => compile(cycle), { code: "invalid-services" });
+});
+
+test("the backend catalog cannot impersonate the frontend service", () => {
+  const files = sampleFiles();
+  const catalog = JSON.parse(files.backend["src/config/deploy-services.json"]);
+  catalog.services.push({
+    name: "frontend",
+    allowed_environments: ["staging"],
+    default_dependencies: []
+  });
+  files.backend["src/config/deploy-services.json"] = JSON.stringify(catalog);
+  const f = serviceFixture(files);
+  f.entry.request.release_parts[0].deploy_units.push("frontend");
+  assert.throws(() => compile(f), {
+    code: "invalid-services",
+    status: "blocked",
+    message:
+      "The sandbox backend catalog cannot use the reserved frontend name."
+  });
+});
+
+test("malformed report steps retain the result-unverified classification", async () => {
+  const plan = fixtureServicePlan();
+  const good = await executeServiceSteps(plan, serviceAdapter(), { attemptId });
+  for (const invalid of [null, undefined, [], 0, "worker"]) {
+    const report = structuredClone(good);
+    report.steps[1] = invalid;
+    assert.throws(
+      () => verifyServiceReport(report, plan, attemptId),
+      (error) =>
+        error instanceof ServiceError && error.code === "result-unverified"
+    );
+  }
 });
 
 test("SD-05/06: failed database/API and timeout stop dependents and retain state before cleanup", async () => {

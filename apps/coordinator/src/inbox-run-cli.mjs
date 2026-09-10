@@ -16,7 +16,7 @@ RELEASE_COORDINATOR_PROFILE=sandbox|real npm run inbox:run -- --resume RUN_ID [-
 Writes managed labels, titles, submitter assignment, one status comment, justified
 Issue closures, and the selected inbox's codex/inbox-state journal branch. Runs once.
 Requires Node.js 20+, Git 2.38+, and gh with inbox write and selected PR-repository read access.
-Sandbox service checks also require Actions write access to the pinned sample backend.
+Sandbox service checks also require gh 2.97.0+ and Actions write access to the pinned sample backend.
   --issue NUMBER  Process only this Issue. Default: open requests plus known history.
                   Each suitable ticket gets its own automatically saved merge plan.
                   Uses ticket dependencies/order and the profile's current main commits.

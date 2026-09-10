@@ -31,7 +31,8 @@ async function githubFixture() {
     id: "33333333-3333-4333-8333-333333333333",
     plan,
     plan_hash: plan.fingerprint,
-    actor: { id: "456" },
+    actor: { id: "456", login: "trusted-user" },
+    created_at: "2026-09-10T08:00:00.000Z",
     workflow_id: 12,
     workflow_run_id: 99
   };
@@ -99,11 +100,22 @@ async function githubFixture() {
       else if (endpoint.endsWith("/dispatches")) {
         assert.equal(method, "POST");
         value = { workflow_run_id: 99 };
-      } else if (endpoint.includes("/runs?"))
-        value = {
-          workflow_runs: state.duplicate ? [state.run, state.run] : [state.run]
-        };
-      else if (endpoint.endsWith("/actions/runs/99")) value = state.run;
+      } else if (endpoint.includes("/runs?")) {
+        const page = Number(
+          new URL(`https://github.com/${endpoint}`).searchParams.get("page")
+        );
+        value = state.pages
+          ? {
+              total_count: state.total ?? state.pages.flat().length,
+              workflow_runs: state.pages[page - 1] ?? []
+            }
+          : {
+              total_count: state.duplicate ? 2 : 1,
+              workflow_runs: state.duplicate
+                ? [state.run, state.run]
+                : [state.run]
+            };
+      } else if (endpoint.endsWith("/actions/runs/99")) value = state.run;
       else if (endpoint.includes("/jobs?"))
         value = { total_count: 1, jobs: [state.job] };
       else assert.fail(endpoint);
@@ -188,4 +200,39 @@ test("SD-09: a real profile or unpinned runtime cannot create the execution adap
       }),
     /never a fallback/
   );
+});
+
+test("saved attempts beyond 500 newer runs are found with actor/time filters", async () => {
+  const { client, attempt, state } = await githubFixture();
+  state.pages = Array.from({ length: 5 }, () =>
+    Array.from({ length: 100 }, () => ({ display_title: "Other attempt" }))
+  );
+  state.pages.push([state.run]);
+  assert.equal((await client.find(attempt)).id, 99);
+  const calls = state.calls.filter((call) =>
+    call.args.some((arg) => arg.includes("/runs?"))
+  );
+  assert.equal(calls.length, 6);
+  for (const call of calls) {
+    const endpoint = call.args.find((arg) => arg.includes("/runs?"));
+    const query = new URL(`https://github.com/${endpoint}`).searchParams;
+    assert.equal(query.get("actor"), "trusted-user");
+    assert.equal(query.get("created"), ">=2026-09-10T07:55:00Z");
+  }
+  state.pages[0][0] = state.run;
+  await assert.rejects(client.find(attempt), /More than one/);
+});
+
+test("incomplete, oversized and unidentifiable attempt searches stop explicitly", async () => {
+  const { client, attempt, state } = await githubFixture();
+  state.pages = [[state.run]];
+  for (const total of [101, 1001]) {
+    state.total = total;
+    await assert.rejects(client.find(attempt), { code: "workflow-unverified" });
+  }
+  for (const changes of [{ created_at: "bad" }, { actor: { id: "456" } }]) {
+    await assert.rejects(client.find({ ...attempt, ...changes }), {
+      code: "attempt-unverified"
+    });
+  }
 });

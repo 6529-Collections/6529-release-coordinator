@@ -179,6 +179,18 @@ and the test backend's runtime branch still matched the configured
 `Check package`, an up-to-date branch, and resolved review threads, with no
 bypass actors. This delivery does not publish npm or deploy product code.
 
+PR review added guards for legacy-plan resume, malformed report steps, reserved
+frontend service names, and complete workflow-run reconciliation. The workflow
+search uses the saved actor and creation time with a clock-skew margin; truncated,
+changing, or oversized results stay unverified. Fixture preparation also saves
+its exact branch before push/PR creation and reconciles a lost PR response.
+The command guide now states the GitHub CLI 2.97.0 minimum for service logs.
+All 42 focused tests and the full **314-test Node 24.19.0 check** passed locally
+after these changes. Runtime synchronization is tracked separately in sample
+[frontend PR #11](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/11)
+and [backend PR #13](https://github.com/6529-Collections/release-coordinator-test-backend/pull/13);
+the configured pin must match the verified merged runtime before Coordinator merge.
+
 ## Planned later stage: batch selection and tests, September 9
 
 **Documentation only; not implemented or tested.** The

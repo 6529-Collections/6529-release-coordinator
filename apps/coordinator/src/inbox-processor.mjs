@@ -457,7 +457,9 @@ export async function processInbox({
                     entry,
                     currentObservation,
                     decideTicket(entry, currentObservation)
-                  ) && digest(await plan(entry)) === digest(run.plans?.[number])
+                  ) &&
+                  digest(await plan(entry)) ===
+                    digest(run.plans?.[number] ?? stored)
                 );
               },
               guard: () => journal.guard(run),

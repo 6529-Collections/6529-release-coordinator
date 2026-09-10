@@ -150,23 +150,59 @@ export function createServiceGitHub({
       });
     },
     async find(attempt) {
+      serviceAssert(
+        Number.isFinite(Date.parse(attempt.created_at)) &&
+          typeof attempt.actor?.login === "string" &&
+          /^[A-Za-z0-9-]{1,100}(?:\[bot\])?$/u.test(attempt.actor.login),
+        "attempt-unverified",
+        "The saved attempt needs its creation time and actor for reconciliation."
+      );
+      // Include a small clock-skew margin; unrelated earlier runs cannot bury
+      // the saved attempt. GitHub caps filtered run searches at 1,000 results.
+      const created = new Date(Date.parse(attempt.created_at) - 5 * 60_000)
+        .toISOString()
+        .replace(/\.\d{3}Z$/u, "Z");
+      const filters = new URLSearchParams({
+        event: "workflow_dispatch",
+        branch: runtime.ref,
+        actor: attempt.actor.login,
+        created: `>=${created}`,
+        per_page: "100"
+      });
       const matches = [];
-      for (let page = 1; page <= 5; page++) {
+      let complete = false;
+      let total;
+      for (let page = 1; page <= 10; page++) {
         const list = await call(
           "GET",
-          `/actions/workflows/${runtime.workflow}/runs?event=workflow_dispatch&branch=${encodeURIComponent(runtime.ref)}&per_page=100&page=${page}`
+          `/actions/workflows/${runtime.workflow}/runs?${filters}&page=${page}`
         );
         serviceAssert(
-          Array.isArray(list.workflow_runs),
+          Array.isArray(list.workflow_runs) &&
+            Number.isSafeInteger(list.total_count) &&
+            list.total_count >= 0 &&
+            list.total_count <= 1000 &&
+            (total === undefined || total === list.total_count) &&
+            list.workflow_runs.length ===
+              Math.min(100, list.total_count - (page - 1) * 100),
           "workflow-unverified",
-          "The sandbox run list is incomplete."
+          "The sandbox run list is incomplete or exceeds the reconciliation limit."
         );
+        total ??= list.total_count;
         for (const run of list.workflow_runs.filter(
           (run) => run.display_title === title(attempt.id)
         ))
           matches.push(validateRun(run, attempt));
-        if (list.workflow_runs.length < 100) break;
+        if (page * 100 >= list.total_count) {
+          complete = true;
+          break;
+        }
       }
+      serviceAssert(
+        complete,
+        "workflow-unverified",
+        "The saved attempt's complete workflow history could not be verified."
+      );
       serviceAssert(
         matches.length <= 1,
         "workflow-unverified",

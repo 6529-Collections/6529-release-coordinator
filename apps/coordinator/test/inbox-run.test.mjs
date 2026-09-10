@@ -655,6 +655,42 @@ test("resuming a legacy interrupted run preserves its recorded plan while upgrad
   assert.equal(f.state().lock, null);
 });
 
+test("legacy service verification uses its saved plan and still detects destination movement", async () => {
+  const f = fixture();
+  const input = await inputPlan(f);
+  const current = structuredClone(input);
+  const legacy = createJournal(f.api, f.profile, { workflow: "inbox-run-v1" });
+  const { run } = await legacy.acquire(await f.identity(), undefined, {
+    workflow: "inbox-run-v1",
+    issue_number: 1,
+    close_test: false,
+    merge_plan: input
+  });
+  let verified = false;
+  const result = await invoke(f, {
+    args: ["--resume", run.run_id, "--json"],
+    plan: async () => structuredClone(current),
+    rehearse: async (entry, saved) => {
+      assert.deepEqual(saved, input);
+      return fakeReport(entry, saved, f.profile);
+    },
+    services: async ({ decision, verifyInputs }) => {
+      assert.equal(await verifyInputs(), true);
+      current.repositories[0].destination.commit = "f".repeat(40);
+      assert.equal(await verifyInputs(), false);
+      verified = true;
+      return {
+        decision,
+        result: { status: "not-run", message: "Verification fixture" }
+      };
+    }
+  });
+  assert.equal(result.code, 0);
+  assert.equal(verified, true);
+  assert.equal(f.state().workflow, inboxWorkflow);
+  assert.equal(f.state().lock, null);
+});
+
 test("one inbox scan generates a separate saved plan for each suitable ticket", async () => {
   const f = fixture();
   const first = (await readInbox({ get: f.get, profile: f.profile }))

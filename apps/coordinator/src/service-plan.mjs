@@ -119,11 +119,18 @@ export function buildServicePlan(entry, report, profile, runtime) {
     error.database = database;
     throw error;
   }
+  const catalog = catalogServices(
+    fileJson(sources.backend.files["src/config/deploy-services.json"])
+  );
+  serviceAssert(
+    !catalog.has("frontend"),
+    "invalid-services",
+    "The sandbox backend catalog cannot use the reserved frontend name.",
+    "blocked"
+  );
   const graph = inspectServiceGraph(
     canonicalRequest(entry.request, profile),
-    catalogServices(
-      fileJson(sources.backend.files["src/config/deploy-services.json"])
-    )
+    catalog
   );
   serviceAssert(
     graph.status === "pass",
