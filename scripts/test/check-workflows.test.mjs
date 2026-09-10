@@ -26,7 +26,7 @@ test("quoted keys and flow mappings have the same policy meaning", () => {
   validateWorkflows(changed);
 });
 
-for (const [name, edit, file = releaseFile] of [
+for (const [name, edit, file = releaseFile, expected] of [
   [
     "PR job grants itself Issue writes",
     (w) => {
@@ -48,8 +48,10 @@ for (const [name, edit, file = releaseFile] of [
   [
     "extra privileged job",
     (w) => {
-      w.jobs.extra = w.jobs.publish;
-    }
+      w.jobs.extra = structuredClone(w.jobs.publish);
+    },
+    releaseFile,
+    /Unexpected or missing workflow jobs/u
   ],
   [
     "PR job bypasses checks",
@@ -168,8 +170,9 @@ for (const [name, edit, file = releaseFile] of [
   test(`policy rejects: ${name}`, () => {
     const workflow = parseWorkflow(sources[file]);
     edit(workflow);
-    assert.throws(() =>
-      validateWorkflows({ ...sources, [file]: stringify(workflow) })
+    assert.throws(
+      () => validateWorkflows({ ...sources, [file]: stringify(workflow) }),
+      expected
     );
   });
 }

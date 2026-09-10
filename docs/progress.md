@@ -5,18 +5,29 @@ package and consumer observations were not all rechecked during this update.
 Runtime behavior comes from code and live evidence. The [ticket contract](./inbox-processing.md) describes the local manual processor;
 [execution design](./design.md) remains future work. There is no running service.
 
-**Latest merged milestone:** [PR #31](https://github.com/6529-Collections/6529-release-coordinator/pull/31)
+**Merged starting point for this delivery:** [PR #31](https://github.com/6529-Collections/6529-release-coordinator/pull/31)
 merged September 9 at `8d13a69a9cb6ea919a4bfd8f9f0c67d466a77056`.
 The unified `inbox:run` workflow and planned batch documentation are on `main`.
 Merge and successful [required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34362487818)
 were rechecked September 10. That CI ran 255 tests; no package publication or
 product deployment was part of the merge.
 
-## Latest local work: checks for Coordinator code, September 10
+## Coordinator code checks: PR delivery, September 10
 
-Implemented on `codex/coordinator-pr-checks`, based on the current merged `main`
-above. **Local implementation; this change has not been committed, pushed, or
-run in GitHub CI.** `npm run check` combines JavaScript lint, formatting checks,
+Delivery is tracked in [PR #40](https://github.com/6529-Collections/6529-release-coordinator/pull/40),
+from `codex/coordinator-pr-checks`, based on the merged milestone above.
+Implementation commit `4f06ed35dc7bbe509e90b2a4726f92312c06749f` passed
+[GitHub PR CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34449207007)
+on September 10: 287 tests on each of Node 20, 22, and 24, with all other check
+phases successful. The required `Check package` gate passed and publication
+was skipped. The PR records the final review, head, and merge result.
+
+Pre-merge review corrected the extra-privileged-job test fixture to clone its
+job and assert the job-allowlist error, so YAML alias rejection cannot satisfy
+that test accidentally. The delivery record also now separates local validation
+from the verified GitHub run above.
+
+`npm run check` combines JavaScript lint, formatting checks,
 all discovered test files, structural workflow policy checks, and an isolated
 smoke install of the packed public CLI. See [code checks](./code-checks.md).
 
@@ -46,8 +57,8 @@ The live [Protect main ruleset](https://github.com/6529-Collections/6529-release
 was updated and read back September 10: **Check package** remains required from
 GitHub Actions, and an **up-to-date branch is now required**. Other rules and
 bypass settings were preserved. The publication environment still allows only
-branch `main`. This server rule is active now; the new check implementation
-still awaits commit, push, PR CI, and merge.
+branch `main`. This server rule is active. The new command and workflow passed
+PR CI as recorded above; follow PR #40 for its final delivery status.
 
 ## Merged one-ticket workflow and its earlier acceptance evidence
 
@@ -85,9 +96,9 @@ ticket after the selected release; a failure against the new base may then need
 a correction. Group failures, infrastructure problems, and testing limits do
 not automatically make every ticket action-needed.
 
-Next development sequence: first finish and deliver the Coordinator code checks
-above, then implement selection across sandbox tickets and add meaningful sample
-PR checks on their combined code. The [planned acceptance cases](./merge-rehearsal-testing.md#planned-batch-acceptance)
+The Coordinator code-check delivery is tracked above. Subsequent development
+will implement selection across sandbox tickets and add meaningful sample PR
+checks on their combined code. The [planned acceptance cases](./merge-rehearsal-testing.md#planned-batch-acceptance)
 cover splitting, incompatibility, limits, exact inputs, and ticket presentation.
 Numeric limits, tie-breaking, dependencies between tickets, saved attempt state,
 runner permissions/results, temporary PR cleanup, and batch reason codes still
@@ -219,8 +230,8 @@ exact PRs. Both profiles share the same implementation; test manifests and
 receipts remain separate from real request evidence.
 
 We can continue developing and testing in the sandbox. The merged combined
-workflow uses fresh rehearsal reports to update the same ticket. Delivering the
-Coordinator code checks described above is the next development step.
+workflow uses fresh rehearsal reports to update the same ticket. The Coordinator
+code-check delivery is tracked above.
 The [next batch stage](#planned-next-stage-batch-selection-and-tests-september-9)
 is documented but unimplemented. Real-project live acceptance, the larger release
 worker, execution permissions, deployment evidence sources, and recovery remain
