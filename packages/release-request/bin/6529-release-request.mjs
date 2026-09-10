@@ -103,14 +103,15 @@ async function main() {
   }
 
   const options = parseInputArguments(args);
-  const inputSource = options.input === "-" ? "stdin" : path.resolve(options.input);
-  const readInput = options.input === "-"
-    ? readStandardInput
-    : () => readFile(inputSource, "utf8");
+  const inputSource =
+    options.input === "-" ? "stdin" : path.resolve(options.input);
+  const readInput =
+    options.input === "-"
+      ? readStandardInput
+      : () => readFile(inputSource, "utf8");
 
-  const runCommand = command === "submit"
-    ? submitReleaseRequestRun
-    : createReleaseRequestRun;
+  const runCommand =
+    command === "submit" ? submitReleaseRequestRun : createReleaseRequestRun;
   const result = await runCommand({
     projectDirectory: options.projectDirectory,
     inputSource,
@@ -118,9 +119,10 @@ async function main() {
   });
 
   const summary = {
-    status: command === "submit"
-      ? result.submission?.status || result.run.status
-      : result.run.status,
+    status:
+      command === "submit"
+        ? result.submission?.status || result.run.status
+        : result.run.status,
     run_id: result.run.run_id,
     run_path: result.runPath,
     request_id: result.run.request?.id || null,

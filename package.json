@@ -8,10 +8,23 @@
     "apps/*"
   ],
   "scripts": {
+    "check": "node scripts/check.mjs",
+    "lint": "eslint . --max-warnings=0",
+    "format:check": "prettier --check \"{apps,packages,scripts}/**/*.{mjs,json}\" \"*.{mjs,json}\" \".github/workflows/*.{yml,yaml}\"",
+    "format:fix": "prettier --write \"{apps,packages,scripts}/**/*.{mjs,json}\" \"*.{mjs,json}\" \".github/workflows/*.{yml,yaml}\"",
+    "check:workflows": "node scripts/check-workflows.mjs",
+    "check:package": "node scripts/check-package.mjs",
     "inbox:read": "node apps/coordinator/bin/read-inbox.mjs",
     "inbox:run": "node apps/coordinator/bin/run-inbox.mjs",
     "readiness:check": "node apps/coordinator/bin/check-readiness.mjs",
-    "test": "npm test --workspaces --if-present",
+    "test": "node scripts/test.mjs",
     "request:submit": "node apps/coordinator/bin/submit-request.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.10.0",
+    "globals": "17.12.0",
+    "prettier": "3.9.6",
+    "yaml": "2.9.0"
   }
 }

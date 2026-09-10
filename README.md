@@ -120,6 +120,7 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 | Need | Document |
 | --- | --- |
 | What has shipped, what is local, and what comes next | [Progress](./docs/progress.md) |
+| Check changes to this repository before merging | [Repository code checks](./docs/code-checks.md) |
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
 | Understand the ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
@@ -152,5 +153,16 @@ record. Design documents describe future work; history preserves past evidence.
 Product repositories retain their own authorized merge and deployment procedures.
 Release requests and workflow logs are public and must never contain secrets.
 
-Run the existing local test suites with `npm test`. This does not submit a
-request or deploy anything.
+## Check changes to this repository
+
+After `npm ci --ignore-scripts`, run `npm run check`. It checks JavaScript,
+formatting, all automated tests, workflow permissions, and the packed public
+CLI. GitHub runs the same command on PRs into `main` and pushes to `main`.
+The existing required `Check package` result requires every configured Node
+version to pass. See [code checks](./docs/code-checks.md) for setup and boundaries
+and [progress](./docs/progress.md) for local versus merged/CI evidence.
+
+This checks Coordinator code using controlled inputs and temporary repositories;
+it does not process real inbox tickets. `inbox:run` is the separate ticket command.
+`npm test` still runs just the automated tests. Fix formatting separately with
+`npm run format:fix`, then review the diff and rerun the checks.

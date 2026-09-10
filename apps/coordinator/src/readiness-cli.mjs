@@ -17,26 +17,46 @@ No request can be authorized by this command. Release history and exact
 execution-merge proof are not available yet. No merge, deploy, or GitHub write.
 `;
 
-export async function runReadinessCli(args, {
-  get, github, env = process.env,
-  stdout = value => process.stdout.write(value), stderr = value => process.stderr.write(value)
-} = {}) {
-  if (args.length === 1 && args[0] === "--help") { stdout(help); return 0; }
-  if (args.length > 1 || (args.length === 1 && args[0] !== "--json")) { stderr(help); return 2; }
+export async function runReadinessCli(
+  args,
+  {
+    get,
+    github,
+    env = process.env,
+    stdout = (value) => process.stdout.write(value),
+    stderr = (value) => process.stderr.write(value)
+  } = {}
+) {
+  if (args.length === 1 && args[0] === "--help") {
+    stdout(help);
+    return 0;
+  }
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--json")) {
+    stderr(help);
+    return 2;
+  }
   const json = args[0] === "--json";
   let profile;
   try {
-    profile = selectProfile(env.RELEASE_COORDINATOR_PROFILE, { defaultReal: true });
-    get ??= createGitHubReader({ profile }); github ??= createReadinessGitHub({ profile });
+    profile = selectProfile(env.RELEASE_COORDINATOR_PROFILE, {
+      defaultReal: true
+    });
+    get ??= createGitHubReader({ profile });
+    github ??= createReadinessGitHub({ profile });
     await get.identity?.();
     const report = await checkReadiness({ get, github, profile });
-    stdout(json ? `${JSON.stringify(report, null, 2)}\n` : formatReadiness(report));
+    stdout(
+      json ? `${JSON.stringify(report, null, 2)}\n` : formatReadiness(report)
+    );
     return report.counts.pending ? 1 : 0;
   } catch (cause) {
     const error = profile
       ? "Inbox read failed; no complete readiness report is available. Check GitHub read access and network availability."
       : cause.message;
-    if (json) stdout(`${JSON.stringify({ mode: "read-only", profile: profile?.name ?? null, repository: profile?.inbox.full_name ?? null, release_authorized: false, error }, null, 2)}\n`);
+    if (json)
+      stdout(
+        `${JSON.stringify({ mode: "read-only", profile: profile?.name ?? null, repository: profile?.inbox.full_name ?? null, release_authorized: false, error }, null, 2)}\n`
+      );
     else stderr(`${error}\n`);
     return 2;
   }

@@ -16,45 +16,74 @@ Exit codes: 0 = all saved records verified (or inbox empty),
 No merge, deployment, labels, or other GitHub writes occur.
 `;
 
-export async function runCli(args, {
-  get, env = process.env,
-  stdout = value => process.stdout.write(value),
-  stderr = value => process.stderr.write(value)
-} = {}) {
+export async function runCli(
+  args,
+  {
+    get,
+    env = process.env,
+    stdout = (value) => process.stdout.write(value),
+    stderr = (value) => process.stderr.write(value)
+  } = {}
+) {
   if (args.length === 1 && args[0] === "--help") {
     stdout(help);
     return 0;
   }
-  let json = false, submitter;
+  let json = false,
+    submitter;
   const seen = new Set();
   for (let index = 0; index < args.length; index++) {
     const arg = args[index];
-    if (seen.has(arg) || !["--json", "--submitter"].includes(arg)) { stderr(help); return 2; }
+    if (seen.has(arg) || !["--json", "--submitter"].includes(arg)) {
+      stderr(help);
+      return 2;
+    }
     seen.add(arg);
     if (arg === "--json") json = true;
     else {
       submitter = args[++index];
-      if (!/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/u.test(submitter ?? "")) { stderr(help); return 2; }
+      if (
+        !/^[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$/u.test(submitter ?? "")
+      ) {
+        stderr(help);
+        return 2;
+      }
     }
   }
   let profile;
   try {
-    profile = selectProfile(env.RELEASE_COORDINATOR_PROFILE, { defaultReal: true });
+    profile = selectProfile(env.RELEASE_COORDINATOR_PROFILE, {
+      defaultReal: true
+    });
     get ??= createGitHubReader({ profile });
     await get.identity?.();
     const report = await readInbox({ get, profile });
     if (submitter) {
       report.submitter_filter = submitter;
-      report.requests = report.requests.filter(entry => entry.github_actor?.login.toLowerCase() === submitter.toLowerCase());
-      report.counts = { pending: report.requests.length, valid: report.requests.filter(entry => entry.status === "valid").length,
-        invalid: report.requests.filter(entry => entry.status === "invalid").length, unverified: report.requests.filter(entry => entry.status === "unverified").length };
+      report.requests = report.requests.filter(
+        (entry) =>
+          entry.github_actor?.login.toLowerCase() === submitter.toLowerCase()
+      );
+      report.counts = {
+        pending: report.requests.length,
+        valid: report.requests.filter((entry) => entry.status === "valid")
+          .length,
+        invalid: report.requests.filter((entry) => entry.status === "invalid")
+          .length,
+        unverified: report.requests.filter(
+          (entry) => entry.status === "unverified"
+        ).length
+      };
     }
-    stdout(json ? `${JSON.stringify(report, null, 2)}\n` : formatReport(report));
+    stdout(
+      json ? `${JSON.stringify(report, null, 2)}\n` : formatReport(report)
+    );
     return report.counts.invalid || report.counts.unverified ? 1 : 0;
   } catch (error) {
     const failure = {
       mode: "read-only",
-      repository: profile?.inbox.full_name ?? null, profile: profile?.name ?? null,
+      repository: profile?.inbox.full_name ?? null,
+      profile: profile?.name ?? null,
       error: `Inbox read failed; no complete report is available. ${error.message}`
     };
     if (json) stdout(`${JSON.stringify(failure, null, 2)}\n`);
