@@ -525,6 +525,14 @@ program and fake JSON data are available. A separate temporary MySQL container
 has no published ports. A trusted adapter mediates its data and validates results.
 Container images are pinned by digest in `service-runtime.mjs`.
 
+The trusted adapter validates both baseline and candidate database definitions
+with `databaseSpec` before composing SQL. Change IDs are restricted to
+`^[a-z][a-z0-9-]{0,60}$` and increments to integers from 0 through 100. These
+restrictions are part of the SQL construction boundary; widening them requires
+reviewing that boundary and the pinned runtime together. A killed container is
+reported as unknown unless its cause and attribution can be verified; an exit
+code alone does not establish a ticket defect.
+
 `inbox-run-v3` saves the exact service plan and unique attempt before dispatch.
 A lost dispatch response is reconciled, never blindly repeated. Subsequent runs
 reverify the same workflow result; changed inputs require a different plan.
@@ -534,6 +542,11 @@ The result must match the runtime, actor, workflow job, attempt, exact plan,
 service order, source versions, data/output assertions and cleanup. Skipped or
 cancelled execution cannot pass. The controller rechecks ticket/PR/main inputs
 before execution and before presenting its result.
+The saved plan remains immutable, but those checks read the current destination
+commits again. If `main` advances, the old result remains evidence for its saved
+inputs and the current ticket result becomes stale. Comparing the saved plan to
+itself would bypass that check. A new explicit run captures the new destination
+and needs evidence for that exact combination.
 
 Shared runtime source lives in this Coordinator. `sandbox/provision.mjs` copies
 it into the sample repositories as a generated bundle; it is not an independent

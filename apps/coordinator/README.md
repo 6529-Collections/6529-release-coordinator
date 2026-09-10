@@ -350,6 +350,11 @@ are held. These small fixture rules do not inspect real product databases.
 Unchanged retries reuse and reverify the saved workflow. A lost dispatch response
 is reconciled by its unique attempt name; it never triggers a blind second POST.
 A pending or uncertain attempt stays in the journal for a later explicit run.
+The controller polls for roughly ten minutes; the workflow's ten-minute job limit
+starts after a runner is assigned. A queue delay can therefore make the command
+exit `2` while its workflow is still pending. Re-run the same ticket to reconcile
+that saved attempt; do not dispatch a replacement workflow. A wait is not evidence
+that the requested code failed.
 `real` retains inspection/Git rehearsal and reports services as `not-run`.
 
 [Combining tickets](../../docs/design.md#proposed-batch-testing-and-selection)
