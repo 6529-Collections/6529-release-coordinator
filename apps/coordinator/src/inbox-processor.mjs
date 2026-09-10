@@ -3,7 +3,11 @@ import { realProfile } from "./profiles.mjs";
 import { readInbox, inspectIssue } from "./inbox-reader.mjs";
 import { inspectReadiness } from "./readiness.mjs";
 import { decideTicket, policyVersion } from "./inbox-policy.mjs";
-import { coordinateTicket, runPolicyVersion } from "./inbox-rehearsal.mjs";
+import {
+  coordinateTicket,
+  runPolicyVersion,
+  canRehearse
+} from "./inbox-rehearsal.mjs";
 import {
   appendDecision,
   createJournal,
@@ -243,6 +247,7 @@ export async function processInbox({
   closeTest = false,
   resume,
   rehearsal,
+  services,
   plan,
   signal,
   now = () => new Date(),
@@ -334,6 +339,7 @@ export async function processInbox({
         status: "not-run",
         message: "Recorded terminal ticket; its disposition is preserved."
       };
+      let serviceResult;
       let ticket = state.tickets[number];
       if (entry.intake_in_progress) {
         results.push({
@@ -423,6 +429,60 @@ export async function processInbox({
           rehearsalResult = coordinated.result;
           if (coordinated.evidence)
             observation = { ...observation, rehearsal: coordinated.evidence };
+          if (services) {
+            const checked = await services({
+              entry,
+              rehearsal: coordinated,
+              profile,
+              decision,
+              attempts: state.service_attempts ?? {},
+              signal,
+              verifyInputs: async () => {
+                const currentIssue = await response(
+                  api,
+                  "GET",
+                  `/issues/${number}`
+                );
+                if (
+                  receiptHash(currentIssue) !== receiptHash(issue) ||
+                  currentIssue.state !== "open"
+                )
+                  return false;
+                const currentObservation = await observe(entry, {
+                  github,
+                  profile
+                });
+                return (
+                  canRehearse(
+                    entry,
+                    currentObservation,
+                    decideTicket(entry, currentObservation)
+                  ) && digest(await plan(entry)) === digest(run.plans?.[number])
+                );
+              },
+              guard: () => journal.guard(run),
+              saveAttempt: async (attempt) => {
+                try {
+                  signal?.throwIfAborted();
+                  state.service_attempts ??= {};
+                  state.service_attempts[attempt.plan_hash] =
+                    structuredClone(attempt);
+                  await journal.save(
+                    state,
+                    run,
+                    `service attempt #${number} ${attempt.state}`
+                  );
+                } catch (error) {
+                  error.service_journal_failure = true;
+                  throw error;
+                }
+              }
+            });
+            await journal.guard(run);
+            signal?.throwIfAborted();
+            decision = checked.decision;
+            serviceResult = checked.result;
+          }
         }
         // Reverify immutable intake before the journaled intent. Readiness itself
         // rereads PR metadata after all catalog/check observations.
@@ -517,7 +577,8 @@ export async function processInbox({
       });
       results.push({
         ...applied,
-        ...(rehearsal ? { rehearsal: rehearsalResult } : {})
+        ...(rehearsal ? { rehearsal: rehearsalResult } : {}),
+        ...(serviceResult ? { services: serviceResult } : {})
       });
       pendingNumber = null;
     }

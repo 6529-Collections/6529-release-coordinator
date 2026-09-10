@@ -1,13 +1,23 @@
 # Merge rehearsal and test repository plan
 
-**Scope and acceptance plan, prepared September 9, 2026.** This is the next
-bounded stage after inbox organization. [Progress](./progress.md) records what
-has actually run; [the app guide](../apps/coordinator/README.md) lists commands
-that exist. The command is implemented and merged in PR #26; the public sandbox
-follow-up completes live required-check acceptance. Its integration is recorded
-separately in progress.
+**Original merge-rehearsal scope prepared September 9, 2026; next stages updated
+September 10.** The original bounded stage after inbox organization is complete.
+[Progress](./progress.md) records what has actually run;
+[the app guide](../apps/coordinator/README.md) lists commands that exist. The
+engine merged in PR #26; the public sandbox follow-up completed live required-check
+acceptance, and later integration delivered the one-command ticket workflow.
+
+The one-ticket sandbox service/database stage is implemented and has local
+Docker and live ticket acceptance evidence. Its Coordinator source is still
+uncommitted; the sample repository setup is merged. Batch acceptance remains
+future work. Each stage's evidence is separate from the original MR milestone.
+Documentation alone is not permission to execute external changes.
 
 ## What we will prove
+
+This section records the original merge-only milestone. The implemented
+[service/database stage](#service-and-database-acceptance) extends it below;
+the [batch matrix](#planned-batch-acceptance) remains a later plan.
 
 Given exact PR commits, an explicit destination in each repository, and an
 explicit order, can Git combine those changes in temporary local repositories?
@@ -30,10 +40,11 @@ correctness, runtime prerequisites, deployment, or permission to release.
 | 3. Live rehearsal | Run the same engine against the real test PRs, including deliberate failures and updates. | Each required live case has an expected and actual result, exact commits, and saved evidence. |
 | 4. Review and handoff | Repeat unchanged cases, verify boundaries and cleanup, update documentation, and integrate through normal PR checks. | Local and live results recorded separately; remaining limitations explicit; Coordinator implementation merged into `main`. |
 
-Stop after phase 4. Adding a scheduler, processing real inbox requests through
-the rehearsal, changing tickets from rehearsal results, or performing releases
-is a separate stage. Do not keep adding test cases after this matrix passes
-unless a concrete failure or uncovered requirement justifies one.
+The original merge-only milestone stopped after phase 4. Ticket integration and
+sandbox service checks were delivered in the separately recorded stages below;
+real live rehearsal acceptance and release execution remain separate work.
+Do not keep adding cases to the completed MR matrix unless a concrete failure
+or uncovered requirement justifies one.
 
 ## The two GitHub repositories
 
@@ -43,17 +54,19 @@ IDs, visibility, sample PRs, and current acceptance limits are recorded in
 or resumes its recorded seed only after checking the exact baseline branches.
 It does not overwrite an unrelated existing repository.
 
-| Repository | Sample content |
+| Repository | Current sample content |
 | --- | --- |
-| `release-coordinator-test-frontend` | A few text/JSON files and a dependency-free sample check. |
-| `release-coordinator-test-backend` | Similar sample files plus `src/config/deploy-services.json` with a small `api` and `dbMigrationsLoop` dependency example. |
+| `release-coordinator-test-frontend` | A small frontend consumer with an output assertion, earlier merge fixtures, and a generated copy of the shared test runtime. |
+| `release-coordinator-test-backend` | Database schema/data definitions, worker and API programs, and `src/config/deploy-services.json` declaring `dbMigrationsLoop -> worker -> api`; also the pinned service-check workflow and generated runtime. |
 
 Each repository starts with a recorded baseline on `main`. Add a test-only
 `rehearsal-target` branch to prove that the selected destination matters.
 Create new named branches and PRs per case; do not reuse an old PR by changing
 its meaning. Record the actual baseline commits and PR numbers after setup.
 
-Use a minimal GitHub Actions check named `Sandbox check`, with read-only
+The original merge-only fixtures used a minimal `Sandbox check`. The current
+sample PR checks run meaningful program assertions with temporary MySQL using
+the same generated runtime as the ticket checks. Keep `Sandbox check` with read-only
 contents permission, no deployment or publication jobs, no product secrets,
 and no dependency installation. Pin any Actions used to reviewed commits.
 Require the check on the tested destination branches, disable force pushes,
@@ -72,8 +85,9 @@ execution is authorized. The rehearsal engine itself only reads GitHub and
 fetches Git objects; it never pushes, merges a GitHub PR, dispatches a workflow,
 changes settings, or writes a comment. The `inbox:run` command wraps that engine
 with verified-ticket intake, automatic plan generation, and writes to the selected
-inbox's ticket presentation and decision journal. PR setup naturally starts the
-sample CI.
+inbox's ticket presentation and decision journal. For supported sandbox tickets,
+the command also dispatches the pinned service-check workflow. PR setup naturally
+starts the sample CI.
 
 ## Keep the test environment separate
 
@@ -341,8 +355,11 @@ Both profiles now accept verified inbox inputs and automatically generated
 destination plans through the same adapter and engine. The combined `inbox:run`
 workflow already uses fresh rehearsal results to update the same ticket. That
 does not make current readiness results eligible or take execution ownership.
-The next proposed sandbox stage below groups multiple tickets and tests their
-combined code; that is not implemented by the existing input adapter or runner.
+The implemented sandbox service stage below tests one complete ticket's service
+order and database behavior through the same command. Its separate service
+runner has local and live acceptance evidence; the Git merge engine itself
+remains read-only outside its temporary local repositories. Multi-ticket
+selection and tests of combined tickets remain unimplemented.
 
 Before a real rollout, verify real permissions and repository limits with a
 separately authorized live read-only run. Real mode rejects test manifests and
@@ -351,29 +368,264 @@ second merge implementation. A rehearsal never starts ticket processing or
 deployment on its own; the existing `inbox:run` command coordinates rehearsal
 with ticket processing, while deployment remains absent.
 
-Actual combined application builds/tests, release ownership, scheduling,
-deployment, runtime prerequisites, recovery, and the unresolved choices in
+Multi-ticket application checks, real release builds, release ownership,
+scheduling, deployment, existing-runtime prerequisites, recovery, and the unresolved choices in
 [the execution design](./design.md#decisions-to-settle-before-execution) remain
 outside this stage. The sandbox can be extended for those tests later, but the
-success of this plan does not count as that later evidence.
+success of the completed merge-rehearsal stage does not count as that later evidence.
+
+<a id="planned-service-and-database-acceptance"></a>
+
+## Service and database acceptance
+
+**Implemented and tested September 10, 2026; sandbox only.** Coordinator source
+remains uncommitted; the sample repository setup is merged. See
+[progress](./progress.md) and the [acceptance record](./testing/service-database-2026-09-10.md)
+for local, GitHub, and merge evidence. This
+stage comes before [batch acceptance](#planned-batch-acceptance). Keep the two
+existing sample repositories and their separate test inbox. Start with one
+complete ticket, including its frontend/backend parts, exact PRs, selected
+services, target, and dependencies. Use controlled new requests for changed
+inputs; never edit an accepted ticket's JSON to turn it into a different case.
+Start valid cases with `target: staging`, consistent with the sample catalog.
+This remains an isolated simulation, not a change to a product staging environment.
+
+### What exists and what the real backend teaches us
+
+The earlier sandbox backend at `33dc26417355f53b8ba94f1d20c9bd9e3779edaa`
+only checked `FAIL_CHECK` and declared `api -> dbMigrationsLoop`. That MR evidence
+remains its own milestone. The new sample adds a real temporary MySQL check,
+`dbMigrationsLoop -> worker -> api -> frontend`, and data/output assertions.
+Normal sample PR checks use the same generated runtime as the ticket workflow;
+the opposite repository uses its baseline sample in those individual PR checks.
+Only the complete ticket run tests both exact candidate versions together.
+
+The real backend was inspected at `main` commit
+`5c990e9dbe762277cc13ecfa36f1bc9a58375eef` on September 10:
+
+- Its [service catalog](https://github.com/6529-Collections/6529seize-backend/blob/5c990e9dbe762277cc13ecfa36f1bc9a58375eef/src/config/deploy-services.json)
+  lists available deployment units and normal dependencies. For example,
+  `ownersBalancesLoop` depends on `dbMigrationsLoop`; `api` also depends on
+  `artworkDocumentationProcessor`. The sample below is a deliberately smaller
+  dependency example, not the real backend's full graph.
+- Its [instructions](https://github.com/6529-Collections/6529seize-backend/blob/5c990e9dbe762277cc13ecfa36f1bc9a58375eef/AGENTS.md)
+  require sequential deployments in dependency order, waiting for success before
+  continuing, and deploying backend dependencies before dependent frontend work.
+  Deploy only relevant units; an omitted prerequisite needs verified existing
+  state, not an automatic addition to the request.
+- The [deployment workflow](https://github.com/6529-Collections/6529seize-backend/blob/5c990e9dbe762277cc13ecfa36f1bc9a58375eef/.github/workflows/deploy.yml)
+  deploys one selected service and explicitly invokes `dbMigrationsLoop` for a
+  database deployment. The [database handler](https://github.com/6529-Collections/6529seize-backend/blob/5c990e9dbe762277cc13ecfa36f1bc9a58375eef/src/dbMigrationsLoop/index.ts)
+  can synchronize TypeORM entity definitions and run data/migration work.
+  Database detection must include entity/schema changes, not just files named
+  migrations. A normal service deployment is not an instruction to invoke every
+  background business job once.
+- Its [test setup](https://github.com/6529-Collections/6529seize-backend/blob/5c990e9dbe762277cc13ecfa36f1bc9a58375eef/src/tests/_setup/globalSetup.ts)
+  starts temporary MySQL through Testcontainers. Reuse that approach with small
+  fake data; do not copy the product database, credentials, or full application.
+
+These observations inform test fidelity, not a requirement to copy the earlier
+Release Bus architecture. Recheck product adapters before any future real use.
+
+### Small executable example
+
+The sample backend contains database setup/change definitions, a worker, and an
+API. The sample frontend consumes the API result with a meaningful output check.
+The catalog defines service dependencies; the ticket defines the frontend's
+dependency on the backend. Keep service execution order separate from PR
+merge order; a service edge does not invent an order between PRs.
+
+```text
+Validate the database answer and save the complete service plan
+  -> prepare and verify temporary MySQL at the saved baseline, with fake rows
+  -> apply and verify the requested database change, when needed
+  -> run the selected worker and verify its result/version
+  -> start the selected API and verify its result/version
+  -> check the frontend against that API
+  -> save the outcome and clean up owned test resources
+```
+
+The `yes` example adds a field to an existing table, preserves existing rows,
+has the worker fill the field, and checks the API/frontend output.
+The `no` example uses the baseline structure and verifies normal application reads/writes
+without a release-specific schema change or one-off data conversion. Database
+setup is still necessary for both cases. Upgrade an existing baseline as well
+as proving clean setup; building an empty database from candidate code alone
+would miss upgrade problems.
+
+Run only selected services in a saved, deterministic dependency order. Verify
+success and exact code identity before starting a dependent step. If a required
+service is omitted, require matching baseline prerequisite evidence or hold the
+request; do not silently deploy it. Keep database outcome, each service outcome,
+and the frontend/backend integration result separate. A green workflow or API
+health endpoint alone cannot replace the expected application/data assertions.
+
+### Where the test database lives
+
+The Coordinator repository owns the shared database setup, execution, result
+checking, and cleanup code. The sample backend repository owns the sample schema
+and data definitions and the `sandbox-service-check.yml` workflow. Its GitHub
+Actions job creates a temporary MySQL container, seeds fake data, exercises the
+exact candidate code, saves the outcome, and removes its owned resources.
+Normal sample PR checks also use temporary databases. The explicit local Docker
+acceptance runner creates equivalent temporary resources on the operator's machine.
+
+There is no permanent sandbox database. A sample ticket's `target: staging`
+refers to the sample service catalog; it does not select the product's staging
+database. Real-backend tests and database execution still need real adapters
+and their own verification. The sample schema and programs do not become a
+production database by switching profiles.
+
+### Database answers and decisions
+
+Use the unchanged public `database_change` field. It describes release-specific
+schema or data changes, not whether the application uses a database. The current
+sandbox Coordinator compares the answer with the saved sample schema and data
+definitions before executing. Real database detection remains future work.
+
+| Input/evidence | Behavior before sandbox service execution |
+| --- | --- |
+| `no`, with complete supporting inspection | Use the established baseline database; run the selected services without a release-specific database update. |
+| `yes` | Save the exact database change, run it against the baseline, and verify its effect before dependent services. An unspecified change or missing execution proof remains held. |
+| `unknown` or incomplete inspection | Hold database/service execution with the missing fact and an owner. Never silently interpret uncertainty as `no`. |
+| `no`, but inspected code changes the database | Record the disagreement and classify it as database-changing. Hold for a corrected request; preserve the original receipt. Do not silently rewrite its answer or execute as a no-database-change request. |
+
+Use trusted, explicit fixture rules for entity/schema and one-off data-change
+paths. Save both the declared answer and inspected evidence. Absence of a known
+filename is not general proof that real code cannot change a database. Unknown
+patterns stay unresolved; the sandbox rule set does not certify a real detector.
+
+### Shared workflow, isolated execution, and evidence
+
+The implemented stage extends `inbox:run` without another operator command,
+manual plan file, or imported passing report. Keep shared inspection, dependency planning,
+sequencing, stop/retry decisions, and evidence contracts. Trusted profile
+configuration selects repositories and available actions. The new executable
+actions are sandbox-only; `real` must refuse unsupported execution capability
+while retaining its existing inspection/rehearsal behavior. A profile switch
+does not implement or authorize AWS/product deployment.
+
+The local Coordinator remains the manual controller. Live sample execution runs
+on isolated GitHub Actions runners using temporary MySQL and the exact candidate
+code; local fixture tests can exercise the same logic first. Reuse the sample
+program checks in normal sandbox PR CI and in the one-ticket candidate run.
+Do not impose this extra per-ticket full run on the later batch design by default.
+
+The trusted runtime is pinned in `apps/coordinator/src/service-runtime-config.mjs`:
+test backend repository ID, `sandbox-service-check.yml`, branch
+`codex/sandbox-services-runtime-v1`, and an exact expected commit. GitHub dispatch
+uses that branch; the controller verifies its commit before dispatch and verifies
+the actual run commit afterward. Moving it requires an intentional code pin update.
+
+No per-candidate branch or PR is pushed. Exact regular Git blobs captured from the
+passing rehearsed trees are sent as bounded JSON input to the trusted workflow.
+The job's own runtime is never loaded from a candidate branch. Candidates execute
+in read-only, unprivileged Node containers with no outbound network; only their
+program and fake JSON data are available. A separate temporary MySQL container
+has no published ports. A trusted adapter mediates its data and validates results.
+Container images are pinned by digest in `service-runtime.mjs`.
+
+`inbox-run-v3` saves the exact service plan and unique attempt before dispatch.
+A lost dispatch response is reconciled, never blindly repeated. Subsequent runs
+reverify the same workflow result; changed inputs require a different plan.
+A ten-minute job limit, bounded MySQL probes, 15-second program limits and bounded
+controller polling keep uncertain attempts visible for explicit reconciliation.
+The result must match the runtime, actor, workflow job, attempt, exact plan,
+service order, source versions, data/output assertions and cleanup. Skipped or
+cancelled execution cannot pass. The controller rechecks ticket/PR/main inputs
+before execution and before presenting its result.
+
+Shared runtime source lives in this Coordinator. `sandbox/provision.mjs` copies
+it into the sample repositories as a generated bundle; it is not an independent
+implementation. Changes to bundled files require checked sample PRs, a matching
+runtime branch and pin, and source comparison before acceptance. Candidate
+code must not receive the Coordinator's inbox-write credentials or product
+credentials. Tickets name services, not arbitrary commands or database URLs.
+Use the existing schema and profile boundary; no public npm change is needed.
+
+Record request/checksum, profile, exact base/PR/candidate commits, catalog and
+test configuration, service order, baseline database identity, declared/observed
+database classification, per-step start/result/version, workflow attempt and
+links, final data/integration assertions, retry decisions, and cleanup. Bind a
+cross-repository check to both exact frontend and backend versions. Changed code,
+schema, baseline, order, or test configuration needs matching new evidence.
+
+On a failed database or service step, stop dependents and save what changed.
+An attributable program failure differs from unavailable infrastructure or an
+unknown result. Resume only when saved state and completed effects can be
+verified; do not repeat a one-off data update blindly. A failure after a database
+change records the need for human recovery in a real release. Destroying an owned
+temporary test database after saving evidence is cleanup, not proof of rollback
+or permission to restore a real database automatically.
+
+Ticket presentation belongs to the
+[sandbox service/database outcomes](./inbox-processing.md#sandbox-service-and-database-ticket-outcomes).
+Preserve the receipt and existing history. Existing `rehearsal:passed` continues
+to mean Git rehearsal only; it must not become database/application proof.
+
+### Acceptance and finish line
+
+The [dated acceptance record](./testing/service-database-2026-09-10.md) records
+which cases have offline, actual local Docker, and live ticket evidence. Tests
+for wrong metadata, cancelled/skipped runs, and lost responses use controlled
+adapters; they are not presented as all having happened live.
+
+Run offline regressions with `npm run check`. For explicitly authorized local
+Docker acceptance, run:
+
+```sh
+node apps/coordinator/sandbox/test-runtime.mjs --run-owned-containers
+```
+
+This creates owned temporary containers and saves evidence under
+`.release-coordinator/service-development/runtime-cases/`. Normal Coordinator PR
+CI stays offline; sample repository PR CI runs the shared temporary MySQL checks.
+`prepare-cases.mjs --create-sample-prs` is a developer setup utility for the fixed
+sandbox repositories, not a second inbox command. Its recorded PRs remain source
+fixtures and never become verified tickets without normal submission.
+
+The initial executor requires all four sample steps. An omitted prerequisite is
+held; proving a pre-existing service can satisfy it remains unimplemented.
+
+| Case | Required evidence |
+| --- | --- |
+| SD-01: No database change | A prepared baseline supports normal worker/API/frontend behavior; no release-specific database update runs and unrelated services do not run. |
+| SD-02: Database change | An existing database upgrades successfully, original rows survive, and worker/API/frontend checks pass in the saved order on the exact requested versions. |
+| SD-03: Unknown or false `no` | Unknown/missing inspection holds execution; a known entity/schema or one-off data change contradicting `no` is recorded and requests correction. No dependent service starts. |
+| SD-04: Dependency selection and order | Unknown services, cycles, and invalid targets block. A missing prerequisite stays held; resolving it from existing runtime evidence is not implemented. Wrong ordering cannot pass; omitted services are never silently selected. |
+| SD-05: Database failure or partial effect | Record the failed update and observed database state; dependent services never start. Preserve recovery evidence and do not claim automatic rollback. |
+| SD-06: Service failure, timeout, or missing result | Stop dependent steps. Separate a reproducible program failure from runner/evidence uncertainty; report the exact step and next-action owner. |
+| SD-07: Repeat and interrupted retry | Same verified operation does not duplicate a one-off data change or ticket decision. Resume checks exact inputs and prior effects; ambiguous state holds instead of rerunning blindly. |
+| SD-08: Application and version proof | Reject incorrect data/output, a frontend/API mismatch, wrong service versions, stale results, and skipped/cancelled required checks. A baseline-only failure is not blamed on the ticket. |
+| SD-09: Profile boundary and cleanup | Local and live evidence remain separate; real execution and cross-profile resources are rejected. Only owned temporary resources are cleaned after success/failure/interruption, with outcome saved before deletion. The run issues no writes to source PRs, product environments, or the real inbox; independent activity is recorded separately. |
+
+The recorded local and live cases meet this stage's finish line: one complete
+sandbox ticket path, controlled cases, visible reasons, saved evidence, and
+verified cleanup. Their evidence layers and limits are listed in the acceptance
+record. This proves small program behavior and Coordinator decisions against
+temporary MySQL. It does not
+prove production data compatibility, AWS deployment, real runtime prerequisites,
+or recovery. Commit the Coordinator extension and complete its normal PR checks
+and merge before beginning the existing non-database batch matrix.
 
 ## Planned batch acceptance
 
-**Next-stage plan recorded September 9, 2026; every case below is unimplemented
-and unrun.** This section follows the
+**Later-stage plan recorded September 9 and resequenced September 10, 2026;
+every case below is unimplemented and unrun.** This section follows the
 [batch-selection design](./design.md#proposed-batch-testing-and-selection) and
 [proposed ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes).
 It does not change the completed MR matrix or its dated evidence above.
 
-Start after the current one-ticket command is reviewed, checked, and merged.
-Keep using the two existing sample repositories and separate sandbox inbox.
-First add selection across several real sandbox tickets, preserving existing
-initial checks. Then add small sample programs and meaningful required PR checks
-and run those checks against selected combined candidates. The current sample
-check only passes or deliberately fails when `FAIL_CHECK` exists; it proves the
-check gate, not application correctness or a passing-alone/failing-together bug.
+The [one-ticket service/database matrix](#service-and-database-acceptance)
+has local and live evidence; merge its Coordinator implementation before starting
+batch work. The original one-ticket command and this repository's code-check
+gate are already merged. Keep using the two existing sample repositories and
+separate sandbox inbox. Add selection across several
+real sandbox tickets, preserving existing initial checks, and reuse the small
+programs and meaningful required PR checks against selected combined candidates.
 
-Use independent requests without database changes first. Select whole tickets
+Use independent requests without database changes first. Earlier one-ticket
+database proof does not authorize database-changing batches. Select whole tickets
 and validated dependency groups. Define the trusted representation of dependencies
 between tickets before adding those fixtures; the public schema does not already
 provide it. Keep the shared profile/engine direction, but only the sandbox's

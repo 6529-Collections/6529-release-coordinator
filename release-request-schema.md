@@ -119,6 +119,23 @@ The backend has many separately deployed units, so its part must list them.
 | `deploy_units` | Backend units selected for deployment. | The backend is not deployed as one app. |
 | `deploy_dependencies` | Extra `before` and `after` rules for this release. | Handles a dependency that is special to this release. |
 
+## What the database answer means
+
+`database_change` is the requester's answer about a release-specific schema or
+one-off data change. `no` still allows the application to use a database for
+normal reads and writes. `unknown` is a valid request value, not permission to
+treat the request as `no`. Entity definitions can change database structure even
+when no migration file changes.
+
+The public CLI validates and records this answer. The sandbox Coordinator also
+compares it with its small sample's exact schema and data definitions, holds
+unknown evidence, and requires a corrected request when `no` contradicts a
+verified change. It can apply the supported sample change to temporary MySQL.
+Real database detection/application remains part of the
+[proposed database rules](./docs/design.md#database-changes). See the
+[sandbox tests](./docs/merge-rehearsal-testing.md#service-and-database-acceptance)
+for scope and evidence. The public schema and npm version are unchanged.
+
 ## How backend order works
 
 The release file does not copy the whole backend service catalog.
@@ -128,7 +145,11 @@ The release file does not copy the whole backend service catalog.
 3. `deploy_dependencies` adds only rules that are special to this release.
 4. The local readiness checker combines both sources with release-part order
    and checks that the result has no loop.
-5. A later execution plan will decide how to run units with no dependency.
+5. For a complete supported sandbox ticket, `inbox:run` executes the sample
+   database, worker, API, and frontend steps in a saved dependency order,
+   verifying each before dependents start. This requires all four sample steps;
+   missing prerequisites stay held. The read-only readiness checker reports
+   order but does not execute it, and real service execution remains unimplemented.
 
 The CLI and `inbox:read` do not calculate this order. `readiness:check` reads the
 catalog at the exact requested backend commits, validates selected units and

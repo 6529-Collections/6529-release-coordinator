@@ -2,8 +2,9 @@
 
 Sandbox and real configurations use the same intake, receipt verification,
 readiness, local merge engine, and ticket updates. `inbox:run` joins inspection,
-rehearsal, and presentation into one manual run. Multiple-ticket merge batches,
-release ownership, builds, and deployments remain later work. See
+rehearsal, supported sandbox service/database checks, and presentation into one
+manual run. Real service execution, multiple-ticket merge batches, release
+ownership, release builds, and deployments remain later work. See
 [progress](./progress.md) for local, live sandbox, and remote merge evidence.
 
 ## Trusted configuration
@@ -21,6 +22,7 @@ credential through a request. An unknown name stops without falling back.
 | Receipt checks | Selected inbox, successful workflow/attempt, request checksum, ticket number and GitHub actor | Same checks |
 | State journal | `codex/inbox-state` in the test inbox repository | Existing state branch in the real inbox repository |
 | Rehearsal destination | Current `main` of each selected test repository | Current `main` of each selected product repository |
+| Service/database checks | Fixed, pinned workflow in the test backend; temporary MySQL and sample programs | Not implemented; services are reported as `not-run` |
 | Local submissions | `.release-coordinator/profiles/sandbox/submissions/` | `.release-coordinator/profiles/real/submissions/` |
 | Rehearsal reports | `.release-coordinator/merge-rehearsal/sandbox/` | `.release-coordinator/merge-rehearsal/real/` |
 
@@ -125,7 +127,7 @@ Starting a new run captures current destination commits. See the
 
 Plans remain internal evidence: the journal stores the ticket/request binding,
 exact PR order and destinations; full reports record their resulting trees.
-The journal's `inbox-run-v2` marker prevents older writers from overwriting the
+The journal's `inbox-run-v3` marker prevents older writers from overwriting the
 new run format. A legacy interrupted v1 run retains its already recorded scope
 and plan on explicit resume.
 
@@ -155,3 +157,33 @@ The combined workflow has its own [acceptance record](./testing/unified-inbox-20
 requires only the named configuration once installed, but permissions, product
 repository limits, and the first real live run still need verification. Offline
 real-profile tests are not real-system runtime proof.
+
+## Service and database extension
+
+The local `inbox:run` implementation includes tested
+[one-ticket service/database acceptance](./merge-rehearsal-testing.md#service-and-database-acceptance).
+Coordinator source remains uncommitted; see progress for the separate local/live
+evidence and merged sample setup. Multi-ticket batching remains future work.
+The same repositories, test inbox,
+exact-input bindings and automatically generated plans are retained.
+
+The manual controller runs locally. Live sample programs run in isolated GitHub
+Actions jobs with temporary MySQL. Trusted source configuration in
+`apps/coordinator/src/service-runtime-config.mjs` fixes the backend repository,
+workflow, branch and expected commit. Ref movement holds execution. Tickets
+cannot choose commands, database URLs, runtime code or runner credentials.
+
+Candidate programs receive only their read-only source file and fake JSON data
+in separate restricted containers. MySQL is a separate owned container. The
+trusted adapter mediates reads/writes and checks expected data. The workflow has
+read-only repository permission and no inbox/product credentials in candidates.
+
+The shared profile still selects capabilities, not permissions. `real` keeps
+inspection and Git rehearsal; its service result is `not-run`. Real deployment,
+database inspection and recovery adapters remain absent. No environment switch
+can transfer sandbox proof or enable AWS deployment.
+
+Service evidence is kept in the sandbox journal's `service_attempts` and local
+`.release-coordinator/service-checks/sandbox/` reports, bound to both exact product
+sample versions. See [progress](./progress.md) for local, live and merge evidence.
+The public request schema and npm package are unchanged.

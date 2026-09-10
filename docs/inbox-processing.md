@@ -1,9 +1,11 @@
 # Inbox processing contract
 
-**Implemented locally September 9, 2026; see [progress](./progress.md) for test
-and rollout evidence.** Submit a request, then run one explicit command to
-inspect its ticket, rehearse suitable exact PRs, and record the result on that
-same ticket. Release execution remains separate.
+**One-ticket workflow merged; sandbox service extension implemented and tested
+September 10, 2026, with Coordinator source still uncommitted.** See
+[progress](./progress.md) for test and rollout evidence. Submit a request, then
+run one explicit command to inspect its ticket, rehearse suitable exact PRs,
+run supported sandbox service checks, and record the result on that same ticket.
+Release execution remains separate.
 
 This document owns the ticket states, labels, reasons, and first-processing
 rules. [Progress](./progress.md) owns dated implementation and live evidence.
@@ -22,8 +24,9 @@ Clear outdated requests and requests whose PRs are all already merged leave the
 active inbox with a recorded reason. Other requests that need evidence stay
 visible. Closing a ticket never silently claims that a release happened.
 
-The scope is intake defaults, ticket inspection, local merge rehearsal, status
-updates, decision history, and migration of existing tickets. Keep the installed CLI `0.0.4`
+The scope is intake defaults, ticket inspection, local merge rehearsal, supported
+sandbox service/database checks, status updates, decision history, and migration
+of existing tickets. Keep the installed CLI `0.0.4`
 input and request schema `0.000001` unchanged. No new npm release or frontend/
 backend installation is needed for this scope.
 
@@ -180,6 +183,41 @@ append duplicate decisions/comments. A later failure removes the old passing
 label and retains both meaningful outcomes in history. An interrupted run keeps
 its lock; explicit resume uses the stored plan and fresh evidence.
 
+<a id="proposed-service-and-database-ticket-outcomes"></a>
+
+## Sandbox service and database ticket outcomes
+
+**Implemented and tested September 10, 2026; see [progress](./progress.md) for live and merge evidence.** The
+[one-ticket sandbox stage](./merge-rehearsal-testing.md#service-and-database-acceptance)
+comes before batching. Reuse the managed comment, submitter ownership, and
+decision history and original request/receipt. The sandbox writer uses
+`inbox-run-v3`; older writers must stop. The journal's `service_attempts` map saves
+exact plans and attempts before dispatch and retains verified results for retries.
+
+Managed labels are `services:not-run`, `services:passed`, `services:blocked`,
+`services:unknown`, and `services:stale`. Reasons are `database-unverified`,
+`database-declaration-mismatch`, `service-checks-failed`,
+`service-checks-unverified`, and `service-checks-stale`. These describe sandbox
+checks separately from Git rehearsal and any future release outcome.
+
+| Evidence | Presentation and next action |
+| --- | --- |
+| Sandbox service/database/integration checks pass | Keep the ticket open and waiting for future release capability. Show the exact tested versions and sample outcomes separately from `rehearsal:passed`; never claim real deployment or completion. |
+| Database answer or inspection is unknown | Wait with the missing fact and its owner. The current unresolved classification goes to Coordinator maintainers for reconciliation, including obtaining requester clarification. No dependent execution starts. |
+| Declared `no` contradicts a verified database change | Action-needed for a corrected request. Show the declaration, changed files, observed database change, and submitter action without altering the receipt. |
+| A database or service check has an attributable program failure | Action-needed with the exact step, versions, expected/actual result, and correction owner. Preserve any partial database effect and which dependents did not start. |
+| Runner failure, timeout, unknown prior effect, or missing version/prerequisite proof | Wait with evidence and a bounded retry or reconciliation action owned by the responsible maintainer. Do not blame the submitter's code without support. |
+
+Show the attempted service order, database declaration and inspection result,
+per-step outcomes, data/integration assertions, workflow/report links, cleanup,
+and retry condition. Compare with the baseline before claiming a ticket caused a
+failure. A retry must not duplicate data changes or unchanged comments/decisions.
+A database classification hold has no service attempt to reconcile. Confirm the
+answer and inspection coverage; changing the immutable answer requires a corrected
+request before another run can proceed.
+Simulation of a failure after a database change must state that real recovery
+would require a person; temporary-resource cleanup is not successful recovery.
+
 ## Proposed batch ticket outcomes
 
 **Future behavior, not emitted by the current processor.** The
@@ -188,6 +226,10 @@ limited splitting of failing groups before release mutations. Current
 `inbox:run` still rehearses one ticket at a time. The outcome descriptions here
 do not add reason codes, change existing labels, or authorize ticket writes.
 Register the reasons and journal policy together when implementing batching.
+This stage follows the service/database acceptance above, reusing its meaningful
+sample checks. Initial multi-ticket batches still exclude database-changing or
+unresolved-database requests; leave them waiting for the appropriate capability
+with a clear reason rather than marking them broken or silently skipping them.
 
 Leaving a ticket out of a candidate keeps its PRs and Issue open. Keep the entire
 ticket and any inseparable dependency group together. Selection or a passing
@@ -396,7 +438,7 @@ replacement, completion, and terminal corrections remain reserved; no commands
 for those actions exist yet. No test is inferred from editable request/title text.
 
 The combined workflow uses policy `2026-09-09.4`. It upgrades the journal to
-`workflow: "inbox-run-v2"` without changing prior decisions. Older
+`workflow: "inbox-run-v3"` without changing prior decisions; v1/v2 journals upgrade on an authorized write. Older
 checkouts reject this field before writes, even if a pass adds no new reason.
 Once that marker is recorded, use a checkout supporting the combined workflow. Older processors reject unknown reasons and stop safely;
 update the checkout rather than rewriting history. No public CLI upgrade is needed.

@@ -229,22 +229,29 @@
               <strong>One ticket workflow:</strong> Run <code>inbox:run</code> with a
               profile and ticket. It checks the saved request and handles initial blockers,
               creates the merge plan from the ticket and configured destinations,
-              tries suitable PRs locally, and updates that same ticket
-              with reasons and a rehearsal result. The original receipt stays intact.
+              tries suitable PRs locally, runs supported sandbox service/database checks,
+              and updates that same ticket with reasons and separate Git and service results.
+              The original receipt stays intact.
               See the <a href="./docs/inbox-processing.md">ticket contract</a> and
               <a href="./docs/progress.md">local versus live evidence</a>.
             </p>
             <p>
               <strong>Passing is still pre-release:</strong> The ticket shows
-              <code>rehearsal:passed</code> and waits for future execution. Sandbox and
+              <code>rehearsal:passed</code> for Git and <code>services:passed</code> for
+              successful sandbox application checks, and waits for future execution. Sandbox and
               real profiles share the same code. No product merge, build, or deployment
               runs. See the <a href="./docs/profiled-inbox-testing.md">profile guide</a>.
             </p>
             <p>
-              <strong>Planned next:</strong> Combine several complete tickets, test that batch,
-              and divide confirmed failures within limits. Excluded tickets keep clear reasons
-              and next actions. This is not implemented by the current one-ticket workflow.
-              See the <a href="./docs/design.md#proposed-batch-testing-and-selection">batch design</a>.
+              <strong>Implemented and tested in sandbox:</strong> One ticket's database,
+              worker, API, and frontend checks run in dependency order. Temporary MySQL
+              and fake data run in the test backend's GitHub Actions job and are cleaned
+              up afterward. Database answers, failures, and retries have recorded evidence;
+              see the <a href="./docs/merge-rehearsal-testing.md#service-and-database-acceptance">service/database guide</a>.
+              Coordinator source still needs committing, PR checks, and merging. The next
+              development stage is <a href="./docs/design.md#proposed-batch-testing-and-selection">testing batches</a>
+              without database changes, keeping excluded tickets visible with reasons.
+              Batching remains unimplemented.
             </p>
             <p>
               Source: <code>packages/release-request/</code>. Product repositories install only

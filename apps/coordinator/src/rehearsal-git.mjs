@@ -261,6 +261,61 @@ export async function createRehearsalGit({
           await supportedTree(commit);
         }
         return {
+          async files(commit, names) {
+            if (
+              !isSha(commit) ||
+              !Array.isArray(names) ||
+              names.length > 10 ||
+              names.some(
+                (name) =>
+                  !/^src\/[a-zA-Z0-9_./-]+$/u.test(name) || name.includes("..")
+              )
+            )
+              throw new RehearsalError(
+                "invalid_snapshot",
+                "Unsupported sample source paths."
+              );
+            const files = {};
+            for (const name of names) {
+              const entry = (await git(cwd, ["ls-tree", commit, "--", name]))
+                .stdout;
+              if (
+                !entry.startsWith("100644 blob ") &&
+                !entry.startsWith("100755 blob ")
+              )
+                throw new RehearsalError(
+                  "unsupported_tree",
+                  "A sample source must be a regular Git file."
+                );
+              const file = await blob(commit, name);
+              if (Buffer.byteLength(file.text) > 12_000)
+                throw new RehearsalError(
+                  "resource_limit",
+                  "Sample source exceeds its size limit."
+                );
+              files[name] = file;
+            }
+            return files;
+          },
+          async changedPaths(base, commit) {
+            if (!isSha(base) || !isSha(commit))
+              throw new RehearsalError(
+                "invalid_commit",
+                "Invalid source comparison."
+              );
+            return (
+              await git(cwd, [
+                "diff",
+                "--no-ext-diff",
+                "--name-only",
+                "-z",
+                base,
+                commit
+              ])
+            ).stdout
+              .split("\0")
+              .filter(Boolean);
+          },
           async merge(current, head) {
             if (!isSha(current) || !isSha(head))
               throw new RehearsalError(

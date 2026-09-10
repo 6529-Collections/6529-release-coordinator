@@ -1,8 +1,8 @@
 # Checks for this repository
 
 These checks protect changes to the Release Coordinator's own code. They are
-separate from checking or processing release tickets and from the planned tests
-of combined frontend/backend PRs. See [progress](./progress.md) for delivery status.
+separate from processing release tickets, running sandbox applications, and the
+future tests of combined tickets. See [progress](./progress.md) for delivery status.
 
 ## Local command
 
@@ -79,9 +79,21 @@ Workflow tests verify the checked-in configuration, not every live account,
 environment, or npm setting. They are regression tests, not a sandbox for
 arbitrary workflow code; changes to the policy itself still need review.
 
-## What to extend later
+## Behavior tests and sandbox execution
 
-Keep general checking tools separate from Coordinator behavior tests. Add tests
-for batch membership, dependency order, retries, and exact combined results with
-the batch implementation. A new test runner, product builds, browser tests, and
-the frontend's large test-selection system are not needed for this gate.
+The service extension's contract, workflow-result verification, durable attempts
+and complete ticket integration run as offline tests in `npm run check`.
+Sequencing, database answers, stop/retry rules and evidence matching are covered.
+These tests do not contact GitHub, change inbox tickets or require Docker/product
+credentials.
+
+The explicit `apps/coordinator/sandbox/test-runtime.mjs --run-owned-containers`
+runner is separate: it uses local Docker and temporary MySQL. The generated
+sample repositories run equivalent application assertions in their own PR CI.
+The live `inbox:run` command dispatches GitHub Actions, so it does not require
+Docker on the operator's machine. See the
+[service acceptance record](./testing/service-database-2026-09-10.md).
+
+Add batch membership, bounded splitting and exact-combination tests with the
+future batch implementation. A new general test runner, product builds and the
+frontend's large test-selection system are not needed for this repo's gate.

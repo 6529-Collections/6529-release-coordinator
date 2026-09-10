@@ -4,7 +4,7 @@ import { decideTicket } from "./inbox-policy.mjs";
 import { terminal } from "./ticket-presentation.mjs";
 import { safeRehearsalError } from "./rehearsal.mjs";
 
-export const runPolicyVersion = "2026-09-09.4";
+export const runPolicyVersion = "2026-09-10.1";
 const check = (checks, id) => checks.find((value) => value.id === id);
 const pullChecks = [
   "requested_code",
@@ -221,6 +221,7 @@ export async function coordinateTicket({
           );
         return {
           decision: { ...next, rehearsal: result },
+          report,
           evidence,
           result: {
             ...result,

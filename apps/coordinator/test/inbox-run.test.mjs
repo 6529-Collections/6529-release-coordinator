@@ -15,6 +15,10 @@ import {
 } from "../src/inbox-merge-plan.mjs";
 import { readInbox } from "../src/inbox-reader.mjs";
 import { RehearsalError } from "../src/rehearsal-plan.mjs";
+import { coordinateServices } from "../src/inbox-services.mjs";
+import { executeServiceSteps } from "../src/service-contract.mjs";
+import { serviceFixture, serviceAdapter } from "./service-fixture.mjs";
+import { sourceFiles } from "../sandbox/fixtures.mjs";
 import {
   createJournal,
   validateJournal,
@@ -87,6 +91,9 @@ async function invoke(
     stdout: (text) => {
       output += text;
     },
+    // This suite isolates the existing Git/ticket stage. Service integration
+    // has its own complete application fixtures and workflow-adapter tests.
+    services: null,
     ...options
   });
   return { code, report: JSON.parse(output) };
@@ -127,6 +134,91 @@ function fakeReport(entry, input, profile, status = "pass") {
     report_file: "fixture-report.json"
   };
 }
+
+test("one inbox command saves a service attempt before dispatch, presents its result and reuses it on retry", async () => {
+  const f = fixture(sandboxProfile),
+    sample = serviceFixture();
+  f.request.release_parts = structuredClone(sample.entry.request.release_parts);
+  sync(f);
+  f.github.pullRequest = async (repository, number) => {
+    const part = f.request.release_parts.find(
+      (p) => p.pull_requests[0].number === number
+    );
+    const pull = part.pull_requests[0];
+    const role = part.id;
+    return {
+      ...structuredClone(f.pr),
+      number,
+      headRefOid: pull.commit,
+      headRefName: pull.branch,
+      repository: { nameWithOwner: f.profile.repositories[role].full_name },
+      headRepository: { nameWithOwner: f.profile.repositories[role].full_name }
+    };
+  };
+  f.github.catalog = async (commit) => ({
+    commit,
+    blob_sha: "d".repeat(40),
+    catalog: JSON.parse(sample.files.backend["src/config/deploy-services.json"])
+  });
+  let dispatched = 0,
+    completed;
+  const client = {
+    identity: async () => ({
+      actor: { id: "456", login: "trusted-user" },
+      workflow_id: 12
+    }),
+    dispatch: async (attempt) => {
+      assert.equal(
+        f.state().service_attempts[attempt.plan_hash].state,
+        "dispatching"
+      );
+      dispatched++;
+      completed = {
+        report: await executeServiceSteps(attempt.plan, serviceAdapter(), {
+          attemptId: attempt.id
+        }),
+        workflow: {
+          id: 99,
+          url: "https://github.com/6529-Collections/release-coordinator-test-backend/actions/runs/99"
+        }
+      };
+      return { workflow_run_id: 99 };
+    },
+    result: async () => completed
+  };
+  const options = {
+    rehearse: async (entry, input, { profile }) => {
+      const report = fakeReport(entry, input, profile);
+      for (const repo of report.repositories)
+        repo.service_source = {
+          files: sourceFiles(sample.files[repo.role]),
+          baseline: sourceFiles(sample.baseline[repo.role]),
+          changed_paths: []
+        };
+      return report;
+    },
+    services: (args) =>
+      coordinateServices({
+        ...args,
+        runtime: sample.runtime,
+        client,
+        saveReport: async () => "service-fixture.json"
+      })
+  };
+  const first = await invoke(f, options);
+  assert.equal(first.code, 0, JSON.stringify(first.report));
+  assert.equal(first.report.requests[0].services.status, "passed");
+  assert.equal(first.report.requests[0].status, "waiting");
+  assert.ok(f.issue.labels.includes("services:passed"));
+  assert.equal(f.state().workflow, "inbox-run-v3");
+  assert.equal(Object.values(f.state().service_attempts)[0].state, "completed");
+  const second = await invoke(f, options);
+  assert.equal(second.code, 0, JSON.stringify(second.report));
+  assert.equal(dispatched, 1);
+  assert.equal(f.comments.length, 1);
+  assert.equal(f.state().tickets[1].transitions.length, 1);
+  assert.equal(f.state().lock, null);
+});
 
 for (const profile of [sandboxProfile, realProfile]) {
   test(`${profile.name}: one command verifies, merges with real Git, saves evidence, and updates one ticket; repeat is stable`, async (t) => {

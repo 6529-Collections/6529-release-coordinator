@@ -41,6 +41,7 @@ export async function rehearseMerge(
   {
     github,
     createGit = createRehearsalGit,
+    captureRepository,
     signal,
     revision = { commit: "unavailable", dirty: true },
     now = () => new Date().toISOString(),
@@ -234,6 +235,12 @@ export async function rehearseMerge(
           item.merges.every((merge) => merge.status === "pass")
         ) {
           item.final_tree = item.merges.at(-1).tree;
+          if (captureRepository)
+            item.service_source = await captureRepository(
+              workspace,
+              repo,
+              current
+            );
           item.checks.push(
             check(
               "local_merge",
