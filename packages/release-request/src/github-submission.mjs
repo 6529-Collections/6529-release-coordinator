@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 
-export const COORDINATOR_REPOSITORY = "6529-Collections/6529-release-coordinator";
+export const COORDINATOR_REPOSITORY =
+  "6529-Collections/6529-release-coordinator";
 export const SUBMISSION_WORKFLOW = "submit-release-request.yml";
 
 function errorRecord(code, message, location = "$") {
@@ -137,7 +138,8 @@ function inboxIssueFromWorkflowResult(result) {
 export async function submitReleaseRequestToGitHub({
   request,
   runGh = runGitHubCli,
-  sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+  sleep = (milliseconds) =>
+    new Promise((resolve) => setTimeout(resolve, milliseconds))
 }) {
   let authenticated;
   try {
@@ -149,7 +151,10 @@ export async function submitReleaseRequestToGitHub({
         "GitHub CLI is not installed or is not available in PATH."
       );
     }
-    return failedSubmission("github_cli", `Could not run GitHub CLI: ${error.message}`);
+    return failedSubmission(
+      "github_cli",
+      `Could not run GitHub CLI: ${error.message}`
+    );
   }
 
   if (authenticated.exitCode !== 0) {
@@ -165,16 +170,19 @@ export async function submitReleaseRequestToGitHub({
   });
   let dispatched;
   try {
-    dispatched = await runGh([
-      "workflow",
-      "run",
-      SUBMISSION_WORKFLOW,
-      "--repo",
-      COORDINATOR_REPOSITORY,
-      "--ref",
-      "main",
-      "--json"
-    ], { input: workflowInput });
+    dispatched = await runGh(
+      [
+        "workflow",
+        "run",
+        SUBMISSION_WORKFLOW,
+        "--repo",
+        COORDINATOR_REPOSITORY,
+        "--ref",
+        "main",
+        "--json"
+      ],
+      { input: workflowInput }
+    );
   } catch (error) {
     return failedSubmission(
       "github_dispatch",
@@ -189,7 +197,9 @@ export async function submitReleaseRequestToGitHub({
     );
   }
 
-  let workflowRun = workflowRunFromUrl(`${dispatched.stdout}\n${dispatched.stderr}`);
+  let workflowRun = workflowRunFromUrl(
+    `${dispatched.stdout}\n${dispatched.stderr}`
+  );
   if (!workflowRun) {
     try {
       workflowRun = await findWorkflowRun(request.request_id, runGh, sleep);
@@ -233,9 +243,10 @@ export async function submitReleaseRequestToGitHub({
       workflowRun
     );
   }
-  const workflowResult = viewed.exitCode === 0
-    ? readWorkflowResult(`${viewed.stdout}\n${viewed.stderr}`)
-    : null;
+  const workflowResult =
+    viewed.exitCode === 0
+      ? readWorkflowResult(`${viewed.stdout}\n${viewed.stderr}`)
+      : null;
 
   if (!workflowResult) {
     return failedSubmission(
@@ -256,10 +267,12 @@ export async function submitReleaseRequestToGitHub({
   }
 
   if (watched.exitCode !== 0 || workflowResult.status !== "submitted") {
-    const reason = workflowResult.reason || "The central workflow rejected the request.";
-    const errors = Array.isArray(workflowResult.errors) && workflowResult.errors.length > 0
-      ? workflowResult.errors
-      : [errorRecord("workflow_failed", reason)];
+    const reason =
+      workflowResult.reason || "The central workflow rejected the request.";
+    const errors =
+      Array.isArray(workflowResult.errors) && workflowResult.errors.length > 0
+        ? workflowResult.errors
+        : [errorRecord("workflow_failed", reason)];
     return failedSubmission("workflow_failed", reason, workflowRun, errors);
   }
 

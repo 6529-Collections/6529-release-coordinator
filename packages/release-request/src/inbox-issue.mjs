@@ -29,7 +29,9 @@ function canonicalRequestJson(request) {
 }
 
 export function releaseRequestChecksum(request) {
-  return createHash("sha256").update(canonicalRequestJson(request)).digest("hex");
+  return createHash("sha256")
+    .update(canonicalRequestJson(request))
+    .digest("hex");
 }
 
 export function releaseRequestIssueTitle(requestId) {
@@ -92,7 +94,9 @@ function parseSavedIssue(body) {
   )?.[1];
 
   if (!requestId || !checksum || !requestText) {
-    throw new Error("The existing inbox Issue is missing trusted request markers.");
+    throw new Error(
+      "The existing inbox Issue is missing trusted request markers."
+    );
   }
 
   let request;
@@ -111,7 +115,8 @@ function parseSavedIssue(body) {
 
 function requireResponse(response, expectedStatus, action) {
   if (response.status !== expectedStatus) {
-    const message = response.data?.message || `GitHub returned status ${response.status}.`;
+    const message =
+      response.data?.message || `GitHub returned status ${response.status}.`;
     throw new Error(`${action}: ${message}`);
   }
   return response.data;
@@ -129,7 +134,9 @@ async function findReleaseRequestIssues({ githubRequest, requestId }) {
     });
     const issues = requireResponse(response, 200, "Could not search the inbox");
     if (!Array.isArray(issues)) {
-      throw new Error("Could not search the inbox: GitHub returned an invalid issue list.");
+      throw new Error(
+        "Could not search the inbox: GitHub returned an invalid issue list."
+      );
     }
 
     matches.push(
@@ -260,7 +267,11 @@ export async function saveReleaseRequestIssue({
       labels: [REQUEST_LABEL.name, PENDING_LABEL.name, targetLabel.name]
     }
   });
-  const issue = requireResponse(response, 201, "Could not create the inbox Issue");
+  const issue = requireResponse(
+    response,
+    201,
+    "Could not create the inbox Issue"
+  );
 
   return {
     checksum,

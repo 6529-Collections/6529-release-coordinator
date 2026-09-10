@@ -42,6 +42,10 @@ from first principles.
 - `README.md` is the entry point and documentation index.
 - `docs/progress.md` records dated implementation, merge/publication evidence,
   next steps, and deliberately deferred work.
+- `docs/code-checks.md` owns checks for this repository's code and PR gate.
+  `npm run check` runs non-fixing lint, formatting checks, all offline tests,
+  workflow policy checks, and a packed-CLI smoke test. It does not run the inbox.
+  Keep format fixes separate and distinguish local checks from live GitHub CI.
 - `docs/inbox-processing.md` owns the ticket workflow,
   status/reason labels, submitter ownership, history requirements, and migration.
   Check `docs/progress.md` for local implementation versus merged/runtime proof.

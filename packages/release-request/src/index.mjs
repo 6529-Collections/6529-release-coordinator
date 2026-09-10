@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { link, mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
+import {
+  link,
+  mkdir,
+  readFile,
+  rename,
+  unlink,
+  writeFile
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,7 +23,11 @@ const RUN_RECORD_VERSION = "0.000001";
 const GENERATED_FIELDS = ["schema_version", "request_id", "created_at"];
 
 const packageDirectory = path.dirname(fileURLToPath(import.meta.url));
-const schemaPath = path.join(packageDirectory, "..", "release-request.schema.json");
+const schemaPath = path.join(
+  packageDirectory,
+  "..",
+  "release-request.schema.json"
+);
 const schema = JSON.parse(await readFile(schemaPath, "utf8"));
 const RELEASE_REQUEST_SCHEMA_VERSION = schema.properties.schema_version.const;
 
@@ -135,7 +146,7 @@ function validationErrors(errors = []) {
   return errors.map((error) => {
     let location = error.instancePath || "$";
     if (error.keyword === "required" && error.params?.missingProperty) {
-      location = `${location === "$" ? "" : location}/${error.params.missingProperty}` || "$";
+      location = `${location === "$" ? "" : location}/${error.params.missingProperty}`;
     }
 
     return errorRecord(error.keyword, error.message || "is invalid", location);
@@ -207,7 +218,13 @@ function baseRunRecord({ runId, startedAt, inputSource }) {
   };
 }
 
-async function finishFailedRun({ run, runPath, errors, now, createTemporaryId }) {
+async function finishFailedRun({
+  run,
+  runPath,
+  errors,
+  now,
+  createTemporaryId
+}) {
   const failedRun = {
     ...run,
     status: "failed",
@@ -235,7 +252,11 @@ export async function createReleaseRequestRun({
   const runId = createId();
   const startedAt = timestamp(now);
   const runRelativePath = relativeRuntimePath("runs", `${runId}.json`);
-  const runPath = absoluteRuntimePath(projectDirectory, "runs", `${runId}.json`);
+  const runPath = absoluteRuntimePath(
+    projectDirectory,
+    "runs",
+    `${runId}.json`
+  );
   let run = baseRunRecord({ runId, startedAt, inputSource });
 
   try {
@@ -253,7 +274,9 @@ export async function createReleaseRequestRun({
     const failedRun = await finishFailedRun({
       run,
       runPath,
-      errors: [errorRecord("input_read", `Could not read input: ${error.message}`)],
+      errors: [
+        errorRecord("input_read", `Could not read input: ${error.message}`)
+      ],
       now,
       createTemporaryId
     });
@@ -281,7 +304,9 @@ export async function createReleaseRequestRun({
     const failedRun = await finishFailedRun({
       run,
       runPath,
-      errors: [errorRecord("invalid_json", `Input is not valid JSON: ${error.message}`)],
+      errors: [
+        errorRecord("invalid_json", `Input is not valid JSON: ${error.message}`)
+      ],
       now,
       createTemporaryId
     });
@@ -305,8 +330,15 @@ export async function createReleaseRequestRun({
     return { ok: false, run: failedRun, runPath: runRelativePath };
   }
 
-  const requestRelativePath = relativeRuntimePath("outbox", `${requestId}.json`);
-  const requestPath = absoluteRuntimePath(projectDirectory, "outbox", `${requestId}.json`);
+  const requestRelativePath = relativeRuntimePath(
+    "outbox",
+    `${requestId}.json`
+  );
+  const requestPath = absoluteRuntimePath(
+    projectDirectory,
+    "outbox",
+    `${requestId}.json`
+  );
 
   try {
     await writeNewJson(requestPath, result.request, createTemporaryId);
@@ -314,7 +346,9 @@ export async function createReleaseRequestRun({
     const failedRun = await finishFailedRun({
       run,
       runPath,
-      errors: [errorRecord("request_save", `Could not save request: ${error.message}`)],
+      errors: [
+        errorRecord("request_save", `Could not save request: ${error.message}`)
+      ],
       now,
       createTemporaryId
     });
@@ -414,11 +448,11 @@ export async function submitReleaseRequestRun({
   const errors = submission.ok
     ? []
     : submission.errors || [
-      errorRecord(
-        "submission_failed",
-        submission.reason || "The release request submission failed."
-      )
-    ];
+        errorRecord(
+          "submission_failed",
+          submission.reason || "The release request submission failed."
+        )
+      ];
   run = {
     ...run,
     status: submission.ok ? "succeeded" : "failed",

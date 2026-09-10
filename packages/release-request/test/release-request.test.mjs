@@ -20,24 +20,11 @@ import {
 } from "../src/inbox-issue.mjs";
 
 const testDirectory = path.dirname(fileURLToPath(import.meta.url));
-const binPath = path.join(testDirectory, "..", "bin", "6529-release-request.mjs");
-const workflowPath = path.join(
+const binPath = path.join(
   testDirectory,
   "..",
-  "..",
-  "..",
-  ".github",
-  "workflows",
-  "submit-release-request.yml"
-);
-const publishWorkflowPath = path.join(
-  testDirectory,
-  "..",
-  "..",
-  "..",
-  ".github",
-  "workflows",
-  "publish-release-request.yml"
+  "bin",
+  "6529-release-request.mjs"
 );
 
 const fixedTime = "2026-08-31T10:00:00.000Z";
@@ -93,9 +80,9 @@ function idSequence(...ids) {
 }
 
 function workflowMarker(result) {
-  return `RELEASE_REQUEST_RESULT=${Buffer.from(
-    JSON.stringify(result)
-  ).toString("base64url")}\n`;
+  return `RELEASE_REQUEST_RESULT=${Buffer.from(JSON.stringify(result)).toString(
+    "base64url"
+  )}\n`;
 }
 
 async function temporaryProject(t) {
@@ -144,7 +131,9 @@ function fakeInboxGitHub() {
         issues.push(issue);
         return { status: 201, data: issue };
       }
-      throw new Error(`Unexpected fake GitHub request: ${method} ${requestPath}`);
+      throw new Error(
+        `Unexpected fake GitHub request: ${method} ${requestPath}`
+      );
     }
   };
 }
@@ -173,7 +162,10 @@ test("complete request validation returns clear schema errors", () => {
   const result = validateReleaseRequest(request);
 
   assert.equal(result.ok, false);
-  assert.equal(result.errors.some((error) => error.code === "required"), true);
+  assert.equal(
+    result.errors.some((error) => error.code === "required"),
+    true
+  );
   assert.equal(
     result.errors.some((error) => error.location.endsWith("/deploy_units")),
     true
@@ -214,7 +206,10 @@ test("the inbox creates one labeled Issue and reuses it", async () => {
   assert.equal(reusedAfterEdit.issue.url, created.issue.url);
   assert.equal(github.issues.length, 1);
   assert.match(github.issues[0].body, /Trusted GitHub actor \| @simo6529/u);
-  assert.match(github.issues[0].body, new RegExp(releaseRequestChecksum(request), "u"));
+  assert.match(
+    github.issues[0].body,
+    new RegExp(releaseRequestChecksum(request), "u")
+  );
   assert.equal(
     github.calls.filter(
       (call) => call.method === "POST" && call.path === "/issues"
@@ -283,34 +278,6 @@ test("the inbox rejects an Issue whose saved release JSON changed", async () => 
   );
 });
 
-test("the central workflow has the narrow Issue permission and request lock", async () => {
-  const workflow = await readFile(workflowPath, "utf8");
-
-  assert.match(workflow, /permissions:\n  contents: read\n  issues: write/u);
-  assert.match(
-    workflow,
-    /group: release-request-inbox-\$\{\{ inputs\.request_id \}\}/u
-  );
-  assert.match(workflow, /run: node apps\/coordinator\/bin\/save-inbox-request\.mjs/u);
-  assert.match(workflow, /RELEASE_COORDINATOR_PROFILE: real/u);
-  assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/u);
-});
-
-test("npm publishing is limited to protected main and a short-lived identity", async () => {
-  const workflow = await readFile(publishWorkflowPath, "utf8");
-
-  assert.match(workflow, /workflow_dispatch:\n    inputs:\n      version:/u);
-  assert.match(workflow, /needs: check/u);
-  assert.match(workflow, /environment: npm-publish/u);
-  assert.equal([...workflow.matchAll(/id-token: write/gu)].length, 1);
-  assert.equal([...workflow.matchAll(/persist-credentials: false/gu)].length, 2);
-  assert.match(workflow, /GITHUB_REF.*refs\/heads\/main/u);
-  assert.match(workflow, /npm publish/u);
-  assert.match(workflow, /--ignore-scripts/u);
-  assert.match(workflow, /--provenance/u);
-  assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN/u);
-});
-
 test("valid input saves a succeeded run and one outbox request", async (t) => {
   const projectDirectory = await temporaryProject(t);
   const runId = "11111111-1111-4111-8111-111111111111";
@@ -335,7 +302,12 @@ test("valid input saves a succeeded run and one outbox request", async (t) => {
   assert.equal(run.request.id, requestId);
 
   const request = await readJson(
-    path.join(projectDirectory, ".release-coordinator", "outbox", `${requestId}.json`)
+    path.join(
+      projectDirectory,
+      ".release-coordinator",
+      "outbox",
+      `${requestId}.json`
+    )
   );
   assert.equal(request.schema_version, "0.000001");
   assert.equal(request.request_id, requestId);
@@ -381,15 +353,15 @@ test("schema validation failure saves errors and no outbox request", async (t) =
     inputSource: "test",
     readInput: async () => JSON.stringify(draft),
     now: () => new Date(fixedTime),
-    createId: idSequence(
-      runId,
-      "55555555-5555-4555-8555-555555555555"
-    )
+    createId: idSequence(runId, "55555555-5555-4555-8555-555555555555")
   });
 
   assert.equal(result.ok, false);
   assert.equal(result.run.status, "failed");
-  assert.equal(result.run.errors.some((error) => error.code === "required"), true);
+  assert.equal(
+    result.run.errors.some((error) => error.code === "required"),
+    true
+  );
   assert.equal(result.run.request, null);
 });
 
@@ -472,7 +444,9 @@ test("the CLI create command saves a valid request end to end", async (t) => {
   assert.match(summary.request_id, /^[0-9a-f-]{36}$/);
 
   const run = await readJson(path.join(projectDirectory, summary.run_path));
-  const request = await readJson(path.join(projectDirectory, summary.request_path));
+  const request = await readJson(
+    path.join(projectDirectory, summary.request_path)
+  );
   assert.equal(run.status, "succeeded");
   assert.equal(request.request_id, summary.request_id);
 });
@@ -494,7 +468,8 @@ test("GitHub submission returns a clear authentication failure", async () => {
 test("GitHub submission starts, waits for, and reads the central workflow", async () => {
   const request = validRequest();
   const calls = [];
-  const runUrl = "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/12345";
+  const runUrl =
+    "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/12345";
   const workflowResult = {
     status: "submitted",
     request_id: request.request_id,
@@ -526,7 +501,11 @@ test("GitHub submission starts, waits for, and reads the central workflow", asyn
         return { exitCode: 0, stdout: "completed\n", stderr: "" };
       }
       if (args[1] === "view") {
-        return { exitCode: 0, stdout: workflowMarker(workflowResult), stderr: "" };
+        return {
+          exitCode: 0,
+          stdout: workflowMarker(workflowResult),
+          stderr: ""
+        };
       }
       throw new Error(`Unexpected gh call: ${args.join(" ")}`);
     }
@@ -541,12 +520,18 @@ test("GitHub submission starts, waits for, and reads the central workflow", asyn
     "https://github.com/6529-Collections/6529-release-coordinator/issues/42"
   );
   assert.equal(result.github.actor, "simo6529");
-  assert.deepEqual(calls, ["auth status", "workflow run", "run watch", "run view"]);
+  assert.deepEqual(calls, [
+    "auth status",
+    "workflow run",
+    "run watch",
+    "run view"
+  ]);
 });
 
 test("GitHub submission returns the workflow rejection reason", async () => {
   const request = validRequest();
-  const runUrl = "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/67890";
+  const runUrl =
+    "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/67890";
   const workflowResult = {
     status: "failed",
     request_id: request.request_id,
@@ -572,7 +557,11 @@ test("GitHub submission returns the workflow rejection reason", async () => {
       if (args[1] === "watch") {
         return { exitCode: 1, stdout: "", stderr: "workflow failed\n" };
       }
-      return { exitCode: 0, stdout: workflowMarker(workflowResult), stderr: "" };
+      return {
+        exitCode: 0,
+        stdout: workflowMarker(workflowResult),
+        stderr: ""
+      };
     }
   });
 
@@ -609,7 +598,11 @@ test("GitHub submission rejects success without a trusted inbox Issue", async ()
       if (args[1] === "watch") {
         return { exitCode: 0, stdout: "completed\n", stderr: "" };
       }
-      return { exitCode: 0, stdout: workflowMarker(workflowResult), stderr: "" };
+      return {
+        exitCode: 0,
+        stdout: workflowMarker(workflowResult),
+        stderr: ""
+      };
     }
   });
 
@@ -622,7 +615,8 @@ test("a successful submit run saves GitHub proof locally", async (t) => {
   const projectDirectory = await temporaryProject(t);
   const runId = "77777777-7777-4777-8777-777777777777";
   const requestId = "88888888-8888-4888-8888-888888888888";
-  const runUrl = "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/24680";
+  const runUrl =
+    "https://github.com/6529-Collections/6529-release-coordinator/actions/runs/24680";
 
   const result = await submitReleaseRequestRun({
     projectDirectory,
@@ -698,7 +692,9 @@ test("a rejected submit run keeps the valid request and failure reason", async (
   assert.equal(result.run.submission.reason, error.message);
   assert.deepEqual(result.run.errors, [error]);
 
-  const request = await readJson(path.join(projectDirectory, result.requestPath));
+  const request = await readJson(
+    path.join(projectDirectory, result.requestPath)
+  );
   assert.equal(request.request_id, requestId);
 });
 
@@ -716,6 +712,8 @@ test("the CLI submit command saves invalid local input without calling GitHub", 
   assert.equal(summary.errors[0].code, "invalid_json");
   assert.equal(summary.workflow_run_id, null);
 
-  const runs = await readdir(path.join(projectDirectory, ".release-coordinator", "runs"));
+  const runs = await readdir(
+    path.join(projectDirectory, ".release-coordinator", "runs")
+  );
   assert.equal(runs.length, 1);
 });

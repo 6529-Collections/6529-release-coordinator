@@ -49,8 +49,7 @@ Local checks from this Coordinator repository:
 
 ```sh
 npm ci --ignore-scripts
-npm test
-npm pack --dry-run --ignore-scripts --workspace=@6529-collections/release-request
+npm run check
 ```
 
 The publish job checks the requested version, creates and inspects one archive,

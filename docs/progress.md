@@ -1,45 +1,82 @@
 # Progress and next steps
 
-Last updated: **2026-09-09**. Evidence below carries its own date; the earlier
+Last updated: **2026-09-10**. Evidence below carries its own date; the earlier
 package and consumer observations were not all rechecked during this update.
 Runtime behavior comes from code and live evidence. The [ticket contract](./inbox-processing.md) describes the local manual processor;
 [execution design](./design.md) remains future work. There is no running service.
 
-**Latest merged milestone:** [PR #30](https://github.com/6529-Collections/6529-release-coordinator/pull/30)
-merged September 9 at `f53a143a52cba354570716d696fc44d6b2229d49`. Sandbox and real
-profiles now share submission, receipt verification, inspection, processing,
-and one-ticket merge-rehearsal code. All 235 local tests passed, and
-[required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34348455618)
-passed on final head `5c2475801be5114dbb8bd3c9df3d8f454992017d`. The
-[sandbox acceptance record](./testing/profiled-inbox-2026-09-09.md) proves the
-live test-ticket path. The newer combined workflow below is on
-`codex/unified-inbox-run`; review, CI, and merge remain pending.
+**Merged starting point for this delivery:** [PR #31](https://github.com/6529-Collections/6529-release-coordinator/pull/31)
+merged September 9 at `8d13a69a9cb6ea919a4bfd8f9f0c67d466a77056`.
+The unified `inbox:run` workflow and planned batch documentation are on `main`.
+Merge and successful [required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34362487818)
+were rechecked September 10. That CI ran 255 tests; no package publication or
+product deployment was part of the merge.
 
-## Latest local work: one ticket command
+## Coordinator code checks: PR delivery, September 10
 
-Committed locally as `585366d` on `codex/unified-inbox-run`, based on documentation
-commit `c52c450992c236750223eb031de78498fd4a0fe5`. **This source change is on this
-branch; review, CI, and merge remain pending.** `inbox:run` replaces both old operator entry points. It
-inspects tickets, automatically creates a plan from each suitable ticket and
-the profile-configured current `main` commits, rehearses its exact PRs, and
-updates the same ticket/journal from fresh evidence. There is no operator plan
-file. Missing configuration or evidence gets a clear reason. Read-only diagnostics
-remain available.
+Delivery is tracked in [PR #40](https://github.com/6529-Collections/6529-release-coordinator/pull/40),
+from `codex/coordinator-pr-checks`, based on the merged milestone above.
+Implementation commit `4f06ed35dc7bbe509e90b2a4726f92312c06749f` passed
+[GitHub PR CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34449207007)
+on September 10: 287 tests on each of Node 20, 22, and 24, with all other check
+phases successful. The required `Check package` gate passed and publication
+was skipped. The PR records the final review, head, and merge result.
 
-All **255 local tests passed** (26 package, 229 Coordinator). The simpler
-command passed twice on live sandbox ticket #1 with no supplied plan file.
+Pre-merge review corrected the extra-privileged-job test fixture to clone its
+job and assert the job-allowlist error, so YAML alias rejection cannot satisfy
+that test accidentally. The delivery record also now separates local validation
+from the verified GitHub run above.
+
+`npm run check` combines JavaScript lint, formatting checks,
+all discovered test files, structural workflow policy checks, and an isolated
+smoke install of the packed public CLI. See [code checks](./code-checks.md).
+
+The PR workflow runs the full command on Node 20, 22, and 24 and keeps the
+required `Check package` name. Its final gate rejects failed, cancelled, or
+skipped verification. Intake Issue permission is scoped to its writer job;
+intake installs production dependencies only. Publication is still manual,
+limited to `main`, and protected by its environment and successful checks.
+
+Local validation passed with **287 tests on each of Node 20.20.2, 22.23.2,
+and 24.21.0**, using the full `npm run check` command. Each run also passed lint,
+formatting, workflow policy, the offline packed-package install, and the source
+unchanged check. The test count replaces two old workflow text tests with 34
+structural-policy, package-allowlist, and source-preservation tests. Deliberately
+invalid JavaScript and formatting also made the full command fail as expected.
+`npm ci --ignore-scripts` passed and reported no audit findings for this lockfile.
+Existing production dependency lock entries are unchanged.
+
+Existing JavaScript received a one-time formatting baseline plus small lint
+cleanups. Parsing comparisons separated formatting from the few code/test edits.
+No inbox, product PR, package publication, or deployment command ran. An initial
+local path named `node@24` actually resolved to Node 25.6.1; its successful run
+was not counted as Node 24 evidence. The listed 20/22/24 runtimes were downloaded
+from nodejs.org with archive SHA-256 checks and verified separately.
+
+The live [Protect main ruleset](https://github.com/6529-Collections/6529-release-coordinator/rules/22272421)
+was updated and read back September 10: **Check package** remains required from
+GitHub Actions, and an **up-to-date branch is now required**. Other rules and
+bypass settings were preserved. The publication environment still allows only
+branch `main`. This server rule is active. The new command and workflow passed
+PR CI as recorded above; follow PR #40 for its final delivery status.
+
+## Merged one-ticket workflow and its earlier acceptance evidence
+
+`inbox:run` replaces both old operator entry points. It inspects tickets,
+automatically creates a plan from each suitable ticket and the profile-configured
+current `main` commits, rehearses its exact PRs, and updates the same ticket and
+journal from fresh evidence. There is no operator plan file. Missing configuration
+or evidence gets a clear reason. Read-only diagnostics remain available.
+
+Before PR #31 merged, all 255 local tests passed (26 package, 229 Coordinator).
+The command passed twice on live sandbox ticket #1 with no supplied plan file.
 Each generated plan was saved before Git. Both runs preserved the same ticket,
 comment, and two historical decisions, and left all sample PRs/branches and the
 real inbox/journal unchanged. The journal upgraded to `inbox-run-v2`, preserving
 history and preventing old writers from replacing the new run format. See the
 [automatic planning evidence](./testing/unified-inbox-2026-09-09.md#automatic-planning-follow-up).
-The ticket remains waiting for independent release-history/ownership and future
-execution. This work does not make a passing rehearsal release authorization.
-
-Public npm `0.0.4`, the public schema, product repositories, and intake workflows
-are unchanged. No product merge, build, or deployment ran. The next delivery
-step is review/CI and merge of this branch. The next proposed development
-stage is recorded below; release execution remains separate.
+A passing rehearsal remains separate from release authorization and deployment
+proof. Public npm remains at the previously published `0.0.4`.
 
 ## Planned next stage: batch selection and tests, September 9
 
@@ -59,8 +96,8 @@ ticket after the selected release; a failure against the new base may then need
 a correction. Group failures, infrastructure problems, and testing limits do
 not automatically make every ticket action-needed.
 
-Next development sequence: first deliver `585366d` through review/CI and merge;
-then implement selection across sandbox tickets and add meaningful sample PR
+The Coordinator code-check delivery is tracked above. Subsequent development
+will implement selection across sandbox tickets and add meaningful sample PR
 checks on their combined code. The [planned acceptance cases](./merge-rehearsal-testing.md#planned-batch-acceptance)
 cover splitting, incompatibility, limits, exact inputs, and ticket presentation.
 Numeric limits, tie-breaking, dependencies between tickets, saved attempt state,
@@ -68,8 +105,8 @@ runner permissions/results, temporary PR cleanup, and batch reason codes still
 need implementation decisions. Both design views now agree on bounded selection
 before release mutations; their listed later execution differences remain open.
 
-This update changes documentation only. Existing single-ticket behavior and its
-255-test/live-sandbox evidence remain the implemented milestone. There is no
+The September 9 batch-design update changed documentation only. Its existing
+single-ticket behavior and 255-test/live-sandbox evidence remain the prior milestone. There is no
 batch executor, combined application CI, product merge, or deployment proof.
 
 ## Implemented and verified
@@ -192,9 +229,9 @@ submission, receipt reuse, explicit processing, and rehearsal of one ticket's
 exact PRs. Both profiles share the same implementation; test manifests and
 receipts remain separate from real request evidence.
 
-We can continue developing and testing in the sandbox. The local combined
-workflow now uses fresh rehearsal reports to update the same ticket. Reviewing
-this source change and checking its CI/merge state are the next delivery steps.
+We can continue developing and testing in the sandbox. The merged combined
+workflow uses fresh rehearsal reports to update the same ticket. The Coordinator
+code-check delivery is tracked above.
 The [next batch stage](#planned-next-stage-batch-selection-and-tests-september-9)
 is documented but unimplemented. Real-project live acceptance, the larger release
 worker, execution permissions, deployment evidence sources, and recovery remain
