@@ -3,24 +3,34 @@
 Last updated: **2026-09-10**. Evidence below carries its own date; the earlier
 package and consumer observations were not all rechecked during this update.
 Runtime behavior comes from code and live evidence. The [ticket contract](./inbox-processing.md) describes the local manual processor;
-[execution design](./design.md) remains future work. There is no running service.
+[execution design](./design.md) remains future work. There is no always-on release
+worker; each manual run exits after its work.
 
-**Merged starting point for this delivery:** [PR #31](https://github.com/6529-Collections/6529-release-coordinator/pull/31)
-merged September 9 at `8d13a69a9cb6ea919a4bfd8f9f0c67d466a77056`.
-The unified `inbox:run` workflow and planned batch documentation are on `main`.
-Merge and successful [required CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34362487818)
-were rechecked September 10. That CI ran 255 tests; no package publication or
-product deployment was part of the merge.
+**Baseline before the sandbox service extension:** [PR #40](https://github.com/6529-Collections/6529-release-coordinator/pull/40)
+merged September 10 at `430cae629fac12fe78a57bc57e00d3ef411c6742`.
+The unified `inbox:run` workflow and this repository's code checks are on `main`.
+The merge and successful [post-merge main CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34450016915)
+were rechecked September 10; local `main` was at that merge before this work.
+The service/database extension is implemented and tested; its
+[source delivery](#sandbox-source-delivery-september-10) is recorded separately
+from the earlier acceptance snapshots.
+No package publication or product deployment was part of the merge.
 
-## Coordinator code checks: PR delivery, September 10
+## Coordinator code checks: merged, September 10
 
-Delivery is tracked in [PR #40](https://github.com/6529-Collections/6529-release-coordinator/pull/40),
-from `codex/coordinator-pr-checks`, based on the merged milestone above.
+Delivery completed in [PR #40](https://github.com/6529-Collections/6529-release-coordinator/pull/40),
+from `codex/coordinator-pr-checks`, based on PR #31's September 9 merge
+`8d13a69a9cb6ea919a4bfd8f9f0c67d466a77056`.
 Implementation commit `4f06ed35dc7bbe509e90b2a4726f92312c06749f` passed
 [GitHub PR CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34449207007)
 on September 10: 287 tests on each of Node 20, 22, and 24, with all other check
 phases successful. The required `Check package` gate passed and publication
-was skipped. The PR records the final review, head, and merge result.
+was skipped. Final source head `f893f0154fb78f98dbb8ac524e76dd2d21e921c4`
+merged at **07:27:06 UTC on September 10**, producing the current baseline above.
+[Post-merge main CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34450016915)
+passed all three Node jobs and `Check package` at that exact merge commit;
+publication was skipped. These remote results were read back during this update,
+not rerun as part of documentation housekeeping.
 
 Pre-merge review corrected the extra-privileged-job test fixture to clone its
 job and assert the job-allowlist error, so YAML alias rejection cannot satisfy
@@ -58,7 +68,7 @@ was updated and read back September 10: **Check package** remains required from
 GitHub Actions, and an **up-to-date branch is now required**. Other rules and
 bypass settings were preserved. The publication environment still allows only
 branch `main`. This server rule is active. The new command and workflow passed
-PR CI as recorded above; follow PR #40 for its final delivery status.
+PR and post-merge main CI as recorded above. This code-check delivery is complete.
 
 ## Merged one-ticket workflow and its earlier acceptance evidence
 
@@ -78,7 +88,122 @@ history and preventing old writers from replacing the new run format. See the
 A passing rehearsal remains separate from release authorization and deployment
 proof. Public npm remains at the previously published `0.0.4`.
 
-## Planned next stage: batch selection and tests, September 9
+## Sandbox services and database, September 10
+
+**Implemented and tested; see [source delivery](#sandbox-source-delivery-september-10)
+for the Coordinator PR and CI, separate from sample-runtime merges.**
+The same `inbox:run` command now follows a passing supported sandbox rehearsal
+with temporary MySQL, a selected database step, worker, API and frontend checks.
+The local controller dispatches a fixed, pinned GitHub Actions runtime and binds
+its result to the exact ticket, candidate sources, baseline and execution order.
+The public request schema/npm package and real execution capabilities are unchanged.
+
+The `inbox-run-v3` journal saves each service plan and attempt before dispatch.
+Retries reverify the same run, including after a lost dispatch response, instead
+of blindly repeating effects. New `services:*` labels and reasons show service
+results separately from Git rehearsal. Passing checks leave the ticket waiting.
+Unknown or contradictory database answers, missing prerequisites, stale input,
+unverifiable runtime output and cleanup uncertainty cannot become success.
+
+The [acceptance record](./testing/service-database-2026-09-10.md) contains the
+local and live matrix, exact runtime/source pins and fixture links. Seven actual
+local Docker cases passed their expected assertions: no change, upgrade with an
+idempotent one-off update, partial schema failure, API failure, frontend mismatch,
+timeout, and candidate isolation. Expected failure cases stop dependent steps,
+retain the observed database state and remove only owned temporary resources.
+Offline tests also cover malformed input, missing/wrong metadata, skipped or
+cancelled execution, stale input, durable dispatch and repeated ticket handling.
+The final `npm run check` passed **306 tests on Node 24.19.0**, lint, formatting,
+workflow policy, packed CLI/schema smoke checks and source preservation.
+
+The sample repositories receive a generated copy of the shared runtime and
+meaningful normal PR checks. They do not host a separately maintained algorithm.
+All seven live ticket cases produced the expected outcomes: two passes, a
+partial database failure, an API failure, and three holds for unknown/incorrect
+answers or a missing prerequisite. Four exact service workflows ran; retries
+reused them and the held cases started none. The first live run caught a log
+transport issue, which was fixed and rechecked against its saved run. One intake
+queue timeout was cancelled and reconciled before a successful controlled retry.
+See the linked record for cleanup and protected-resource verification. These
+results do not imply a Coordinator source merge. All seven new test tickets are
+closed, the sandbox journal is unlocked, all local containers are removed, and
+the six source fixture PR heads and real inbox journal are unchanged. Product
+main refs advanced independently during the test window; no product writes or
+deployments were issued by this task.
+
+The real backend reference remains pinned in the
+[service/database guide](./merge-rehearsal-testing.md#service-and-database-acceptance).
+This fixture models order, baseline upgrades and data/output checks. It does not
+prove AWS deployment, real database change detection, persistent service health,
+existing-runtime prerequisites or real rollback. Missing prerequisites remain
+held. Source delivery through normal PR checks and merge precedes bounded batches
+of complete requests without database changes. No batch command exists yet.
+
+## Documentation alignment, September 10
+
+The housekeeping update aligned guides and diagrams with the implemented and
+tested sandbox service/database checks. At that point Coordinator source was
+still uncommitted; merged sample setup and live results were recorded separately.
+The testing guide
+also identifies where temporary MySQL runs and separates the sample `staging`
+target from a product staging database. Older section links remain valid.
+
+The next sequence is delivery of this extension, then bounded sandbox batching
+without database changes. Historical acceptance records remain dated evidence;
+real service execution, deployment, and recovery remain future work. This
+housekeeping changes documentation only; the earlier 306-test result is not a
+new test run, and external state was not rechecked for this wording update.
+Documentation validation checked 148 local file/section links across 13 changed
+documents and the three retained legacy anchors. All passed; `git diff --check`
+also passed.
+
+## Sandbox source delivery, September 10
+
+The accepted implementation and documentation were committed without signing as
+`af5117f29cad4c036fc509b4ff5c0af557c8c5df` on `codex/sandbox-service-checks` and
+submitted in [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45).
+That PR is the source of truth for its current review, check, and merge state.
+The existing [306-test local acceptance](./testing/service-database-2026-09-10.md)
+precedes the PR; it does not substitute for GitHub CI.
+
+The first [PR CI run](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34470317468)
+passed on source `af5117f`: 306 tests and the full check command on each of Node
+20, 22, and 24, followed by the required `Check package` gate. Publication was
+skipped. Later commits require their own passing checks; the PR records those
+results and review resolution. The delivery-note update passed 155 local links
+across 13 documents and `git diff --check`.
+
+Before submission, remote `main` still matched the recorded `430cae6` baseline
+and the test backend's runtime branch still matched the configured
+`18d33510d925b0e5ce30168e888cc7586f532749` pin. Main protection requires
+`Check package`, an up-to-date branch, and resolved review threads, with no
+bypass actors. This delivery does not publish npm or deploy product code.
+
+PR review added guards for legacy-plan resume, malformed report steps, reserved
+frontend service names, and complete workflow-run reconciliation. The workflow
+search uses the saved actor and creation time with a clock-skew margin; truncated,
+changing, or oversized results stay unverified. Fixture preparation also saves
+its exact branch before push/PR creation and reconciles a lost PR response.
+The command guide now states the GitHub CLI 2.97.0 minimum for service logs.
+All 42 focused tests and the full **314-test Node 24.19.0 check** passed locally
+after these changes. A read-only GitHub check at 11:36 UTC recovered and verified
+the original passing run `34456463421` using the updated actor/time-filtered query;
+it issued no dispatch. The seven original live ticket cases remain dated evidence
+at their original runtime pin, rather than new runs of every review edge case.
+
+Runtime synchronization completed separately in sample
+[frontend PR #11](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/11),
+merged at `b2a43d5a362116a371aae86aa17d23be146cf1f6`, and
+[backend PR #13](https://github.com/6529-Collections/release-coordinator-test-backend/pull/13),
+merged at `49d92ac76c9bf91520c82010afbae7f9e0fdbb39` on September 10.
+Both passed `Sandbox check` and CodeRabbit before merge. Each changes only the
+shared report-step guard; all five bundled runtime files were compared with the
+Coordinator source and matched in both merged trees. The fixed backend runtime
+branch was advanced without force and read back at `49d92ac`; the Coordinator
+configuration now pins that full commit. This is sample-runtime delivery, not
+a product deployment or a repeat of the complete live ticket matrix.
+
+## Planned later stage: batch selection and tests, September 9
 
 **Documentation only; not implemented or tested.** The
 [batch design](./design.md#proposed-batch-testing-and-selection) now puts full
@@ -96,9 +221,11 @@ ticket after the selected release; a failure against the new base may then need
 a correction. Group failures, infrastructure problems, and testing limits do
 not automatically make every ticket action-needed.
 
-The Coordinator code-check delivery is tracked above. Subsequent development
-will implement selection across sandbox tickets and add meaningful sample PR
-checks on their combined code. The [planned acceptance cases](./merge-rehearsal-testing.md#planned-batch-acceptance)
+The Coordinator code-check delivery is complete. The one-ticket service/database
+matrix has passed its recorded local and live cases; merge that extension, then
+implement selection across sandbox tickets and reuse those meaningful sample PR
+checks on their combined code. Start with
+requests without database changes. The [planned acceptance cases](./merge-rehearsal-testing.md#planned-batch-acceptance)
 cover splitting, incompatibility, limits, exact inputs, and ticket presentation.
 Numeric limits, tie-breaking, dependencies between tickets, saved attempt state,
 runner permissions/results, temporary PR cleanup, and batch reason codes still
@@ -107,7 +234,7 @@ before release mutations; their listed later execution differences remain open.
 
 The September 9 batch-design update changed documentation only. Its existing
 single-ticket behavior and 255-test/live-sandbox evidence remain the prior milestone. There is no
-batch executor, combined application CI, product merge, or deployment proof.
+batch executor, multi-ticket application CI, product merge, or deployment proof.
 
 ## Implemented and verified
 
@@ -179,7 +306,8 @@ dependency validation. It uses a fixed GraphQL read query and catalog GETs.
 Neither command chooses the latest wanted request or approves a deployment.
 
 Neither read-only command changes tickets. The local `inbox:run` combines
-inspection, rehearsal, and ticket decisions. Its old separate operator commands
+inspection, rehearsal, supported sandbox service checks, and ticket decisions.
+Its old separate operator commands
 have been removed. Both updated
 readers select all open `release-request` Issues, including tickets without
 `pending`. The merged intake workflow's `status:received` setup was verified
@@ -232,8 +360,11 @@ receipts remain separate from real request evidence.
 We can continue developing and testing in the sandbox. The merged combined
 workflow uses fresh rehearsal reports to update the same ticket. The Coordinator
 code-check delivery is tracked above.
-The [next batch stage](#planned-next-stage-batch-selection-and-tests-september-9)
-is documented but unimplemented. Real-project live acceptance, the larger release
+The [service/database stage](#sandbox-services-and-database-september-10) is
+implemented with local and live acceptance evidence; its Coordinator source
+delivery is tracked above. The later
+[batch stage](#planned-later-stage-batch-selection-and-tests-september-9) remains
+documented but unimplemented. Real-project live acceptance, the larger release
 worker, execution permissions, deployment evidence sources, and recovery remain
 later work.
 

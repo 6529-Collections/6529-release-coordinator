@@ -5,9 +5,10 @@
 This is a standalone project for designing and implementing a new release
 coordinator from the ground up. Request submission, local inbox inspection,
 read-only readiness observations, and one manual `inbox:run` workflow are
-implemented. That workflow inspects tickets, rehearses suitable exact PRs, and
-updates the same ticket and journal. Release execution remains a design;
-a passing rehearsal never authorizes it.
+implemented. That workflow inspects tickets, rehearses suitable exact PRs, runs
+supported sandbox service/database checks, and updates the same ticket and
+journal. See progress for local implementation versus merged and live evidence.
+Release execution remains a design; passing checks never authorize it.
 
 It is intended to coordinate releases across:
 
@@ -62,11 +63,18 @@ from first principles.
   Profile selection never grants permissions or promotes sandbox proof into real
   evidence. Check progress for offline versus actual live acceptance.
 - `docs/merge-rehearsal-testing.md` owns the sandbox rehearsal scope,
-  its test repositories, test matrix, and finish line. Check progress for local
+  its test repositories, test matrices, and finish lines. The current sandbox stage
+  tests one ticket's services and database behavior before future multi-ticket batching.
+  Its service/database section owns the small programs, temporary MySQL baseline,
+  declared-versus-observed database answer, ordered steps, retry/stop evidence,
+  and cleanup. Keep the shared Coordinator logic and explicit profile boundary;
+  sandbox actions never enable real deployment. Check progress for local
   implementation, live coverage, and GitHub account limitations.
   Keep test manifests separate from verified inbox requests; do not widen the
   public schema or production repository allowlist to accommodate test fixtures.
-  The plan is not implementation or permission to create external resources.
+  Documentation is not permission to create external resources. Keep the runtime
+  bundle identical to its source, verify its fixed branch/commit, and preserve
+  service attempts in the v3 journal before dispatch.
 - `docs/design.md` contains the proposed execution design and unresolved
   differences with the full process diagram. Settle those choices before
   implementing release execution. Its batch-testing section owns the proposed

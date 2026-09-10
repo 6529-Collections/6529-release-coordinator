@@ -2,6 +2,11 @@ import { createHash, randomUUID } from "node:crypto";
 import { realProfile } from "./profiles.mjs";
 import { stateBranch, stateFile } from "./coordinator-github.mjs";
 import {
+  serviceStatuses,
+  validateServicePlan,
+  verifyServiceReport
+} from "./service-contract.mjs";
+import {
   response,
   statuses,
   reasons,
@@ -26,8 +31,8 @@ export const receiptHash = (issue) =>
   digest({ id: issue.id, number: issue.number, body: issue.body });
 const validSha = (value) =>
   typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
-export const inboxWorkflow = "inbox-run-v2";
-const workflows = ["inbox-run-v1", inboxWorkflow];
+export const inboxWorkflow = "inbox-run-v3";
+const workflows = ["inbox-run-v1", "inbox-run-v2", inboxWorkflow];
 
 export function validateJournal(state, profile = realProfile) {
   if (
@@ -45,7 +50,8 @@ export function validateJournal(state, profile = realProfile) {
           "parent",
           "lock",
           "tickets",
-          "workflow"
+          "workflow",
+          "service_attempts"
         ].includes(key)
     ) ||
     (state.workflow !== undefined && !workflows.includes(state.workflow))
@@ -56,6 +62,35 @@ export function validateJournal(state, profile = realProfile) {
     (!state.lock.run_id || !state.lock.token || !state.lock.actor?.id)
   )
     throw new Error("Invalid inbox lock.");
+  if (state.service_attempts !== undefined) {
+    if (
+      state.workflow !== inboxWorkflow ||
+      !state.service_attempts ||
+      Array.isArray(state.service_attempts) ||
+      Object.keys(state.service_attempts).length > 1000
+    )
+      throw new Error("Unsupported service attempt history.");
+    for (const [hash, attempt] of Object.entries(state.service_attempts)) {
+      if (
+        hash !== attempt.plan_hash ||
+        hash !== attempt.plan?.fingerprint ||
+        !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(attempt.id) ||
+        !attempt.actor?.id ||
+        !["prepared", "dispatching", "running", "completed"].includes(
+          attempt.state
+        ) ||
+        attempt.plan.binding?.repository !== profile.inbox.full_name ||
+        profile.name !== "sandbox" ||
+        (attempt.workflow_run_id !== null &&
+          (!Number.isSafeInteger(attempt.workflow_run_id) ||
+            attempt.workflow_run_id < 1))
+      )
+        throw new Error("Invalid service attempt identity or profile.");
+      validateServicePlan(attempt.plan);
+      if (attempt.result)
+        verifyServiceReport(attempt.result.report, attempt.plan, attempt.id);
+    }
+  }
   for (const [number, ticket] of Object.entries(state.tickets)) {
     if (
       !/^[1-9][0-9]*$/u.test(number) ||
@@ -105,6 +140,13 @@ export function validateJournal(state, profile = realProfile) {
           typeof record.decision.rehearsal.message !== "string")
       )
         throw new Error("Invalid rehearsal decision history.");
+      if (
+        record.decision.services &&
+        (!serviceStatuses.includes(record.decision.services.status) ||
+          typeof record.decision.services.message !== "string" ||
+          state.workflow !== inboxWorkflow)
+      )
+        throw new Error("Invalid service decision history.");
       previous = hash;
     }
     if (
@@ -251,7 +293,10 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
       if (
         state.workflow &&
         state.workflow !== workflow &&
-        !(state.workflow === "inbox-run-v1" && workflow === inboxWorkflow)
+        !(
+          ["inbox-run-v1", "inbox-run-v2"].includes(state.workflow) &&
+          workflow === inboxWorkflow
+        )
       )
         throw new Error(
           "This inbox requires the combined inbox:run workflow; do not use an older processor."

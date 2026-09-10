@@ -1,10 +1,10 @@
 # Local Coordinator commands
 
 This private workspace runs manually on your machine and exits. `inbox:run`
-checks requests, rehearses a suitable ticket's exact PRs, and updates that same
-ticket with reasons and evidence. Select `sandbox` or `real` explicitly.
+checks requests, rehearses a suitable ticket's exact PRs, runs supported sandbox
+service checks in GitHub Actions, and updates that ticket with reasons and evidence. Select `sandbox` or `real` explicitly.
 Start with [Run the ticket workflow](#run-the-ticket-workflow) below.
-No server, timer, or deployment worker is started.
+No persistent Coordinator server, timer, or deployment worker is started.
 
 `inbox:read` and `readiness:check` remain read-only diagnostics. The
 [ticket rules](../../docs/inbox-processing.md) define labels, ownership, reasons,
@@ -311,8 +311,8 @@ Initial blockers skip planning/rehearsal. Missing destination configuration or
 GitHub evidence gets `reason:merge-plan-unavailable`; an impossible generated
 scope/order gets `reason:merge-plan-invalid`. The comment explains what failed.
 A pass adds `rehearsal:passed`, with exact destinations and resulting trees.
-The ticket still waits for future release execution. Combined code has not been
-built or deployed. Conflicts, unknown evidence, and changed inputs retain their
+The ticket still waits for future release execution. Git success alone does not
+prove application behavior or deployment. Conflicts, unknown evidence, and changed inputs retain their
 separate rehearsal reasons. Saved reports cannot be imported.
 
 Omit the ticket selector to process all selected tickets through the same flow:
@@ -324,12 +324,46 @@ RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 Each suitable ticket gets a separate plan; different tickets are not merged
 together. Use `npm run --silent inbox:run` to suppress npm's banner for JSON.
 
-Combining tickets and testing smaller groups after a failure is
-[planned work](../../docs/design.md#proposed-batch-testing-and-selection).
-No batch-selection flags, temporary GitHub PR creation, or combined application
-checks exist in this command. The plan keeps this operator entry point and
-places full checks at the batch level, with evidence-based outcomes for excluded
-tickets. It does not change the command's current permissions or behavior.
+For a complete supported sandbox ticket, the same command continues through
+[service and database checks](../../docs/merge-rehearsal-testing.md#service-and-database-acceptance).
+It captures exact sample code from the rehearsed trees, inspects the database
+answer, saves its plan and unique attempt, and dispatches the pinned backend
+workflow. The GitHub account needs Actions dispatch access to the test backend
+and read access to its jobs/logs, in addition to the existing inbox permissions.
+No local Docker installation is needed for `inbox:run`.
+Sandbox service logs require GitHub CLI **2.97.0 or later** because the reader
+uses `gh api --allow-escape-sequences` ([upstream release](https://github.com/cli/cli/releases/tag/v2.97.0)).
+Raw logs stay in memory and are never printed to the operator's terminal.
+
+The job runs isolated temporary MySQL and sample programs in the test backend
+repository's GitHub Actions runner. It uses fake data and removes the owned
+database after recording the result; see [database location and scope](../../docs/merge-rehearsal-testing.md#where-the-test-database-lives).
+The controller checks
+the workflow identity, runtime commit, actor, attempt, exact plan, service order,
+versions, expected data/output, and cleanup. It rechecks the ticket, PR gates and
+main commits before and after execution. A stale or missing result cannot pass.
+`services:passed` remains separate from `rehearsal:passed` and never closes a
+release ticket. Reports live under `.release-coordinator/service-checks/sandbox/`.
+
+The first stage requires all four explicit steps: `dbMigrationsLoop`, `worker`,
+`api`, and `frontend`, in one staging ticket. Missing prerequisites are held;
+there is no existing-runtime prerequisite resolver. Unknown changed file patterns
+are held. These small fixture rules do not inspect real product databases.
+
+Unchanged retries reuse and reverify the saved workflow. A lost dispatch response
+is reconciled by its unique attempt name; it never triggers a blind second POST.
+A pending or uncertain attempt stays in the journal for a later explicit run.
+The controller polls for roughly ten minutes; the workflow's ten-minute job limit
+starts after a runner is assigned. A queue delay can therefore make the command
+exit `2` while its workflow is still pending. Re-run the same ticket to reconcile
+that saved attempt; do not dispatch a replacement workflow. A wait is not evidence
+that the requested code failed.
+`real` retains inspection/Git rehearsal and reports services as `not-run`.
+
+[Combining tickets](../../docs/design.md#proposed-batch-testing-and-selection)
+is still future work. There are no batch-selection flags or per-candidate GitHub
+PR creation in this command. Later full checks belong at the batch level by
+default, starting with requests without database changes.
 
 The default selection is every open `release-request` Issue plus ticket IDs
 already recorded in the journal, even if someone removed their labels. Both
@@ -394,9 +428,9 @@ independent commit history. **Never merge it into main, delete it, or force-push
 it.** It is runtime state, not a source branch. See the
 [storage and trust contract](../../docs/inbox-processing.md#storage-and-trusted-writers).
 
-Policy `2026-09-09.4` generates plans internally. The journal marker is now
-`workflow: "inbox-run-v2"`. First use upgrades a legacy/v1 journal without
-rewriting its decisions. Old writers reject v2 before changes. Keep the marker
+Policy `2026-09-10.1` generates Git and supported sandbox service plans internally. The journal marker is now
+`workflow: "inbox-run-v3"`. First use upgrades a legacy/v1/v2 journal without
+rewriting its decisions. Older writers reject the v3 marker before changes. Keep the marker
 and history intact; use current code instead of removing unfamiliar fields or
 reasons. Read-only diagnostics and the public CLI do not change.
 
@@ -433,8 +467,8 @@ without known disposition, or externally rewritten state before proceeding.
 
 | Exit | Ticket workflow result |
 | --- | --- |
-| `0` | All selected tickets have verified presentation and are closed/preserved or have a saved passing rehearsal. Waiting for future execution is still expected after a pass. |
-| `1` | A selected ticket has a blocker or awaits initial evidence. |
+| `0` | All selected tickets have verified presentation and are closed/preserved or have a saved passing rehearsal and any supported sandbox service checks passed. Waiting for future execution is still expected after a pass. |
+| `1` | A selected ticket has a blocker, a failed sandbox service check, or awaits initial evidence. |
 | `2` | Usage error, unavailable planning evidence, unknown rehearsal, unverified presentation, or interrupted/partial processing. |
 | `3` | Rehearsal evidence changed during the run; no current pass is claimed. |
 

@@ -22,6 +22,7 @@ import {
   safeRehearsalError
 } from "./rehearsal.mjs";
 import { runRehearsalProcess } from "./rehearsal-process.mjs";
+import { captureServiceSource } from "./service-plan.mjs";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 export async function readRehearsalManifest(filename) {
@@ -148,6 +149,7 @@ export async function runMergePlan(
     save = saveRehearsalReport,
     revision = codeRevision,
     signal,
+    captureRepository,
     timeout = 180_000
   } = {}
 ) {
@@ -161,6 +163,7 @@ export async function runMergePlan(
     const report = await run(plan, {
       github,
       signal: controller.signal,
+      captureRepository,
       revision: await revision(),
       createGit: (options) =>
         createRehearsalGit({ ...options, repositories: profile.repositories })
@@ -217,7 +220,14 @@ export async function rehearseInboxTicket(
     );
   }
   const plan = inboxMergePlan(input, fresh, profile);
-  return runMergePlan(plan, { ...options, profile, get });
+  return runMergePlan(plan, {
+    ...options,
+    profile,
+    get,
+    ...(profile.name === "sandbox"
+      ? { captureRepository: captureServiceSource }
+      : {})
+  });
 }
 
 // Developer fixture harness only: no ticket input or Issue-writing mode.

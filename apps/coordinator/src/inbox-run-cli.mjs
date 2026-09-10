@@ -5,6 +5,7 @@ import { createReadinessGitHub } from "./readiness-github.mjs";
 import { processInbox } from "./inbox-processor.mjs";
 import { rehearseInboxTicket } from "./rehearsal-runner.mjs";
 import { generateInboxPlan } from "./inbox-merge-plan.mjs";
+import { coordinateServices } from "./inbox-services.mjs";
 
 const help = `Check requests, rehearse suitable tickets, and update the same Issues and history.
 
@@ -15,6 +16,7 @@ RELEASE_COORDINATOR_PROFILE=sandbox|real npm run inbox:run -- --resume RUN_ID [-
 Writes managed labels, titles, submitter assignment, one status comment, justified
 Issue closures, and the selected inbox's codex/inbox-state journal branch. Runs once.
 Requires Node.js 20+, Git 2.38+, and gh with inbox write and selected PR-repository read access.
+Sandbox service checks also require gh 2.97.0+ and Actions write access to the pinned sample backend.
   --issue NUMBER  Process only this Issue. Default: open requests plus known history.
                   Each suitable ticket gets its own automatically saved merge plan.
                   Uses ticket dependencies/order and the profile's current main commits.
@@ -29,7 +31,9 @@ Requires Node.js 20+, Git 2.38+, and gh with inbox write and selected PR-reposit
 Exit codes: 0 = closed/preserved tickets or a saved passing rehearsal;
 1 = blocked or waiting for initial evidence; 2 = usage, unknown rehearsal/planning,
 unverified presentation, or interrupted/partial processing; 3 = stale rehearsal.
-Only temporary local Git merges occur. No product merge, build, deployment, or release authorization.
+Sandbox continues suitable complete sample tickets through isolated MySQL/service checks
+on GitHub Actions and reuses verified saved attempts. Real mode only rehearses Git.
+No product merge, deployment, or release authorization.
 `;
 
 export async function runInboxRunCli(
@@ -42,6 +46,7 @@ export async function runInboxRunCli(
     run = processInbox,
     plan = generateInboxPlan,
     rehearse = rehearseInboxTicket,
+    services = coordinateServices,
     signal,
     stdout = (value) => process.stdout.write(value),
     stderr = (value) => process.stderr.write(value)
@@ -107,6 +112,7 @@ export async function runInboxRunCli(
       identity: client.identity,
       get,
       github,
+      services,
       plan: (entry) => plan(entry, { profile, signal }),
       rehearsal: (entry, plan) =>
         rehearse(entry, plan, { profile, get, signal })
@@ -117,22 +123,32 @@ export async function runInboxRunCli(
         : `Inbox run ${report.run_id}; no release authorized.\n${report.requests
             .map(
               (item) =>
-                `#${item.issue_number}: ${item.status}; ${item.applied ? "verified" : "left unchanged"}; rehearsal ${item.rehearsal?.status ?? "not-run"}${item.reasons?.length ? `; ${item.reasons.join(", ")}` : ""}${item.rehearsal?.report_file ? `\nReport: ${item.rehearsal.report_file}` : ""}${item.assignment === "unavailable" ? "; submitter assignment unavailable; see status comment for lookup" : ""}`
+                `#${item.issue_number}: ${item.status}; ${item.applied ? "verified" : "left unchanged"}; rehearsal ${item.rehearsal?.status ?? "not-run"}; services ${item.services?.status ?? "not-run"}${item.reasons?.length ? `; ${item.reasons.join(", ")}` : ""}${item.rehearsal?.report_file ? `\nReport: ${item.rehearsal.report_file}` : ""}${item.services?.report_file ? `\nService report: ${item.services.report_file}` : ""}${item.assignment === "unavailable" ? "; submitter assignment unavailable; see status comment for lookup" : ""}`
             )
             .join("\n")}\n`
     );
     if (
       report.requests.some(
-        (item) => !item.applied || item.rehearsal?.status === "unknown"
+        (item) =>
+          !item.applied ||
+          item.rehearsal?.status === "unknown" ||
+          item.services?.status === "unknown"
       )
     )
       return 2;
-    if (report.requests.some((item) => item.rehearsal?.status === "stale"))
+    if (
+      report.requests.some(
+        (item) =>
+          item.rehearsal?.status === "stale" ||
+          item.services?.status === "stale"
+      )
+    )
       return 3;
     return report.requests.some(
       (item) =>
         !["closed", "completed"].includes(item.status) &&
-        item.rehearsal?.status !== "passed"
+        (item.rehearsal?.status !== "passed" ||
+          item.services?.status === "blocked")
     )
       ? 1
       : 0;

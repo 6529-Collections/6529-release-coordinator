@@ -1,8 +1,8 @@
 # Proposed release execution design
 
 **Draft, not implemented release behavior.** The live system submits requests;
-the local app verifies intake, inspects readiness, organizes tickets, and
-rehearses merges.
+the local app verifies intake, inspects readiness, organizes tickets, rehearses
+merges, and runs supported one-ticket sandbox service/database checks.
 It does not authorize or execute releases. See [progress](./progress.md) for
 that boundary.
 This document retains the written execution baseline formerly embedded in the
@@ -14,7 +14,8 @@ separate step-by-step draft; it currently differs in the ways listed below.
 The implemented smaller stage is [inbox processing](./inbox-processing.md): central
 intake defaults, clear ticket statuses and reasons, submitter ownership,
 recorded decisions, and migration of existing tickets. `inbox:run` now joins
-initial inspection, local rehearsal, and ticket updates in one manual process.
+initial inspection, local rehearsal, supported sandbox service checks, and
+ticket updates in one manual process.
 See progress for local, merge, and runtime evidence.
 
 The current intake boundary excludes requests whose PRs are all already merged:
@@ -28,8 +29,9 @@ merge must not trigger this intake closure rule. Inbox receipt acceptance and
 ticket processing are not execution ownership.
 
 That document owns the first-processing contract. It keeps the existing CLI input
-and read-only commands; `inbox:run` combines inspection, rehearsal, and Issue
-updates. It does not authorize release execution or settle the choices below.
+and read-only commands; `inbox:run` combines inspection, rehearsal, supported
+sandbox checks, and Issue updates. It does not authorize release execution or
+settle the choices below.
 The full execution design's lane, batch, and worker database should not be
 introduced merely to organize tickets. The smaller processing stage still
 uses its own GitHub decision journal, not the future worker database.
@@ -44,23 +46,54 @@ inbox ticket and generate the destination/merge plan internally; private test ma
 remain sandbox-only. The same engine checks exact commits and merge order,
 with separate evidence for conflicts, CI/review blockers, and changing inputs.
 
-The original profiled engine is merged and has live sandbox proof. The new
-combined command uses its fresh reports to update the same ticket, with distinct
-passed/blocked/unknown/stale outcomes. Real-project live acceptance remains
+The original profiled engine and unified command are merged and have live
+sandbox proof. The command uses fresh reports to update the same ticket, with
+distinct passed/blocked/unknown/stale outcomes. Real-project live acceptance remains
 outstanding. See [progress](./progress.md) for exact implementation, test, and
-merge evidence. No product branches change and no builds or deployments run.
+merge evidence. Git rehearsal changes no product branches and runs no builds
+or deployments; the sandbox service extension below runs application tests.
 
 This scope requires explicit destinations and one documented merge method.
 It does not settle the real release lane, timing of `main` changes, or artifact
 policy below. The ticket contract now owns rehearsal outcomes; later release
 execution still requires its own decisions and evidence.
 
+<a id="next-bounded-stage-sandbox-services-and-database"></a>
+
+## Sandbox services and database
+
+**Implemented and tested September 10, 2026; sandbox only.** Source delivery is
+tracked in [progress](./progress.md#sandbox-source-delivery-september-10).
+One complete sandbox ticket exercises small database, worker, API, and
+frontend steps. The [service/database guide](./merge-rehearsal-testing.md#service-and-database-acceptance)
+owns the fixtures, temporary MySQL baseline, test matrix, evidence, and finish line.
+The real backend's catalog, sequential deployment instructions, database handler,
+and existing temporary-MySQL tests inform this example; the guide records pinned
+sources. The local Coordinator inspects the sample database definitions and
+runs the sample service checks through a pinned GitHub workflow. The controlled
+local and live cases have their expected results recorded in progress; real
+execution remains unimplemented.
+
+Keep one `inbox:run` workflow and shared decision logic. Sandbox actions
+operate on isolated temporary resources, with exact service versions and results
+verified before dependents start. `database_change: no` still uses the existing
+database; `yes` needs an identified and verified change; unknown or contradictory
+evidence holds execution. Preserve failures, partial effects, and safe retry
+decisions in the same ticket's history without claiming release completion.
+
+The shared profile selects configuration and available actions, not permissions.
+Real execution adapters remain absent. Testing the order and data behavior in
+sandbox does not settle the real lane, merge timing, builds, production database
+inspection, or deployment/recovery choices. The later batch stage still starts
+with requests without database changes.
+
 ## Proposed batch testing and selection
 
 **Direction recorded September 9, 2026; not implemented.** Today `inbox:run`
-processes each ticket separately, reads existing PR checks, and tries local Git
-merges. It does not combine different tickets, run application checks on their
-combined code, or open temporary PRs. The next development stage stays in the
+processes each ticket separately, reads existing PR checks, tries local Git
+merges, and runs supported sandbox application checks for that ticket. It does
+not combine different tickets, test their combined code, or open temporary PRs.
+This later stage follows the one-ticket service/database matrix and stays in the
 two sample repositories and test inbox. Extend the same operator workflow;
 do not add a separate operator command or manual plan file.
 
@@ -142,8 +175,9 @@ exclusions, parent attempt, dependency groups/order, exact inputs, test plan, an
 remaining budget. Save workflow identities, links, results, and cleanup afterward.
 Resuming must preserve those inputs and limits. Do not retest an identical
 candidate merely to consume another attempt; any evidence reuse requires the
-same complete inputs and fresh required gates. Current `inbox:run` still runs
-fresh rehearsals; this paragraph is a future batch-search requirement.
+same complete inputs and fresh required gates. Current `inbox:run` runs fresh
+Git rehearsals and can reuse its verified saved sandbox service attempt. Batch
+search and its candidate cache remain future work.
 
 ### When A and B pass alone but fail together
 
@@ -194,12 +228,18 @@ it. If only an inseparable group has been tested, name the group and unresolved
 attribution instead of guessing one culprit. Infrastructure and evidence problems
 belong to the responsible maintainer, not automatically to the submitter.
 
-### Next sandbox milestone
+### Sequence before the batch milestone
 
-First share the committed one-ticket workflow through review/CI and merge.
-Then define and implement selection across several sandbox tickets, keeping the
-existing ticket checks. Add small sample programs and meaningful PR checks to
-the two test repositories, then run those checks on selected combined candidates.
+The one-ticket workflow and this repository's code-check gate are merged.
+The [one-ticket service/database extension](./merge-rehearsal-testing.md#service-and-database-acceptance)
+has local and live sandbox acceptance evidence. Its source delivery is tracked
+in [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45).
+Complete normal PR checks and merge before adding
+selection across several sandbox tickets, keeping the existing ticket checks.
+Reuse the small sample programs and meaningful PR checks
+from that earlier stage on selected combined candidates. Full checks belong on
+the chosen batch by default; the earlier one-ticket acceptance exercise does not
+add another mandatory full run for every incoming ticket.
 Use the [planned batch acceptance cases](./merge-rehearsal-testing.md#planned-batch-acceptance)
 to prove splitting, attribution, deferred-ticket handling, and exact-input rules.
 No product merge, deployment, npm publication, or automatic release ownership is
@@ -512,7 +552,7 @@ For each release, the Coordinator:
 
 1. applies the saved database change when the batch has one;
 2. checks that the staging database change worked;
-3. deploys the saved backend build;
+3. deploys the selected backend services from saved builds in dependency order, verifying each before its dependents;
 4. deploys the saved frontend build after the backend is ready;
 5. confirms the exact frontend and backend versions;
 6. tests the important user journeys;
@@ -528,8 +568,8 @@ Production receives the same saved builds that passed staging.
 The Coordinator:
 
 1. checks and saves the current production versions and last working builds;
-2. applies the saved database change when the batch has one;
-3. deploys the backend build;
+2. applies and verifies the saved database change when the batch has one;
+3. deploys the selected backend services from saved builds in dependency order, verifying each before its dependents;
 4. deploys the frontend build after the backend is ready;
 5. gives the release to more users slowly when the platform supports it;
 6. confirms the exact production versions;
@@ -565,15 +605,33 @@ reserved until recovery is complete.
 
 ### Database changes
 
-The request says whether the database changes. The Coordinator also checks the
-changed files. A yes from either source means database change.
+These are proposed real-release rules. The sandbox implements their limited
+sample equivalent; real database inspection/execution remains absent. The request's `database_change` answer covers release-specific schema
+changes and one-off data changes. Normal application reads/writes still happen
+for `no` requests; a test database must still be prepared.
+
+Compare the declaration with inspected changes at the exact saved commits using
+trusted rules. Include entity/schema definitions and one-off data-change code,
+not just a migration directory. A yes from either source means database change.
+An `unknown` answer, incomplete coverage, or missing change identity holds
+execution. Absence of a familiar filename does not prove `no`. A declared `no`
+contradicted by inspected code is recorded as database-changing and held for a
+corrected request; never modify the accepted receipt or silently run it as `no`.
 
 The same saved database change runs in staging first and production later. It
-runs before the backend deployment in this first design. Each environment must
-report a clear result.
+must finish and be verified before dependent backend services start. In the real
+backend this may involve deploying and invoking `dbMigrationsLoop`; that adapter
+and its proof remain to be designed, rather than assuming a separate SQL command.
+Each environment must report the exact change, starting state, and verified result.
+
+Only selected services run in dependency order. Omitted prerequisites need exact
+existing-state proof; do not add them automatically. Retry/resume must verify
+prior effects and avoid applying the same one-off data change twice. Unknown
+partial state stops dependent work and requires reconciliation.
 
 A database-changing release never recovers automatically. If it fails after the
 database changed, the Coordinator saves the exact state and waits for a person.
+Cleaning up a disposable sandbox database proves test isolation, not real rollback.
 
 ### A waiting PR moves
 
@@ -689,9 +747,10 @@ Version one should include:
 - when the GitHub Issue inbox should move into the Coordinator database;
 - GitHub App permissions and emergency access;
 - maximum release size;
-- the batch implementation choices listed under the next sandbox milestone;
+- real execution equivalents for the sandbox workflow/result, retry and cleanup contracts;
+- the batch implementation choices listed under the batch milestone sequence;
 - exact merge implementation and repository rules;
-- database change commands and version proof;
+- real database inspection coverage, change commands, and version/effect proof;
 - gradual rollout support;
 - runtime version proof for the frontend and backend;
 - production health signals and limits;

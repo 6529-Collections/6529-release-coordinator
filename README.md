@@ -2,7 +2,8 @@
 
 The Coordinator is being built to handle releases across the frontend and
 backend. **Request intake is live. One local command now checks a ticket,
-rehearses its suitable PRs, and updates that same ticket with the result.
+rehearses its suitable PRs, runs supported sandbox service/database checks,
+and updates that same ticket with the result.
 Sandbox and real profiles share the same code. Automatic release execution
 is not built yet.**
 
@@ -20,19 +21,23 @@ work are tracked in [Progress and next steps](./docs/progress.md).
 
 Use one command with an explicit profile and ticket:
 
+Sandbox service checks require GitHub CLI 2.97.0 or later; see the
+[command requirements](./apps/coordinator/README.md#run-the-ticket-workflow).
+
 ```sh
 RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --json
 ```
 
-It runs this sequence on your machine and exits:
+The local controller runs this sequence, then exits:
 
 1. Verify the saved ticket and inspect its PRs, checks, reviews, and dependencies.
 2. Retire clearly outdated or already-merged requests; give other blockers a reason.
 3. For a suitable ticket, create and save its merge plan from the ticket and current configured destinations, then try its exact PRs in temporary local Git repositories.
-4. Save the result and update the same ticket's labels, status comment, and decision history.
+4. For a complete supported sandbox ticket, run the database, worker, API, and frontend checks on an isolated GitHub Actions runner.
+5. Save the results and update the same ticket's labels, status comment, and decision history.
 
 A passing rehearsal adds `rehearsal:passed`. The ticket still waits for the future
-release worker; nothing has been built or deployed. Conflicts and missing evidence
+release worker. Sandbox application results have their own `services:*` label; no product deployment occurs. Conflicts and missing evidence
 get visible reasons and next actions. Repeating unchanged work rechecks the facts
 without adding duplicate comments or decisions.
 
@@ -47,9 +52,9 @@ rehearsal. Different tickets are not merged together.
 entry points have been removed. `inbox:read` and `readiness:check` remain read-only
 diagnostics. Submission still uses the public CLI or private `request:submit`.
 
-The command's GitHub writes are limited to the selected inbox's managed ticket
-presentation and `codex/inbox-state` history, where plans are saved before Git
-work. It also creates temporary local Git repositories and saves rehearsal
+The command writes the selected inbox's managed ticket presentation and
+`codex/inbox-state` history, where plans are saved before Git work. In sandbox it
+also dispatches the fixed, pinned service-check workflow in the test backend. It also creates temporary local Git repositories and saves rehearsal
 reports with requested PR versions and destinations in profile-specific local
 paths before updating the ticket. An `already-merged` closure says the Coordinator will
 not handle that request; it does not claim deployment. Mixed merged/open requests
@@ -62,13 +67,39 @@ still tests the merge engine against sample PRs, including deliberate failures.
 Test manifests cannot enter the ticket workflow or either decision journal.
 The public npm package and request schema are unchanged.
 
-## Planned next stage: test a batch of tickets
+## Sandbox services and database
 
-**Not implemented:** keep the existing checks for each ticket, select complete
-compatible requests, and run normal PR checks on their combined code. Avoid
+The local implementation now extends the same `inbox:run` command with one
+complete sandbox ticket: temporary MySQL with fake rows, a database change when
+needed, a worker, an API, and a frontend output check. Steps run in dependency
+order; a failed prerequisite stops its dependents.
+
+`no` means no release-specific database change; the application still uses a
+database. `unknown`, incomplete inspection, and a false `no` hold execution.
+Exact inputs and workflow attempts are saved. Retrying the same input verifies
+its existing run instead of dispatching another one.
+
+The controller runs locally; the sample programs and temporary database run in
+the test backend repository's GitHub Actions job. Each run uses fake data and
+removes its owned database after saving the result. A sandbox ticket's `staging`
+target does not connect to the real product's staging database. The
+[sandbox guide](./docs/merge-rehearsal-testing.md#service-and-database-acceptance)
+owns runtime pins, tests and limits. [Progress](./docs/progress.md) distinguishes
+local implementation from merged code and live acceptance. The one-ticket
+acceptance cases have passed; [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
+tracks source delivery, review, and CI. Real execution adapters remain absent; switching
+profiles does not enable deployment.
+
+## Planned later stage: test a batch of tickets
+
+After the tested service/database extension is merged, keep the existing checks
+for each ticket, select complete compatible requests, and run normal PR checks on
+their combined code. Avoid
 another full build/test run per ticket by default. If a batch fails, try smaller
 groups within time/attempt limits, preserving dependencies. Test the final
 selected combination; do not assume separately passing groups work together.
+Batching is unimplemented. Start with requests without database changes;
+passing the earlier database tests does not enable database-changing batches.
 
 Excluded tickets stay visible with a reason and next action. If A and B pass
 alone but fail together, use a saved priority order to select one independent
@@ -126,6 +157,7 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 | Understand the ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
 | Select sandbox or real, submit a request, and run its ticket workflow | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
 | Understand the sandbox merge-rehearsal test matrix and evidence | [Merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) |
+| Understand the implemented one-ticket service/database checks and evidence | [Service and database acceptance](./docs/merge-rehearsal-testing.md#service-and-database-acceptance) |
 | Review proposed batching, limited retries, and excluded-ticket handling | [Batch design](./docs/design.md#proposed-batch-testing-and-selection) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |

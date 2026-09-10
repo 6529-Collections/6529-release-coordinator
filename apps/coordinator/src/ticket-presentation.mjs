@@ -37,7 +37,12 @@ export const reasons = [
   "merge-plan-unavailable",
   "rehearsal-blocked",
   "rehearsal-unverified",
-  "rehearsal-stale"
+  "rehearsal-stale",
+  "database-unverified",
+  "database-declaration-mismatch",
+  "service-checks-failed",
+  "service-checks-unverified",
+  "service-checks-stale"
 ];
 export const managedLabels = new Set([
   "release-request",
@@ -48,7 +53,8 @@ export const managedLabels = new Set([
   "component:backend",
   ...statuses.map((s) => `status:${s}`),
   ...reasons.map((s) => `reason:${s}`),
-  ...rehearsalStatuses.map((s) => `rehearsal:${s}`)
+  ...rehearsalStatuses.map((s) => `rehearsal:${s}`),
+  ...rehearsalStatuses.map((s) => `services:${s}`)
 ]);
 export const labelNames = (issue) =>
   issue.labels.map((label) => (typeof label === "string" ? label : label.name));
@@ -100,7 +106,8 @@ export function desiredLabels(issue, decision, request) {
       `status:${decision.status}`,
       ...scope,
       ...decision.reasons.map((reason) => `reason:${reason.code}`),
-      ...(decision.rehearsal ? [`rehearsal:${decision.rehearsal.status}`] : [])
+      ...(decision.rehearsal ? [`rehearsal:${decision.rehearsal.status}`] : []),
+      ...(decision.services ? [`services:${decision.services.status}`] : [])
     ])
   ].sort();
 }
@@ -233,6 +240,33 @@ export function statusComment({
       );
     if (rehearsal.plan_hash)
       lines.push(`Plan fingerprint: \`${rehearsal.plan_hash}\`.`);
+  }
+  if (decision.services) {
+    const services = decision.services;
+    lines.push(
+      "",
+      `**Sandbox service checks:** ${prose(services.status)}. ${prose(services.message)}`
+    );
+    if (services.database)
+      lines.push(
+        `Database: declared ${prose(services.database.declared)}, inspected ${prose(services.database.observed)}.`
+      );
+    for (const step of services.steps ?? [])
+      lines.push(
+        `- ${prose(step.unit)}: ${prose(step.status)}; source ${prose(step.version)}.`
+      );
+    if (services.workflow)
+      lines.push(`Workflow: ${prose(services.workflow.url)}`);
+    if (services.database_state)
+      lines.push(
+        `Database result: ${prose(JSON.stringify(services.database_state))}`
+      );
+    if (services.cleanup)
+      lines.push(
+        `Temporary resource cleanup: ${prose(services.cleanup.status)}.`
+      );
+    if (services.plan_hash)
+      lines.push(`Service plan fingerprint: ${prose(services.plan_hash)}.`);
   }
   if (request) {
     lines.push(
