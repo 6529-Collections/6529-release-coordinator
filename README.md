@@ -83,8 +83,8 @@ target does not connect to the real product's staging database. The
 [sandbox guide](./docs/merge-rehearsal-testing.md#service-and-database-acceptance)
 owns runtime pins, tests and limits. [Progress](./docs/progress.md) distinguishes
 local implementation from merged code and live acceptance. The one-ticket
-acceptance cases have passed; the Coordinator changes still need committing,
-PR checks, and merging. Real execution adapters remain absent; switching
+acceptance cases have passed; [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
+tracks source delivery, review, and CI. Real execution adapters remain absent; switching
 profiles does not enable deployment.
 
 ## Planned later stage: test a batch of tickets

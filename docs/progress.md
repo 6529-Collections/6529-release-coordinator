@@ -6,13 +6,14 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 [execution design](./design.md) remains future work. There is no always-on release
 worker; each manual run exits after its work.
 
-**Current merged code baseline:** [PR #40](https://github.com/6529-Collections/6529-release-coordinator/pull/40)
+**Baseline before the sandbox service extension:** [PR #40](https://github.com/6529-Collections/6529-release-coordinator/pull/40)
 merged September 10 at `430cae629fac12fe78a57bc57e00d3ef411c6742`.
 The unified `inbox:run` workflow and this repository's code checks are on `main`.
 The merge and successful [post-merge main CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34450016915)
 were rechecked September 10; local `main` was at that merge before this work.
-The service/database extension below is implemented locally and remains
-uncommitted in this Coordinator checkout.
+The service/database extension is implemented and tested; its
+[source delivery](#sandbox-source-delivery-september-10) is recorded separately
+from the earlier acceptance snapshots.
 No package publication or product deployment was part of the merge.
 
 ## Coordinator code checks: merged, September 10
@@ -89,7 +90,8 @@ proof. Public npm remains at the previously published `0.0.4`.
 
 ## Sandbox services and database, September 10
 
-**Implemented and tested; Coordinator changes are not yet committed or merged.**
+**Implemented and tested; see [source delivery](#sandbox-source-delivery-september-10)
+for the Coordinator PR and CI, separate from sample-runtime merges.**
 The same `inbox:run` command now follows a passing supported sandbox rehearsal
 with temporary MySQL, a selected database step, worker, API and frontend checks.
 The local controller dispatches a fixed, pinned GitHub Actions runtime and binds
@@ -134,15 +136,15 @@ The real backend reference remains pinned in the
 This fixture models order, baseline upgrades and data/output checks. It does not
 prove AWS deployment, real database change detection, persistent service health,
 existing-runtime prerequisites or real rollback. Missing prerequisites remain
-held. The immediate delivery step is to commit the Coordinator code/docs,
-complete normal PR checks, and merge. The next implementation is bounded batches
+held. Source delivery through normal PR checks and merge precedes bounded batches
 of complete requests without database changes. No batch command exists yet.
 
 ## Documentation alignment, September 10
 
-Current guides and diagrams now describe the sandbox service/database checks as
-implemented and tested. They distinguish Coordinator source that is still
-uncommitted from merged sample setup and recorded live results. The testing guide
+The housekeeping update aligned guides and diagrams with the implemented and
+tested sandbox service/database checks. At that point Coordinator source was
+still uncommitted; merged sample setup and live results were recorded separately.
+The testing guide
 also identifies where temporary MySQL runs and separates the sample `staging`
 target from a product staging database. Older section links remain valid.
 
@@ -154,6 +156,28 @@ new test run, and external state was not rechecked for this wording update.
 Documentation validation checked 148 local file/section links across 13 changed
 documents and the three retained legacy anchors. All passed; `git diff --check`
 also passed.
+
+## Sandbox source delivery, September 10
+
+The accepted implementation and documentation were committed without signing as
+`af5117f29cad4c036fc509b4ff5c0af557c8c5df` on `codex/sandbox-service-checks` and
+submitted in [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45).
+That PR is the source of truth for its current review, check, and merge state.
+The existing [306-test local acceptance](./testing/service-database-2026-09-10.md)
+precedes the PR; it does not substitute for GitHub CI.
+
+The first [PR CI run](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34470317468)
+passed on source `af5117f`: 306 tests and the full check command on each of Node
+20, 22, and 24, followed by the required `Check package` gate. Publication was
+skipped. Later commits require their own passing checks; the PR records those
+results and review resolution. The delivery-note update passed 155 local links
+across 13 documents and `git diff --check`.
+
+Before submission, remote `main` still matched the recorded `430cae6` baseline
+and the test backend's runtime branch still matched the configured
+`18d33510d925b0e5ce30168e888cc7586f532749` pin. Main protection requires
+`Check package`, an up-to-date branch, and resolved review threads, with no
+bypass actors. This delivery does not publish npm or deploy product code.
 
 ## Planned later stage: batch selection and tests, September 9
 
@@ -314,7 +338,7 @@ workflow uses fresh rehearsal reports to update the same ticket. The Coordinator
 code-check delivery is tracked above.
 The [service/database stage](#sandbox-services-and-database-september-10) is
 implemented with local and live acceptance evidence; its Coordinator source
-still needs delivery. The later
+delivery is tracked above. The later
 [batch stage](#planned-later-stage-batch-selection-and-tests-september-9) remains
 documented but unimplemented. Real-project live acceptance, the larger release
 worker, execution permissions, deployment evidence sources, and recovery remain

@@ -1,7 +1,7 @@
 # Inbox processing contract
 
 **One-ticket workflow merged; sandbox service extension implemented and tested
-September 10, 2026, with Coordinator source still uncommitted.** See
+September 10, 2026.** See
 [progress](./progress.md) for test and rollout evidence. Submit a request, then
 run one explicit command to inspect its ticket, rehearse suitable exact PRs,
 run supported sandbox service checks, and record the result on that same ticket.

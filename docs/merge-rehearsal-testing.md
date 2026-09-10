@@ -8,8 +8,8 @@ engine merged in PR #26; the public sandbox follow-up completed live required-ch
 acceptance, and later integration delivered the one-command ticket workflow.
 
 The one-ticket sandbox service/database stage is implemented and has local
-Docker and live ticket acceptance evidence. Its Coordinator source is still
-uncommitted; the sample repository setup is merged. Batch acceptance remains
+Docker and live ticket acceptance evidence. [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
+tracks Coordinator source delivery; the sample repository setup is merged. Batch acceptance remains
 future work. Each stage's evidence is separate from the original MR milestone.
 Documentation alone is not permission to execute external changes.
 
@@ -379,7 +379,7 @@ success of the completed merge-rehearsal stage does not count as that later evid
 ## Service and database acceptance
 
 **Implemented and tested September 10, 2026; sandbox only.** Coordinator source
-remains uncommitted; the sample repository setup is merged. See
+delivery and merged sample setup are recorded separately. See
 [progress](./progress.md) and the [acceptance record](./testing/service-database-2026-09-10.md)
 for local, GitHub, and merge evidence. This
 stage comes before [batch acceptance](#planned-batch-acceptance). Keep the two
@@ -605,8 +605,8 @@ verified cleanup. Their evidence layers and limits are listed in the acceptance
 record. This proves small program behavior and Coordinator decisions against
 temporary MySQL. It does not
 prove production data compatibility, AWS deployment, real runtime prerequisites,
-or recovery. Commit the Coordinator extension and complete its normal PR checks
-and merge before beginning the existing non-database batch matrix.
+or recovery. Source delivery through normal PR checks and merge precedes the
+existing non-database batch matrix.
 
 ## Planned batch acceptance
 

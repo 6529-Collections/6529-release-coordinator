@@ -62,7 +62,8 @@ execution still requires its own decisions and evidence.
 
 ## Sandbox services and database
 
-**Implemented and tested September 10, 2026; sandbox only, Coordinator source uncommitted.**
+**Implemented and tested September 10, 2026; sandbox only.** Source delivery is
+tracked in [progress](./progress.md#sandbox-source-delivery-september-10).
 One complete sandbox ticket exercises small database, worker, API, and
 frontend steps. The [service/database guide](./merge-rehearsal-testing.md#service-and-database-acceptance)
 owns the fixtures, temporary MySQL baseline, test matrix, evidence, and finish line.
@@ -231,8 +232,9 @@ belong to the responsible maintainer, not automatically to the submitter.
 
 The one-ticket workflow and this repository's code-check gate are merged.
 The [one-ticket service/database extension](./merge-rehearsal-testing.md#service-and-database-acceptance)
-has local and live sandbox acceptance evidence; its Coordinator source remains
-uncommitted. Commit it and complete normal PR checks and merge before adding
+has local and live sandbox acceptance evidence. Its source delivery is tracked
+in [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45).
+Complete normal PR checks and merge before adding
 selection across several sandbox tickets, keeping the existing ticket checks.
 Reuse the small sample programs and meaningful PR checks
 from that earlier stage on selected combined candidates. Full checks belong on

@@ -1,8 +1,11 @@
 # One-ticket service and database acceptance — September 10, 2026
 
-The Coordinator implementation is local and uncommitted, based on merged
+At the time of acceptance, the Coordinator implementation was local and
+uncommitted, based on merged
 `430cae629fac12fe78a57bc57e00d3ef411c6742`. Sandbox setup PRs are separate from
-the Coordinator's own merge status. No product release is performed.
+the Coordinator's own merge status. No product release was performed. Later
+source delivery is tracked in [progress](../progress.md#sandbox-source-delivery-september-10);
+the observations below retain the state and evidence from the acceptance run.
 
 ## Scope and mechanism
 

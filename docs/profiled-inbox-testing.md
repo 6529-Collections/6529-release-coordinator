@@ -162,8 +162,8 @@ real-profile tests are not real-system runtime proof.
 
 The local `inbox:run` implementation includes tested
 [one-ticket service/database acceptance](./merge-rehearsal-testing.md#service-and-database-acceptance).
-Coordinator source remains uncommitted; see progress for the separate local/live
-evidence and merged sample setup. Multi-ticket batching remains future work.
+See progress for Coordinator source delivery, separate local/live evidence,
+and merged sample setup. Multi-ticket batching remains future work.
 The same repositories, test inbox,
 exact-input bindings and automatically generated plans are retained.
 
