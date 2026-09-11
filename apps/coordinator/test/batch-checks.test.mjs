@@ -7,6 +7,7 @@ import {
   verifySavedBatch
 } from "../src/batch-checks.mjs";
 import { batchMergePlan } from "../src/batch-plan.mjs";
+import { generateInboxPlan } from "../src/inbox-merge-plan.mjs";
 import { batchPolicy } from "../src/batch-plan.mjs";
 import { serviceHash, ServiceError } from "../src/service-contract.mjs";
 import { selectBatch } from "../src/batch-selection.mjs";
@@ -52,6 +53,57 @@ test("real Git catches conflicts between different tickets without running progr
   assert.equal(result.status, "blocked");
   assert.equal(result.kind, "conflict");
   assert.deepEqual(result.conflicts[0].paths, ["shared.txt"]);
+});
+
+test("real Git holds a net-zero candidate before expensive checks", async (t) => {
+  const f = await batchFixture(t),
+    item = await f.ticket();
+  for (const part of item.entry.request.release_parts) {
+    const repo = f.git.repositories[part.id];
+    await f.git.git(repo.cwd, ["rm", "docs/ticket-1.md"]);
+    await f.git.git(repo.cwd, ["commit", "-m", "Revert all requested changes"]);
+    const commit = await f.git.git(repo.cwd, ["rev-parse", "HEAD"]);
+    part.pull_requests[0].commit = commit;
+  }
+  item.input = await generateInboxPlan(item.entry, {
+    profile: sandboxProfile,
+    github: f.git.github
+  });
+  const state = await selectBatch({
+    items: [item],
+    prepare: f.prepare,
+    check: async () =>
+      assert.fail("a net-zero candidate must not start CI or services"),
+    guard: async () => {},
+    verify: async () => true,
+    save: async () => {}
+  });
+  assert.deepEqual(state.selected, []);
+  assert.equal(state.status, "finished");
+  assert.equal(state.attempts.length, 1);
+  assert.equal(state.attempts[0].phase, "git");
+  assert.equal(state.stop.status, "unknown");
+  assert.match(state.stop.message, /no changes against saved main/);
+  validateBatchHistory({ [state.fingerprint]: state }, sandboxProfile);
+});
+
+test("empty publications cannot start checks or reuse a passing result without trials", async (t) => {
+  const f = await batchFixture(t),
+    prepared = await f.prepare([await f.ticket()]);
+  const empty = structuredClone(prepared);
+  for (const repo of empty.publications) repo.patch = [];
+  const h = checkHarness(empty);
+  await assert.rejects(h.run(), /without changed trees/);
+  assert.deepEqual(h.events, []);
+  assert.equal(h.state(), undefined);
+  const valid = checkHarness(prepared);
+  await valid.run();
+  const invalid = valid.state();
+  invalid.prs = [];
+  await assert.rejects(
+    verifySavedBatch(prepared, invalid, valid.options),
+    /evidence or cleanup is incomplete/
+  );
 });
 
 test("batch scope cannot substitute versions, split a ticket, mix targets or use real repos", async (t) => {
@@ -165,6 +217,20 @@ test("durable batch history requires the exact selected group and completed clea
     })
   );
   validateBatchHistory({ [state.fingerprint]: state }, sandboxProfile);
+  const empty = structuredClone(state);
+  const prepared = empty.attempts.find(
+    (attempt) => attempt.phase === "git"
+  ).result;
+  for (const repo of prepared.publications) repo.patch = [];
+  const unchecked = empty.attempts.find(
+    (attempt) => attempt.phase === "checks"
+  );
+  unchecked.progress.prs = [];
+  unchecked.progress.prepared_hash = serviceHash(prepared);
+  assert.throws(
+    () => validateBatchHistory({ [empty.fingerprint]: empty }, sandboxProfile),
+    /exact CI, service or cleanup proof/
+  );
   const broken = structuredClone(state);
   broken.attempts.find(
     (attempt) => attempt.phase === "checks"

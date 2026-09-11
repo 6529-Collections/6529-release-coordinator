@@ -109,7 +109,14 @@ export function harness(count = 2) {
             status: "passed",
             input_hash: plan.input_hash,
             binding: plan.batch,
-            publications: [],
+            publications: report.repositories.map((repo) => ({
+              role: repo.role,
+              base: repo.destination.commit,
+              tree: repo.final_tree,
+              patch: [
+                { path: "docs/batch.md", content: "Batch\n", mode: "100644" }
+              ]
+            })),
             service_plan: servicePlanFromSources({
               request: { ...plan.dependency_request, database_change: "no" },
               binding: plan.batch,
@@ -121,7 +128,22 @@ export function harness(count = 2) {
         check: (prepared, options) =>
           checkBatch(prepared, {
             ...options,
-            client: {},
+            client: {
+              identity: async () => ({
+                actor: { id: "456", login: "tester" },
+                workflow_id: 101
+              }),
+              open: async (record, _patch, save) => {
+                record.number = record.role === "backend" ? 21 : 22;
+                record.commit = "a".repeat(40);
+                await save(record);
+              },
+              result: async (record) => ({
+                status: "passed",
+                role: record.role
+              }),
+              cleanup: async () => ({ status: "removed" })
+            },
             serviceClient: {},
             executeServices: async (plan, run) => {
               dispatches++;

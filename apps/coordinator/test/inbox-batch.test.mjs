@@ -28,6 +28,10 @@ test("one unscoped sandbox command finishes all cheap work, tests one group and 
   ).length;
   const second = await processInbox(h.options);
   assert.deepEqual(second.batch.selected, [1, 2]);
+  assert.equal(
+    h.events.filter((event) => event === "reverify-evidence").length,
+    1
+  );
   assert.equal(h.dispatches(), 1);
   assert.equal(h.f.comments.length, 2);
   assert.equal(

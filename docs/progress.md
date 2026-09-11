@@ -8,6 +8,16 @@ worker; each manual run exits after its work.
 
 ## v0.1 run logging, September 11
 
+Pre-merge review in [PR #61](https://github.com/6529-Collections/6529-release-coordinator/pull/61)
+corrected trial workflow links and removed the workflow definition ID from the
+dispatch event; `workflow_id` in logs identifies a run. It also closes a batch
+evidence gap: when combined trees have no changes against saved main, cheap
+preparation holds the candidate before CI/services. A passing or reused batch
+must contain at least one verified temporary PR. The inbox fixture now records
+trial PRs, and its repeat assertion requires remote evidence revalidation.
+The updated full local check passed on Node 22.16.0: **376 passed, 0 failed,
+3 opt-in Docker cases skipped**, with all other check phases passing.
+
 Implemented [live and saved run logs](./design.md#next-step-v01-run-logging) in the
 existing `inbox:run` command. Events show meaningful steps starting and finishing,
 verified versus uncertain outcomes, ticket/PR/workflow and attempt identities,

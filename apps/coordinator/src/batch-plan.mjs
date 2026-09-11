@@ -152,6 +152,14 @@ export async function prepareBatch(
     tree: repo.final_tree,
     patch: repo.service_source.patch
   }));
+  if (!publications.some((repo) => repo.patch.length))
+    return {
+      status: "unknown",
+      kind: "evidence",
+      message:
+        "The combined trees have no changes against saved main. No temporary PR can be checked; this candidate is held for Coordinator review.",
+      report_file: report.report_file
+    };
   for (const repo of report.repositories) delete repo.service_source.patch;
   const servicePlan = servicePlanFromSources({
     request: { ...plan.dependency_request, database_change: "no" },

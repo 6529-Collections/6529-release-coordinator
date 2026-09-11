@@ -25,6 +25,7 @@ export async function verifySavedBatch(
     profile === sandboxProfile &&
       state?.prepared_hash === serviceHash(prepared) &&
       state.result &&
+      (state.result.status !== "passed" || state.prs.length > 0) &&
       state.cleanup === "removed",
     "batch-evidence",
     "Saved batch evidence or cleanup is incomplete."
@@ -121,6 +122,11 @@ export async function checkBatch(
     profile === sandboxProfile && prepared.status === "passed",
     "batch-profile",
     "Checks need a prepared sandbox batch."
+  );
+  serviceAssert(
+    prepared.publications.some((repo) => repo.patch.length),
+    "batch-no-changes",
+    "A candidate without changed trees cannot supply temporary PR check evidence."
   );
   const hash = serviceHash(prepared);
   const state = previous
@@ -283,7 +289,7 @@ export async function checkBatch(
           if (poll + 1 < maxPolls) await wait(pollMs);
         }
         serviceAssert(
-          state.prs.every((record) => record.result),
+          state.prs.length > 0 && state.prs.every((record) => record.result),
           "batch-checks-pending",
           "Temporary PR checks are still pending. Resume the saved attempt; its PRs remain recorded."
         );

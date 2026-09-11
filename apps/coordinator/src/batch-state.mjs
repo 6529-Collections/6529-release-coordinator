@@ -157,6 +157,7 @@ export function validateBatchHistory(batches, profile) {
         if (attempt.result?.status === "passed") {
           serviceAssert(
             progress.cleanup === "removed" &&
+              progress.prs.length > 0 &&
               progress.result &&
               serviceHash(progress.result) === serviceHash(attempt.result) &&
               progress.service_attempts.candidate?.result?.report?.status ===

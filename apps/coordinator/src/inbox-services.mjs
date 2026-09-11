@@ -97,7 +97,6 @@ export async function runServiceAttempt(
           step: "services.dispatch",
           attempt_id: attempt.id,
           repository: plan.runtime?.repository,
-          workflow_id: attempt.workflow_id,
           message:
             "Request the saved service workflow once; its result will be reconciled separately."
         },

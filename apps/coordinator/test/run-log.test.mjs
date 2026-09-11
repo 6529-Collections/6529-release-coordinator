@@ -267,6 +267,11 @@ test("lost workflow dispatch is unknown first, then reconciled to verified step 
     ["started", "unknown"]
   );
   assert.ok(
+    events
+      .filter((e) => e.step === "services.dispatch")
+      .every((e) => !Object.hasOwn(e, "workflow_id"))
+  );
+  assert.ok(
     events.some((e) => e.step === "services.found" && e.workflow_id === 99)
   );
   assert.deepEqual(
@@ -361,7 +366,7 @@ test("the real inbox verification carries backend movement and cleanup truth to 
   assert.match(result.report.batch.stop.message, /backend main changed/);
   assert.match(
     result.report.batch.stop.message,
-    /No temporary trial PRs were recorded/
+    /All recorded temporary trial PRs and branches were verified removed/
   );
   for (const issue of h.f.state().tickets
     ? Object.values(h.f.state().tickets)
