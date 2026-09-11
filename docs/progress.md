@@ -15,7 +15,7 @@ they were not repeated during this cleanup.
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66); [live sandbox migration and exact repeat passed](./testing/history-2026-09-11.md). The real inbox was not migrated. |
-| PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | Node 20/22/24 CI, CodeQL and Snyk passed on final PR head `2c801fc`; required merge rules remain active. Snyk's six-library workspace limitation remains below. Expanded 6529bot configuration is now on `main`; completed jobs need separate observation on a subsequent PR. |
+| PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | Node 20/22/24 CI, CodeQL and Snyk passed on final PR #66 head `2c801fc`; required merge rules remain active. All four configured opening reviews subsequently completed on [PR #70](https://github.com/6529-Collections/6529-release-coordinator/pull/70). Snyk's six-library workspace limitation remains below. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -24,12 +24,9 @@ candidate stays waiting and does not authorize a release.
 
 ## Next steps
 
-1. Observe the expanded 6529bot set on the next ordinary PR now that its
-   configuration is on `main`. This is review activation evidence, not another
-   history implementation task.
-2. Build the release sequence in the test repositories before
-   adding real adapters. [Later execution acceptance](./merge-rehearsal-testing.md#later-execution-acceptance)
-   covers that future stage; it is not part of this cleanup.
+Build the release sequence in the test repositories before adding real adapters.
+[Later execution acceptance](./merge-rehearsal-testing.md#later-execution-acceptance)
+covers that future stage; it is not part of this cleanup.
 
 ## PR #66 delivery and live history acceptance, September 11
 
@@ -47,6 +44,15 @@ Its merge tree matches reviewed `2c801fc`. Main's
 [repository CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34600113234)
 and [CodeQL](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34600113188)
 also passed.
+
+The subsequent documentation [PR #70](https://github.com/6529-Collections/6529-release-coordinator/pull/70)
+proved base-branch activation on opening head `5e8549d`: general, security,
+deployment/Actions and GLM Swarm all published reviews without actionable
+findings. Its Node 20/22/24, package, CodeQL and Snyk checks passed. The five-job
+push configuration also has the offline policy/parser coverage below; later
+head-specific review outcomes remain visible on the PR. CodeRabbit's first
+attempt on that documentation head was rate-limited despite its green status,
+so that status alone is not counted as a completed review.
 
 The [live acceptance record](./testing/history-2026-09-11.md) proves v4-to-v5
 sandbox migration from that clean merged source, preservation of all 13 older

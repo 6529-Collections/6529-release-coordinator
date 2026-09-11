@@ -101,7 +101,7 @@ arbitrary workflow code; changes to the policy itself still need review.
 ## Automatic review set
 
 Every PR targeting `main`, including drafts, uses the same review set. There is
-no size classifier, risk label or manual opt-in. Configuration is on this branch;
+no size classifier, risk label or manual opt-in. Configuration is merged on `main`;
 see [progress](./progress.md) for delivery and live activation evidence.
 
 | Reviewer | Initial PR | Each new push |
@@ -120,11 +120,11 @@ limit is five. Central permission, provider availability and enforced spending
 caps remain authoritative; this configuration cannot raise them. Public requests
 must come from a trusted maintainer. No provider credentials belong in this repo.
 
-The central bot reads config from the **PR base**, so these settings become
-effective after merging them into `main`. A feature-branch config alone does not
-prove the new jobs ran. The existing central draft policy already permitted the
-four default reviews on PR #66; this file preserves draft admission and changes
-the selected review kinds.
+The central bot reads config from the **PR base**. These settings merged in
+PR #66, and all four configured opening reviews ran on PR #70. A feature-branch
+config alone does not prove the new jobs ran; see progress for dated evidence.
+The existing central draft policy already permitted four default reviews before
+the change; this file preserves draft admission and selects the review kinds above.
 
 [`.coderabbit.yaml`](../.coderabbit.yaml) enables draft and incremental reviews,
 shows incomplete/failed review status, and leaves automatic approval disabled.
