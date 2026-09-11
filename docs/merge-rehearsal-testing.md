@@ -639,6 +639,11 @@ which cases have offline versus live proof. This section follows the
 [proposed ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes).
 It does not change the completed MR matrix or its dated evidence above.
 
+The subsequent [20-case stress campaign](./testing/complex-corner-cases.md)
+records individual results, test layers, the reproduced ownership race, and
+unsupported future behavior. Its local simulations do not upgrade earlier
+evidence into live GitHub race or release-execution proof.
+
 The [one-ticket service/database matrix](#service-and-database-acceptance)
 has local and live evidence and its source merged in PR #45 before batch work.
 The batch implementation uses the same two sample repositories, test inbox,

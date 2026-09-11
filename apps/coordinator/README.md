@@ -321,8 +321,10 @@ Omit the ticket selector to process all selected tickets through the same flow:
 RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 ```
 
-Each suitable ticket gets a separate plan; different tickets are not merged
-together. Use `npm run --silent inbox:run` to suppress npm's banner for JSON.
+Sandbox runs first inspect and rehearse each ticket, then test suitable whole
+tickets together through the bounded batch flow described below. Real runs
+retain individual ticket plans and Git rehearsals. Use
+`npm run --silent inbox:run` to suppress npm's banner for JSON.
 
 For a complete supported sandbox ticket, the same command continues through
 [service and database checks](../../docs/merge-rehearsal-testing.md#service-and-database-acceptance).
@@ -333,7 +335,8 @@ and read access to its jobs/logs, in addition to the existing inbox permissions.
 No local Docker installation is needed for `inbox:run`.
 Sandbox service logs require GitHub CLI **2.97.0 or later** because the reader
 uses `gh api --allow-escape-sequences` ([upstream release](https://github.com/cli/cli/releases/tag/v2.97.0)).
-Raw logs stay in memory and are never printed to the operator's terminal.
+Raw GitHub Actions logs stay in memory and are never printed to the operator's
+terminal.
 
 The job runs isolated temporary MySQL and sample programs in the test backend
 repository's GitHub Actions runner. It uses fake data and removes the owned
@@ -497,3 +500,33 @@ without known disposition, or externally rewritten state before proceeding.
 Code 2 takes precedence, then 3, then 1. Help makes no GitHub calls. A failure
 report does not claim all prior writes were rolled back. A pass is an observation
 of exact inputs, not release authorization or a reservation of product branches.
+
+### Run logs
+
+`inbox:run` now prints step progress to stderr and saves a chronological JSON-lines
+log at `~/.6529-release-coordinator/logs/PROFILE/INBOX_REPOSITORY_ID/RUN_ID.jsonl`.
+It prints the exact path at startup and finish. The initial `startup-UUID.jsonl`
+file becomes the assigned run's file after journal acquisition; early acquisition
+failures retain their startup file. There are no additional command flags.
+
+The log records starts, verified results, uncertainty, interruptions, exact
+identities/links, step durations and cleanup. `--resume` appends to the same history
+with a new invocation ID. A crash can leave a partial last line; it is preserved
+and reported as incomplete. Reading a log never grants permission to resume.
+
+`--json` stdout remains one final result. Its `logging` object reports `file`,
+`complete`, `invocation_id`, `run_id` and `previous_tail_incomplete`. Use
+`npm run --silent inbox:run` to suppress npm's banner. Progress still goes to stderr.
+A log initialization failure stops before inbox work. A later disk failure lets
+existing journal/cleanup work continue, warns that the log is incomplete and returns
+exit `2`, even if ticket processing succeeded. The ticket results remain visible.
+
+Remote service step details arrive with the verified final workflow report; their
+source times are recorded separately from when the Coordinator observed them.
+Raw Actions logs and full requests are not copied into these logs.
+
+See the [logging contract](../../docs/design.md#next-step-v01-run-logging) and
+[validation record](../../docs/progress.md#v01-run-logging-september-11). This adds
+no heartbeat, status command, board, automatic restart or takeover. The existing
+manual recovery procedure remains required; a quiet log is not proof a process
+has stopped.

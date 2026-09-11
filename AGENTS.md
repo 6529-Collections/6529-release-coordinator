@@ -78,8 +78,10 @@ from first principles.
   bundle identical to its source, verify its fixed branch/commit, and preserve
   service and batch attempts in the v4 journal before dispatch.
 - `docs/design.md` contains the proposed execution design and unresolved
-  differences with the full process diagram. Settle those choices before
-  implementing release execution. Its batch-testing section owns the bounded
+  differences with the full process diagram. Its v0.1 logging section owns local
+  run diagnostics; logs never replace journal authority or prove a process stopped.
+  Heartbeat and automatic recovery remain deferred. Settle the execution choices
+  before implementing release execution. Its batch-testing section owns the bounded
   search before release mutations: keep tickets/dependencies whole,
   test the final exact combination, and never blame every member of a failed
   group. Batch ticket projections belong in `docs/inbox-processing.md`; planned

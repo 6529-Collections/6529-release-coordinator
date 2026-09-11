@@ -45,8 +45,10 @@ The ticket already supplies the exact PRs, services, target, and dependencies.
 The Coordinator creates the rehearsal plan itself. Both profiles currently test
 against each repository's current `main`; this does not change `main` or choose
 a deployment policy. See the [profiled inbox guide](./docs/profiled-inbox-testing.md).
-Omit `--issue` to process the inbox, giving each suitable ticket its own plan and
-rehearsal. Different tickets are not merged together.
+Omit `--issue` to process the inbox. Sandbox runs first check each ticket, then
+test suitable whole tickets together through the bounded batch flow below.
+Real runs retain individual ticket plans and Git rehearsals. These rehearsals
+do not merge source PRs into `main`.
 
 `inbox:run` replaces the old `inbox:process` and `merge:rehearse` commands; those
 entry points have been removed. `inbox:read` and `readiness:check` remain read-only
@@ -61,6 +63,10 @@ not handle that request; it does not claim deployment. Mixed merged/open request
 remain open for a scope decision. See the
 [command guide](./apps/coordinator/README.md#run-the-ticket-workflow) for permissions,
 exit codes and recovery, and [ticket rules](./docs/inbox-processing.md) for labels.
+
+The command prints live progress to stderr and saves per-run logs outside this
+checkout, under `~/.6529-release-coordinator/logs/`. It reports the exact path and
+preserves earlier history on explicit resume. See [run logs](./apps/coordinator/README.md#run-logs).
 
 The developer [fixture harness](./apps/coordinator/README.md#merge-engine-and-fixture-tests)
 still tests the merge engine against sample PRs, including deliberate failures.
@@ -151,6 +157,7 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 | Need | Document |
 | --- | --- |
 | What has shipped, what is local, and what comes next | [Progress](./docs/progress.md) |
+| Read live and saved run logs, including interruptions and cleanup | [Run logging](./docs/design.md#next-step-v01-run-logging) |
 | Check changes to this repository before merging | [Repository code checks](./docs/code-checks.md) |
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |

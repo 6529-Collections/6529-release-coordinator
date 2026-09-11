@@ -1,4 +1,5 @@
 import { sandboxProfile } from "./profiles.mjs";
+import { runEvent } from "./run-log.mjs";
 import { buildServicePlan } from "./service-plan.mjs";
 import { batchPolicy, prepareBatch } from "./batch-plan.mjs";
 import { selectBatch, batchTicketResult } from "./batch-selection.mjs";
@@ -59,6 +60,12 @@ export async function coordinateInboxBatch({
   );
   const suitable = [],
     totals = { frontend: 0, backend: 0 };
+  runEvent({
+    step: "batch.filter",
+    outcome: "started",
+    message: "Finish cheap scope and database checks before combined CI.",
+    tickets: items.map((item) => item.number)
+  });
   for (const item of [...items].sort((a, b) => a.number - b.number)) {
     if (item.recordedTerminal || !item.decision || terminal(item.decision))
       continue;
@@ -132,7 +139,24 @@ export async function coordinateInboxBatch({
       }
     }
     if (result) item.decision = batchDecision(item.decision, result);
+    runEvent({
+      step: "batch.ticket",
+      issue_number: item.number,
+      request_id: item.entry.request?.request_id,
+      outcome: result ? "unknown" : "succeeded",
+      result_status: result?.code ?? "suitable",
+      message: result
+        ? "This whole ticket is held before combined checks; its saved decision explains why."
+        : "This whole ticket is suitable for combined Git filtering."
+    });
   }
+  runEvent({
+    step: "batch.filter",
+    outcome: "succeeded",
+    tickets: suitable.map((item) => item.number),
+    message:
+      "Cheap ticket filtering finished; only suitable whole tickets enter the batch search."
+  });
   if (!suitable.length && !run.batch_fingerprint)
     return { status: "no-candidate", selected: [], release_authorized: false };
   const inputs = suitable.map((item) => ({

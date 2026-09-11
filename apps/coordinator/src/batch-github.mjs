@@ -2,6 +2,7 @@ import { executeGitHub } from "./coordinator-github.mjs";
 import { createRehearsalGitHub } from "./rehearsal-github.mjs";
 import { readServiceLogs } from "./service-github.mjs";
 import { sandboxProfile } from "./profiles.mjs";
+import { assertDestination } from "./input-stability.mjs";
 import { batchPolicy } from "./batch-plan.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { serviceFiles } from "./service-contract.mjs";
@@ -115,12 +116,12 @@ export function createBatchGitHub({
   }
   async function unchanged(record) {
     const ref = await call(record.role, "GET", "/git/ref/heads/main");
-    serviceAssert(
-      ref.data?.object?.sha === record.base,
-      "batch-stale",
-      "Sandbox main changed during this trial.",
-      "stale"
-    );
+    assertDestination({
+      role: record.role,
+      repository: profile.repositories[record.role].full_name,
+      expected: record.base,
+      observed: ref.data?.object?.sha
+    });
   }
   return {
     async identity(role, base) {

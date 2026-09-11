@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { loggedStep, runEvent, logOutcome } from "./run-log.mjs";
 import { mkdir, lstat, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { sandboxProfile } from "./profiles.mjs";
@@ -91,7 +92,20 @@ export async function runServiceAttempt(
     await guard();
     signal?.throwIfAborted();
     try {
-      const dispatched = await client.dispatch(attempt);
+      const dispatched = await loggedStep(
+        {
+          step: "services.dispatch",
+          attempt_id: attempt.id,
+          repository: plan.runtime?.repository,
+          workflow_id: attempt.workflow_id,
+          message:
+            "Request the saved service workflow once; its result will be reconciled separately."
+        },
+        () => client.dispatch(attempt),
+        () => ({
+          message: "GitHub accepted dispatch; completion has not been verified."
+        })
+      );
       if (Number.isSafeInteger(dispatched?.workflow_run_id))
         attempt.workflow_run_id = dispatched.workflow_run_id;
     } catch {
@@ -99,38 +113,102 @@ export async function runServiceAttempt(
     }
     await save(attempt);
   }
-  for (let poll = 0; poll < maxPolls; poll++) {
-    signal?.throwIfAborted();
-    await guard();
-    if (!attempt.workflow_run_id) {
-      const found = await client.find(attempt);
-      if (found) {
-        attempt.workflow_run_id = found.id;
-        attempt.state = "running";
-        await save(attempt);
+  return loggedStep(
+    {
+      step: "services.wait",
+      attempt_id: attempt.id,
+      repository: plan.runtime?.repository,
+      workflow_id: attempt.workflow_run_id,
+      message:
+        "Find the saved workflow and wait for verified application results."
+    },
+    async () => {
+      for (let poll = 0; poll < maxPolls; poll++) {
+        signal?.throwIfAborted();
+        await guard();
+        if (!attempt.workflow_run_id) {
+          const found = await client.find(attempt);
+          if (found) {
+            attempt.workflow_run_id = found.id;
+            attempt.state = "running";
+            await save(attempt);
+            runEvent({
+              step: "services.found",
+              outcome: "succeeded",
+              attempt_id: attempt.id,
+              workflow_id: found.id,
+              repository: plan.runtime?.repository,
+              url: `https://github.com/${plan.runtime?.repository}/actions/runs/${found.id}`,
+              message:
+                "Found the workflow matching the saved attempt; no replacement was dispatched."
+            });
+          }
+        }
+        if (attempt.workflow_run_id) {
+          const result = await client.result(attempt);
+          if (result) {
+            verifyServiceReport(result.report, plan, attempt.id);
+            if (attempt.result)
+              serviceAssert(
+                serviceHash(attempt.result) === serviceHash(result),
+                "result-unverified",
+                "A previously recorded workflow result changed."
+              );
+            attempt.state = "completed";
+            attempt.result = result;
+            await save(attempt);
+            // Remote step detail is observed after verified completion, not a live
+            // heartbeat. Preserve source times separately from observation time.
+            for (const step of result.report.steps)
+              runEvent({
+                step: "services.step",
+                unit: step.unit,
+                outcome: logOutcome(step.status),
+                result_status: step.status,
+                attempt_id: attempt.id,
+                workflow_id: result.workflow.id,
+                url: result.workflow.url,
+                source_started_at: step.started_at,
+                source_finished_at: step.finished_at,
+                duration_ms:
+                  step.started_at && step.finished_at
+                    ? Math.max(
+                        0,
+                        Date.parse(step.finished_at) -
+                          Date.parse(step.started_at)
+                      )
+                    : undefined,
+                message:
+                  "Observed this service step in the verified workflow report."
+              });
+            runEvent({
+              step: "services.cleanup",
+              outcome: logOutcome(result.report.cleanup?.status),
+              cleanup_status: result.report.cleanup?.status,
+              attempt_id: attempt.id,
+              workflow_id: result.workflow.id,
+              url: result.workflow.url,
+              message:
+                result.report.cleanup?.status === "removed"
+                  ? "The verified report confirms temporary service/database cleanup."
+                  : "Service/database cleanup is incomplete or unknown; inspect the saved workflow."
+            });
+            return attempt;
+          }
+        }
+        if (poll + 1 < maxPolls) await wait(pollMs);
       }
-    }
-    if (attempt.workflow_run_id) {
-      const result = await client.result(attempt);
-      if (result) {
-        verifyServiceReport(result.report, plan, attempt.id);
-        if (attempt.result)
-          serviceAssert(
-            serviceHash(attempt.result) === serviceHash(result),
-            "result-unverified",
-            "A previously recorded workflow result changed."
-          );
-        attempt.state = "completed";
-        attempt.result = result;
-        await save(attempt);
-        return attempt;
-      }
-    }
-    if (poll + 1 < maxPolls) await wait(pollMs);
-  }
-  throw new ServiceError(
-    "workflow-pending",
-    "The saved sandbox attempt has no complete result yet. Recheck it; do not dispatch it again."
+      throw new ServiceError(
+        "workflow-pending",
+        "The saved sandbox attempt has no complete result yet. Recheck it; do not dispatch it again."
+      );
+    },
+    (attempt) => ({
+      outcome: logOutcome(attempt.result.report.status),
+      result_status: attempt.result.report.status,
+      workflow_id: attempt.result.workflow.id,
+      url: attempt.result.workflow.url
+    })
   );
 }
 
@@ -193,7 +271,14 @@ export async function coordinateServices({
       }
     };
   try {
-    const plan = buildServicePlan(entry, rehearsal.report, profile, runtime);
+    const plan = await loggedStep(
+      {
+        step: "services.plan",
+        issue_number: entry.issue_number,
+        message: "Inspect the sample scope and declared database answer."
+      },
+      () => buildServicePlan(entry, rehearsal.report, profile, runtime)
+    );
     serviceAssert(
       await verifyInputs(),
       "inputs-stale",

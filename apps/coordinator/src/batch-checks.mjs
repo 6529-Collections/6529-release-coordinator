@@ -1,4 +1,5 @@
 import { sandboxProfile } from "./profiles.mjs";
+import { loggedStep, runEvent, logOutcome } from "./run-log.mjs";
 import { createBatchGitHub } from "./batch-github.mjs";
 import { createServiceGitHub } from "./service-github.mjs";
 import { runServiceAttempt } from "./inbox-services.mjs";
@@ -156,7 +157,19 @@ export async function checkBatch(
     for (const record of state.prs) {
       if (record.cleanup === "removed") continue;
       await guard();
-      await client.cleanup(record);
+      await loggedStep(
+        {
+          step: "trial.cleanup",
+          attempt_id: id,
+          role: record.role,
+          repository: profile.repositories[record.role].full_name,
+          pr_number: record.number,
+          branch: record.branch,
+          message: "Close the owned trial PR and verify removal of its branch."
+        },
+        () => client.cleanup(record),
+        () => ({ cleanup_status: "removed" })
+      );
       record.cleanup = "removed";
       await persist();
     }
@@ -217,43 +230,107 @@ export async function checkBatch(
         await persist();
       }
       if (!record.result)
-        await client.open(record, spec.patch, async (saved) => {
-          Object.assign(record, saved);
-          await persist();
-        });
+        await loggedStep(
+          {
+            step: "trial.open",
+            attempt_id: id,
+            role: record.role,
+            repository: profile.repositories[record.role].full_name,
+            branch: record.branch,
+            message: "Create or reconcile the exact owned temporary PR."
+          },
+          () =>
+            client.open(record, spec.patch, async (saved) => {
+              Object.assign(record, saved);
+              await persist();
+            }),
+          () => ({
+            pr_number: record.number,
+            url: `https://github.com/${profile.repositories[record.role].full_name}/pull/${record.number}`
+          })
+        );
     }
-    for (let poll = 0; poll < maxPolls; poll++) {
-      signal?.throwIfAborted();
-      await guard();
-      for (const record of state.prs) {
-        if (record.result) continue;
-        const result = await client.result(record);
-        if (result) {
-          record.result = result;
-          await persist();
+    await loggedStep(
+      {
+        step: "trial.checks",
+        attempt_id: id,
+        message: "Wait for and verify the combined PR checks."
+      },
+      async () => {
+        for (let poll = 0; poll < maxPolls; poll++) {
+          signal?.throwIfAborted();
+          await guard();
+          for (const record of state.prs) {
+            if (record.result) continue;
+            const result = await client.result(record);
+            if (result) {
+              record.result = result;
+              await persist();
+              runEvent({
+                step: "trial.result",
+                outcome: logOutcome(result.status),
+                attempt_id: id,
+                repository: profile.repositories[record.role].full_name,
+                pr_number: record.number,
+                workflow_id: result.workflow?.id,
+                url: result.workflow?.url,
+                result_status: result.status,
+                message: "Verified a completed trial's required-check result."
+              });
+            }
+          }
+          if (state.prs.every((record) => record.result)) break;
+          if (poll + 1 < maxPolls) await wait(pollMs);
         }
-      }
-      if (state.prs.every((record) => record.result)) break;
-      if (poll + 1 < maxPolls) await wait(pollMs);
-    }
-    serviceAssert(
-      state.prs.every((record) => record.result),
-      "batch-checks-pending",
-      "Temporary PR checks are still pending. Resume the saved attempt; its PRs remain recorded."
+        serviceAssert(
+          state.prs.every((record) => record.result),
+          "batch-checks-pending",
+          "Temporary PR checks are still pending. Resume the saved attempt; its PRs remain recorded."
+        );
+      },
+      () => ({
+        outcome: state.prs.every((record) => record.result?.status === "passed")
+          ? "succeeded"
+          : state.prs.some(
+                (record) =>
+                  !["passed", "blocked"].includes(record.result?.status)
+              )
+            ? "unknown"
+            : "failed",
+        message:
+          "Completed PR results were read; their outcomes determine whether service checks can start."
+      })
     );
     await verify();
     const checks = state.prs.map((record) => record.result);
     async function services(plan, key) {
-      const attempt = await executeServices(plan, {
-        previous: state.service_attempts[key],
-        client: serviceClient,
-        signal,
-        guard,
-        save: async (attempt) => {
-          state.service_attempts[key] = structuredClone(attempt);
-          await persist();
-        }
-      });
+      const attempt = await loggedStep(
+        {
+          step: `batch.services.${key}`,
+          attempt_id: id,
+          message:
+            key === "baseline"
+              ? "Check the unchanged baseline before attributing a code failure."
+              : "Execute the exact combined service plan."
+        },
+        () =>
+          executeServices(plan, {
+            previous: state.service_attempts[key],
+            client: serviceClient,
+            signal,
+            guard,
+            save: async (attempt) => {
+              state.service_attempts[key] = structuredClone(attempt);
+              await persist();
+            }
+          }),
+        (attempt) => ({
+          outcome: logOutcome(attempt.result.report.status),
+          result_status: attempt.result.report.status,
+          workflow_id: attempt.result.workflow?.id,
+          url: attempt.result.workflow?.url
+        })
+      );
       const report = verifyServiceReport(
         attempt.result.report,
         plan,

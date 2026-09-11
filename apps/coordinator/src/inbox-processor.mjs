@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { bindRunLog, loggedStep, runEvent } from "./run-log.mjs";
+import { assertPinnedDestinations } from "./input-stability.mjs";
 import { realProfile } from "./profiles.mjs";
 import { readInbox, inspectIssue } from "./inbox-reader.mjs";
 import { inspectReadiness } from "./readiness.mjs";
@@ -265,7 +267,10 @@ export async function processInbox({
   if (closeTest && !issueNumber)
     throw new Error("Test closure requires one explicit Issue number.");
   signal?.throwIfAborted();
-  const actor = await identity();
+  const actor = await loggedStep(
+    { step: "operator.identity", message: "Verify the acting GitHub account." },
+    identity
+  );
   const scope =
     resume && issueNumber === undefined && !closeTest
       ? undefined
@@ -274,7 +279,11 @@ export async function processInbox({
           close_test: closeTest,
           ...(rehearsal ? { workflow: inboxWorkflow } : {})
         };
-  const { state, run } = await journal.acquire(actor, resume, scope);
+  const { state, run } = await loggedStep(
+    { step: "journal.acquire", message: "Acquire the inbox journal lock." },
+    () => journal.acquire(actor, resume, scope)
+  );
+  bindRunLog(run.run_id, Boolean(resume));
   issueNumber = run.scope.issue_number ?? undefined;
   closeTest = run.scope.close_test;
   const results = [];
@@ -289,7 +298,13 @@ export async function processInbox({
   let pendingNumber = null;
   try {
     // Complete the listing/proof pass before considering any Issue writes.
-    const inbox = await loadInbox({ get, now, profile });
+    const inbox = await loggedStep(
+      {
+        step: "inbox.scan",
+        message: "Read requests and verify intake receipts."
+      },
+      () => loadInbox({ get, now, profile })
+    );
     const numbers =
       run.ticket_numbers ??
       (issueNumber
@@ -324,7 +339,21 @@ export async function processInbox({
       )
         throw new Error(`Issue #${number} is not a release request.`);
       issues.set(number, issue);
-      entries.set(number, await inspect(issue, { get, profile }));
+      entries.set(
+        number,
+        await loggedStep(
+          {
+            step: "ticket.intake",
+            issue_number: number,
+            message: "Verify this ticket's immutable request and receipt."
+          },
+          () => inspect(issue, { get, profile }),
+          (entry) => ({
+            outcome: entry.status === "valid" ? "succeeded" : "unknown",
+            result_status: entry.status
+          })
+        )
+      );
     }
     const all = new Map(
       inbox.requests.map((entry) => [entry.issue_number, entry])
@@ -395,7 +424,15 @@ export async function processInbox({
           "Test closure is limited to the authenticated operator's verified request."
         );
       if (!recordedTerminal) {
-        observation = await observe(entry, { github, profile });
+        observation = await loggedStep(
+          {
+            step: "ticket.readiness",
+            issue_number: number,
+            request_id: entry.request?.request_id,
+            message: "Read current PR checks, reviews and dependencies."
+          },
+          () => observe(entry, { github, profile })
+        );
         decision = decideTicket(entry, observation, {
           overlaps: overlapping(
             entry,
@@ -404,6 +441,16 @@ export async function processInbox({
             )
           ),
           closeTest
+        });
+        runEvent({
+          step: "ticket.filter",
+          issue_number: number,
+          request_id: entry.request?.request_id,
+          outcome: "succeeded",
+          message:
+            "Initial ticket policy evaluated; blockers are recorded before rehearsal.",
+          result_status: decision.status,
+          remaining: decision.reasons.map((reason) => reason.code)
         });
         if (rehearsal) {
           // Resume retains this run's pinned destinations. The legacy fallback
@@ -469,14 +516,19 @@ export async function processInbox({
                   github,
                   profile
                 });
+                const currentPlan = await plan(entry);
+                assertPinnedDestinations(
+                  run.plans?.[number] ?? stored,
+                  currentPlan,
+                  profile
+                );
                 return (
                   canRehearse(
                     entry,
                     currentObservation,
                     decideTicket(entry, currentObservation)
                   ) &&
-                  digest(await plan(entry)) ===
-                    digest(run.plans?.[number] ?? stored)
+                  digest(currentPlan) === digest(run.plans?.[number] ?? stored)
                 );
               },
               guard: () => journal.guard(run),
@@ -545,13 +597,15 @@ export async function processInbox({
             )
               return false;
             const observation = await observe(entry, { github, profile });
+            const currentPlan = await plan(entry);
+            assertPinnedDestinations(item.input, currentPlan, profile);
             if (
               !canRehearse(
                 entry,
                 observation,
                 decideTicket(entry, observation)
               ) ||
-              digest(await plan(entry)) !== digest(item.input)
+              digest(currentPlan) !== digest(item.input)
             )
               return false;
           }
@@ -634,35 +688,50 @@ export async function processInbox({
         }
       }
       pendingNumber = number;
-      const applied = await applyTicket({
-        api,
-        journal,
-        state,
-        run,
-        ticket,
-        number,
-        actor,
-        signal,
-        verifyClosure: async () => {
-          if (recordedTerminal || closeTest) return;
-          const freshIssue = await response(api, "GET", `/issues/${number}`);
-          if (receiptHash(freshIssue) !== ticket.receipt_hash)
-            throw new Error("Receipt changed before closure.");
-          const freshEntry = await inspect(freshIssue, { get, profile });
-          const freshObservation = await observe(freshEntry, {
-            github,
-            profile
-          });
-          const fresh = decideTicket(freshEntry, freshObservation);
-          if (
-            fresh.status !== "closed" ||
-            digest(fresh.reasons) !== digest(latest(ticket).decision.reasons)
-          )
-            throw new Error(
-              "PR evidence changed before closure; the intended decision was not applied."
-            );
-        }
-      });
+      const applied = await loggedStep(
+        {
+          step: "ticket.update",
+          issue_number: number,
+          request_id: ticket.request?.request_id,
+          message: "Apply and verify the saved ticket decision."
+        },
+        () =>
+          applyTicket({
+            api,
+            journal,
+            state,
+            run,
+            ticket,
+            number,
+            actor,
+            signal,
+            verifyClosure: async () => {
+              if (recordedTerminal || closeTest) return;
+              const freshIssue = await response(
+                api,
+                "GET",
+                `/issues/${number}`
+              );
+              if (receiptHash(freshIssue) !== ticket.receipt_hash)
+                throw new Error("Receipt changed before closure.");
+              const freshEntry = await inspect(freshIssue, { get, profile });
+              const freshObservation = await observe(freshEntry, {
+                github,
+                profile
+              });
+              const fresh = decideTicket(freshEntry, freshObservation);
+              if (
+                fresh.status !== "closed" ||
+                digest(fresh.reasons) !==
+                  digest(latest(ticket).decision.reasons)
+              )
+                throw new Error(
+                  "PR evidence changed before closure; the intended decision was not applied."
+                );
+            }
+          }),
+        (applied) => ({ result_status: applied.status })
+      );
       results.push({
         ...applied,
         ...(rehearsal ? { rehearsal: rehearsalResult } : {}),
@@ -672,7 +741,13 @@ export async function processInbox({
       pendingNumber = null;
     }
     signal?.throwIfAborted();
-    await journal.release(state, run);
+    await loggedStep(
+      {
+        step: "journal.release",
+        message: "Release the completed run's inbox lock."
+      },
+      () => journal.release(state, run)
+    );
     return {
       mode: "write",
       profile: profile.name,
@@ -686,6 +761,49 @@ export async function processInbox({
   } catch (error) {
     // Retain the lock on failure, even on an uncertain API response. Recovery
     // is explicit, after the prior process has stopped; it never uses a timer.
+    const trials = Object.values(state.batches ?? {}).flatMap((batch) =>
+      batch.attempts.flatMap((attempt) =>
+        (attempt.progress?.prs ?? [])
+          .filter((pr) => pr.cleanup !== "removed")
+          .map(
+            (pr) =>
+              `${pr.role}: ${pr.number ? `PR #${pr.number}, ` : ""}${pr.branch}`
+          )
+      )
+    );
+    runEvent({
+      step: "run.unfinished",
+      outcome: signal?.aborted ? "interrupted" : "unknown",
+      message:
+        "The run did not finish; recorded operations may need reconciliation. No rollback is claimed.",
+      remaining: [
+        ...trials,
+        ...[
+          ...Object.values(state.service_attempts ?? {}),
+          ...Object.values(state.batches ?? {}).flatMap((batch) =>
+            batch.attempts.flatMap((attempt) =>
+              Object.values(attempt.progress?.service_attempts ?? {})
+            )
+          )
+        ]
+          .filter(
+            (attempt) =>
+              !attempt.result ||
+              attempt.result.report?.cleanup?.status !== "removed"
+          )
+          .map((attempt) => {
+            const workflowId =
+              attempt.workflow_run_id ?? attempt.result?.workflow?.id;
+            return `Service attempt ${attempt.id}: ${
+              workflowId
+                ? `https://github.com/${attempt.plan?.runtime?.repository}/actions/runs/${workflowId}`
+                : "dispatch outcome unverified"
+            }`;
+          }),
+        ...(pendingNumber ? [`Ticket #${pendingNumber} presentation`] : [])
+      ],
+      recovery: `Stop the original process and settle in-flight requests before --resume ${run.run_id}.`
+    });
     if (pendingNumber && state.tickets[pendingNumber]) {
       state.tickets[pendingNumber].application_error = {
         at: now().toISOString(),

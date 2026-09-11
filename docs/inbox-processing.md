@@ -438,6 +438,14 @@ advance. GitHub Issue calls are not transactional; do not run a resumed copy
 while the original process may still be alive. The command guide owns the
 recovery procedure and timeout guidance.
 
+The [v0.1 run logs](./design.md#next-step-v01-run-logging) add local step history
+and live progress, separate from this journal. They explain started, verified and
+uncertain operations and actual cleanup. They do not supply ticket evidence,
+change labels or ownership, or replace the journal's recovery records. A log write
+failure is visible but does not discard saved decisions or prevent existing
+cleanup. No heartbeat, board or automatic takeover is included; the
+stop-before-resume requirement remains. See progress for local versus live proof.
+
 The workflow's initial comment identity is bound to its verified result log.
 If a comment POST loses its response, its previously recorded random marker and
 author ID allow recovery; an arbitrary lookalike comment is not adopted. Once

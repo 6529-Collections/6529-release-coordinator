@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { loggedStep, runEvent, logOutcome } from "./run-log.mjs";
 import {
   serviceHash,
   serviceAssert,
@@ -104,18 +105,33 @@ export async function selectBatch({
     };
     let result;
     try {
-      result =
-        phase === "git"
-          ? await prepare(group)
-          : await check(prepared, {
-              id: record.id,
-              previous: record.progress,
-              save: saveProgress,
-              guard,
-              verify: current,
-              signal,
-              deadline: state.deadline
-            });
+      result = await loggedStep(
+        {
+          step: `batch.${phase}`,
+          attempt_id: record.id,
+          tickets: record.members,
+          message:
+            phase === "git"
+              ? "Try the combined Git changes before expensive checks."
+              : "Run checks for this exact candidate."
+        },
+        async () =>
+          phase === "git"
+            ? await prepare(group)
+            : await check(prepared, {
+                id: record.id,
+                previous: record.progress,
+                save: saveProgress,
+                guard,
+                verify: current,
+                signal,
+                deadline: state.deadline
+              }),
+        (result) => ({
+          outcome: logOutcome(result.status),
+          result_status: result.status
+        })
+      );
     } catch (error) {
       // A check adapter must finish or preserve ownership before returning. An
       // uncertain write/save escapes and leaves the inbox locked for recovery.
@@ -154,7 +170,16 @@ export async function selectBatch({
             value.phase === "git" &&
             value.members.join(",") === record.members.join(",")
         )?.result;
-        await revalidate(prepared, record.progress, { guard });
+        await loggedStep(
+          {
+            step: "batch.reverify",
+            attempt_id: record.id,
+            tickets: record.members,
+            message:
+              "Re-read saved candidate proof without creating new trials or CI."
+          },
+          () => revalidate(prepared, record.progress, { guard })
+        );
       }
       await current();
     }
@@ -250,7 +275,28 @@ export async function selectBatch({
       });
     }
     state.selected = [];
-    state.stop = { status: "stale", kind: "evidence", message: error.message };
+    const trials = state.attempts.flatMap(
+      (attempt) => attempt.progress?.prs ?? []
+    );
+    const remaining = trials.filter((pr) => pr.cleanup !== "removed");
+    const cleanup = !trials.length
+      ? "No temporary trial PRs were recorded."
+      : !remaining.length
+        ? "All recorded temporary trial PRs and branches were verified removed."
+        : `Cleanup remains unverified for ${remaining.map((pr) => `${pr.role} ${pr.branch}`).join(", ")}.`;
+    state.stop = {
+      status: "stale",
+      kind: "evidence",
+      message: `${error.message} ${cleanup}`
+    };
+    runEvent({
+      step: "batch.stopped",
+      outcome: "failed",
+      result_status: "stale",
+      message: state.stop.message,
+      cleanup_status: remaining.length ? "pending" : "removed",
+      remaining: remaining.map((pr) => `${pr.role} ${pr.branch}`)
+    });
     state.status = "finished";
     await persist();
     return state;

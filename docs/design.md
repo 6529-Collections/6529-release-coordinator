@@ -2,7 +2,8 @@
 
 **Draft, not implemented release behavior.** The live system submits requests;
 the local app verifies intake, inspects readiness, organizes tickets, rehearses
-merges, and runs supported one-ticket sandbox service/database checks.
+merges, and runs supported one-ticket sandbox service/database checks and
+bounded sandbox batches without database changes.
 It does not authorize or execute releases. See [progress](./progress.md) for
 that boundary.
 This document retains the written execution baseline formerly embedded in the
@@ -35,6 +36,116 @@ settle the choices below.
 The full execution design's lane, batch, and worker database should not be
 introduced merely to organize tickets. The smaller processing stage still
 uses its own GitHub decision journal, not the future worker database.
+
+<a id="next-step-v01-run-logging"></a>
+
+## v0.1 run logging
+
+**Implemented locally September 11, 2026.** Here, v0.1 names this small Coordinator
+milestone, not a new public npm package version. The existing `inbox:run` command
+shows progress and saves diagnostic history. The manual recovery procedure is
+unchanged. See [progress](./progress.md#v01-run-logging-september-11) for validation
+and delivery evidence.
+
+### What the logs show
+
+- Show progress as each meaningful step starts and finishes: intake, filtering,
+  Git rehearsal, temporary PR creation, waiting for checks, service execution,
+  ticket updates and cleanup. Log a changed outcome, not every unchanged poll.
+- Save the same events in chronological order for each run. Include UTC time,
+  run ID, step, outcome and a plain explanation; include ticket/request,
+  candidate/attempt, repository, PR or workflow identity and links where relevant.
+  Completed steps include elapsed time.
+- Distinguish **started**, **succeeded**, **failed**, **unknown** and
+  **interrupted**. Starting a GitHub request is not proof that it succeeded.
+  A lost response stays uncertain until the existing reconciliation verifies it.
+- Explain stops precisely. If backend `main` changes, name that repository and
+  record the expected and observed commits. Say that the old result cannot be
+  used. Report cleanup separately: what was verified removed, what remains,
+  and what is unknown. Do not claim cleanup succeeded merely because it started.
+- On explicit resume, append a visible resume boundary to the same run's history
+  and retain existing attempt identities. End a normal run with its outcome,
+  unfinished work, any existing recovery instruction, and the log location.
+
+For example: “Backend main changed during testing. These results belong to the
+previous version. The temporary test PRs were cleaned up; a fresh run is needed.”
+That cleanup sentence is valid only after cleanup has been verified. If cleanup
+is incomplete, name the remaining owned PRs/branches and the required next action.
+This addresses the explanation gap recorded in CT-05; it does not change when
+stale evidence is rejected.
+
+### Where the information lives
+
+Detailed logs live on the machine running the command, outside individual
+checkouts: `~/.6529-release-coordinator/logs/PROFILE/INBOX_REPOSITORY_ID/RUN_ID.jsonl`.
+The command reports the actual path. Profile and immutable inbox repository ID
+separate histories; files contain one JSON event per line and use private local
+permissions. Each command invocation has its own ID inside the events.
+
+Before acquiring the journal lock, a new command writes a `startup-UUID.jsonl`
+file. After acquisition, it moves that same history to the assigned run ID without
+replacing an existing file. An early failure retains the startup file. Explicit
+resume appends to the run's existing file, including a resume boundary. If a crash
+left a partial final line, preserve those bytes, begin new events on a separate
+line and report the old incomplete tail. Logs are diagnostics, not replay input.
+They survive changing checkout or branch but are not a shared board or journal backup.
+
+The existing `codex/inbox-state` journal remains the source for recorded intent,
+ownership, attempts and recovery decisions. Save those records before the same
+external actions as today. Local logs are for explanation, never imported as
+passing evidence or permission to continue. Preserve the v4 writer boundary,
+current attempt budgets and profile permissions.
+
+Logs contain selected Coordinator events and bounded error codes, not raw Actions
+output, exception dumps, environment dumps or full request bodies. Known credential
+values and token patterns are redacted from diagnostic text. Live progress goes to
+stderr; `--json` stdout remains one final result with `logging.file`, `complete`,
+`invocation_id`, `run_id` and `previous_tail_incomplete` metadata.
+
+Failure to initialize a log stops before inbox work. A later write failure warns
+once and marks `logging.complete: false`; existing journal decisions and cleanup
+continue under their existing rules. The command exits `2` even if ticket processing
+finished successfully. A log failure does not erase a verified ticket result.
+
+Remote service steps are reported when the completed workflow report is verified,
+with the source start/finish times separate from local observation time. Waiting
+for that workflow is visible immediately. This does not stream raw Actions logs
+or poll for a heartbeat.
+
+### Limits and finish line
+
+There is **no heartbeat** in this step. No new live-status file or command,
+GitHub status Issue/Project, dashboard, background service, automatic restart,
+takeover, machine ownership/OS-lock hardening, or stop/restart control system.
+Logs can show the last observed action; silence cannot distinguish slow work,
+a paused process, a crash or a lost connection.
+
+Existing Ctrl+C handling and explicit `--resume` remain. Record interruption
+when the process can do so; an abrupt crash may leave only a “started” event.
+Stop the old process and let in-flight requests settle before manual recovery,
+following the [command guide](../apps/coordinator/README.md#journal-concurrency-and-interrupted-runs).
+The CT-09 overlapping-process gap remains open: logs do not prevent a paused
+process from finishing a GitHub write after ownership changes.
+
+The cases below are covered by
+[run logging tests](../apps/coordinator/test/run-log.test.mjs), using the real CLI,
+journal, selection and check logic with controlled GitHub responses. The trial
+cases also prepare real temporary Git repositories. These are local tests, not
+new live GitHub acceptance.
+
+| Case | Required result |
+| --- | --- |
+| Normal run | Ordered start/result events identify the run, relevant tickets/attempts, elapsed steps and final outcome in terminal and saved log. |
+| Failure or lost response | Verified failure and unknown outcome are distinct; an attempted operation is never logged as confirmed success. |
+| Main changes during checks | Name the changed repository and both commits, reject stale proof, and report verified cleanup or remaining resources accurately. |
+| Interruption and explicit resume | Preserve earlier events and attempt IDs, mark the resume, and use journal reconciliation; a missing final event never authorizes takeover. |
+| Storage and output | Separate profiles/inboxes outside checkouts, report the path and any write failure, and preserve parseable `--json` stdout. |
+| Sensitive output | Useful step/errors remain visible without credentials, raw workflow output or request-body dumps. |
+
+This bounded step requires no request-schema change, consumer integration update,
+package publication,
+source-PR merge or deployment. The dated corner-case results remain evidence of
+the earlier behavior; new tests must record their own results in progress.
 
 ## Bounded stage: sandbox merge rehearsal
 
@@ -216,6 +327,31 @@ labels and submitter-facing reasons. The [acceptance matrix](./merge-rehearsal-t
 records expected cases and the dated evidence distinguishes local tests from live
 GitHub proof. Database-changing batches, cross-ticket dependency declarations,
 real application execution and deployment remain future work.
+
+### Deferred: links between separate tickets
+
+The agreed future direction distinguishes two rules: **“B needs A”** allows A
+to proceed alone but requires A with B; **“A and B must stay together”** makes
+the group indivisible. Neither rule is part of the logging milestone, and the
+current request format still rejects unsupported declarations.
+
+When this feature is built:
+
+1. Reference immutable request IDs. A replacement request must not silently
+   satisfy a link to the original.
+2. Validate missing requests, incompatible targets/scopes, circular requirements
+   and oversized groups before expensive tests.
+3. Make selection and splitting respect the links. If A is excluded, B waits
+   with a specific reason. Never split a must-stay-together group.
+4. Save links with the exact selection so resume preserves them, and show the
+   prerequisite/group and waiting reason on affected tickets.
+5. Test the feature in sandbox and update the schema, submission CLI, intake and
+   frontend/backend submission integrations together before real adoption.
+
+The first version requires prerequisites in the same tested batch. Accepting an
+earlier release as satisfying a prerequisite needs later, verified release
+evidence. Until then, put inseparable work in one complete ticket; CT-20 records
+the current rejection behavior, not proof of this future feature.
 
 ## Decisions to settle before execution
 
@@ -465,6 +601,10 @@ An emergency administrator bypass may exist, but it is not part of the normal
 release path and must be audited.
 
 ## Queue and release lane
+
+**Future release-execution concept, outside the v0.1 logging milestone.** The
+database, heartbeat and takeover below are not current inbox behavior or part
+of the next implementation step.
 
 Many requests may wait in the durable queue. Only one batch may become active.
 
