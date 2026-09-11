@@ -182,7 +182,7 @@ export async function runInboxRunCli(
         "Processing may be partial; inspect the journal and recorded attempts."
       ],
       recovery: log.snapshot().run_id
-        ? `Stop the original process and let in-flight requests settle before --resume ${log.snapshot().run_id}.`
+        ? `Stop the original process, settle in-flight requests and inspect the journal. Use --resume ${log.snapshot().run_id} only if that run still holds the lock.`
         : "Inspect the inbox lock before retrying; acquisition may be uncertain."
     });
     log?.close();

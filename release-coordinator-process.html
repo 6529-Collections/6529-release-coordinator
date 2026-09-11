@@ -996,16 +996,22 @@
             Progress separates local checks from live acceptance and source delivery.
           </p>
           <p class="diagram-context">
-            <strong>Draft differences to settle:</strong> This diagram and the older written
-            baseline differ on release ownership, when main changes, and production builds.
-            Read the <a href="./docs/design.md#decisions-to-settle-before-execution">design decisions</a>
-            before implementing these steps. A staging request alone never authorizes production.
+            <strong>Agreed September 11; execution is not built:</strong> One release at a time.
+            Reuse existing product Actions and their separate staging/production builds.
+            Wait for successful matching staging E2E before merging into main for production.
+            Rollback uses new revert commits and ordinary deployments only when no database
+            change is confirmed and restoration is safe; otherwise a person takes over.
+            See the <a href="./docs/design.md#agreed-execution-direction-september-11">agreed rules</a>.
+            A staging request alone never authorizes production.
           </p>
           <p class="progress-rule" role="note">
-            <strong>Planned progress storage:</strong> A future worker will save each release
-            step and its result. The local reader currently prints its report and exits;
-            it does not save a release state or start later steps. The inbox
-            <code>inbox:run</code> workflow has its own ticket decision journal; it is not an executing release queue.
+            <strong>Storage built locally; live migration pending:</strong> Use the existing GitHub journal:
+            keep active work complete and archive finished records in the same repository.
+            Read old details only when needed, preserving retries and cleanup evidence.
+            Lifetime record caps are removed; each search still has fixed work limits.
+            No separate database, heartbeat or dashboard is required. The current journal
+            is not yet an executing release queue. See the
+            <a href="./docs/inbox-processing.md#history-storage">history storage</a>.
           </p>
           <article class="story" id="story" aria-label="Release process"></article>
         </div>
@@ -1044,7 +1050,7 @@
         {
           title: "Check recovery safety",
           story:
-            "The database-change answer is read from the release request. The changed files are loaded from every listed pull request. The Coordinator's configured database-file rules are loaded. If the request says yes, it is marked as a database change. If a changed file matches a database-file rule, it is also marked as a database change. Otherwise, it is marked as no database change. If the request answer, changed files, or rules cannot be read, the request waits. A database change blocks automatic recovery. Without a database change, automatic recovery may be used later. The answer, matched files, and final result are saved. The release continues only after the result is saved.",
+            "Read the request database-change answer and inspect every exact PR version with trusted source rules, including schema/entity and one-off data changes. A yes means database-changing; unknown coverage or a false no holds the request for clarification. No familiar migration filename is not proof of no change. Record the result. Real database-changing execution remains later work; automatic rollback is prohibited for database-changing or uncertain releases.",
           why:
             "A database change can make old code unsafe with new data. This check stops automatic recovery when it could make the problem worse.",
           failure:
@@ -1053,7 +1059,7 @@
         {
           title: "Check the backend deployment plan",
           story:
-            "The release request is checked for backend changes. If there are none, this step is skipped. Every selected deploy-unit name is checked against the backend service catalog. The normal dependencies from that catalog are added. Any dependency rule that is special to this release is added from the request. A database update is placed before any service that needs it. The combined plan must have no loop. Units with no dependency may deploy together. Changed file paths are checked only for warnings. They do not choose the deploy units. The final unit list, dependency plan, and warnings are saved. The request is accepted only when this plan is clear.",
+            "Check selected backend services and allowed environments against the product service catalog. Combine its applicable dependencies with the request order; verify omitted prerequisites are already satisfied. Reject missing prerequisites and cycles. Dispatch services one at a time in dependency order, including independent services, using the existing Deploy a service Action. Backend dependencies must pass before dependent frontend deployment. Do not add unrelated units automatically.",
           why:
             "The backend has many deploy units. The request chooses what this release needs. The backend catalog keeps the normal dependency rules in one place.",
           failure:
@@ -1062,7 +1068,7 @@
         {
           title: "Create the batch plan",
           story:
-            "Suitable verified requests are considered in a saved priority order, proposed as oldest suitable first. Dependencies take precedence. Every ticket stays whole, including its frontend and backend PRs and selected services. Requests that must ship together stay in one group. The representation of dependencies between tickets must be defined before implementation. Targets must be compatible, and overlapping PR versions are not resolved by age. The initial sandbox stage uses requests without database changes. Database-changing work stays separate; an inseparable group is never split to make it pass. The combined service order must be valid. Save the proposed members, groups, order, configured size and attempt/time limits, and reasons for exclusions. No main branch or deployment changes.",
+            "Start only when the one global release lane is free, and save ownership for this batch. Later requests wait while this release tests, deploys or recovers. Consider suitable tickets in saved Issue-number order, keeping each complete ticket whole. The current sandbox supports self-contained tickets without database changes; cross-ticket links and database-changing batches remain deferred. Save members, exact inputs, service order, budgets and clear reasons for exclusions. Ordinary source-PR CI may continue independently.",
           why:
             "A predictable order decides which compatible work is considered first. Complete tickets and dependency groups prevent partial releases. Explicit limits keep the search bounded, and reasons keep excluded work visible.",
           failure:
@@ -1113,260 +1119,117 @@
           failure:
             "If a pull request is no longer ready or main has changed, the reason is saved. The batch stops, and main stays unchanged."
         },
+
         {
-          title: "Build for staging",
-          story:
-            "The frozen batch is loaded. The exact tested commit for each changed repository is read. If the frontend changed, a fresh staging build starts from its tested commit. For every selected backend service, a fresh staging build starts from the tested backend commit. A database-update build is also created when the batch needs one. Every build must report the expected commit. Each build gets its own ID and checksum. The build files are saved in trusted storage. The environment, commit, build ID, link, file location, and checksum are saved. Each build is marked for staging only. This step passes only when every planned staging build is saved.",
-          why:
-            "Staging must test the exact code in the frozen batch. The same rule is used for the frontend, backend services, and database update.",
-          failure:
-            "If a staging build fails or cannot be saved, the problem is saved. Nothing is deployed, and the batch stops."
+                "title": "Save staging recovery targets",
+                "story": "Keep the global release lane. Before changing shared staging, record its refs and the actually deployed frontend and affected backend service versions, sources and run identities. Inspect conflicting product Actions and wait for them; do not cancel another developer. Current branch heads are not necessarily the last deployed versions.",
+                "why": "A failed release needs a verified working target for each affected service.",
+                "failure": "Missing or uncertain targets hold the release before mutation."
         },
         {
-          title: "Reserve staging",
-          story:
-            "The staging-reservation record is read. If staging is busy, the batch waits. When staging is free, a reservation is created for this batch. The reservation is saved only if staging is still free. If another batch reserved it first, this batch keeps waiting. The saved reservation is checked again. Only the batch holding it may change the staging refs, update the staging database, or deploy to staging.",
-          why:
-            "Only one batch should change staging at a time. This keeps different releases from mixing in the same environment.",
-          failure:
-            "If the staging state cannot be read or the reservation cannot be saved, the batch waits. No staging change starts."
+                "title": "Merge and deploy backend to staging",
+                "story": "Rehearse selected backend changes with current 1a-staging and inspect any unrelated staging changes. Preserve shared history and recheck the expected destination before merging. Save the result, then dispatch Deploy a service on 1a-staging with environment=staging for one required service. Wait for its exact successful result before the next service in dependency order. The Action builds and deploys with existing staging settings. Future database-changing execution must verify the selected database service before dependents.",
+                "why": "Existing backend Actions remain responsible for builds, settings and deployment.",
+                "failure": "A moved ref invalidates old composition evidence. After any shared change, stop and record recovery obligations; database-changing or uncertain state requires a person."
         },
         {
-          title: "Set the staging versions",
-          story:
-            "The staging reservation is checked. The exact tested frontend commit is loaded when the frontend changed. The exact tested backend commit is loaded when the backend changed. The current staging ref for each changed repository is read. Each staging ref is moved to its exact tested commit. The refs are read again to confirm the change. For each repository, the old commit, new commit, and result are saved. This step passes only when every changed staging ref matches its tested commit.",
-          why:
-            "The frontend and backend must both use the exact code that passed the batch tests. Exact staging refs make the code being deployed clear.",
-          failure:
-            "If a staging ref cannot be changed or confirmed, the problem is saved. No staging deployment starts, and the staging reservation is released."
+                "title": "Merge and deploy frontend to staging",
+                "story": "Once backend prerequisites succeed, verify the frontend merge with current 1a-staging, then merge normally. Its push triggers Web Deploy - STAGING. Use the existing manual dispatch for an authorized ops-only deployment. Follow that exact run and its build, artifact, runtime-version and health checks. No separate Coordinator build or environment settings are introduced.",
+                "why": "The frontend starts only after its required backend is ready.",
+                "failure": "A failed build or deployment may leave a changed staging ref or partial runtime. Save actual state and enter recovery; do not release the lane blindly."
         },
         {
-          title: "Update the staging database",
-          story:
-            "The staging reservation is checked. The frozen service plan is checked for a database update. If none is needed, this step is marked as skipped. Otherwise, the saved staging build and checksum are loaded. The files must still match the checksum. A database-update job runs in staging with those exact files. It skips changes that are already applied. It runs the remaining changes in their saved order. The job must finish successfully, and the database must be usable. The build ID, job link, changes, logs, and result are saved. Backend services that need the new database stay stopped until this step passes.",
-          why:
-            "The new backend may need new tables, columns, or prepared data. Staging must have these changes before dependent backend services are deployed.",
-          failure:
-            "If the database update fails or its result is unclear, later staging deployments do not start. The result is saved, and the batch moves to recovery."
+                "title": "Confirm staging versions",
+                "story": "Record the deployed frontend and every relevant backend service version, their source commits and workflow identities. Verify the complete combination, including unchanged prerequisites used by tests. Shared staging may contain other changes; record its actual composition and never assume it equals main plus our PRs.",
+                "why": "A green Action alone does not identify every version in the tested system.",
+                "failure": "Wrong or unavailable version proof stops advancement and requires reconciliation or recovery."
         },
         {
-          title: "Deploy backend services to staging",
-          story:
-            "The staging reservation is checked. The selected backend services and their saved order are loaded. Services in the first group are selected. The saved staging build for each service is loaded and checked. Each build is deployed to staging. The running build ID is read and compared with the saved ID. The service health check runs. The deployment, running build, and health result are saved. Services in the same group may deploy together. Another group starts only when every service in the current group passes. These actions repeat until every selected backend service is running its saved staging build and is healthy.",
-          why:
-            "The backend has many services. Following the saved order prevents a service from starting before something it needs. Checking every service proves that staging has the complete backend release.",
-          failure:
-            "If a service fails or its result is unclear, later groups do not start. The results are saved, and the batch moves to recovery."
+                "title": "Wait for staging E2E",
+                "story": "Reuse the existing required staging E2E workflows. Identify the run for this deployment, environment, source and service-version combination, including backend-only releases. Wait for completion. Recheck deployed versions when tests finish. Save STAGING_VALIDATED only when all required tests and version/health checks pass. Keep the global release lane for a production-intended batch.",
+                "why": "Production must wait for proof that these deployed changes work together.",
+                "failure": "Any required E2E failure fails the release attempt and blocks production. Missing, cancelled, skipped-required or wrong-version results cannot pass. If staging changes, require fresh matching evidence; do not blame every ticket for the group failure."
         },
         {
-          title: "Deploy the frontend to staging",
-          story:
-            "The staging reservation is checked. If the frontend did not change, this step is marked as skipped. Otherwise, the saved frontend staging build, commit, and checksum are loaded. The files must still match the checksum. That exact build is deployed to staging. The running build ID is read and compared with the saved ID. The frontend health check runs. The deployment, running build, and health result are saved. This step passes only when the saved staging build is running and healthy.",
-          why:
-            "Staging must run the exact saved frontend build. The deployment check prevents an old or incomplete frontend from being accepted.",
-          failure:
-            "If deployment or a check fails, the result is saved and the batch moves to recovery."
+                "title": "Check the requested target",
+                "story": "A staging-only request finishes after saving its successful staging result and releases its lane. A production-intended batch continues only with production authorization and matching staging evidence. Later production continuation of a staging-only release requires explicit authorization and fresh input/evidence checks; old validation cannot approve a changed composition.",
+                "why": "Passing staging is not permission to deploy to production.",
+                "failure": "Missing or mismatched authorization blocks production. An active production-intended batch retains the lane while waiting."
         },
         {
-          title: "Confirm staging versions",
-          story:
-            "The staging reservation is checked. The expected frontend build ID is loaded when the frontend changed. The expected build ID for every selected backend service is loaded. The build IDs now running in staging are read directly from the deployment system. Every reported ID is compared with its expected ID. The expected ID, reported ID, check time, and result are saved. When every ID matches, the batch is saved as STAGING_DEPLOYED.",
-          why:
-            "A deployment can report success while one service still runs old code. This check proves that staging is running the complete saved batch.",
-          failure:
-            "If a version is wrong or cannot be confirmed, the problem is saved and the batch moves to recovery."
+                "title": "Save production recovery targets",
+                "story": "Before production mutation, save its actual deployed frontend version and the version of each affected backend service, with source and workflow/build identities. Recheck main, selected PR versions, checks and the intended production composition against the validated evidence. Changed bases or additional code require fresh matching combined tests; do not merge all of staging into main.",
+                "why": "Services may have different previous working versions, and main may contain undeployed changes.",
+                "failure": "Uncertain recovery targets or unmatched code hold production. No old result is reused as proof for new inputs."
         },
         {
-          title: "Test journeys in staging",
-          story:
-            "The batch must be saved as STAGING_DEPLOYED. The fixed staging journeys are loaded. A clean staging session is started for each journey. Its actions run in order. Every expected page or response must appear. The journey must reach its final expected result. The name, times, result, failed action, and test link are saved. Test data is cleaned up, and the cleanup result is saved. When every journey and cleanup passes, the batch is saved as STAGING_VALIDATED. The staging reservation is then released.",
-          why:
-            "Correct versions can still fail when they work together. These tests prove that important user actions work in staging.",
-          failure:
-            "If a journey or cleanup fails, the problem is saved and the batch moves to recovery."
+                "title": "Merge and deploy backend to production",
+                "story": "With the same global lane, successful staging E2E and production authorization, merge the selected backend changes into current verified main normally. Dispatch Deploy a service on main with environment=prod for each required service, one at a time in dependency order. Let existing Actions build fresh production packages. Preserve PR/service release-note groups and finalize only at the documented final service.",
+                "why": "Reuse the existing production path and keep prerequisites ahead of dependents.",
+                "failure": "After a partial merge or deployment, stop advancement and record exact effects. Recover the known batch; uncertain or database-changing work goes to a person."
         },
         {
-          title: "Choose the production release",
-          story:
-            "The batch must be saved as STAGING_VALIDATED. A production decision is loaded for that exact batch ID. The decision must allow this batch to enter production. The saved batch commits, frontend scope, backend services, deployment order, and database result are shown in the decision record. The decision source and time are saved. The decision cannot be reused for another batch. The batch waits until this complete decision is saved.",
-          why:
-            "Passing staging proves that the batch works there. A separate saved decision controls which exact batch may change production.",
-          failure:
-            "If the decision is missing, unclear, or names another batch, production does not start. The reason is saved, and the batch waits."
+                "title": "Merge and deploy frontend to production",
+                "story": "After backend prerequisites pass, recheck and merge selected frontend changes into verified main, then dispatch Web Deploy - PROD on main. That workflow builds, verifies and deploys a new production package with existing production settings. Record the exact run and deployed version. Staging package bytes are not reused.",
+                "why": "The Coordinator triggers and follows the existing Action; it does not become another build system.",
+                "failure": "A failed merge, build, version or health check stops the release and enters recovery."
         },
         {
-          title: "Build for production",
-          story:
-            "The saved production decision is loaded. The exact STAGING_VALIDATED commits are read. Fresh production builds start from those commits. The frontend gets its own production build when it changed. Every selected backend service gets its own production build. A database-update build is also created when needed. Staging build files are not reused. Every build must report the expected commit. Each production build gets its own ID and checksum. The environment, commit, build ID, link, file location, and checksum are saved. This step passes only when every planned production build is saved.",
-          why:
-            "Production gets fresh files made from the exact code that passed staging. Separate builds prevent staging files or settings from being copied into production.",
-          failure:
-            "If a production build fails or cannot be saved, production does not start. The problem is saved, and the batch waits."
+                "title": "Verify production",
+                "story": "Match actual frontend/backend versions with the recorded release. Wait for configured required production-safe E2E and existing health completion checks for those versions. Reuse existing test entry points and signals; this step does not introduce a canary system or new monitoring platform.",
+                "why": "Production success needs evidence for what is actually running.",
+                "failure": "Failed required tests fail the release. Missing, cancelled or mismatched proof blocks completion; use the recorded recovery path."
         },
         {
-          title: "Reserve production",
-          story:
-            "The production-reservation record is read. If production is busy, the batch waits. When production is free, a reservation is created for this batch. The reservation is saved only if production is still free. If another batch reserved it first, this batch keeps waiting. The saved reservation is checked again. Only the batch holding it may save the recovery point, change main, update the production database, or deploy to production.",
-          why:
-            "Only one batch should change production at a time. This prevents partial releases from mixing and keeps recovery clear.",
-          failure:
-            "If the production state cannot be read or the reservation cannot be saved, the batch waits. No production change starts."
-        },
-        {
-          title: "Save the recovery point",
-          story:
-            "The production reservation is checked. The frontend and backend services that will change are loaded. The build ID now running in production is read for each one. Each reported build must still exist in trusted storage and match its checksum. The current main commit is read for every changed repository. One recovery record is saved with those production build IDs and main commits. If the database will not change, automatic recovery may use these builds. If the database will change, automatic recovery stays blocked until a recovery decision is saved.",
-          why:
-            "Recovery needs the exact working code that production uses before the release. The same rule covers the frontend and every selected backend service.",
-          failure:
-            "If a version, build, or main commit is missing, production does not change. The problem is saved, and the production reservation is released."
-        },
-        {
-          title: "Move tested code to main",
-          story:
-            "The production reservation and saved recovery point are checked. If both repositories changed, the backend is handled first. For each changed repository, the saved starting main commit and tested commit are loaded. GitHub reads the commit currently on main. It must match the saved starting commit. The GitHub App moves main to the tested commit. GitHub reads main again. It must now match the tested commit. The old commit, new commit, and result are saved. These actions repeat for every changed repository. This step passes only when every changed main branch is confirmed.",
-          why:
-            "Main must contain the same code that passed staging. Checking the old commit prevents an unexpected main change from being overwritten.",
-          failure:
-            "If a main change fails or cannot be confirmed, all known results are saved. The batch stops and moves to recovery."
-        },
-        {
-          title: "Update the production database",
-          story:
-            "The production reservation is checked. If the batch has no database update, this step is marked as skipped. Otherwise, the saved production database build and checksum are loaded. The files must still match the checksum. The staging result for the same database change must have passed. The database-update job runs in production. It skips changes that are already applied. It runs the remaining changes in their saved order. The job must finish successfully, and the database must be usable. The build ID, job link, changes, logs, and result are saved. Dependent backend services stay stopped until this step passes.",
-          why:
-            "The new backend may need the planned database structure or data. The database must be ready before dependent services start.",
-          failure:
-            "If the database update fails or its result is unclear, later production deployments do not start. The result is saved, and the batch moves to recovery."
-        },
-        {
-          title: "Deploy backend services to production",
-          story:
-            "The production reservation is checked. If no backend service changed, this step is marked as skipped. The selected services and their saved order are loaded. Services in the first group are selected. The saved production build for each service is loaded and checked. Each build is deployed to production. The running build ID is read and compared with the saved ID. The service health check runs. The deployment, running build, and health result are saved. Services in the same group may deploy together. Another group starts only when every service in the current group passes. These actions repeat until every selected backend service is running its saved production build and is healthy.",
-          why:
-            "Production must run the same backend code that passed staging, but from fresh production builds. The saved order protects service dependencies.",
-          failure:
-            "If a service fails or its result is unclear, later groups do not start. The results are saved, and the batch moves to recovery."
-        },
-        {
-          title: "Deploy the frontend to production",
-          story:
-            "The production reservation is checked. If the frontend did not change, this step is marked as skipped. Otherwise, the saved frontend production build, commit, and checksum are loaded. The files must still match the checksum. That exact build is deployed to production. The running build ID is read and compared with the saved ID. The frontend health check runs. The deployment, running build, and health result are saved. This step passes only when the saved production build is running and healthy.",
-          why:
-            "Production must run the same frontend code that passed staging, but from a fresh production build.",
-          failure:
-            "If deployment or a check fails, the result is saved and the batch moves to recovery."
-        },
-        {
-          title: "Release to more users",
-          story:
-            "The rollout plan is loaded. If there is no gradual rollout, this step is marked as skipped. Otherwise, the first planned share of traffic is sent to the new release. The user share, production build IDs, and start time are saved. The batch waits for the time set for that stage. The planned health signals are read and saved. Traffic increases only when every signal stays safe. These actions repeat until all production traffic uses the release. Every stage and result are saved.",
-          why:
-            "Starting small limits how many users are affected by a problem. More users receive the release only while it stays healthy.",
-          failure:
-            "If a rollout health signal fails or is missing, the rollout stops. The result is saved, and the batch moves to recovery."
-        },
-        {
-          title: "Confirm production versions",
-          story:
-            "The production reservation is checked. The expected frontend production build ID is loaded when the frontend changed. The expected production build ID for every selected backend service is loaded. The build IDs now running in production are read directly from the deployment system. Every reported ID is compared with its expected ID. The expected ID, reported ID, source, check time, and result are saved. This step passes only when every expected production build matches.",
-          why:
-            "A deployment can report success while one service still runs old code. This check finds an old or partial production deployment.",
-          failure:
-            "If a version is wrong or cannot be confirmed, the problem is saved and the batch moves to recovery."
-        },
-        {
-          title: "Test key journeys in production",
-          story:
-            "The fixed production journeys are loaded. A clean production test session is started for each journey. Its safe actions run in order. Every expected page or response must appear. The journey must reach its final expected result. The production build IDs, name, times, result, failed action, and test link are saved. Temporary test data is removed, and the cleanup result is saved. This step passes only when every journey and cleanup passes.",
-          why:
-            "Production has different data and settings from staging. These tests prove that important user actions work in the real environment.",
-          failure:
-            "If a journey or cleanup fails, the problem is saved and the batch moves to recovery."
-        },
-        {
-          title: "Watch production health",
-          story:
-            "The saved watch plan is loaded. Its watch time, check times, health signals, data sources, and safe limits are read. The production build IDs and watch start time are saved. At each check time, the current error rate, response time, and alert state are read. Each value, limit, source, time, and result are saved. A missing result is marked as unconfirmed. Checks continue until the full watch time ends. The watch end time and final result are saved. This step passes only when every signal stayed safe and no result was missing.",
-          why:
-            "Some problems appear only under real traffic or take time to appear. Watching production finds them while recovery is still ready.",
-          failure:
-            "If a health signal fails or information is missing, the problem is saved and the batch moves to recovery."
-        },
-        {
-          title: "Close the successful release",
-          story:
-            "The full release record is loaded. Every planned build, deployment, test, rollout stage, and health result must be saved. Each item must have passed or have an allowed skip reason. Closing stops if anything failed, is still running, or is unclear. The final production build IDs, commits, services, results, and finish time are saved. The batch and all included requests are marked as finished together. The final result is saved as successful. The production reservation is released and checked. The final result is sent with a link to the record.",
-          why:
-            "The record proves what was released and what passed. Releasing production only after the full save prevents another batch from starting too soon.",
-          failure:
-            "If closing fails, it is tried again. If it still fails, the release stays open, the production reservation stays held, and the saved reason shows what needs fixing."
+                "title": "Close the successful release",
+                "story": "Save every required result, final versions and ticket outcome. Only after requested-target success and all obligations are complete may the global lane be released. Preserve existing autonomous release notes. Use the journal archive boundary to save a verified finished record in the same GitHub repository and keep a compact reference; never archive ongoing work.",
+                "why": "The next release starts only after this one has a clear saved outcome.",
+                "failure": "A failed or uncertain final save keeps ownership and the release open for reconciliation."
         }
-      ];
+];
 
       const recoverySteps = [
         {
-          title: "Stop and save",
-          story:
-            "The release stops. No new deployment or rollout starts. The current main commits are saved. The frontend build now running is saved. The build now running for every selected backend service is saved. The database result and every finished or unfinished deployment are saved.",
-          why:
-            "The system may be only partly changed. Safe recovery needs the exact current state.",
-          failure:
-            "If the current state cannot be saved, automatic recovery does not start. The active staging or production reservation stays held. The release needs a recovery owner."
+                "title": "Stop and save",
+                "story": "Stop new deployment steps. Inspect in-flight Actions and save exact shared refs, deployed versions, database status and partial effects in the active record. Keep the global release lane.",
+                "why": "Recovery must start from the state that actually exists.",
+                "failure": "If effects or storage are uncertain, stop for a person before attempting recovery."
         },
         {
-          title: "Apply the recovery rules",
-          story:
-            "The saved database result is checked. The saved frontend and backend results are checked. Automatic recovery starts only when the database is safe and every changed part has a saved working build. Otherwise, automatic work stops. The release needs a recovery owner, who repairs, checks, and closes it.",
-          why:
-            "Old code may not work with a changed database. Automatic recovery must not run unless the saved data shows that it is safe.",
-          failure:
-            "If the saved results cannot be read, automatic recovery does not start. The release needs a recovery owner."
+                "title": "Apply the recovery rules",
+                "story": "A database-changing release or unknown database status always requires a person. Automatic rollback is available only for confirmed no-database-change work with verified previous deployed targets and a safe restoration plan. No heartbeat or automatic process takeover is added.",
+                "why": "Old application code may not work after a database change.",
+                "failure": "Missing targets, incompatible service versions or unclear state keep the lane held for a person."
         },
         {
-          title: "Restore automatically",
-          story:
-            "The saved working frontend build and affected backend service builds are restored. Backend services are restored in reverse deployment order when their dependencies require it. Every result is saved. New commits are added to main to undo the failed code.",
-          why:
-            "The running code and main must return to one clear, working state. Main is never reset or rewritten.",
-          failure:
-            "If automatic recovery fails, the release needs a recovery owner. The recovery owner repairs, checks, and closes the release."
+                "title": "Revert and deploy normally",
+                "story": "Prepare new commits on affected current shared branches undoing the failed batch. Preserve unrelated changes and branch protections. Verify restored source against the saved deployed targets, run required checks, then use ordinary Actions to rebuild and deploy in a verified compatible service order. Do not blindly reverse service order or force an older commit onto main.",
+                "why": "New commits preserve history and fit existing deployment guards. The goal is restored working code, not identical old package bytes.",
+                "failure": "A moved ref, conflicting revert, mismatched recovery source or failed recovery operation stops automatic work for a person. Do not try arbitrary alternative rollbacks."
         },
         {
-          title: "Check the recovery",
-          story:
-            "The configured production version checks, journey tests, and health checks run on the restored system. Every result is saved. Recovery passes only when every check passes and the exact running versions are known.",
-          why:
-            "A restore command can report success while the system is still broken. These checks prove that users have a working system.",
-          failure:
-            "If a check fails or the system state is unclear, recovery stays open. The active staging or production reservation stays held. The release needs a recovery owner."
+                "title": "Check the recovery",
+                "story": "Verify new deployment identities map to the intended restored source in each affected environment. Require matching version, health and required E2E results. Record them before releasing ownership.",
+                "why": "A successful deployment command alone does not prove recovery.",
+                "failure": "Any failed or uncertain check keeps recovery open for a person."
         },
         {
-          title: "Close the failed release",
-          story:
-            "The recovery result for the frontend and every affected backend service is saved. The release is marked as failed. The record says whether recovery succeeded. The final result is sent. The active reservation is released only when the system is safe and its exact state is known.",
-          why:
-            "The saved result explains what failed and how the system was made safe. Keeping the active reservation prevents another release from changing the same environment too soon.",
-          failure:
-            "If the final result cannot be saved, the release stays open and the active reservation stays held."
+                "title": "Close the failed release",
+                "story": "Save the original release failure and the verified recovery result. The original release remains failed even if recovery succeeds. Release the global lane only when the system is safe and the outcome saved, or a person records a known safe resolution. Archive only fully finished records.",
+                "why": "The next release must not start against an uncertain system.",
+                "failure": "A failed final save keeps the active record and lane for reconciliation."
         }
-      ];
+];
 
       const recoveryFailureTitles = new Set([
-        "Update the staging database",
-        "Deploy backend services to staging",
-        "Deploy the frontend to staging",
+        "Merge and deploy backend to staging",
+        "Merge and deploy frontend to staging",
         "Confirm staging versions",
-        "Test journeys in staging",
-        "Move tested code to main",
-        "Update the production database",
-        "Deploy backend services to production",
-        "Deploy the frontend to production",
-        "Release to more users",
-        "Confirm production versions",
-        "Test key journeys in production",
-        "Watch production health"
-      ]);
+        "Wait for staging E2E",
+        "Merge and deploy backend to production",
+        "Merge and deploy frontend to production",
+        "Verify production"
+]);
 
       const pathSteps = {
         happy: steps.map((step, index) => ({

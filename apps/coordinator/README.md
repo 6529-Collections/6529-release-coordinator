@@ -174,8 +174,9 @@ An empty inbox is not release authorization either.
 
 These are observations, not an atomic snapshot, reservation, or GitHub lock.
 Facts can change immediately after the last read. Future execution must recheck
-its exact plan and authorization. The unresolved execution design remains in
-[design](../../docs/design.md); this checker does not settle it.
+its exact plan and authorization. The agreed future execution rules remain in
+[design](../../docs/design.md#agreed-execution-direction-september-11);
+this checker does not implement them.
 
 ## Profiled inbox and submission
 
@@ -448,16 +449,24 @@ and corrections to terminal history have no write command in this version.
 
 ### Journal, concurrency, and interrupted runs
 
-The fixed GitHub branch `codex/inbox-state` holds only `inbox-state.json` on an
+The fixed GitHub branch `codex/inbox-state` holds `inbox-state.json` and verified
+`history/batches/` and `history/services/` files on an
 independent commit history. **Never merge it into main, delete it, or force-push
 it.** It is runtime state, not a source branch. See the
 [storage and trust contract](../../docs/inbox-processing.md#storage-and-trusted-writers).
 
-Policy `2026-09-10.2` generates Git, sandbox service and batch plans internally. The journal marker is now
-`workflow: "inbox-run-v4"`. First use upgrades a legacy/v1/v2/v3 journal without
-rewriting its decisions or service history. Older writers reject the v4 marker before changes. Keep the marker
-and history intact; use current code instead of removing unfamiliar fields or
-reasons. Read-only diagnostics and the public CLI do not change.
+The v5 writer archives finished details when a run releases its lock after
+successful ticket presentation and verified cleanup. Active work stays complete;
+exact repeats load old details on demand and recheck remote evidence. The former
+100-batch and 1,000-service lifetime caps are removed; per-search budgets remain.
+See [history storage](../../docs/inbox-processing.md#history-storage). Live
+sandbox migration has not run. Do not delete records or reset attempt budgets.
+
+Policy `2026-09-10.2` generates Git, sandbox service and batch plans internally.
+The journal marker is `workflow: "inbox-run-v5"`. First use upgrades a
+legacy/v1/v2/v3/v4 journal under its lock, preserving decisions, attempt IDs,
+budgets and interrupted scope. Older writers reject the marker before changes.
+Keep it and history intact. Read-only diagnostics and the public CLI do not change.
 
 Each run acquires a repository-wide lock through a fast-forward-only Git ref
 update. A competing run fails before changing tickets. Each meaningful decision
@@ -530,3 +539,13 @@ See the [logging contract](../../docs/design.md#next-step-v01-run-logging) and
 no heartbeat, status command, board, automatic restart or takeover. The existing
 manual recovery procedure remains required; a quiet log is not proof a process
 has stopped.
+
+### Implementation map
+
+`inbox-processor.mjs` orders one run: acquire ownership, scan, prepare, batch,
+present, then release. `inbox-preparation.mjs` owns ticket scanning, readiness,
+plans and verification of the frozen eligible pool. `inbox-ticket-writer.mjs`
+owns saved decisions and their verified ticket updates. `inbox-journal.mjs`
+owns Git persistence and on-demand history reads; `inbox-history.mjs` owns
+archive eligibility and validation. The batch selector and execution adapters
+keep their existing responsibilities. This split adds no commands or framework.

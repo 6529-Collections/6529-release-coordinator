@@ -53,7 +53,11 @@ function keys(value, expected, message) {
   assert.deepEqual(Object.keys(value).sort(), [...expected].sort(), message);
 }
 
-function common(workflow, permissionsByJob) {
+function common(
+  workflow,
+  permissionsByJob,
+  allowedActions = ["actions/checkout", "actions/setup-node"]
+) {
   assert.deepEqual(
     workflow.permissions,
     readOnly,
@@ -112,9 +116,9 @@ function common(workflow, permissionsByJob) {
         `${name}: mandatory steps must fail the job`
       );
       if (step.uses) {
-        assert.match(
-          step.uses,
-          /^actions\/(?:checkout|setup-node)@[a-f0-9]{40}$/u,
+        const [, action, ref] = step.uses.match(/^(.+)@([a-f0-9]{40})$/u) ?? [];
+        assert.ok(
+          allowedActions.includes(action) && /^[a-f0-9]{40}$/u.test(ref),
           `${name}: actions must be explicitly allowed and pinned`
         );
         if (step.uses.startsWith("actions/checkout@")) {
@@ -132,11 +136,12 @@ function common(workflow, permissionsByJob) {
 export function validateWorkflows(sources) {
   keys(
     sources,
-    ["publish-release-request.yml", "submit-release-request.yml"],
+    ["publish-release-request.yml", "submit-release-request.yml", "codeql.yml"],
     "Register every workflow in the permission policy"
   );
   const release = parseWorkflow(sources["publish-release-request.yml"]);
   const intake = parseWorkflow(sources["submit-release-request.yml"]);
+  validateCodeQL(parseWorkflow(sources["codeql.yml"]));
   common(release, {
     verify: readOnly,
     check: readOnly,
@@ -181,7 +186,7 @@ export function validateWorkflows(sources) {
   });
   assert.equal(
     verify.steps.length,
-    4,
+    5,
     "Review changes to mandatory verification steps"
   );
   assert.ok(verify.steps[0].uses?.startsWith("actions/checkout@"));
@@ -194,6 +199,11 @@ export function validateWorkflows(sources) {
   assert.equal(verify.steps[1].with?.["node-version"], "${{ matrix.node }}");
   assert.equal(verify.steps[2].run, "npm ci --ignore-scripts");
   assert.equal(verify.steps[3].run, "npm run check");
+  assert.equal(
+    verify.steps[4].run,
+    "npm audit --package-lock-only --include=dev --workspaces --include-workspace-root --audit-level=low --ignore-scripts",
+    "Audit the lockfile for all workspaces and development tools without fixes"
+  );
   for (const step of verify.steps) {
     assert.equal(
       step.if,
@@ -291,6 +301,136 @@ export function validateWorkflows(sources) {
   });
 }
 
+function validateCodeQL(workflow) {
+  common(
+    workflow,
+    { analyze: { contents: "read", "security-events": "write" } },
+    [
+      "actions/checkout",
+      "github/codeql-action/init",
+      "github/codeql-action/analyze"
+    ]
+  );
+  keys(
+    workflow.on,
+    ["pull_request", "push", "workflow_dispatch"],
+    "CodeQL must run on PRs and main, without privileged triggers"
+  );
+  assert.deepEqual(workflow.on.pull_request, { branches: ["main"] });
+  assert.deepEqual(workflow.on.push, { branches: ["main"] });
+  assert.equal(workflow.on.workflow_dispatch, null);
+  const job = workflow.jobs.analyze;
+  assert.equal(job.name, "CodeQL (${{ matrix.language }})");
+  for (const field of ["if", "needs", "environment", "env"]) {
+    assert.equal(
+      job[field],
+      undefined,
+      `CodeQL: ${field} requires policy review`
+    );
+  }
+  assert.doesNotMatch(
+    JSON.stringify(workflow),
+    /secrets\s*[.[]|github\.token/iu,
+    "CodeQL must use its scoped built-in identity, without repository secrets"
+  );
+  assert.deepEqual(job.strategy, {
+    "fail-fast": false,
+    matrix: { language: ["javascript-typescript", "actions"] }
+  });
+  assert.equal(job["timeout-minutes"], 25);
+  assert.equal(job.steps.length, 3, "CodeQL must not execute repository code");
+  for (const step of job.steps) {
+    keys(
+      step,
+      ["name", "uses", "with"],
+      "CodeQL steps cannot run commands or skip analysis"
+    );
+  }
+  const [checkout, init, analyze] = job.steps;
+  assert.ok(checkout.uses.startsWith("actions/checkout@"));
+  assert.deepEqual(checkout.with, { "persist-credentials": false });
+  assert.ok(init.uses.startsWith("github/codeql-action/init@"));
+  assert.deepEqual(init.with, {
+    languages: "${{ matrix.language }}",
+    "build-mode": "none",
+    queries: "security-extended"
+  });
+  assert.ok(analyze.uses.startsWith("github/codeql-action/analyze@"));
+  assert.equal(init.uses.split("@")[1], analyze.uses.split("@")[1]);
+  assert.deepEqual(analyze.with, {
+    category: "/language:${{ matrix.language }}",
+    upload: "always",
+    "wait-for-processing": true
+  });
+}
+
+export function validateReviewConfiguration(sources) {
+  keys(
+    sources,
+    [".github/6529bot.yml", ".coderabbit.yaml"],
+    "Both review configurations are required"
+  );
+  const bot = parseWorkflow(sources[".github/6529bot.yml"]);
+  const initial = ["general", "security", "deploy-actions", "glm-swarm"];
+  assert.equal(bot.version, 1);
+  assert.equal(bot.enabled, true);
+  assert.deepEqual(
+    bot.reviewKinds,
+    {
+      allowed: [...initial, "followup"],
+      initial,
+      followup: [...initial, "followup"]
+    },
+    "Run the full review set on opening and every push, plus follow-up"
+  );
+  assert.deepEqual(bot.commands, { enabled: true });
+  assert.deepEqual(bot.lanes, [
+    { provider: "anthropic", model: "claude-opus-4-8" }
+  ]);
+  assert.deepEqual(bot.limits, { maxJobsPerDelivery: 5 });
+  assert.deepEqual(bot.admission, {
+    publicRepoMode: "trusted",
+    privateRepoMode: "open",
+    draftPrMode: "allow",
+    trustedPermission: "write"
+  });
+  assert.deepEqual(bot.budget, { mode: "enforce" });
+  const rabbit = parseWorkflow(sources[".coderabbit.yaml"]);
+  assert.equal(rabbit.reviews?.request_changes_workflow, false);
+  assert.equal(rabbit.reviews?.review_status, true);
+  assert.equal(rabbit.reviews?.review_details, true);
+  assert.equal(rabbit.reviews?.fail_commit_status, true);
+  assert.deepEqual(
+    rabbit.reviews?.auto_review,
+    {
+      enabled: true,
+      drafts: true,
+      auto_incremental_review: true,
+      auto_pause_after_reviewed_commits: 0,
+      ignore_title_keywords: [],
+      ignore_usernames: [],
+      labels: []
+    },
+    "CodeRabbit must review drafts and pushes without automatic pauses or PR filters"
+  );
+  assert.equal(
+    rabbit.reviews?.path_filters,
+    undefined,
+    "Review exclusions require policy review"
+  );
+}
+
+export async function readReviewConfiguration() {
+  return Object.fromEntries(
+    await Promise.all(
+      [".github/6529bot.yml", ".coderabbit.yaml"].map(async (file) => [
+        file,
+        await readFile(new URL(`../${file}`, import.meta.url), "utf8")
+      ])
+    )
+  );
+}
+
 export async function readWorkflows(
   directory = new URL("../.github/workflows/", import.meta.url)
 ) {
@@ -312,7 +452,8 @@ if (
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   validateWorkflows(await readWorkflows());
+  validateReviewConfiguration(await readReviewConfiguration());
   console.log(
-    "Workflow triggers, job permissions and required check gate passed."
+    "Workflow permissions, CodeQL, review configuration and required check gate passed."
   );
 }

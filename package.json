@@ -10,8 +10,8 @@
   "scripts": {
     "check": "node scripts/check.mjs",
     "lint": "eslint . --max-warnings=0",
-    "format:check": "prettier --check \"{apps,packages,scripts}/**/*.{mjs,json}\" \"*.{mjs,json}\" \".github/workflows/*.{yml,yaml}\"",
-    "format:fix": "prettier --write \"{apps,packages,scripts}/**/*.{mjs,json}\" \"*.{mjs,json}\" \".github/workflows/*.{yml,yaml}\"",
+    "format:check": "prettier --check \"{apps,packages,scripts}/**/*.{mjs,json}\" \"*.{mjs,json}\" \".github/**/*.{yml,yaml}\" \".coderabbit.yaml\"",
+    "format:fix": "prettier --write \"{apps,packages,scripts}/**/*.{mjs,json}\" \"*.{mjs,json}\" \".github/**/*.{yml,yaml}\" \".coderabbit.yaml\"",
     "check:workflows": "node scripts/check-workflows.mjs",
     "check:package": "node scripts/check-package.mjs",
     "inbox:read": "node apps/coordinator/bin/read-inbox.mjs",

@@ -1,12 +1,14 @@
+import {
+  archiveFinished,
+  verifyArchive,
+  validateHistoryReferences,
+  validateServiceHistory
+} from "./inbox-history.mjs";
 import { createHash, randomUUID } from "node:crypto";
 import { realProfile } from "./profiles.mjs";
 import { stateBranch, stateFile } from "./coordinator-github.mjs";
 import { validateBatchHistory } from "./batch-state.mjs";
-import {
-  serviceStatuses,
-  validateServicePlan,
-  verifyServiceReport
-} from "./service-contract.mjs";
+import { serviceStatuses } from "./service-contract.mjs";
 import {
   response,
   statuses,
@@ -33,11 +35,12 @@ export const receiptHash = (issue) =>
   digest({ id: issue.id, number: issue.number, body: issue.body });
 const validSha = (value) =>
   typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
-export const inboxWorkflow = "inbox-run-v4";
+export const inboxWorkflow = "inbox-run-v5";
 const workflows = [
   "inbox-run-v1",
   "inbox-run-v2",
   "inbox-run-v3",
+  "inbox-run-v4",
   inboxWorkflow
 ];
 
@@ -59,7 +62,8 @@ export function validateJournal(state, profile = realProfile) {
           "tickets",
           "workflow",
           "service_attempts",
-          "batches"
+          "batches",
+          "history"
         ].includes(key)
     ) ||
     (state.workflow !== undefined && !workflows.includes(state.workflow))
@@ -72,37 +76,24 @@ export function validateJournal(state, profile = realProfile) {
     throw new Error("Invalid inbox lock.");
   if (state.service_attempts !== undefined) {
     if (
-      !["inbox-run-v3", inboxWorkflow].includes(state.workflow) ||
+      !["inbox-run-v3", "inbox-run-v4", inboxWorkflow].includes(
+        state.workflow
+      ) ||
       !state.service_attempts ||
-      Array.isArray(state.service_attempts) ||
-      Object.keys(state.service_attempts).length > 1000
+      Array.isArray(state.service_attempts)
     )
       throw new Error("Unsupported service attempt history.");
-    for (const [hash, attempt] of Object.entries(state.service_attempts)) {
-      if (
-        hash !== attempt.plan_hash ||
-        hash !== attempt.plan?.fingerprint ||
-        !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(attempt.id) ||
-        !attempt.actor?.id ||
-        !["prepared", "dispatching", "running", "completed"].includes(
-          attempt.state
-        ) ||
-        attempt.plan.binding?.repository !== profile.inbox.full_name ||
-        profile.name !== "sandbox" ||
-        (attempt.workflow_run_id !== null &&
-          (!Number.isSafeInteger(attempt.workflow_run_id) ||
-            attempt.workflow_run_id < 1))
-      )
-        throw new Error("Invalid service attempt identity or profile.");
-      validateServicePlan(attempt.plan);
-      if (attempt.result)
-        verifyServiceReport(attempt.result.report, attempt.plan, attempt.id);
-    }
+    validateServiceHistory(state.service_attempts, profile);
   }
   if (state.batches !== undefined) {
-    if (state.workflow !== inboxWorkflow)
+    if (!["inbox-run-v4", inboxWorkflow].includes(state.workflow))
       throw new Error("Batch history requires the current inbox writer.");
     validateBatchHistory(state.batches, profile);
+  }
+  if (state.history !== undefined) {
+    if (state.workflow !== inboxWorkflow)
+      throw new Error("Archives require the current inbox writer.");
+    validateHistoryReferences(state.history, profile);
   }
   for (const [number, ticket] of Object.entries(state.tickets)) {
     if (
@@ -157,12 +148,14 @@ export function validateJournal(state, profile = realProfile) {
         record.decision.services &&
         (!serviceStatuses.includes(record.decision.services.status) ||
           typeof record.decision.services.message !== "string" ||
-          !["inbox-run-v3", inboxWorkflow].includes(state.workflow))
+          !["inbox-run-v3", "inbox-run-v4", inboxWorkflow].includes(
+            state.workflow
+          ))
       )
         throw new Error("Invalid service decision history.");
       if (
         record.decision.batch &&
-        (state.workflow !== inboxWorkflow ||
+        (!["inbox-run-v4", inboxWorkflow].includes(state.workflow) ||
           profile.name !== "sandbox" ||
           !batchStatuses.includes(record.decision.batch.status) ||
           typeof record.decision.batch.message !== "string")
@@ -217,6 +210,7 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
     if (ref.status === 404)
       return {
         sha: null,
+        tree: null,
         state: {
           schema: 1,
           repository: profile.inbox.full_name,
@@ -246,14 +240,31 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
       profile
     );
     if (
+      !validSha(commit.tree?.sha) ||
       !Array.isArray(commit.parents) ||
       commit.parents.length !== (state.parent ? 1 : 0) ||
       (state.parent && commit.parents[0].sha !== state.parent)
     )
       throw new Error("Inbox state ancestry does not match its journal.");
-    return { sha: head, state };
+    return { sha: head, tree: commit.tree.sha, state };
   };
-  const write = async (state, message) => {
+  const readArchive = async (ref, head) => {
+    const file = await response(
+      api,
+      "GET",
+      `/contents/${ref.path}?ref=${head}`
+    );
+    if (
+      file.type !== "file" ||
+      file.path !== ref.path ||
+      file.encoding !== "base64"
+    )
+      throw new Error(
+        "History archive is missing or invalid; no new attempt is safe."
+      );
+    return JSON.parse(Buffer.from(file.content, "base64").toString("utf8"));
+  };
+  const write = async (state, message, archives = []) => {
     const prior = snapshot.sha;
     state.parent = prior;
     state.revision = snapshot.state.revision + 1;
@@ -265,12 +276,26 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
       { content: `${JSON.stringify(state)}\n`, encoding: "utf-8" },
       201
     );
+    const entries = [
+      { path: stateFile, mode: "100644", type: "blob", sha: blob.sha }
+    ];
+    for (const { path, archive } of archives) {
+      const saved = await response(
+        api,
+        "POST",
+        "/git/blobs",
+        { content: `${JSON.stringify(archive)}\n`, encoding: "utf-8" },
+        201
+      );
+      entries.push({ path, mode: "100644", type: "blob", sha: saved.sha });
+    }
     const tree = await response(
       api,
       "POST",
       "/git/trees",
       {
-        tree: [{ path: stateFile, mode: "100644", type: "blob", sha: blob.sha }]
+        ...(snapshot.tree ? { base_tree: snapshot.tree } : {}),
+        tree: entries
       },
       201
     );
@@ -285,26 +310,44 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
       },
       201
     );
-    const updated = await api(
-      prior
-        ? {
-            method: "PATCH",
-            path: `/git/refs/heads/${stateBranch}`,
-            body: { sha: commit.sha, force: false }
-          }
-        : {
-            method: "POST",
-            path: "/git/refs",
-            body: { ref: `refs/heads/${stateBranch}`, sha: commit.sha }
-          }
-    );
-    if (updated.status !== (prior ? 200 : 201))
-      throw new Error(
-        "Inbox journal changed concurrently or could not be saved; no further Issue writes are safe."
+    try {
+      const updated = await api(
+        prior
+          ? {
+              method: "PATCH",
+              path: `/git/refs/heads/${stateBranch}`,
+              body: { sha: commit.sha, force: false }
+            }
+          : {
+              method: "POST",
+              path: "/git/refs",
+              body: { ref: `refs/heads/${stateBranch}`, sha: commit.sha }
+            }
       );
+      if (updated.status !== (prior ? 200 : 201))
+        throw new Error(
+          "Inbox journal changed concurrently or could not be saved; no further Issue writes are safe."
+        );
+    } catch (error) {
+      if (!archives.length) throw error;
+      // A lost response may follow a successful save. Only the exact commit
+      // and state permit continuing to archive verification below. A failed
+      // read propagates to the processor's stop-and-inspect recovery message.
+      const current = await read();
+      if (current.sha !== commit.sha || digest(current.state) !== digest(state))
+        throw error;
+    }
     const verified = await read();
     if (verified.sha !== commit.sha || digest(verified.state) !== digest(state))
       throw new Error("Inbox journal write could not be verified.");
+    for (const { archive, ref } of archives)
+      verifyArchive(
+        await readArchive(ref, verified.sha),
+        archive.kind,
+        archive.identity,
+        ref,
+        profile
+      );
     snapshot = verified;
   };
   return {
@@ -315,9 +358,12 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
         state.workflow &&
         state.workflow !== workflow &&
         !(
-          ["inbox-run-v1", "inbox-run-v2", "inbox-run-v3"].includes(
-            state.workflow
-          ) && workflow === inboxWorkflow
+          [
+            "inbox-run-v1",
+            "inbox-run-v2",
+            "inbox-run-v3",
+            "inbox-run-v4"
+          ].includes(state.workflow) && workflow === inboxWorkflow
         )
       )
         throw new Error(
@@ -329,7 +375,12 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
         );
       if (resume && (!state.lock || state.lock.run_id !== resume))
         throw new Error("That interrupted run is not the current inbox lock.");
-      if (resume && scope && digest(scope) !== digest(state.lock.scope))
+      const savedScope = state.lock?.scope;
+      const comparableScope =
+        savedScope?.workflow === "inbox-run-v4" && workflow === inboxWorkflow
+          ? { ...savedScope, workflow: inboxWorkflow }
+          : savedScope;
+      if (resume && scope && digest(scope) !== digest(comparableScope))
         throw new Error(
           "Resume must preserve the interrupted run's Issue selection and action."
         );
@@ -372,10 +423,36 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
       state.parent = snapshot.state.parent;
       state.revision = snapshot.state.revision;
     },
+    async loadHistory(state, run, kind, identity) {
+      if (
+        !["batches", "services"].includes(kind) ||
+        !/^[0-9a-f]{64}$/u.test(identity)
+      )
+        throw new Error("Invalid history lookup.");
+      await this.guard(run);
+      const field = kind === "batches" ? "batches" : "service_attempts";
+      const ref = state.history?.[kind]?.[identity];
+      if (ref) {
+        const record = verifyArchive(
+          await readArchive(ref, snapshot.sha),
+          kind,
+          identity,
+          ref,
+          profile
+        );
+        state[field] ??= {};
+        state[field][identity] ??= structuredClone(record);
+      }
+      return state[field]?.[identity];
+    },
     async release(state, run) {
       await this.guard(run);
-      state.lock = null;
-      await write(structuredClone(state), `release ${run.run_id}`);
+      const released = structuredClone(state);
+      released.lock = null;
+      const archives =
+        workflow === inboxWorkflow ? archiveFinished(released, profile) : [];
+      await write(released, `release ${run.run_id}`, archives);
+      Object.assign(state, structuredClone(snapshot.state));
     },
     read
   };

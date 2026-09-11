@@ -19,7 +19,8 @@ The install downloads locked dependencies. The check command then runs:
 
 1. `npm run lint`: ESLint's recommended JavaScript rules across source, commands,
    scripts, and tests. This is basic JavaScript analysis, not TypeScript checking.
-2. `npm run format:check`: Prettier checks JavaScript, JSON, and workflow YAML.
+2. `npm run format:check`: Prettier checks JavaScript, JSON, workflow YAML and
+   the checked-in review bot configuration.
    Narrative documents and historical HTML diagrams are outside this formatter.
 3. `npm test`: discovers every `.test.mjs` file under `apps`, `packages`, and
    `scripts`, excluding dependencies and generated runtime records. Each root
@@ -27,6 +28,7 @@ The install downloads locked dependencies. The check command then runs:
    and temporary real Git repositories.
 4. `npm run check:workflows`: parses all workflow YAML and verifies job permissions,
    triggers, pinned actions, the required result, and publishing/intake boundaries.
+   It also verifies the CodeQL analysis and fixed automatic review set below.
    Duplicate keys, aliases, merge keys, and other unsupported YAML constructs
    fail explicitly. A new workflow needs an explicit policy and tests.
 5. `npm run check:package`: packs the public CLI, checks its reviewed nine-file
@@ -62,22 +64,140 @@ Node 20, 22, and 24 using disposable GitHub runners. It runs on every PR targeti
 `main`, without path filters, and on pushes to `main`. Manual publishing also
 requires these checks. Each runner uses `npm ci --ignore-scripts`.
 
+CI also audits the exact shared lockfile, including workspace runtime dependencies
+and root development tools:
+
+```sh
+npm audit --package-lock-only --include=dev --workspaces --include-workspace-root --audit-level=low --ignore-scripts
+```
+
+This non-fixing command contacts the npm registry. Any reported vulnerability at
+low severity or higher, or an audit service error, fails verification and therefore
+`Check package`. It installs nothing and does not change the lockfile. It remains
+separate from the offline `npm run check`; the same command can be run locally.
+
 The existing **Check package** job always evaluates the combined result. Failed,
 cancelled, or skipped verification cannot produce a passing gate. Its name stays
 the same so the existing required-check rule continues to match it.
 
-The repository rules must require that result and an up-to-date branch before
-merging. GitHub also checks merge conflicts. These server settings cannot be
-enforced by a local command; see the dated readback in progress. New workflow
-behavior only becomes live after the change is pushed and merged as appropriate.
+The repository rules require that result, both CodeQL language jobs,
+`security/snyk (6529)` and an up-to-date branch before merging. A separate code-scanning rule enforces the
+alert thresholds below. GitHub also checks merge conflicts. These server settings
+cannot be enforced by a local command; see the dated readback in progress. New
+workflow behavior only becomes live after the change is pushed and merged as
+appropriate.
 
-PR jobs have read-only repository permissions. The manually dispatched intake
+Ordinary PR test jobs have read-only repository permissions. CodeQL alone adds
+`security-events: write` to upload analysis, without content, Issue or publishing
+write access. It does not install dependencies or execute project programs.
+The manually dispatched intake
 job alone receives Issue-writing permission and installs production dependencies
 only. Publication requires manual dispatch from `main`, successful checks, the
 `npm-publish` environment, and its separate short-lived publishing identity.
 Workflow tests verify the checked-in configuration, not every live account,
 environment, or npm setting. They are regression tests, not a sandbox for
 arbitrary workflow code; changes to the policy itself still need review.
+
+## Automatic review set
+
+Every PR targeting `main`, including drafts, uses the same review set. There is
+no size classifier, risk label or manual opt-in. Configuration is on this branch;
+see [progress](./progress.md) for delivery and live activation evidence.
+
+| Reviewer | Initial PR | Each new push |
+| --- | --- | --- |
+| 6529bot general | Full review | Full review |
+| 6529bot security | Full review | Full review |
+| 6529bot deployment/Actions | Full review | Full review |
+| 6529bot GLM Swarm | Advisory review group | Advisory review group |
+| 6529bot follow-up | Not needed yet | Reviews fixes and earlier comments |
+| CodeRabbit | Review, including drafts | Incremental review, with no automatic pause after a commit count |
+
+[`.github/6529bot.yml`](../.github/6529bot.yml) keeps one Anthropic lane for the
+ordinary reviews. GLM Swarm uses the bot's fixed OpenRouter lane. Opening a PR
+creates four bot jobs; pushing creates five, including follow-up. The per-delivery
+limit is five. Central permission, provider availability and enforced spending
+caps remain authoritative; this configuration cannot raise them. Public requests
+must come from a trusted maintainer. No provider credentials belong in this repo.
+
+The central bot reads config from the **PR base**, so these settings become
+effective after merging them into `main`. A feature-branch config alone does not
+prove the new jobs ran. The existing central draft policy already permitted the
+four default reviews on PR #66; this file preserves draft admission and changes
+the selected review kinds.
+
+[`.coderabbit.yaml`](../.coderabbit.yaml) enables draft and incremental reviews,
+shows incomplete/failed review status, and leaves automatic approval disabled.
+CodeRabbit reads the feature-branch file, subject to organization overrides.
+Its behavior must still be verified on the latest PR commit.
+
+Bot comments are advice, not release permission or passing tests. Before merging,
+inspect current reviews and check that every expected job completed. Investigate
+valid findings; a skipped, failed or context-truncated review is not complete
+coverage. GLM may report degraded reviewer threads; an advisory summary alone
+does not prove every reviewer completed. These reviews do not currently produce
+one required GitHub status that enforces the whole bot set.
+
+## CodeQL and dependency security
+
+[`.github/workflows/codeql.yml`](../.github/workflows/codeql.yml) runs on every
+PR into `main`, every push to `main`, and manual dispatch. It scans JavaScript
+and GitHub Actions separately with `security-extended` queries. Both actions are
+pinned to the same reviewed CodeQL commit. Analysis uploads the results for the
+actual checked-out revision and waits for GitHub to process them.
+
+The workflow deliberately has no draft/path filters, skipped failure steps,
+repository secrets, dependency installation or application execution. CodeQL's
+scoped built-in token is used only by the analysis actions. Use this checked-in
+advanced setup; enabling a separate default setup would duplicate/conflict with it.
+
+A green analysis job means the scan completed, not that it found zero problems.
+The active `Protect main` ruleset separately requires CodeQL and rejects new
+high/critical security findings or error-level findings in the PR diff. Both
+`CodeQL (javascript-typescript)` and `CodeQL (actions)` are required statuses,
+so one completed language cannot stand in for the other. `Check package` and
+the up-to-date branch requirement remain in place. See progress for the live
+readback; local policy checks do not inspect these external settings.
+
+Snyk dependency checks use the existing **6529 Snyk organization and GitHub
+integration**, as in the product repositories. This avoids exposing a Snyk token
+to untrusted PR code. Snyk setup requires an authenticated organization account;
+there is no repository credential to use as a fallback.
+
+The root-only import has zero production dependencies and is not useful coverage
+by itself. Import `packages/release-request/package.json` through **Add custom
+file location**. Its dedicated project scans the public CLI's six runtime
+libraries. The Coordinator workspace declares no separate dependencies.
+
+Snyk's GitHub integration does not explicitly support npm workspaces: for this
+nested manifest it resolves dependencies without the shared root lockfile.
+Its result is therefore not proof of the exact versions installed by CI. The
+separate npm audit above checks those locked versions and development tools.
+Do not add duplicate manifests or lockfiles, change dependency versions to match
+a scan, or expose a Snyk token to PR code just to accommodate this limitation.
+
+Configure the package project's PR check for newly introduced vulnerabilities
+at every severity, including ones without a fix. Disable automatic fix and
+upgrade PRs on the imported projects; organization-wide product settings stay
+unchanged. Do not exempt dependencies or dismiss findings to obtain a pass.
+The observed draft PR status `security/snyk (6529)` is required on `main`; verify
+it still includes the package project when changing the integration. A result
+saying no manifest changed reuses the imported
+manifest's baseline; it is not a fresh lockfile scan. Some settings live in Snyk,
+not in this repository; progress records their current activation evidence.
+
+Confirmed source-code false positives are recorded individually in Snyk as
+**Not vulnerable**, with the reviewed code path and a reason to reassess if that
+behavior changes. Keep the source scanner enabled; do not exclude whole tests or
+rules to hide a specific alert. The three reviewed September 11 findings and
+their verification are recorded in [progress](./progress.md#snyk-code-triage-september-11).
+
+Sources: [6529bot configuration](https://github.com/6529-Collections/6529reviewbot/blob/main/docs/repository-config.md),
+[CodeRabbit configuration](https://docs.coderabbit.ai/reference/configuration),
+[CodeQL workflows](https://docs.github.com/en/code-security/reference/code-scanning/workflow-configuration-options),
+[Snyk PR checks](https://docs.snyk.io/scan-with-snyk/pull-requests/pull-request-checks/configure-pull-request-checks),
+[Snyk npm workspace limitations](https://docs.snyk.io/supported-languages/supported-languages-list/javascript),
+[npm audit](https://docs.npmjs.com/cli/v11/commands/npm-audit/).
 
 ## Behavior tests and sandbox execution
 

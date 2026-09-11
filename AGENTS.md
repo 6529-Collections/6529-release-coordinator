@@ -43,12 +43,17 @@ from first principles.
 ## Documentation map
 
 - `README.md` is the entry point and documentation index.
-- `docs/progress.md` records dated implementation, merge/publication evidence,
-  next steps, and deliberately deferred work.
+- `docs/progress.md` is the concise current status, next steps and evidence index.
+  Keep detailed past delivery narratives in `docs/history/` and dated acceptance
+  reports in `docs/testing/`; do not turn historical plans into a fresh work queue.
 - `docs/code-checks.md` owns checks for this repository's code and PR gate.
   `npm run check` runs non-fixing lint, formatting checks, all offline tests,
   workflow policy checks, and a packed-CLI smoke test. It does not run the inbox.
   Keep format fixes separate and distinguish local checks from live GitHub CI.
+  The same guide owns the fixed 6529bot/CodeRabbit review set, CodeQL and Snyk
+  setup. Preserve draft/push coverage, scoped analysis permissions and central
+  bot admission/budgets. Distinguish checked-in config from base-branch activation,
+  external integrations, completed reviews and enforced GitHub merge rules.
 - `docs/inbox-processing.md` owns the ticket workflow,
   status/reason labels, submitter ownership, history requirements, and migration.
   Check `docs/progress.md` for local implementation versus merged/runtime proof.
@@ -76,12 +81,21 @@ from first principles.
   public schema or production repository allowlist to accommodate test fixtures.
   Documentation is not permission to create external resources. Keep the runtime
   bundle identical to its source, verify its fixed branch/commit, and preserve
-  service and batch attempts in the v4 journal before dispatch.
-- `docs/design.md` contains the proposed execution design and unresolved
-  differences with the full process diagram. Its v0.1 logging section owns local
+  service and batch attempts in the v5 journal before dispatch.
+- `docs/design.md` and the full process diagram contain the agreed execution
+  direction, still unimplemented. Reuse existing product Actions and their
+  environment-specific builds; no configuration redesign or portable artifacts.
+  Wait for successful matching staging E2E before production merges into `main`.
+  Keep one release active through completion or recovery. Automatic rollback
+  requires confirmed no database change, verified revert commits and ordinary
+  deploy/check steps; otherwise stop for a person. Its v0.1 logging section owns local
   run diagnostics; logs never replace journal authority or prove a process stopped.
-  Heartbeat and automatic recovery remain deferred. Settle the execution choices
-  before implementing release execution. Its batch-testing section owns the bounded
+  Heartbeat and automatic process takeover remain deferred. Release rollback is
+  future work, distinct from process restart. Keep state in the GitHub journal;
+  `docs/inbox-processing.md` owns verified archives and v5 migration; preserve
+  unfinished work, archive checksums, original attempts and per-run budgets.
+  Lifetime record caps are removed locally; live migration needs separate evidence.
+  A separate database/dashboard is not required. Its batch-testing section owns the bounded
   search before release mutations: keep tickets/dependencies whole,
   test the final exact combination, and never blame every member of a failed
   group. Batch ticket projections belong in `docs/inbox-processing.md`; planned

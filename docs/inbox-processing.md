@@ -32,8 +32,9 @@ backend installation is needed for this scope.
 
 The rehearsal only merges in temporary local repositories. The release worker,
 scheduling, product merges, builds, deployments, and recovery remain later work. No ticket status or
-label authorizes release execution. The execution design's unresolved branch,
-release ownership, and production-build choices remain unresolved.
+label authorizes release execution. The [agreed release rules](./design.md#agreed-execution-direction-september-11)
+reuse existing deployments, require successful staging E2E before production,
+and keep one release active through recovery. Those rules are not implemented here.
 
 ## Responsibility and commands
 
@@ -191,8 +192,9 @@ its lock; explicit resume uses the stored plan and fresh evidence.
 [one-ticket sandbox stage](./merge-rehearsal-testing.md#service-and-database-acceptance)
 comes before batching. Reuse the managed comment, submitter ownership, and
 decision history and original request/receipt. The sandbox writer uses
-`inbox-run-v4` (service attempts were introduced in v3); older writers must stop. The journal's `service_attempts` map saves
-exact plans and attempts before dispatch and retains verified results for retries.
+`inbox-run-v5` (service attempts were introduced in v3); older writers must stop. The journal's `service_attempts` map saves
+exact plans and attempts before dispatch; finished results remain available for
+retries through the history index.
 
 Managed labels are `services:not-run`, `services:passed`, `services:blocked`,
 `services:unknown`, and `services:stale`. Reasons are `database-unverified`,
@@ -218,7 +220,9 @@ request before another run can proceed.
 Simulation of a failure after a database change must state that real recovery
 would require a person; temporary-resource cleanup is not successful recovery.
 
-## Proposed batch ticket outcomes
+<a id="proposed-batch-ticket-outcomes"></a>
+
+## Batch ticket outcomes
 
 **Implemented for unscoped sandbox runs; see [progress](./progress.md) for evidence.**
 The [batch-selection policy](./design.md#proposed-batch-testing-and-selection)
@@ -228,8 +232,8 @@ supports self-contained staging requests with verified no-database-change scope.
 Cross-ticket dependency declarations remain future work; inseparable changes
 must be submitted as one complete ticket.
 
-`inbox-run-v4` adds `batches` history without rewriting prior decisions or service
-attempts. New managed labels are `batch:passed`, `batch:blocked`, `batch:waiting`,
+`inbox-run-v5` preserves the batch history introduced in v4 and archives completed
+details without rewriting prior decisions or attempt identities. New managed labels are `batch:passed`, `batch:blocked`, `batch:waiting`,
 `batch:unknown` and `batch:stale`. Reasons are `batch-selected`,
 `batch-ticket-failed`, `batch-incompatible`, `batch-limit`, `batch-deferred` and
 `batch-unsupported`; the existing database-declaration-mismatch reason is reused.
@@ -238,7 +242,10 @@ release execution. Excluded tickets retain the same comment, reasons, action
 owner, exact group/attempt and check links. Unknown results never blame a submitter.
 Reusing a saved group requires fresh input checks and a fresh read of its actual
 GitHub CI/service evidence. Missing or changed proof stops reuse; a cached journal
-result alone is insufficient. This verification starts no new CI.
+result alone is insufficient. This verification starts no new CI. Its scope is the frozen eligible pool after
+cheap scope and ticket/PR-limit filtering. A ticket held outside that pool cannot
+invalidate its test result by changing unrelated PR evidence. Tickets inside the
+pool still require fresh exact evidence throughout selection and splitting.
 
 The general future outcomes below also cover capabilities beyond this first
 stage, including cross-ticket dependency groups and reassessment after a real
@@ -409,10 +416,80 @@ partly, report it and reconcile against the recorded intended result. Never
 describe an unapplied update as complete. Concurrent runs must not overwrite
 newer decisions or reset terminal outcomes.
 
+<a id="planned-history-storage"></a>
+
+### History storage
+
+**Implemented locally September 11; live migration has not run.** The v5 writer
+keeps complete unfinished work in `inbox-state.json` and moves finished batch and
+standalone service details to the same independent `codex/inbox-state` branch.
+The former 100-batch and 1,000-service lifetime caps are removed. Per-search
+limits still apply: 10 tickets, 10 PRs per repository, 40 Git attempts, 12 check
+rounds and 45 minutes. Closing a ticket does not erase its evidence.
+
+- `inbox-state.json` retains ticket decisions and their transition chains, the
+  current lock and plans, complete active attempts, and a compact `history`
+  index. Index keys are the original batch fingerprints or service plan hashes.
+- `history/batches/<checksum>.json` and `history/services/<checksum>.json` hold
+  complete records, including original inputs, budgets, attempt IDs and results.
+  The checksum names the content, so a later stale observation can have a new
+  snapshot without overwriting the original result. Earlier files remain in the
+  branch tree and their references remain in Git commit history.
+- Index summaries contain ticket/request IDs and request checksums, outcome,
+  evidence links, file path and content checksum. Exact PR versions and full
+  result details are in the archive. The managed ticket still explains outcomes.
+- Exact repeats load only the required record, check its profile, identity,
+  checksum and structure, then use the normal remote evidence revalidation.
+  Old attempt IDs, deadlines and budgets remain intact. Missing or altered
+  archives stop reuse; they never mean “start a fresh attempt.”
+
+Archiving is part of releasing a successfully presented manual run, not a new
+command or a background worker. All referenced tickets must have their latest
+updates saved and no presentation error. Their history must contain the relevant
+batch/service outcome. Every operation must have a terminal result and verified
+cleanup, including temporary PRs and service resources. `batch.status: finished`
+only says the selection search ended; it is not enough on its own. Unfinished
+records stay active. A standalone service attempt referenced by an active batch
+also stays active. There is no implemented release executor needing to keep a
+candidate active; a future executor must add its own ownership check here.
+
+The writer builds on the verified previous Git tree, saves archives and the
+smaller state file in one non-force commit, and reads back the state and newly
+written archives. Ordinary saves preserve existing files. A lost archive ref
+response is accepted only if the exact intended commit and its contents can be
+verified; otherwise processing stops. If final readback fails, inspect the journal:
+the release commit may already exist, so resume only if that run still holds the
+lock. A failed or competing save cannot silently
+drop active evidence. Earlier ordinary-save uncertainty still stops the run.
+
+If both the save confirmation and the following journal read fail, the processor
+stops and tells the operator to inspect the journal. It never skips verification
+and reports success. Once readable, the durable archive can support an exact
+repeat with its original attempt IDs and budgets. A batch identity saved before
+its first attempt is different: it legitimately has no prior record yet. Resuming
+that initial gap may create its first attempt; a referenced but missing archive
+always stops processing, including when the batch inputs are unchanged.
+
+`workflow: "inbox-run-v5"` fences older writers before they can drop archive
+files. The next authorized v5 run upgrades a legacy/v1/v2/v3/v4 journal under its
+lock, preserving receipts, transitions, plans, original results and resume scope.
+Cleanup and presentation obligations must still finish before details move out
+of the active file. Profile separation and stop-before-resume are unchanged.
+The API adapter permits only the fixed state file, checksum-named archive paths,
+and the existing journal branch operations.
+
+This is a small Git-backed index, not unlimited storage. Compact references and
+ticket decision history still grow in the main file. Keep them for this manual
+stage; measure usage before adding index pagination or retention. There is no
+separate database, dashboard or automatic archive deletion.
+
+See [history acceptance](./merge-rehearsal-testing.md#history-storage-acceptance)
+and [local implementation evidence](./progress.md#controller-and-history-cleanup-september-11).
+
 ### Storage and trusted writers
 
 The first implementation uses the fixed GitHub branch **`codex/inbox-state`**,
-with `inbox-state.json` as its only file and an independent commit history. It
+with `inbox-state.json`, verified history files and an independent commit history. It
 is never merged into source branches. The state includes a versioned schema,
 repository identity, parent commit, run lock, and per-ticket decisions/application
 results. Decision records form a hash chain. Their receipt binding and previous
@@ -459,7 +536,8 @@ replacement, completion, and terminal corrections remain reserved; no commands
 for those actions exist yet. No test is inferred from editable request/title text.
 
 The combined workflow uses policy `2026-09-10.2`. It upgrades the journal to
-`workflow: "inbox-run-v4"` without changing prior decisions or service attempts; v1/v2/v3 journals upgrade on an authorized write. Older
+`workflow: "inbox-run-v5"` without changing prior decisions or service identities;
+legacy/v1/v2/v3/v4 journals upgrade on an authorized write. Older
 checkouts reject this field before writes, even if a pass adds no new reason.
 Once that marker is recorded, use a checkout supporting the combined workflow. Older processors reject unknown reasons and stop safely;
 update the checkout rather than rewriting history. No public CLI upgrade is needed.
@@ -469,7 +547,7 @@ Unknown earlier release outcomes/active execution ownership currently produce
 `reason:coordinator-incomplete`. This inbox journal proves its own dispositions;
 it is not independent evidence of a prior deployment, cancellation, or worker
 reservation. Unchanged scans create no new transitions/comments; acquire/release
-commits record runs. The single-file journal is intended for this small manual
+commits record runs. The active journal and compact history index are intended for this small manual
 inbox; growth beyond GitHub's content API limits must be addressed before scaling.
 
 ## Migration of existing tickets

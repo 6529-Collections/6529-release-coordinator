@@ -14,10 +14,9 @@ export function validateBatchHistory(batches, profile) {
     profile.name === "sandbox" &&
       batches &&
       typeof batches === "object" &&
-      !Array.isArray(batches) &&
-      Object.keys(batches).length <= 100,
+      !Array.isArray(batches),
     "batch-state",
-    "Invalid or excessive batch history."
+    "Invalid batch history."
   );
   for (const [key, batch] of Object.entries(batches)) {
     serviceAssert(

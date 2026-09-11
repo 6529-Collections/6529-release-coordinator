@@ -113,7 +113,7 @@ candidate and defer the other. After A reaches `main`, B may need a correction
 to work with that new base. A failed group is not proof every ticket is broken.
 See the [batch design](./docs/design.md#proposed-batch-testing-and-selection),
 [ticket outcomes](./docs/inbox-processing.md#proposed-batch-ticket-outcomes), and
-[sandbox acceptance plan](./docs/merge-rehearsal-testing.md#planned-batch-acceptance).
+[sandbox acceptance](./docs/merge-rehearsal-testing.md#planned-batch-acceptance).
 
 ## Read-only diagnostics
 
@@ -152,6 +152,25 @@ merge proof as unknown: it has no verified release-outcome source and does not
 consume the separate merge-rehearsal reports.
 See [readiness checks](./apps/coordinator/README.md#readiness-checks) for details.
 
+## Agreed next direction
+
+The future worker will find a passing batch, use existing frontend/backend
+Actions to deploy it to staging, wait for successful E2E for its deployed
+versions, then merge into `main` and run existing production Actions when
+authorized. Product workflows keep their separate environment-specific builds.
+One release stays active until completion or verified recovery.
+
+Rollback uses new commits undoing the failed batch and ordinary deployments,
+only when no database change is confirmed and restoration is safe. Database
+changes or uncertain recovery need a person. These are design decisions, not
+capabilities of today's `inbox:run`.
+
+The local v5 journal keeps active work complete and archives finished batch and
+service records in the same GitHub repository. Exact retries retain their old
+attempts and budgets. The lifetime record caps are removed; live sandbox
+migration is still pending. See [history storage](./docs/inbox-processing.md#history-storage)
+and [implementation evidence](./docs/progress.md#controller-and-history-cleanup-september-11).
+
 ## Documentation map
 
 | Need | Document |
@@ -161,20 +180,19 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 | Check changes to this repository before merging | [Repository code checks](./docs/code-checks.md) |
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
-| Understand the ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
+| Understand the ticket workflow, labels, reasons, and migration | [Inbox processing guide](./docs/inbox-processing.md) |
 | Select sandbox or real, submit a request, and run its ticket workflow | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
-| Understand the sandbox merge-rehearsal test matrix and evidence | [Merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) |
+| Understand the sandbox merge-rehearsal test matrix and evidence | [Sandbox testing guide](./docs/merge-rehearsal-testing.md) |
 | Understand the implemented one-ticket service/database checks and evidence | [Service and database acceptance](./docs/merge-rehearsal-testing.md#service-and-database-acceptance) |
 | Review sandbox batching, limits, and excluded-ticket handling | [Batch design](./docs/design.md#proposed-batch-testing-and-selection) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
-| Review the future release design and unsettled choices | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |
+| Review agreed release rules and remaining integration work | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |
 | Publish and adopt the next exact package version | [Publishing guide](./docs/npm-publishing.md) |
 | Read completed migration/review evidence | [Migration history](./docs/history/npm-migration.md) |
 
-The future design and process diagram still differ on release ownership, when
-`main` changes, and production builds. Those differences are recorded together
-in the design document and must be settled before release execution is built.
+The future design and process diagram reflect the September 11 decisions.
+Implementation and acceptance evidence remain separate in progress.
 
 ## Code and ownership
 
@@ -197,6 +215,13 @@ Release requests and workflow logs are public and must never contain secrets.
 After `npm ci --ignore-scripts`, run `npm run check`. It checks JavaScript,
 formatting, all automated tests, workflow permissions, and the packed public
 CLI. GitHub runs the same command on PRs into `main` and pushes to `main`.
+The branch also configures CodeQL for JavaScript and Actions, CodeRabbit draft
+reviews, and a fixed 6529bot general/security/deployment/GLM set on PRs and pushes,
+with a follow-up review after pushes. Bot base-branch activation, Snyk integration
+and external merge enforcement have separate delivery evidence in progress.
+CI also runs a non-fixing npm audit of the shared lockfile, including every
+workspace and development tools. Snyk scans the public package's manifest;
+its npm workspace limitation makes the separate lockfile audit necessary.
 The existing required `Check package` result requires every configured Node
 version to pass. See [code checks](./docs/code-checks.md) for setup and boundaries
 and [progress](./docs/progress.md) for local versus merged/CI evidence.

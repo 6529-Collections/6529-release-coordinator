@@ -1,0 +1,29 @@
+version: 1
+enabled: true
+
+# The same full review set runs on opening and on every push.
+reviewKinds:
+  allowed: [general, security, deploy-actions, glm-swarm, followup]
+  initial: [general, security, deploy-actions, glm-swarm]
+  followup: [general, security, deploy-actions, glm-swarm, followup]
+
+commands:
+  enabled: true
+
+# GLM Swarm uses the bot's separate fixed OpenRouter lane.
+lanes:
+  - provider: anthropic
+    model: claude-opus-4-8
+
+limits:
+  maxJobsPerDelivery: 5
+
+admission:
+  publicRepoMode: trusted
+  privateRepoMode: open
+  draftPrMode: allow
+  trustedPermission: write
+
+# Inherit central spending caps; this file cannot increase them.
+budget:
+  mode: enforce

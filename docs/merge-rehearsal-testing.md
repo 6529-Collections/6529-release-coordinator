@@ -1,7 +1,7 @@
-# Merge rehearsal and test repository plan
+# Sandbox rehearsal and testing
 
-**Original merge-rehearsal scope prepared September 9, 2026; next stages updated
-September 10.** The original bounded stage after inbox organization is complete.
+**Original merge-rehearsal scope prepared September 9, 2026; current scope updated
+September 11.** The original bounded stage after inbox organization is complete.
 [Progress](./progress.md) records what has actually run;
 [the app guide](../apps/coordinator/README.md) lists commands that exist. The
 engine merged in PR #26; the public sandbox follow-up completed live required-check
@@ -9,8 +9,10 @@ acceptance, and later integration delivered the one-command ticket workflow.
 
 The one-ticket sandbox service/database stage is implemented and has local
 Docker and live ticket acceptance evidence. [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
-tracks Coordinator source delivery; the sample repository setup is merged. Batch acceptance remains
-future work. Each stage's evidence is separate from the original MR milestone.
+records the merged service extension; the sample repository setup is also merged.
+Sandbox batching has [local and live acceptance](#batch-acceptance). The v5 archive
+extension has offline proof; live migration remains pending. Each stage's evidence
+is separate from the original MR milestone.
 Documentation alone is not permission to execute external changes.
 
 ## What we will prove
@@ -144,13 +146,15 @@ For this stage:
 - Keep the published package, public request schema, central intake workflow,
   and current ticket policies unchanged. No npm release or product edit is needed.
 
-Two repositories are sufficient for this merge-rehearsal stage. This does not
-retest the public CLI-to-inbox receipt path against new repositories. A future
-full sandbox intake exercise would need its own isolated inbox and explicit
-receipt/identity configuration; do not quietly send fake requests to the real
-inbox or claim that local manifests prove submission works.
+The original two-repository merge-only stage did not test CLI-to-inbox delivery.
+The implemented [profiled inbox stage](./profiled-inbox-testing.md) adds a separate
+test inbox and explicit receipt/identity configuration. Local manifests still do
+not prove submission works; the [dated profiled acceptance](./testing/profiled-inbox-2026-09-09.md)
+records that separate proof. Keep test requests out of the real inbox.
 
-## Rehearsal behavior to implement
+<a id="rehearsal-behavior-to-implement"></a>
+
+## Rehearsal behavior
 
 The engine is now part of the single operator command `inbox:run`, with a
 verified ticket and automatically generated plan. Its old standalone command has been removed.
@@ -370,7 +374,7 @@ deployment on its own; the existing `inbox:run` command coordinates rehearsal
 with ticket processing, while deployment remains absent.
 
 Multi-ticket application checks, real release builds, release ownership,
-scheduling, deployment, existing-runtime prerequisites, recovery, and the unresolved choices in
+scheduling, deployment, existing-runtime prerequisites, recovery, and the agreed but unimplemented rules in
 [the execution design](./design.md#decisions-to-settle-before-execution) remain
 outside this stage. The sandbox can be extended for those tests later, but the
 success of the completed merge-rehearsal stage does not count as that later evidence.
@@ -535,7 +539,7 @@ reported as unknown unless its cause and attribution can be verified; an exit
 code alone does not establish a ticket defect.
 
 The journal saves the exact service plan and unique attempt before dispatch
-(introduced in `inbox-run-v3`, retained in the current v4 writer).
+(introduced in `inbox-run-v3`, retained in the current v5 writer).
 A lost dispatch response is reconciled, never blindly repeated. Subsequent runs
 reverify the same workflow result; changed inputs require a different plan.
 Lookup filters by the saved actor and creation time with a five-minute clock-skew
@@ -630,13 +634,15 @@ prove production data compatibility, AWS deployment, real runtime prerequisites,
 or recovery. Source delivery through normal PR checks and merge precedes the
 existing non-database batch matrix.
 
-## Planned batch acceptance
+<a id="planned-batch-acceptance"></a>
+
+## Batch acceptance
 
 **Batch acceptance requirements, implemented in the sandbox stage September 10,
 2026.** See [progress](./progress.md) and the [dated batch acceptance record](./testing/batch-2026-09-10.md) for
 which cases have offline versus live proof. This section follows the
 [batch-selection design](./design.md#proposed-batch-testing-and-selection) and
-[proposed ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes).
+[ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes).
 It does not change the completed MR matrix or its dated evidence above.
 
 The subsequent [20-case stress campaign](./testing/complex-corner-cases.md)
@@ -697,4 +703,56 @@ live GitHub proof. The finish line is a bounded search that returns a directly
 tested candidate or an honest no-candidate result, with correct visible outcomes
 for every deferred request. It is not proof of the largest possible batch or of
 release readiness. Stop before product merges, shared-environment mutations,
-deployment, and the unresolved execution choices.
+deployment, and the agreed execution rules still requiring implementation.
+
+
+## History storage acceptance
+
+**Offline acceptance passed September 11; live migration has not run.**
+`apps/coordinator/test/inbox-history.test.mjs` uses the actual journal, selector
+and processor with a controlled GitHub API that models preserved base trees,
+atomic non-force ref updates and pinned archive reads. Separately authorized
+live sandbox migration/repeat remains the next proof step. Offline tests never
+migrate a real journal.
+
+| Case | Expected result | Status |
+| --- | --- | --- |
+| More than 100 completed batch histories | Archive finished records and accept later work without a lifetime stop. Keep per-search budgets enforced. | Passed offline |
+| Active work among completed histories | Running/uncertain operations, pending ticket writes and cleanup remain active; `finished` selection alone cannot authorize archiving. | Passed offline |
+| Same exact batch after archive | Load its original record on demand, revalidate remote proof, preserve attempt IDs/budgets and avoid duplicate PRs, workflows or ticket decisions. | Passed offline |
+| Missing, altered or wrong-profile archive | Stop with a specific evidence error; do not treat it as first use or trust a pass from a different inbox. | Passed offline |
+| Archive save fails or response is lost | Preserve active evidence or reconcile the already-committed archive/reference pair; no lost or duplicate authoritative record. | Passed offline |
+| Competing writer during compaction | At most one non-force commit advances; the loser does not discard data or proceed with external actions. | Passed offline |
+| Subsequent ordinary journal writes | Preserve all archived files and index structure; validate full archive content on write/read, rather than recreating a state-only tree. | Passed offline |
+| Existing v4 migration and older writer | Preserve receipts, transitions, service/batch identities and budgets. Older writers reject the new marker before mutation. | Passed offline |
+| Standalone service history and linked records | Archive only fully finished, unneeded records; preserve active references and prevent the existing 1,000-record cap becoming another lifetime stop. | Passed offline |
+
+Offline cases also cover immutable snapshots for later stale observations,
+strict API path limits, uncertain final readback and a v4 batch resumed through
+the full processor. Existing repeat/resume/cleanup tests remain required.
+The three focused batch tests cover changed evidence on unsupported/over-limit
+tickets and changed evidence inside the frozen eligible pool.
+
+Finish live acceptance when an authorized sandbox migration/repeat proves the
+same path, including current repeat/resume/cleanup behavior.
+Keep local fixture results, live evidence and merge status separate in progress.
+Do not rerun product deployments or the full historical campaign for a storage
+change unless a concrete failure justifies it.
+
+## Later execution acceptance
+
+These are future sandbox requirements, not tests already run or permission to
+deploy. Build the same coordinator sequence against test-repository Actions
+before connecting product workflows. See the [execution design](./design.md#agreed-execution-direction-september-11).
+
+| Case | Required outcome |
+| --- | --- |
+| Compatible batch through staging then production | Cheap filtering precedes combined PR checks; ordinary staging merges/Actions run; production starts only after matching successful E2E and authorization. Environment-specific builds remain workflow-owned. |
+| Required E2E fails, is missing, cancelled or skipped | No production dispatch or successful release. A failed test fails the attempt; uncertain evidence gets its actual reason without blaming all tickets. |
+| E2E belongs to another run, code or environment | Reject it even if green. Changed staging during tests requires fresh matching evidence. Cover frontend-only, backend-only and coupled work. |
+| Main/staging moves or contains unrelated changes | Preserve shared history; recheck actual compositions before mutation and invalidate unmatched evidence. Never overwrite refs or promote all of staging. |
+| Sequential services and partial failure | Backend dependencies succeed before dependents/frontend; record partial effects and stop/recover rather than starting another batch. |
+| No-database-change rollback | Save prior deployed versions per service/environment; create verified revert commits, run required checks and ordinary deploys, then check recovery versions/health/E2E. Original release stays failed. |
+| Database change/unknown, conflicting revert or failed recovery | Stop automatic recovery for a person; keep release ownership while unresolved. Never blindly reset branches or restore incompatible code. |
+| Worker merges its own request / resumes / receives a new ticket | Retain execution ownership after PR merge, reconcile existing runs without duplicates, and keep the next release waiting until completion/recovery. |
+| Staging-only success and later production request | Stop after staging. Require explicit production authorization and revalidated composition/evidence for later continuation. |

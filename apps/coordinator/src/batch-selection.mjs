@@ -329,9 +329,7 @@ export function batchTicketResult(batch, number) {
         ? "passed"
         : singleton
           ? "blocked"
-          : batch.stop?.status === "stale"
-            ? "stale"
-            : "waiting",
+          : "waiting",
     code: stale
       ? "batch-deferred"
       : selected

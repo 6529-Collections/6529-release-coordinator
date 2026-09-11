@@ -251,6 +251,7 @@ export async function coordinateServices({
   profile,
   decision,
   attempts,
+  loadAttempt = async (hash) => attempts[hash],
   saveAttempt,
   guard,
   signal,
@@ -286,7 +287,7 @@ export async function coordinateServices({
     );
     client ??= createServiceGitHub({ profile, runtime });
     const attempt = await execute(plan, {
-      previous: attempts[plan.fingerprint],
+      previous: await loadAttempt(plan.fingerprint),
       save: saveAttempt,
       guard,
       client,

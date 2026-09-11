@@ -49,6 +49,9 @@ jobs:
       - name: Check Coordinator code and package
         run: npm run check
 
+      - name: Audit locked runtime and development dependencies
+        run: npm audit --package-lock-only --include=dev --workspaces --include-workspace-root --audit-level=low --ignore-scripts
+
   check:
     name: Check package
     if: always()

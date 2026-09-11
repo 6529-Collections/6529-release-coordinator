@@ -129,8 +129,9 @@ Starting a new run captures current destination commits. See the
 
 Plans remain internal evidence: the journal stores the ticket/request binding,
 exact PR order and destinations; full reports record their resulting trees.
-The journal's `inbox-run-v4` marker prevents older writers from overwriting the
-new run format. A legacy interrupted v1 run retains its already recorded scope
+The journal's `inbox-run-v5` marker prevents older writers from overwriting the
+run format or discarding archived history. See [history storage](./inbox-processing.md#history-storage)
+for active records, archive validation and migration evidence. A legacy interrupted v1 run retains its already recorded scope
 and plan on explicit resume.
 
 Developer test manifests remain sandbox-only fixture inputs. They cannot enter

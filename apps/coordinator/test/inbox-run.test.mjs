@@ -220,7 +220,9 @@ test("one inbox command saves a service attempt before dispatch, presents its re
   assert.equal(first.report.requests[0].status, "waiting");
   assert.ok(f.issue.labels.includes("services:passed"));
   assert.equal(f.state().workflow, inboxWorkflow);
-  assert.equal(Object.values(f.state().service_attempts)[0].state, "completed");
+  assert.deepEqual(f.state().service_attempts, {});
+  const archive = Object.values(f.state().history.services)[0];
+  assert.equal(f.file(archive.path).record.state, "completed");
   const second = await invoke(f, options);
   assert.equal(second.code, 0, JSON.stringify(second.report));
   assert.equal(dispatched, 1);

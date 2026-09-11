@@ -48,6 +48,7 @@ export async function coordinateInboxBatch({
   guard,
   save,
   verify,
+  loadBatch = async (hash) => state.batches?.[hash],
   prepare = prepareBatch,
   check = checkBatch,
   revalidate = verifySavedBatch,
@@ -166,7 +167,10 @@ export async function coordinateInboxBatch({
   const freshFingerprint = serviceHash({ inputs, policy: batchPolicy });
   const fingerprint = run.batch_fingerprint ?? freshFingerprint;
   const changed = fingerprint !== freshFingerprint;
-  const original = state.batches?.[fingerprint];
+  const original = await loadBatch(fingerprint);
+  // The first identity is saved before its first attempt. Resuming that narrow
+  // gap may have no record yet. A referenced but missing archive throws in
+  // loadBatch; it must never be treated as a new attempt.
   serviceAssert(
     !changed || original,
     "batch-state",
@@ -183,10 +187,10 @@ export async function coordinateInboxBatch({
           input: value.input
         }))
       : suitable,
-    previous: state.batches[fingerprint],
+    previous: original,
     signal,
     guard,
-    verify: changed ? async () => false : verify,
+    verify: changed ? async () => false : () => verify(inputs),
     prepare: (group) => prepare(group, { profile, signal }),
     check: (prepared, options) => check(prepared, { ...options, profile }),
     revalidate: (prepared, progress, options) =>
