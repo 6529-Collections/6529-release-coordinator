@@ -11,7 +11,7 @@ The one-ticket sandbox service/database stage is implemented and has local
 Docker and live ticket acceptance evidence. [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
 records the merged service extension; the sample repository setup is also merged.
 Sandbox batching has [local and live acceptance](#batch-acceptance). The v5 archive
-extension has offline proof; live migration remains pending. Each stage's evidence
+extension has offline and [live sandbox proof](./testing/history-2026-09-11.md). Each stage's evidence
 is separate from the original MR milestone.
 Documentation alone is not permission to execute external changes.
 
@@ -708,23 +708,24 @@ deployment, and the agreed execution rules still requiring implementation.
 
 ## History storage acceptance
 
-**Offline acceptance passed September 11; live migration has not run.**
+**Offline and live sandbox acceptance passed September 11.**
 `apps/coordinator/test/inbox-history.test.mjs` uses the actual journal, selector
 and processor with a controlled GitHub API that models preserved base trees,
-atomic non-force ref updates and pinned archive reads. Separately authorized
-live sandbox migration/repeat remains the next proof step. Offline tests never
-migrate a real journal.
+atomic non-force ref updates and pinned archive reads. The
+[live sandbox migration/repeat](./testing/history-2026-09-11.md) ran from merged
+source and preserved the existing journal and exact passing candidate. Failure
+injection and volume cases below remain offline proof; the real inbox was not migrated.
 
 | Case | Expected result | Status |
 | --- | --- | --- |
 | More than 100 completed batch histories | Archive finished records and accept later work without a lifetime stop. Keep per-search budgets enforced. | Passed offline |
 | Active work among completed histories | Running/uncertain operations, pending ticket writes and cleanup remain active; `finished` selection alone cannot authorize archiving. | Passed offline |
-| Same exact batch after archive | Load its original record on demand, revalidate remote proof, preserve attempt IDs/budgets and avoid duplicate PRs, workflows or ticket decisions. | Passed offline |
+| Same exact batch after archive | Load its original record on demand, revalidate remote proof, preserve attempt IDs/budgets and avoid duplicate PRs, workflows or ticket decisions. | Passed offline + live sandbox |
 | Missing, altered or wrong-profile archive | Stop with a specific evidence error; do not treat it as first use or trust a pass from a different inbox. | Passed offline |
 | Archive save fails or response is lost | Preserve active evidence or reconcile the already-committed archive/reference pair; no lost or duplicate authoritative record. | Passed offline |
 | Competing writer during compaction | At most one non-force commit advances; the loser does not discard data or proceed with external actions. | Passed offline |
-| Subsequent ordinary journal writes | Preserve all archived files and index structure; validate full archive content on write/read, rather than recreating a state-only tree. | Passed offline |
-| Existing v4 migration and older writer | Preserve receipts, transitions, service/batch identities and budgets. Older writers reject the new marker before mutation. | Passed offline |
+| Subsequent ordinary journal writes | Preserve all archived files and index structure; validate full archive content on write/read, rather than recreating a state-only tree. | Passed offline + live sandbox |
+| Existing v4 migration and older writer | Preserve receipts, transitions, service/batch identities and budgets. Older writers reject the new marker before mutation. | Passed offline; migration also passed live sandbox |
 | Standalone service history and linked records | Archive only fully finished, unneeded records; preserve active references and prevent the existing 1,000-record cap becoming another lifetime stop. | Passed offline |
 
 Offline cases also cover immutable snapshots for later stale observations,
@@ -733,8 +734,8 @@ the full processor. Existing repeat/resume/cleanup tests remain required.
 The three focused batch tests cover changed evidence on unsupported/over-limit
 tickets and changed evidence inside the frozen eligible pool.
 
-Finish live acceptance when an authorized sandbox migration/repeat proves the
-same path, including current repeat/resume/cleanup behavior.
+The live migration, exact repeat and verified cleanup meet this storage stage's
+finish line. Deliberate interruption/resume cases remain offline evidence.
 Keep local fixture results, live evidence and merge status separate in progress.
 Do not rerun product deployments or the full historical campaign for a storage
 change unless a concrete failure justifies it.

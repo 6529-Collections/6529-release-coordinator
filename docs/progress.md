@@ -1,7 +1,7 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-11**, against pushed source `0ed21bc` and the dependency,
-history and Snyk triage verification below. This page separates implemented behavior, source delivery
+Last reviewed: **2026-09-11**, against merged source `f68294c` and the live sandbox
+history acceptance below. This page separates implemented behavior, source delivery
 and live proof. Earlier GitHub/package observations carry their original dates;
 they were not repeated during this cleanup.
 
@@ -14,8 +14,8 @@ they were not repeated during this cleanup.
 | Sandbox service/database checks | One-ticket checks run sample services and temporary MySQL in GitHub Actions | Local and live acceptance passed; see [source delivery](#sandbox-source-delivery-september-10). |
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
-| v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Included in open [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66); not merged or live-migrated. |
-| PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | Node 20/22/24 CI, CodeQL and Snyk passed on `7c3c398`; CodeQL and Snyk merge rules are active. Snyk scans the CLI's six libraries, with the workspace limitation below. Expanded 6529bot activation needs the base-branch merge. |
+| v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66); [live sandbox migration and exact repeat passed](./testing/history-2026-09-11.md). The real inbox was not migrated. |
+| PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | Node 20/22/24 CI, CodeQL and Snyk passed on final PR head `2c801fc`; required merge rules remain active. Snyk's six-library workspace limitation remains below. Expanded 6529bot configuration is now on `main`; completed jobs need separate observation on a subsequent PR. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -24,22 +24,43 @@ candidate stays waiting and does not authorize a release.
 
 ## Next steps
 
-1. Finish review of open PR #66, which contains v5 history, cleanup and the
-   review/security setup. The new CI audit and Snyk dependency PR status passed.
-   The history concerns have the focused verification below. Verify the expanded 6529bot set after the separately
-   authorized merge makes its configuration available on `main`.
-2. On a separately authorized sandbox run, verify migration of the existing
-   journal and an exact repeat: original attempt IDs/budgets, preserved files,
-   no duplicate PRs/workflows/ticket decisions, verified cleanup and lock release.
-   [History acceptance](./merge-rehearsal-testing.md#history-storage-acceptance)
-   owns the detailed finish line. Live migration has not run.
-3. After that proof, build the release sequence in the test repositories before
+1. Observe the expanded 6529bot set on the next ordinary PR now that its
+   configuration is on `main`. This is review activation evidence, not another
+   history implementation task.
+2. Build the release sequence in the test repositories before
    adding real adapters. [Later execution acceptance](./merge-rehearsal-testing.md#later-execution-acceptance)
    covers that future stage; it is not part of this cleanup.
 
+## PR #66 delivery and live history acceptance, September 11
+
+Final documentation commit `2c801fc` was pushed, PR #66 was marked ready, and
+all required checks passed: Node 20/22/24, `Check package`, both CodeQL scans and
+Snyk. CodeRabbit completed its review of this head with no actionable comments;
+there were no unresolved GitHub review threads. The ready-triggered 6529bot
+general review repeated the save/readback and linked-history concerns. They were
+checked against the existing focused regressions and completion guards below;
+no new defect was demonstrated. The disposition is recorded in the PR description.
+
+[PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66)
+merged at `f68294c729be00dd967c364c039983678907390c` on September 11, 12:40 UTC.
+Its merge tree matches reviewed `2c801fc`. Main's
+[repository CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34600113234)
+and [CodeQL](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34600113188)
+also passed.
+
+The [live acceptance record](./testing/history-2026-09-11.md) proves v4-to-v5
+sandbox migration from that clean merged source, preservation of all 13 older
+tickets and seven older batch/service records, a fresh passing candidate, and
+an exact repeat with zero duplicate PRs, workflows or ticket writes. All eight
+archives passed content verification; completed details left active state, and
+the run lock was released. Existing held ticket #1 explains exit 2 in both runs.
+The temporary ticket #14 was then retired with exit 0, preserved history and
+verified cleanup; only #1 remains open. This completes the storage proof step
+without migrating the real inbox or executing a product release.
+
 ## Documentation and code cleanup, September 11
 
-Local changes shorten this page and preserve the previous narrative in
+The cleanup shortened this page and preserved the previous narrative in
 [the historical progress record](./history/progress-through-2026-09-11.md).
 The guides now identify implemented batch behavior and the v5 writer correctly;
 dated reports keep their original evidence and version names.
@@ -76,7 +97,7 @@ documentation links resolve. The bot's own parser/job builder at source
 `e882f798239ff8a393bc1c60461023a0d4d4419f` confirmed four opening jobs and five push
 jobs. CodeRabbit configuration passed its current official JSON Schema.
 
-Commit `14cbb3c` is pushed to draft PR #66. Its
+Commit `14cbb3c` was pushed while PR #66 was a draft. Its
 [repository checks](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34594520569)
 passed on Node 20/22/24, including `Check package`. Both
 [CodeQL scans](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34594520650)
@@ -96,9 +117,9 @@ CodeRabbit confirmed it loaded `.coderabbit.yaml` and completed its review of
 comments. Its supplemental ESLint runner failed to install dependencies; the
 repository's own ESLint check passed in CI. Its docstring-coverage warning is not
 a repository merge requirement. These results do not claim that every optional
-CodeRabbit tool completed. The central 6529bot reads configuration from `main`,
-so this branch does not yet activate its expanded review set. Its ordinary
-follow-up ran using the existing base-branch defaults.
+CodeRabbit tool completed. At that point the central 6529bot still read the old
+configuration from `main`, so its ordinary follow-up used the existing
+base-branch defaults. The later merge is recorded above.
 
 The user completed GitHub authorization for the existing 6529 Snyk integration.
 The initial root import saw zero dependencies; the targeted import and coverage
@@ -162,8 +183,8 @@ passed with zero findings on test merge `7f3e393` (parents `cecbee6` and `7c3c39
 CodeRabbit reviewed the new tests/audit without actionable comments; its waiting
 for three CI results timed out, but those jobs subsequently passed as verified
 above. Its advisory docstring-coverage warning remains. The 6529bot follow-up
-reported no new findings with partial context. The following documentation-only
-commit records this evidence; PR #66 remains a draft and is not merged.
+reported no new findings with partial context. This was pre-merge evidence;
+the final review and source delivery are recorded above.
 
 ## Snyk Code triage, September 11
 
@@ -204,8 +225,9 @@ owns the format, migration and retention rules.
 
 At that commit, the full Node 22.16.0 check passed **395 tests**, with three
 optional Docker cases skipped, plus lint, formatting, workflow policy, packed CLI
-checks and source preservation. Live v5 migration remains pending; these commits
-are now included in PR #66.
+checks and source preservation. These commits subsequently merged in PR #66;
+the later [live sandbox acceptance](./testing/history-2026-09-11.md) records the
+migration and repeat separately from those offline tests.
 
 ## Implementation alignment review, September 11
 
@@ -264,6 +286,7 @@ snapshot is historical, not a fresh scan.
 | [Services/database](./testing/service-database-2026-09-10.md), [batching](./testing/batch-2026-09-10.md) | Application assertions, ordering, database behavior and exact combined-code results. |
 | [20 corner cases](./testing/complex-corner-cases.md) | Per-case results, evidence layers, reproduced gaps and unsupported future behavior. |
 | [Run logging](./testing/run-logging-2026-09-11.md) | Live logs, source/review boundaries, cleanup and test-ticket retirement. |
+| [v5 history](./testing/history-2026-09-11.md) | Merged source, live sandbox migration, preserved archives, exact repeat and test cleanup. |
 
 Keep current status and next steps here. Update behavior in its owning guide;
 keep dated acceptance reports unchanged unless explicitly recording a new run.
