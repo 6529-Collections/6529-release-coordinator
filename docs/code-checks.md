@@ -186,6 +186,12 @@ saying no manifest changed reuses the imported
 manifest's baseline; it is not a fresh lockfile scan. Some settings live in Snyk,
 not in this repository; progress records their current activation evidence.
 
+Confirmed source-code false positives are recorded individually in Snyk as
+**Not vulnerable**, with the reviewed code path and a reason to reassess if that
+behavior changes. Keep the source scanner enabled; do not exclude whole tests or
+rules to hide a specific alert. The three reviewed September 11 findings and
+their verification are recorded in [progress](./progress.md#snyk-code-triage-september-11).
+
 Sources: [6529bot configuration](https://github.com/6529-Collections/6529reviewbot/blob/main/docs/repository-config.md),
 [CodeRabbit configuration](https://docs.coderabbit.ai/reference/configuration),
 [CodeQL workflows](https://docs.github.com/en/code-security/reference/code-scanning/workflow-configuration-options),

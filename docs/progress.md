@@ -1,7 +1,7 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-11**, against pushed source `7c3c398` and the dependency
-coverage/history verification below. This page separates implemented behavior, source delivery
+Last reviewed: **2026-09-11**, against pushed source `0ed21bc` and the dependency,
+history and Snyk triage verification below. This page separates implemented behavior, source delivery
 and live proof. Earlier GitHub/package observations carry their original dates;
 they were not repeated during this cleanup.
 
@@ -131,8 +131,9 @@ six-library baseline; it is not a fresh exact-lock scan. The observed
 `security/snyk (6529)` status is now required by active `Protect main` ruleset
 `22272421`, with existing status, up-to-date branch and CodeQL alert rules
 preserved and read back after the update.
-The organization's separate Snyk Code import also reported three low findings on
-main; this dependency work does not assess or dismiss those source-code findings.
+The organization's separate Snyk Code import reported three low findings on
+main. They were subsequently reviewed as false positives; see
+[the source-scan triage below](#snyk-code-triage-september-11).
 
 Seven new offline history regressions passed against the existing implementation;
 the history code changes only add comments explaining its existing guarantees.
@@ -163,6 +164,27 @@ for three CI results timed out, but those jobs subsequently passed as verified
 above. Its advisory docstring-coverage warning remains. The 6529bot follow-up
 reported no new findings with partial context. The following documentation-only
 commit records this evidence; PR #66 remains a draft and is not merged.
+
+## Snyk Code triage, September 11
+
+Reviewed all three low findings in
+[the Snyk Code project](https://app.snyk.io/org/6529/project/551de9a2-d5b3-48d0-858d-38da2d7a727d)
+against its scanned main commit `cecbee6b1a9374581df2c0379bada59b78257e79` and the
+current branch. The flagged code already existed on main. With explicit user
+authorization, each specific alert was submitted as **Not vulnerable**, with its
+own source-based reason and no expiry. Snyk's subsequent retest succeeded on the
+same main commit, analyzing 94 files (78% reported coverage): **0 open findings,
+3 ignored findings**. The ignored list was read back and confirmed each original
+issue ID, its **Not vulnerable** type, the complete saved reason and no expiry.
+
+| Finding and Snyk issue ID | Review outcome recorded in Snyk |
+| --- | --- |
+| Hardcoded Non-Cryptographic Secret — `294e40d0-4020-4116-af4c-edfb4bf276de` | `apps/coordinator/test/run-log.test.mjs:84` uses an inert fake credential in an offline test. The test injects it into errors/events and asserts that neither logs nor terminal output expose it. It authenticates to no service. Reassess if the fixture is used for real authentication. |
+| Use of Password Hash With Insufficient Computational Effort — `780d40af-e3d7-4504-84cc-80f7ad2c10ad` | `apps/coordinator/src/service-contract.mjs:35` calculates Git blob IDs using the required SHA-1 header/content format, then compares them with pinned Git blob IDs. It does not store passwords. Plan fingerprints separately use SHA-256. Reassess if the function's purpose or Git object format changes. |
+| Prototype Pollution — `dac707b7-5466-4879-9988-3e98eea49555` | Traced the 57-step report from `apps/coordinator/test/rehearsal.test.mjs:651` to `apps/coordinator/src/rehearsal.mjs:299`. The accessed key comes from the normalized array's `entries()` loop, so it is a numeric list position rather than an exception message or arbitrary property name. The report array is created internally. Reassess if plan normalization or index generation changes. |
+
+This triage changes no application code and establishes no general exemption for
+tests, SHA-1 or object access. Scanning and required merge checks remain enabled.
 
 ## Controller and history cleanup, September 11
 
