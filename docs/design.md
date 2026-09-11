@@ -368,7 +368,7 @@ They do not enable deployment in the current command.
 | What gates production? | Successful staging deployment/version/health checks and completed successful required E2E for the recorded deployed versions. Failed E2E fails the release attempt; missing, cancelled, skipped-required, or uncertain results cannot pass. |
 | What happens after failure? | Stop advancement. After shared state changed, recover the recorded batch; never split it as a recovery shortcut. Database-changing or uncertain releases require a person. |
 | How does automatic rollback work? | Only for confirmed no-database-change releases: new commits undo the failed batch, required checks run, and ordinary deployment Actions rebuild and deploy the restored code. Verify recovery before releasing the lane. |
-| Where does state live? | Continue using the profile's GitHub inbox journal. Keep active records complete; archive finished records in the same repository and read them when needed. The local v5 writer removes lifetime record caps; live migration remains pending. |
+| Where does state live? | Continue using the profile's GitHub inbox journal. Keep active records complete; archive finished records in the same repository and read them when needed. The merged v5 writer removes lifetime record caps; sandbox migration and exact repeat have [live evidence](./testing/history-2026-09-11.md). |
 
 The Coordinator owns selection, ordering, authorized merges/dispatch, waiting,
 evidence matching, ticket outcomes and recovery decisions. Product repositories
@@ -472,10 +472,11 @@ prove limited test behavior, not a real deployment or rollback.
 ## Where inbox and queue state live
 
 Use the existing independent `codex/inbox-state` branch in the selected inbox
-repository. The local v5 implementation keeps active state in `inbox-state.json`
+repository. The v5 implementation keeps active state in `inbox-state.json`
 and [archived finished records](./inbox-processing.md#history-storage) in the same
-branch, loading full old details only on demand. Live migration remains pending. A separate database or new
-operator dashboard is not required for this stage.
+branch, loading full old details only on demand. Sandbox migration and exact
+repeat passed; see [live evidence](./testing/history-2026-09-11.md). A separate
+database or new operator dashboard is not required for this stage.
 
 Minimum release records are the requests and their trusted receipts, selected
 PR heads, actual destination compositions, target, ordered services, phase,
@@ -679,9 +680,9 @@ ownership while any effect, cleanup or save is uncertain.
 
 ## Version-one scope and deferred work
 
-The local [history refactor](./inbox-processing.md#history-storage) has offline
-[acceptance coverage](./merge-rehearsal-testing.md#history-storage-acceptance);
-its separately authorized live sandbox migration/repeat remains pending.
+The merged [history refactor](./inbox-processing.md#history-storage) has offline
+[acceptance coverage](./merge-rehearsal-testing.md#history-storage-acceptance)
+and a passing [live sandbox migration/repeat](./testing/history-2026-09-11.md).
 Keep the current command, profile isolation, cheap-first selection, exact evidence,
 logs, no-database-change batch boundary and manual stop-before-resume procedure.
 

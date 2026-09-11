@@ -420,7 +420,7 @@ newer decisions or reset terminal outcomes.
 
 ### History storage
 
-**Implemented locally September 11; live migration has not run.** The v5 writer
+**Merged and verified in the sandbox September 11.** The v5 writer
 keeps complete unfinished work in `inbox-state.json` and moves finished batch and
 standalone service details to the same independent `codex/inbox-state` branch.
 The former 100-batch and 1,000-service lifetime caps are removed. Per-search
@@ -471,7 +471,7 @@ that initial gap may create its first attempt; a referenced but missing archive
 always stops processing, including when the batch inputs are unchanged.
 
 `workflow: "inbox-run-v5"` fences older writers before they can drop archive
-files. The next authorized v5 run upgrades a legacy/v1/v2/v3/v4 journal under its
+files. The first authorized v5 run upgrades a legacy/v1/v2/v3/v4 journal under its
 lock, preserving receipts, transitions, plans, original results and resume scope.
 Cleanup and presentation obligations must still finish before details move out
 of the active file. Profile separation and stop-before-resume are unchanged.
@@ -483,8 +483,10 @@ ticket decision history still grow in the main file. Keep them for this manual
 stage; measure usage before adding index pagination or retention. There is no
 separate database, dashboard or automatic archive deletion.
 
-See [history acceptance](./merge-rehearsal-testing.md#history-storage-acceptance)
-and [local implementation evidence](./progress.md#controller-and-history-cleanup-september-11).
+See [history acceptance](./merge-rehearsal-testing.md#history-storage-acceptance),
+[live sandbox evidence](./testing/history-2026-09-11.md) and
+[implementation evidence](./progress.md#controller-and-history-cleanup-september-11).
+This sandbox acceptance did not migrate the real inbox journal.
 
 ### Storage and trusted writers
 

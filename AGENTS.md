@@ -94,7 +94,8 @@ from first principles.
   future work, distinct from process restart. Keep state in the GitHub journal;
   `docs/inbox-processing.md` owns verified archives and v5 migration; preserve
   unfinished work, archive checksums, original attempts and per-run budgets.
-  Lifetime record caps are removed locally; live migration needs separate evidence.
+  Lifetime record caps are removed; keep sandbox migration evidence separate from
+  real-profile migration and release execution.
   A separate database/dashboard is not required. Its batch-testing section owns the bounded
   search before release mutations: keep tickets/dependencies whole,
   test the final exact combination, and never blame every member of a failed

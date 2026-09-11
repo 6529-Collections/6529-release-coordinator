@@ -459,8 +459,9 @@ The v5 writer archives finished details when a run releases its lock after
 successful ticket presentation and verified cleanup. Active work stays complete;
 exact repeats load old details on demand and recheck remote evidence. The former
 100-batch and 1,000-service lifetime caps are removed; per-search budgets remain.
-See [history storage](../../docs/inbox-processing.md#history-storage). Live
-sandbox migration has not run. Do not delete records or reset attempt budgets.
+See [history storage](../../docs/inbox-processing.md#history-storage) and the
+[live sandbox migration/repeat](../../docs/testing/history-2026-09-11.md).
+Do not delete records or reset attempt budgets.
 
 Policy `2026-09-10.2` generates Git, sandbox service and batch plans internally.
 The journal marker is `workflow: "inbox-run-v5"`. First use upgrades a
