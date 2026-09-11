@@ -68,10 +68,12 @@ The existing **Check package** job always evaluates the combined result. Failed,
 cancelled, or skipped verification cannot produce a passing gate. Its name stays
 the same so the existing required-check rule continues to match it.
 
-The repository rules must require that result and an up-to-date branch before
-merging. GitHub also checks merge conflicts. These server settings cannot be
-enforced by a local command; see the dated readback in progress. New workflow
-behavior only becomes live after the change is pushed and merged as appropriate.
+The repository rules require that result, both CodeQL language jobs and an
+up-to-date branch before merging. A separate code-scanning rule enforces the
+alert thresholds below. GitHub also checks merge conflicts. These server settings
+cannot be enforced by a local command; see the dated readback in progress. New
+workflow behavior only becomes live after the change is pushed and merged as
+appropriate.
 
 Ordinary PR test jobs have read-only repository permissions. CodeQL alone adds
 `security-events: write` to upload analysis, without content, Issue or publishing
@@ -138,10 +140,12 @@ scoped built-in token is used only by the analysis actions. Use this checked-in
 advanced setup; enabling a separate default setup would duplicate/conflict with it.
 
 A green analysis job means the scan completed, not that it found zero problems.
-GitHub code-scanning merge protection must separately require CodeQL and reject
-new high/critical security findings or error-level findings. Keep `Check package`
-required and the branch up to date. Live enforcement is an external repository
-setting; do not describe it as active until it has been read back.
+The active `Protect main` ruleset separately requires CodeQL and rejects new
+high/critical security findings or error-level findings in the PR diff. Both
+`CodeQL (javascript-typescript)` and `CodeQL (actions)` are required statuses,
+so one completed language cannot stand in for the other. `Check package` and
+the up-to-date branch requirement remain in place. See progress for the live
+readback; local policy checks do not inspect these external settings.
 
 Snyk dependency checks use the existing **6529 Snyk organization and GitHub
 integration**, as in the product repositories. This avoids exposing a Snyk token

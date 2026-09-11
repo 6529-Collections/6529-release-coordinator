@@ -1,8 +1,8 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-11**, against pushed source `5e30e32` and the review/check
-configuration changes below. This page separates implemented behavior, source delivery and
-live proof. Earlier GitHub/package observations carry their original dates;
+Last reviewed: **2026-09-11**, against pushed source `14cbb3c` and the live
+review/check setup below. This page separates implemented behavior, source delivery
+and live proof. Earlier GitHub/package observations carry their original dates;
 they were not repeated during this cleanup.
 
 ## Current state
@@ -15,7 +15,7 @@ they were not repeated during this cleanup.
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Included in open [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66); not merged or live-migrated. |
-| PR reviews/security | Fixed bot reviews, CodeRabbit drafts and CodeQL configured on this branch | Local validation below; 6529bot activation needs the base-branch merge. Snyk account setup and security merge-rule activation are pending. |
+| PR reviews/security | Fixed bot reviews, CodeRabbit drafts and CodeQL configured on this branch | Node checks and both CodeQL scans passed; CodeQL merge rules are active. CodeRabbit draft review completed, with a supplemental-tool limitation below. Expanded 6529bot activation needs the base-branch merge; Snyk import needs GitHub authorization. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -24,9 +24,10 @@ candidate stays waiting and does not authorize a release.
 
 ## Next steps
 
-1. Finish the expanded review/security setup and review open PR #66, which contains
-   v5 history and the cleanup. Verify new external checks separately from the
-   already-passing Node checks on `5e30e32`; assess its existing bot findings.
+1. Finish Snyk authorization/import and verify its dependency PR status. Review
+   open PR #66, which contains v5 history, cleanup and the review/security setup;
+   assess its bot findings. Verify the expanded 6529bot set after the separately
+   authorized merge makes its configuration available on `main`.
 2. On a separately authorized sandbox run, verify migration of the existing
    journal and an exact repeat: original attempt IDs/budgets, preserved files,
    no duplicate PRs/workflows/ticket decisions, verified cleanup and lock release.
@@ -75,11 +76,37 @@ documentation links resolve. The bot's own parser/job builder at source
 `e882f798239ff8a393bc1c60461023a0d4d4419f` confirmed four opening jobs and five push
 jobs. CodeRabbit configuration passed its current official JSON Schema.
 
-The central bot reads configuration from `main`,
-so this branch does not yet activate its expanded review set. CodeQL live runs
-and external code-scanning merge protection remain unverified. Snyk setup is
-waiting for an authenticated session in the existing 6529 organization; no fake
-passing check or token-bearing PR workflow substitutes for that integration.
+Commit `14cbb3c` is pushed to draft PR #66. Its
+[repository checks](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34594520569)
+passed on Node 20/22/24, including `Check package`. Both
+[CodeQL scans](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34594520650)
+completed successfully. GitHub recorded zero results and no analysis errors for
+JavaScript and Actions on PR merge revision `980d4e083b2cb53b0daede61e836e07268dcdf28`.
+This is scanning evidence, not a claim that the code has no security defects.
+
+The active `Protect main` ruleset (`22272421`) was updated and read back:
+`Check package` and both CodeQL language jobs are required, with the existing
+up-to-date branch and review-thread rules preserved. Its native code-scanning
+rule requires CodeQL and blocks new high/critical security alerts or error-level
+alerts in the PR diff. No bypass actors were added. GitHub's separate default
+CodeQL setup remains off to avoid duplicating the checked-in workflow.
+
+CodeRabbit confirmed it loaded `.coderabbit.yaml` and completed its review of
+`14cbb3c` while the PR remained a draft, with a successful status and no actionable
+comments. Its supplemental ESLint runner failed to install dependencies; the
+repository's own ESLint check passed in CI. Its docstring-coverage warning is not
+a repository merge requirement. These results do not claim that every optional
+CodeRabbit tool completed. The central 6529bot reads configuration from `main`,
+so this branch does not yet activate its expanded review set. Its ordinary
+follow-up ran using the existing base-branch defaults.
+
+The existing 6529 Snyk organization and GitHub integration are accessible, but
+importing this repository requires additional GitHub OAuth authorization. The
+authorization page is handed to the user because its public-repository access
+covers the account, not only this repository. Private access, automatic fix/upgrade
+PRs and Snyk Code were not selected. Import, root/workspace coverage, dependency
+PR checks and the Snyk required status remain pending; no empty passing job or
+token-bearing PR workflow substitutes for that integration.
 [Code checks](./code-checks.md) owns the configuration and activation steps.
 
 ## Controller and history cleanup, September 11
