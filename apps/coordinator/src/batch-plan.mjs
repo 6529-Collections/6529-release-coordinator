@@ -8,9 +8,10 @@ import {
 } from "./service-plan.mjs";
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { sandboxServiceRuntime } from "./service-runtime-config.mjs";
+import { isReleaseRequestTarget } from "./release-target.mjs";
 
 export const batchPolicy = Object.freeze({
-  version: "sandbox-batch-v1",
+  version: "sandbox-batch-v2",
   max_tickets: 10,
   max_prs_per_repository: 10,
   max_git_attempts: 40,
@@ -20,7 +21,7 @@ export const batchPolicy = Object.freeze({
   dependencies: "self-contained-tickets-only",
   required_workflow: "sandbox-check.yml",
   required_job: "Sandbox check",
-  workflow_blob: "6fe8f54d4f3147854c3186c9b3992f983612b0b0",
+  workflow_blob: "bb736a236bc1d14d2f8ea35ce40953686e91169f",
   runtime: sandboxServiceRuntime
 });
 
@@ -32,14 +33,20 @@ export function batchMergePlan(items, profile = sandboxProfile) {
     "batch-scope",
     "Batch trials require whole sandbox tickets within the configured limit."
   );
+  const targets = [...new Set(items.map((item) => item.entry.request.target))];
+  serviceAssert(
+    targets.length === 1 && isReleaseRequestTarget(targets[0]),
+    "batch-unsupported",
+    "Every ticket in one batch must have the same staging or production target."
+  );
   const bindings = [],
     repos = new Map();
   for (const item of items) {
     serviceAssert(
-      item.entry.request.target === "staging" &&
+      item.entry.request.target === targets[0] &&
         item.entry.request.database_change === "no",
       "batch-unsupported",
-      "The first batch stage requires staging tickets without database changes."
+      "This batch stage requires one shared target and no database changes."
     );
     const plan = inboxMergePlan(item.input, item.entry, profile);
     bindings.push(inboxBinding(item.entry, profile));
@@ -88,7 +95,7 @@ export function batchMergePlan(items, profile = sandboxProfile) {
       source: "verified-batch",
       profile: profile.name,
       case_id: `batch-${serviceHash(bindings).slice(0, 24)}`,
-      target: "staging",
+      target: targets[0],
       repositories: ordered
     },
     profile
@@ -149,6 +156,7 @@ export async function prepareBatch(
     role: repo.role,
     repository: repo.repository,
     base: repo.destination.commit,
+    base_tree: repo.service_source.base_tree,
     tree: repo.final_tree,
     patch: repo.service_source.patch
   }));

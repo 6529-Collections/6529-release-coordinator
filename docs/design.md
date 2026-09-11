@@ -1,15 +1,15 @@
 # Proposed release execution design
 
-**Draft, not implemented release behavior.** The live system submits requests;
-the local app verifies intake, inspects readiness, organizes tickets, rehearses
-merges, and runs supported one-ticket sandbox service/database checks and
-bounded sandbox batches without database changes.
-It does not authorize or execute releases. See [progress](./progress.md) for
-that boundary.
+**Real product execution remains a design.** The local app verifies intake,
+inspects readiness, organizes tickets, rehearses merges, and runs supported
+sandbox checks. An unscoped sandbox run now moves one selected
+no-database-change batch through protected test staging and, after matching E2E,
+protected test production. It has no real product adapter or authorization. See
+[progress](./progress.md) for that boundary.
 The [agreed execution direction](#agreed-execution-direction-september-11)
 and [process diagram](../release-coordinator-process.html) describe the same
-September 11 decisions. They are requirements for later implementation, not
-evidence that product release execution is available.
+September 11 decisions. The sandbox implementation exercises their order; it is
+not evidence that product release execution is available.
 
 ## Inbox stage before execution
 
@@ -17,7 +17,8 @@ The implemented smaller stage is [inbox processing](./inbox-processing.md): cent
 intake defaults, clear ticket statuses and reasons, submitter ownership,
 recorded decisions, and migration of existing tickets. `inbox:run` now joins
 initial inspection, local rehearsal, supported sandbox service checks, and
-ticket updates in one manual process.
+ticket updates in one manual process. Unscoped sandbox runs also own the test
+release lane through completion or explicit recovery.
 See progress for local, merge, and runtime evidence.
 
 The current intake boundary excludes requests whose PRs are all already merged:
@@ -35,7 +36,8 @@ and read-only commands; `inbox:run` combines inspection, rehearsal, supported
 sandbox checks, and Issue updates. It does not authorize release execution.
 Keep the existing GitHub journal and manual operation. A separate database,
 heartbeat, dashboard and automatic takeover are not prerequisites for the next
-step. The future release lane is different from today's per-command inbox lock.
+step. The sandbox release lane is stored under today's per-command inbox lock;
+real execution remains absent.
 
 <a id="next-step-v01-run-logging"></a>
 
@@ -214,9 +216,9 @@ permission is introduced.
    reviews, scope, dependencies and per-ticket Git merges. Reading existing CI
    results does not rerun them.
 2. Inspect the supported sample files, complete service scope and database answer.
-   Only self-contained staging tickets with verified `database_change: no` enter
-   batching. A false no is action-needed; unsupported scope or unresolved answers
-   stay visible with a reason.
+   Only self-contained staging or production tickets with verified
+   `database_change: no` enter batching, and one batch has one target. A false no
+   is action-needed; unsupported scope or unresolved answers stay visible with a reason.
 3. Save the ordered selection and starting main commits. Try the whole group's
    Git merge. If it conflicts, build a compatible group in saved priority order,
    recording exclusions. Complete this cheap filtering before starting new CI.
@@ -250,7 +252,7 @@ flowchart TD
 
 ### Saved order, scope and limits
 
-The code-owned `sandbox-batch-v1` policy uses ascending GitHub Issue number as a
+The code-owned `sandbox-batch-v2` policy uses ascending GitHub Issue number as a
 stable intake order. The requester cannot choose priority through `created_at`.
 Each ticket is indivisible: all its parts, PRs and selected services stay together.
 The current intake contract describes dependencies within a ticket. Cross-ticket
@@ -290,8 +292,8 @@ reuse and requires reconciliation.
 
 If A passes, B passes, but A+B fails, the saved priority selects A and leaves B
 waiting with the exact failure and selected candidate. B is not labelled broken.
-Once A actually reaches main through a future authorized release process, B must
-be checked against that new base. A specific failure caused by B's addition can
+Once A actually reaches main through the sandbox sequence or a future authorized
+real release process, B must be checked against that new base. A specific failure caused by B's addition can
 then require a correction. The priority policy does not prove which author made
 an error.
 
@@ -304,7 +306,7 @@ input/configuration or a resolved interrupted attempt is needed for new evidence
 
 ### Journal, temporary PRs and recovery
 
-`inbox-run-v5` preserves earlier ticket, service and v4 batch history, including
+`inbox-run-v6` preserves earlier ticket, service and v4/v5 batch history, including
 inputs, attempts, budgets, intermediate Git results, exact temporary PR identities,
 service attempts, results and cleanup. Older writers reject the marker. A saved
 selection remains fixed on resume; newly arriving tickets wait for a later run.
@@ -357,8 +359,8 @@ the current rejection behavior, not proof of this future feature.
 
 ## Agreed execution direction, September 11
 
-These decisions replace the conflicting August written and visual drafts.
-They do not enable deployment in the current command.
+These decisions replace the conflicting August written and visual drafts. The
+current command implements them only against the pinned sandbox repositories.
 
 | Question | Agreed rule |
 | --- | --- |
@@ -368,7 +370,7 @@ They do not enable deployment in the current command.
 | What gates production? | Successful staging deployment/version/health checks and completed successful required E2E for the recorded deployed versions. Failed E2E fails the release attempt; missing, cancelled, skipped-required, or uncertain results cannot pass. |
 | What happens after failure? | Stop advancement. After shared state changed, recover the recorded batch; never split it as a recovery shortcut. Database-changing or uncertain releases require a person. |
 | How does automatic rollback work? | Only for confirmed no-database-change releases: new commits undo the failed batch, required checks run, and ordinary deployment Actions rebuild and deploy the restored code. Verify recovery before releasing the lane. |
-| Where does state live? | Continue using the profile's GitHub inbox journal. Keep active records complete; archive finished records in the same repository and read them when needed. The merged v5 writer removes lifetime record caps; sandbox migration and exact repeat have [live evidence](./testing/history-2026-09-11.md). |
+| Where does state live? | Continue using the profile's GitHub inbox journal. Keep active records complete; archive finished records in the same repository and read them when needed. The v6 sandbox writer adds exact release operations to the v5 storage model; [live release acceptance](./testing/release-sequence-2026-09-11.md) verifies closeout and a clear lock. |
 
 The Coordinator owns selection, ordering, authorized merges/dispatch, waiting,
 evidence matching, ticket outcomes and recovery decisions. Product repositories
@@ -450,32 +452,38 @@ Cross-ticket links and database-changing batches remain deferred.
 flowchart LR
     U[Developer or agent] --> CLI[Product skill and request CLI]
     CLI --> INBOX[Verified GitHub Issue inbox]
-    INBOX --> IP[inbox:run - checks and sandbox trials]
+    INBOX --> IP[inbox:run - checks and batch selection]
     IP --> J[(Profile-specific GitHub journal)]
-    INBOX -. later .-> W[Release worker - one batch]
-    W --> J
-    W --> GH[Normal protected merges]
-    W --> BE[Existing backend Actions - one service at a time]
+    IP -->|sandbox only| SW[One selected fake release]
+    SW --> SSTG[Protected fake staging]
+    SSTG --> SE2E[Matching fake E2E]
+    SE2E -->|production target| SPROD[Protected fake production]
+    SPROD --> J
+    IP -. future real adapter .-> W[One real release]
+    W --> GH[Normal protected product merges]
+    W --> BE[Existing backend Actions]
     W --> FE[Existing frontend Actions]
-    BE --> STG[Staging]
+    BE --> STG[Real staging]
     FE --> STG
     STG --> E2E[Matching versions and successful staging E2E]
-    E2E -->|with production authorization| PROD[Existing production Actions]
-    PROD --> VERIFY[Versions, health and required safe E2E]
-    VERIFY --> J
+    E2E --> PROD[Existing production Actions]
+    PROD --> J
     J --> INBOX
 ```
 
-This is an execution design. Current sandbox trials and their temporary MySQL
-prove limited test behavior, not a real deployment or rollback.
+The solid sandbox path is implemented and live tested. The dotted real adapter
+and product path remain an execution design. Fake staging and temporary MySQL do
+not prove a real deployment or rollback.
 
 ## Where inbox and queue state live
 
 Use the existing independent `codex/inbox-state` branch in the selected inbox
-repository. The v5 implementation keeps active state in `inbox-state.json`
+repository. The v6 implementation keeps active state in `inbox-state.json`
 and [archived finished records](./inbox-processing.md#history-storage) in the same
 branch, loading full old details only on demand. Sandbox migration and exact
-repeat passed; see [live evidence](./testing/history-2026-09-11.md). A separate
+repeat and release closeout passed; see
+[history evidence](./testing/history-2026-09-11.md) and
+[release evidence](./testing/release-sequence-2026-09-11.md). A separate
 database or new operator dashboard is not required for this stage.
 
 Minimum release records are the requests and their trusted receipts, selected
@@ -685,12 +693,16 @@ The merged [history refactor](./inbox-processing.md#history-storage) has offline
 and a passing [live sandbox migration/repeat](./testing/history-2026-09-11.md).
 Keep the current command, profile isolation, cheap-first selection, exact evidence,
 logs, no-database-change batch boundary and manual stop-before-resume procedure.
+The sandbox release sequence is implemented locally and has
+[live acceptance](./testing/release-sequence-2026-09-11.md).
+Its request target mapping is fixed in one module: `staging` runs staging only,
+while `production` runs staging and then `prod`. Each fake workflow dispatch
+requires the pinned workflow, contract, and runner blobs at its exact commit.
 
-Later execution work adds the single release lane, trusted product workflow
-adapters, protected staging/main merges, matching E2E waits, deployed recovery
-targets, conditional rollback and ticket closeout. Exercise the same sequence in
-the test repositories first, then connect real repositories with verified
-configuration and permissions. Profile selection does not grant authority.
+Later execution work adds trusted product workflow adapters, deployed recovery
+targets and conditional rollback. Connect the already tested order to real
+repositories only with verified configuration and permissions. Profile selection
+does not grant authority.
 
 Explicitly deferred: cross-ticket links, database-changing batches, portable
 staging-to-production builds, environment-variable redesign, a separate state
@@ -701,9 +713,9 @@ release notes rather than creating parallel implementations.
 
 ## Remaining integration decisions
 
-- Authorized execution identity and existing repository merge rules.
-- Actual staging/main composition handling, including unrelated staging changes.
-- Trusted workflow/run/result and runtime-version contracts for each service.
+- Authorized real execution identity and existing repository merge rules.
+- Actual product staging/main composition handling, including unrelated staging changes.
+- Trusted product workflow/run/result and runtime-version contracts for each service.
 - Existing E2E trigger and deployed-version coverage, especially backend-only
   releases; required production-safe tests and existing health completion signals.
 - Verified recovery ordering and source restoration when prior service versions

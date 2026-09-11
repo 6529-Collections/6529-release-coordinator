@@ -78,7 +78,7 @@ test("completed batches leave the working file; ordinary saves preserve archives
   );
   await j.release(state, run);
   const second = await processInbox(h.options);
-  assert.deepEqual(second.batch.selected, [1, 2]);
+  assert.deepEqual(second.batch.selected, []);
   assert.equal(h.dispatches(), 1);
   assert.deepEqual(currentBatch(h.f), original);
   assert.deepEqual(h.f.state().tickets, before.tickets);
@@ -91,7 +91,12 @@ test("more than 100 completed batches archive without resetting search budgets o
     const input = structuredClone(record.inputs[0].input);
     input.inbox.request_id = randomUUID();
     const batch = await selectBatch({
-      items: [{ entry: { issue_number: 1 }, input }],
+      items: [
+        {
+          entry: { issue_number: 1, request: { target: "staging" } },
+          input
+        }
+      ],
       verify: async () => false,
       guard: async () => {},
       save: async () => {},
@@ -108,6 +113,7 @@ test("more than 100 completed batches archive without resetting search budgets o
     policy: pending.policy
   });
   pending.selected = [];
+  delete pending.execution;
   pending.status = "searching";
   pending.attempts = [];
   state.batches[pending.fingerprint] = pending;
@@ -200,12 +206,15 @@ for (const failure of ["missing", "changed", "profile", "summary"]) {
       await journal.save(state, run, "fixture corrupt reference");
       await journal.release(state, run);
     }
+    const selectedApi = failure === "summary" ? original : altered;
+    const journal = createJournal(selectedApi, sandboxProfile, {
+      workflow: inboxWorkflow
+    });
+    const acquired = await journal.acquire(await h.f.identity(), undefined, {});
+    const identity = Object.keys(acquired.state.history.batches)[0];
     await assert.rejects(
-      processInbox({
-        ...h.options,
-        api: failure === "summary" ? original : altered
-      }),
-      /archive|GitHub GET/
+      journal.loadHistory(acquired.state, acquired.run, "batches", identity),
+      /archive|GitHub GET|history/i
     );
     assert.equal(h.dispatches(), 1);
     assert.ok(h.f.state().lock);
@@ -383,25 +392,36 @@ test("missing archive on an unchanged resumed batch cannot start a fresh attempt
   assert.equal(h.f.state().lock.batch_fingerprint, record.fingerprint);
 });
 
-test("resume after saving only the first batch identity starts its first attempt once", async () => {
+test("a failed first batch identity save starts one attempt after explicit resume", async () => {
   const h = harness();
   let interrupted = false;
-  h.f.after = async (call) => {
+  h.f.before = async (call) => {
     if (call.method !== "PATCH" || !call.path.startsWith("/git/refs/")) return;
-    const state = h.f.state();
-    const fingerprint = state.lock?.batch_fingerprint;
-    if (!interrupted && fingerprint && !state.batches?.[fingerprint]) {
+    const pending = h.f.file("inbox-state.json", call.body.sha);
+    const fingerprint = pending.lock?.batch_fingerprint;
+    if (!interrupted && fingerprint && !pending.batches?.[fingerprint]) {
       interrupted = true;
       throw Error("interrupted after saving initial identity");
     }
   };
-  await assert.rejects(processInbox(h.options), /initial identity/);
+  await assert.rejects(
+    processInbox({
+      ...h.options,
+      journal: createJournal(h.f.api, sandboxProfile, {
+        workflow: inboxWorkflow,
+        pause: async () => {},
+        confirmationAttempts: 1
+      })
+    }),
+    /initial identity/
+  );
   assert.equal(interrupted, true);
   assert.equal(h.dispatches(), 0);
   const run = h.f.state().lock;
-  h.f.after = async () => {};
+  assert.equal(run.batch_fingerprint, undefined);
+  h.f.before = async () => {};
   await processInbox({ ...h.options, resume: run.run_id });
-  assert.equal(currentBatch(h.f).fingerprint, run.batch_fingerprint);
+  assert.ok(currentBatch(h.f).fingerprint);
   assert.equal(h.dispatches(), 1);
 });
 
@@ -469,6 +489,7 @@ test("later stale observation gets a new immutable snapshot, preserving the orig
     message: "Backend main changed."
   };
   record.selected = [];
+  delete record.execution;
   state.batches[record.fingerprint] = record;
   for (const number of [1, 2])
     presented(state.tickets[number], {
@@ -533,6 +554,7 @@ test("standalone services archive past 1000 while preserving pending or linked a
   // An unfinished batch retaining a service identity also prevents its removal.
   record.selected = [];
   record.status = "searching";
+  delete record.execution;
   const check = record.attempts.find((a) => a.phase === "checks");
   delete check.result;
   delete check.progress.result;

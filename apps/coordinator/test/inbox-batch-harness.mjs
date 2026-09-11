@@ -8,6 +8,11 @@ import { sandboxProfile } from "../src/profiles.mjs";
 import { generateInboxPlan, inboxMergePlan } from "../src/inbox-merge-plan.mjs";
 import { executeServiceSteps } from "../src/service-contract.mjs";
 import { servicePlanFromSources } from "../src/service-plan.mjs";
+import { executeRelease } from "../src/release-execution.mjs";
+import {
+  releaseProtocol,
+  verifyReleaseReport
+} from "../src/release-contract.mjs";
 
 export function harness(count = 2) {
   const f = fixture(sandboxProfile),
@@ -60,6 +65,73 @@ export function harness(count = 2) {
     )
   });
   let dispatches = 0;
+  let releaseRun = 1000;
+  const release = (options) =>
+    executeRelease({
+      ...options,
+      client: {
+        identity: async () => ({
+          actor: { id: "456", login: "tester" },
+          runtime: {
+            backend: { workflow_id: 201 },
+            frontend: { workflow_id: 202 }
+          },
+          versions: {
+            staging: {
+              backend: "b".repeat(40),
+              frontend: "b".repeat(40)
+            },
+            prod: {
+              backend: "b".repeat(40),
+              frontend: "b".repeat(40)
+            }
+          }
+        }),
+        integrate: async ({ candidate }) => ({
+          status: "passed",
+          kind: "merge",
+          commit: candidate.commit,
+          tree: candidate.tree,
+          url: "https://example.invalid/integration"
+        }),
+        run: async ({ record }) => {
+          const runId = releaseRun++;
+          const report = {
+            protocol: releaseProtocol,
+            profile: "sandbox",
+            release_id: record.operation.release_id,
+            operation_id: record.operation.operation_id,
+            operation_hash: record.operation.fingerprint,
+            operation: record.operation.operation,
+            environment: record.operation.environment,
+            role: record.operation.role,
+            unit: record.operation.unit,
+            status: "passed",
+            checks: [{ name: "fixture", status: "passed" }],
+            versions: {
+              backend: record.operation.backend_commit,
+              frontend: record.operation.frontend_commit
+            },
+            runner: {
+              repository: sandboxProfile.repositories.backend.full_name,
+              run_id: runId,
+              attempt: 1,
+              commit: record.operation.backend_commit
+            },
+            completed_at: new Date().toISOString()
+          };
+          verifyReleaseReport(report, record.operation);
+          return {
+            status: "passed",
+            report,
+            workflow: {
+              id: runId,
+              url: `https://example.invalid/release/${runId}`
+            }
+          };
+        }
+      }
+    });
   const options = {
     api: f.api,
     identity: f.identity,
@@ -89,6 +161,7 @@ export function harness(count = 2) {
     },
     services: async () =>
       assert.fail("individual service checks must not run in batch mode"),
+    release,
     batch: (opts) =>
       coordinateInboxBatch({
         ...opts,
@@ -112,6 +185,7 @@ export function harness(count = 2) {
             publications: report.repositories.map((repo) => ({
               role: repo.role,
               base: repo.destination.commit,
+              base_tree: repo.service_source.base_tree,
               tree: repo.final_tree,
               patch: [
                 { path: "docs/batch.md", content: "Batch\n", mode: "100644" }
