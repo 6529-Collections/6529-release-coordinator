@@ -272,8 +272,8 @@ export async function checkBatch(
                 attempt_id: id,
                 repository: profile.repositories[record.role].full_name,
                 pr_number: record.number,
-                workflow_id: result.workflow?.id,
-                url: result.workflow?.url,
+                workflow_id: result.workflow_id,
+                url: result.workflow,
                 result_status: result.status,
                 message: "Verified a completed trial's required-check result."
               });

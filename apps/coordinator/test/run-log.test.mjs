@@ -291,7 +291,12 @@ test("real Git candidate plus main movement reports exact repository/commits and
   let changed = false;
   h.client.result = async (record) => {
     changed = true;
-    return { status: "passed", role: record.role };
+    return {
+      status: "passed",
+      role: record.role,
+      workflow_id: 123,
+      workflow: `https://github.com/${sandboxProfile.repositories[record.role].full_name}/actions/runs/123`
+    };
   };
   const expected = prepared.publications.find((p) => p.role === "backend").base;
   const result = await logs.log.run(async () => {
@@ -314,6 +319,15 @@ test("real Git candidate plus main movement reports exact repository/commits and
   assert.equal(h.state().cleanup, "removed");
   assert.ok(!h.events.includes("services"));
   const events = await logs.events();
+  const ci = events.filter((event) => event.step === "trial.result");
+  assert.equal(ci.length, 2);
+  for (const event of ci) {
+    assert.equal(event.workflow_id, 123);
+    assert.equal(
+      event.url,
+      `https://github.com/${event.repository}/actions/runs/123`
+    );
+  }
   const movement = events.find((e) => e.step === "inputs.destination");
   assert.equal(movement.expected_commit, expected);
   assert.equal(movement.observed_commit, "f".repeat(40));

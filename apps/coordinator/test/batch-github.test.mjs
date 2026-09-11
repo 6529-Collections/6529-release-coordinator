@@ -14,7 +14,10 @@ test("temporary PR writer saves exact identity, verifies checks, and only remove
   await f.client.open(f.record, f.patch, f.save);
   assert.ok(f.saved.some((value) => value.commit && !value.number));
   assert.ok(f.saved.some((value) => value.pr_state === "creating"));
-  assert.equal((await f.client.result(f.record)).status, "passed");
+  const result = await f.client.result(f.record);
+  assert.equal(result.status, "passed");
+  assert.equal(result.workflow, f.run.html_url);
+  assert.equal(result.workflow_id, f.run.id);
   await f.client.cleanup(f.record);
   assert.equal(f.pr().state, "closed");
   assert.ok(

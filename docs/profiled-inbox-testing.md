@@ -89,8 +89,9 @@ Omit the ticket number to process all selected tickets:
 RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 ```
 
-Every suitable ticket gets its own generated plan and rehearsal. Different
-tickets are not merged together. The old manual plan input and separate
+Every suitable ticket first gets its own generated plan and Git rehearsal.
+Unscoped sandbox runs then test compatible whole tickets together; real runs
+retain individual Git rehearsals. The old manual plan input and separate
 processing/rehearsal commands have been removed. Diagnostics stay read-only.
 
 ## Automatic plan for each ticket
