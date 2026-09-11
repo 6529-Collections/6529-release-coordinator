@@ -50,6 +50,10 @@ from first principles.
   `npm run check` runs non-fixing lint, formatting checks, all offline tests,
   workflow policy checks, and a packed-CLI smoke test. It does not run the inbox.
   Keep format fixes separate and distinguish local checks from live GitHub CI.
+  The same guide owns the fixed 6529bot/CodeRabbit review set, CodeQL and Snyk
+  setup. Preserve draft/push coverage, scoped analysis permissions and central
+  bot admission/budgets. Distinguish checked-in config from base-branch activation,
+  external integrations, completed reviews and enforced GitHub merge rules.
 - `docs/inbox-processing.md` owns the ticket workflow,
   status/reason labels, submitter ownership, history requirements, and migration.
   Check `docs/progress.md` for local implementation versus merged/runtime proof.

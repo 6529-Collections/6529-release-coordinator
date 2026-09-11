@@ -1,7 +1,7 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-11**, against local source `e6537ab` and the cleanup
-changes below. This page separates implemented behavior, source delivery and
+Last reviewed: **2026-09-11**, against pushed source `5e30e32` and the review/check
+configuration changes below. This page separates implemented behavior, source delivery and
 live proof. Earlier GitHub/package observations carry their original dates;
 they were not repeated during this cleanup.
 
@@ -14,7 +14,8 @@ they were not repeated during this cleanup.
 | Sandbox service/database checks | One-ticket checks run sample services and temporary MySQL in GitHub Actions | Local and live acceptance passed; see [source delivery](#sandbox-source-delivery-september-10). |
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
-| v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Local implementation and tests passed at `e6537ab`; not pushed or live-migrated. |
+| v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Included in open [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66); not merged or live-migrated. |
+| PR reviews/security | Fixed bot reviews, CodeRabbit drafts and CodeQL configured on this branch | Local validation below; 6529bot activation needs the base-branch merge. Snyk account setup and security merge-rule activation are pending. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -23,8 +24,9 @@ candidate stays waiting and does not authorize a release.
 
 ## Next steps
 
-1. Deliver the local v5 changes and this cleanup through the repository's normal
-   checks/review process. Local test results do not replace remote CI evidence.
+1. Finish the expanded review/security setup and review open PR #66, which contains
+   v5 history and the cleanup. Verify new external checks separately from the
+   already-passing Node checks on `5e30e32`; assess its existing bot findings.
 2. On a separately authorized sandbox run, verify migration of the existing
    journal and an exact repeat: original attempt IDs/budgets, preserved files,
    no duplicate PRs/workflows/ticket decisions, verified cleanup and lock release.
@@ -53,7 +55,32 @@ preservation. The new CLI test failed against the old wording and passed after
 the fix; all 23 focused logging/batch-selection tests passed. All 243 checked local
 file/section references resolve. The historical snapshot preserves all 991
 previous lines exactly, apart from relative link paths adjusted for its new home.
-No commit, push, inbox mutation, publication or product deployment was performed.
+The cleanup was subsequently committed as `5e30e32` and pushed with `e6537ab` and
+`bbc644d` to PR #66. Node 20/22/24 and `Check package` passed on that head. No
+inbox mutation, publication or product deployment was performed.
+
+## Fixed PR reviews and security checks, September 11
+
+Implemented on `codex/coordinator-history-cleanup`: 6529bot general, security,
+deployment/Actions and GLM Swarm on opening and every push, plus follow-up after
+pushes; CodeRabbit includes drafts and has no automatic commit-count pause.
+CodeQL scans JavaScript and Actions with extended security queries, pinned
+actions and only the permissions needed to upload its results. Offline policy
+tests reject dropped reviews/scans, bypasses and privilege expansion.
+
+Local validation passed **426 tests**, with three optional Docker cases skipped,
+plus lint, formatting, workflow/review policy and packed-CLI checks. The 61 policy
+tests cover the actual files and rejected regressions; all 248 checked local
+documentation links resolve. The bot's own parser/job builder at source
+`e882f798239ff8a393bc1c60461023a0d4d4419f` confirmed four opening jobs and five push
+jobs. CodeRabbit configuration passed its current official JSON Schema.
+
+The central bot reads configuration from `main`,
+so this branch does not yet activate its expanded review set. CodeQL live runs
+and external code-scanning merge protection remain unverified. Snyk setup is
+waiting for an authenticated session in the existing 6529 organization; no fake
+passing check or token-bearing PR workflow substitutes for that integration.
+[Code checks](./code-checks.md) owns the configuration and activation steps.
 
 ## Controller and history cleanup, September 11
 
@@ -73,8 +100,8 @@ owns the format, migration and retention rules.
 
 At that commit, the full Node 22.16.0 check passed **395 tests**, with three
 optional Docker cases skipped, plus lint, formatting, workflow policy, packed CLI
-checks and source preservation. These are local results; live v5 migration and
-remote delivery remain pending.
+checks and source preservation. Live v5 migration remains pending; these commits
+are now included in PR #66.
 
 ## Implementation alignment review, September 11
 

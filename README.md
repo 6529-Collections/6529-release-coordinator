@@ -215,6 +215,10 @@ Release requests and workflow logs are public and must never contain secrets.
 After `npm ci --ignore-scripts`, run `npm run check`. It checks JavaScript,
 formatting, all automated tests, workflow permissions, and the packed public
 CLI. GitHub runs the same command on PRs into `main` and pushes to `main`.
+The branch also configures CodeQL for JavaScript and Actions, CodeRabbit draft
+reviews, and a fixed 6529bot general/security/deployment/GLM set on PRs and pushes,
+with a follow-up review after pushes. Bot base-branch activation, Snyk integration
+and external merge enforcement have separate delivery evidence in progress.
 The existing required `Check package` result requires every configured Node
 version to pass. See [code checks](./docs/code-checks.md) for setup and boundaries
 and [progress](./docs/progress.md) for local versus merged/CI evidence.
