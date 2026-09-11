@@ -113,7 +113,7 @@ candidate and defer the other. After A reaches `main`, B may need a correction
 to work with that new base. A failed group is not proof every ticket is broken.
 See the [batch design](./docs/design.md#proposed-batch-testing-and-selection),
 [ticket outcomes](./docs/inbox-processing.md#proposed-batch-ticket-outcomes), and
-[sandbox acceptance plan](./docs/merge-rehearsal-testing.md#planned-batch-acceptance).
+[sandbox acceptance](./docs/merge-rehearsal-testing.md#planned-batch-acceptance).
 
 ## Read-only diagnostics
 
@@ -180,9 +180,9 @@ and [implementation evidence](./docs/progress.md#controller-and-history-cleanup-
 | Check changes to this repository before merging | [Repository code checks](./docs/code-checks.md) |
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
-| Understand the ticket workflow, labels, reasons, and migration | [Inbox processing plan](./docs/inbox-processing.md) |
+| Understand the ticket workflow, labels, reasons, and migration | [Inbox processing guide](./docs/inbox-processing.md) |
 | Select sandbox or real, submit a request, and run its ticket workflow | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
-| Understand the sandbox merge-rehearsal test matrix and evidence | [Merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) |
+| Understand the sandbox merge-rehearsal test matrix and evidence | [Sandbox testing guide](./docs/merge-rehearsal-testing.md) |
 | Understand the implemented one-ticket service/database checks and evidence | [Service and database acceptance](./docs/merge-rehearsal-testing.md#service-and-database-acceptance) |
 | Review sandbox batching, limits, and excluded-ticket handling | [Batch design](./docs/design.md#proposed-batch-testing-and-selection) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |

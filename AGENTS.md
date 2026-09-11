@@ -43,8 +43,9 @@ from first principles.
 ## Documentation map
 
 - `README.md` is the entry point and documentation index.
-- `docs/progress.md` records dated implementation, merge/publication evidence,
-  next steps, and deliberately deferred work.
+- `docs/progress.md` is the concise current status, next steps and evidence index.
+  Keep detailed past delivery narratives in `docs/history/` and dated acceptance
+  reports in `docs/testing/`; do not turn historical plans into a fresh work queue.
 - `docs/code-checks.md` owns checks for this repository's code and PR gate.
   `npm run check` runs non-fixing lint, formatting checks, all offline tests,
   workflow policy checks, and a packed-CLI smoke test. It does not run the inbox.
@@ -89,8 +90,8 @@ from first principles.
   future work, distinct from process restart. Keep state in the GitHub journal;
   `docs/inbox-processing.md` owns verified archives and v5 migration; preserve
   unfinished work, archive checksums, original attempts and per-run budgets.
-  Lifetime record caps are removed locally; live migration needs separate evidence. A separate database/dashboard is not
-  required. Its batch-testing section owns the bounded
+  Lifetime record caps are removed locally; live migration needs separate evidence.
+  A separate database/dashboard is not required. Its batch-testing section owns the bounded
   search before release mutations: keep tickets/dependencies whole,
   test the final exact combination, and never blame every member of a failed
   group. Batch ticket projections belong in `docs/inbox-processing.md`; planned

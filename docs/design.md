@@ -93,7 +93,7 @@ They survive changing checkout or branch but are not a shared board or journal b
 The existing `codex/inbox-state` journal remains the source for recorded intent,
 ownership, attempts and recovery decisions. Save those records before the same
 external actions as today. Local logs are for explanation, never imported as
-passing evidence or permission to continue. Preserve the v4 writer boundary,
+passing evidence or permission to continue. Preserve the v5 writer boundary,
 current attempt budgets and profile permissions.
 
 Logs contain selected Coordinator events and bounded error codes, not raw Actions

@@ -180,6 +180,40 @@ test("the full CLI leaves JSON stdout parseable and logs cheap work before expen
   assert.equal(h.f.state().lock, null);
 });
 
+test("CLI recovery guidance checks ownership when archive readback fails after release", async (t) => {
+  const root = await rootFor(t),
+    h = harness();
+  const api = h.options.api;
+  h.options.api = async (call) => {
+    const result = await api(call);
+    if (call.path.startsWith("/contents/history/"))
+      result.data.content = Buffer.from("{}").toString("base64");
+    return result;
+  };
+  const result = await cli(h, root);
+  assert.equal(result.code, 2);
+  assert.equal(
+    h.f.state().lock,
+    null,
+    "Release committed before archive readback failed"
+  );
+  assert.equal(h.dispatches(), 1);
+  assert.match(result.report.error, /only if that run still holds the lock/);
+  const events = (await readFile(result.report.logging.file, "utf8"))
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  const final = events.at(-1);
+  assert.equal(final.step, "run.finish");
+  assert.equal(final.outcome, "unknown");
+  assert.match(final.recovery, /inspect the journal/);
+  assert.match(final.recovery, /only if that run still holds the lock/);
+  assert.equal(
+    final.recovery,
+    events.find((event) => event.step === "run.unfinished").recovery
+  );
+});
+
 test("interrupted ticket updates retain run history; explicit resume appends and does not rerun services", async (t) => {
   const root = await rootFor(t),
     h = harness();

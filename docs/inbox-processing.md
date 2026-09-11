@@ -220,7 +220,9 @@ request before another run can proceed.
 Simulation of a failure after a database change must state that real recovery
 would require a person; temporary-resource cleanup is not successful recovery.
 
-## Proposed batch ticket outcomes
+<a id="proposed-batch-ticket-outcomes"></a>
+
+## Batch ticket outcomes
 
 **Implemented for unscoped sandbox runs; see [progress](./progress.md) for evidence.**
 The [batch-selection policy](./design.md#proposed-batch-testing-and-selection)

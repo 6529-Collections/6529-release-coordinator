@@ -1,7 +1,7 @@
-# Merge rehearsal and test repository plan
+# Sandbox rehearsal and testing
 
-**Original merge-rehearsal scope prepared September 9, 2026; next stages updated
-September 10.** The original bounded stage after inbox organization is complete.
+**Original merge-rehearsal scope prepared September 9, 2026; current scope updated
+September 11.** The original bounded stage after inbox organization is complete.
 [Progress](./progress.md) records what has actually run;
 [the app guide](../apps/coordinator/README.md) lists commands that exist. The
 engine merged in PR #26; the public sandbox follow-up completed live required-check
@@ -9,8 +9,10 @@ acceptance, and later integration delivered the one-command ticket workflow.
 
 The one-ticket sandbox service/database stage is implemented and has local
 Docker and live ticket acceptance evidence. [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
-tracks Coordinator source delivery; the sample repository setup is merged. Batch acceptance remains
-future work. Each stage's evidence is separate from the original MR milestone.
+records the merged service extension; the sample repository setup is also merged.
+Sandbox batching has [local and live acceptance](#batch-acceptance). The v5 archive
+extension has offline proof; live migration remains pending. Each stage's evidence
+is separate from the original MR milestone.
 Documentation alone is not permission to execute external changes.
 
 ## What we will prove
@@ -144,13 +146,15 @@ For this stage:
 - Keep the published package, public request schema, central intake workflow,
   and current ticket policies unchanged. No npm release or product edit is needed.
 
-Two repositories are sufficient for this merge-rehearsal stage. This does not
-retest the public CLI-to-inbox receipt path against new repositories. A future
-full sandbox intake exercise would need its own isolated inbox and explicit
-receipt/identity configuration; do not quietly send fake requests to the real
-inbox or claim that local manifests prove submission works.
+The original two-repository merge-only stage did not test CLI-to-inbox delivery.
+The implemented [profiled inbox stage](./profiled-inbox-testing.md) adds a separate
+test inbox and explicit receipt/identity configuration. Local manifests still do
+not prove submission works; the [dated profiled acceptance](./testing/profiled-inbox-2026-09-09.md)
+records that separate proof. Keep test requests out of the real inbox.
 
-## Rehearsal behavior to implement
+<a id="rehearsal-behavior-to-implement"></a>
+
+## Rehearsal behavior
 
 The engine is now part of the single operator command `inbox:run`, with a
 verified ticket and automatically generated plan. Its old standalone command has been removed.
@@ -535,7 +539,7 @@ reported as unknown unless its cause and attribution can be verified; an exit
 code alone does not establish a ticket defect.
 
 The journal saves the exact service plan and unique attempt before dispatch
-(introduced in `inbox-run-v3`, retained in the current v4 writer).
+(introduced in `inbox-run-v3`, retained in the current v5 writer).
 A lost dispatch response is reconciled, never blindly repeated. Subsequent runs
 reverify the same workflow result; changed inputs require a different plan.
 Lookup filters by the saved actor and creation time with a five-minute clock-skew
@@ -630,13 +634,15 @@ prove production data compatibility, AWS deployment, real runtime prerequisites,
 or recovery. Source delivery through normal PR checks and merge precedes the
 existing non-database batch matrix.
 
-## Planned batch acceptance
+<a id="planned-batch-acceptance"></a>
+
+## Batch acceptance
 
 **Batch acceptance requirements, implemented in the sandbox stage September 10,
 2026.** See [progress](./progress.md) and the [dated batch acceptance record](./testing/batch-2026-09-10.md) for
 which cases have offline versus live proof. This section follows the
 [batch-selection design](./design.md#proposed-batch-testing-and-selection) and
-[proposed ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes).
+[ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes).
 It does not change the completed MR matrix or its dated evidence above.
 
 The subsequent [20-case stress campaign](./testing/complex-corner-cases.md)
