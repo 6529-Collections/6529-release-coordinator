@@ -330,6 +330,9 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
         );
     } catch (error) {
       if (!archives.length) throw error;
+      // A lost response may follow a successful save. Only the exact commit
+      // and state permit continuing to archive verification below. A failed
+      // read propagates to the processor's stop-and-inspect recovery message.
       const current = await read();
       if (current.sha !== commit.sha || digest(current.state) !== digest(state))
         throw error;

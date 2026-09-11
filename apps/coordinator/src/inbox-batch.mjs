@@ -168,6 +168,9 @@ export async function coordinateInboxBatch({
   const fingerprint = run.batch_fingerprint ?? freshFingerprint;
   const changed = fingerprint !== freshFingerprint;
   const original = await loadBatch(fingerprint);
+  // The first identity is saved before its first attempt. Resuming that narrow
+  // gap may have no record yet. A referenced but missing archive throws in
+  // loadBatch; it must never be treated as a new attempt.
   serviceAssert(
     !changed || original,
     "batch-state",

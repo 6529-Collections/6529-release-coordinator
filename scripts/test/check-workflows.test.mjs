@@ -111,6 +111,42 @@ for (const [name, edit, file = releaseFile, expected] of [
     }
   ],
   [
+    "dependency audit is missing",
+    (w) => {
+      w.jobs.verify.steps.pop();
+    }
+  ],
+  [
+    "dependency audit excludes workspace packages",
+    (w) => {
+      w.jobs.verify.steps[4].run = "npm audit --workspaces=false";
+    }
+  ],
+  [
+    "dependency audit omits development tools",
+    (w) => {
+      w.jobs.verify.steps[4].run = w.jobs.verify.steps[4].run.replace(
+        "--include=dev",
+        "--omit=dev"
+      );
+    }
+  ],
+  [
+    "dependency audit ignores medium findings",
+    (w) => {
+      w.jobs.verify.steps[4].run = w.jobs.verify.steps[4].run.replace(
+        "--audit-level=low",
+        "--audit-level=high"
+      );
+    }
+  ],
+  [
+    "dependency audit failures are ignored",
+    (w) => {
+      w.jobs.verify.steps[4]["continue-on-error"] = true;
+    }
+  ],
+  [
     "checkout retains credentials",
     (w) => {
       w.jobs.verify.steps[0].with["persist-credentials"] = true;

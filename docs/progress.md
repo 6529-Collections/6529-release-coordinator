@@ -1,7 +1,7 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-11**, against pushed source `14cbb3c` and the live
-review/check setup below. This page separates implemented behavior, source delivery
+Last reviewed: **2026-09-11**, against pushed source `27a1db3` and the dependency
+coverage/history verification changes below. This page separates implemented behavior, source delivery
 and live proof. Earlier GitHub/package observations carry their original dates;
 they were not repeated during this cleanup.
 
@@ -15,7 +15,7 @@ they were not repeated during this cleanup.
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Included in open [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66); not merged or live-migrated. |
-| PR reviews/security | Fixed bot reviews, CodeRabbit drafts and CodeQL configured on this branch | Node checks and both CodeQL scans passed; CodeQL merge rules are active. CodeRabbit draft review completed, with a supplemental-tool limitation below. Expanded 6529bot activation needs the base-branch merge; Snyk import needs GitHub authorization. |
+| PR reviews/security | Fixed bot reviews, CodeRabbit drafts and CodeQL configured; a complete lockfile audit added to CI | Prior CI and CodeQL passed; CodeQL merge rules are active. Snyk now scans the CLI's six libraries, with the workspace limitation below. Expanded 6529bot activation needs the base-branch merge. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -24,9 +24,9 @@ candidate stays waiting and does not authorize a release.
 
 ## Next steps
 
-1. Finish Snyk authorization/import and verify its dependency PR status. Review
-   open PR #66, which contains v5 history, cleanup and the review/security setup;
-   assess its bot findings. Verify the expanded 6529bot set after the separately
+1. Verify the new CI audit and Snyk dependency PR status, then finish review of
+   open PR #66, which contains v5 history, cleanup and the review/security setup.
+   The history concerns have the focused verification below. Verify the expanded 6529bot set after the separately
    authorized merge makes its configuration available on `main`.
 2. On a separately authorized sandbox run, verify migration of the existing
    journal and an exact repeat: original attempt IDs/budgets, preserved files,
@@ -100,14 +100,52 @@ CodeRabbit tool completed. The central 6529bot reads configuration from `main`,
 so this branch does not yet activate its expanded review set. Its ordinary
 follow-up ran using the existing base-branch defaults.
 
-The existing 6529 Snyk organization and GitHub integration are accessible, but
-importing this repository requires additional GitHub OAuth authorization. The
-authorization page is handed to the user because its public-repository access
-covers the account, not only this repository. Private access, automatic fix/upgrade
-PRs and Snyk Code were not selected. Import, root/workspace coverage, dependency
-PR checks and the Snyk required status remain pending; no empty passing job or
-token-bearing PR workflow substitutes for that integration.
+The user completed GitHub authorization for the existing 6529 Snyk integration.
+The initial root import saw zero dependencies; the targeted import and coverage
+correction are recorded below. No token-bearing PR workflow was added.
 [Code checks](./code-checks.md) owns the configuration and activation steps.
+
+## Dependency coverage and bot concern verification, September 11
+
+Snyk's targeted import of `packages/release-request/package.json` created
+[the CLI dependency project](https://app.snyk.io/org/6529/project/cd173965-5342-4bf7-bd07-8641c4b40764).
+Its main-branch scan sees six libraries and reports zero issues. The original
+root project has zero production dependencies; it does not cover development
+tools. Snyk's nested-manifest scan uses no shared lockfile: it resolved
+`fast-uri@3.1.7`, while the checked-in lockfile uses `3.1.6`. This is a real
+coverage distinction, not a reason to change application dependencies.
+
+The added CI npm audit reads the actual shared lockfile for all workspaces and
+development tools, fails at low severity or higher, and performs no install or
+fix. The local audit reported zero known vulnerabilities. Two disposable fixtures
+with a deliberately vulnerable dependency proved that the same command fails
+for both a workspace runtime dependency and a root development dependency,
+without installing packages or changing either lockfile. The fixtures were removed.
+The CLI project's Snyk dependency PR check is enabled for newly introduced issues
+of every severity, including issues without a fix. Automatic fix and upgrade PRs
+are disabled for this project. These settings were saved and verified in Snyk;
+the resulting GitHub status and required-check activation await a fresh push.
+The organization's separate Snyk Code import also reported three low findings on
+main; this dependency work does not assess or dismiss those source-code findings.
+
+Seven new offline history regressions passed against the existing implementation;
+the history code changes only add comments explaining its existing guarantees.
+All 23 focused history tests and 66 workflow/review policy tests passed.
+
+| Bot concern | Verified outcome |
+| --- | --- |
+| Lost save confirmation followed by a failed journal read | Stops with inspect-the-journal guidance. Durable history remains available; a later exact repeat keeps attempts/budgets and does not dispatch again or duplicate ticket updates. |
+| Lost confirmation followed by corrupt archive readback | The archive verification still runs and rejects the result; it cannot report success based only on the saved branch head. |
+| Transport error, HTTP 403 or HTTP 422 before the ref update lands | Active records and lock remain; explicit resume preserves the original attempts and completes without duplicate dispatch. |
+| Missing archive for an unchanged resumed batch | Stops without creating a fresh attempt. Missing referenced evidence is distinct from saving an initial identity before any attempt exists; that narrow initial interruption resumes correctly. |
+| Clone mutation, migration shim and summary assumptions | Existing clone isolation, archive checksum/structure validation and v4 migration/resume tests already cover the stated guarantees. No demonstrated correctness defect warrants the suggested rewrite. |
+| Repeated service-reference scan and duplicated path regex | Optional maintenance suggestions, with no demonstrated failure in the current scope. Left unchanged. |
+
+The latest 6529bot comment on `27a1db3` claimed code/test fixes in a docs-only
+commit and used truncated context. The verification above, rather than that
+claim, settles these concerns. Full local `npm run check` passed: 438 tests passed,
+three optional Docker tests skipped, with lint, formatting, workflow policy and
+packed CLI checks passing. The new CI audit and tests await push and live CI.
 
 ## Controller and history cleanup, September 11
 

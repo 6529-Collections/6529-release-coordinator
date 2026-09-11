@@ -462,6 +462,14 @@ the release commit may already exist, so resume only if that run still holds the
 lock. A failed or competing save cannot silently
 drop active evidence. Earlier ordinary-save uncertainty still stops the run.
 
+If both the save confirmation and the following journal read fail, the processor
+stops and tells the operator to inspect the journal. It never skips verification
+and reports success. Once readable, the durable archive can support an exact
+repeat with its original attempt IDs and budgets. A batch identity saved before
+its first attempt is different: it legitimately has no prior record yet. Resuming
+that initial gap may create its first attempt; a referenced but missing archive
+always stops processing, including when the batch inputs are unchanged.
+
 `workflow: "inbox-run-v5"` fences older writers before they can drop archive
 files. The next authorized v5 run upgrades a legacy/v1/v2/v3/v4 journal under its
 lock, preserving receipts, transitions, plans, original results and resume scope.

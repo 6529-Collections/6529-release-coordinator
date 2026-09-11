@@ -9,6 +9,7 @@ import {
 import { archiveFinished, historyReady } from "../src/inbox-history.mjs";
 import {
   createCoordinatorGitHub,
+  stateBranch,
   stateFile
 } from "../src/coordinator-github.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
@@ -246,6 +247,161 @@ test("lost archive ref response is reconciled to the exact saved commit and pair
   assert.equal(h.f.state().lock, null);
   assert.deepEqual(h.f.state().batches, {});
   assert.deepEqual(currentBatch(h.f), record);
+  assert.equal(h.dispatches(), 1);
+});
+
+for (const failure of ["journal read", "archive verification"]) {
+  test(`lost archive confirmation followed by failed ${failure} stops safely and preserves exact reuse`, async () => {
+    const h = harness();
+    let lost = false,
+      failedRead = false,
+      callsAtLoss;
+    await assert.rejects(
+      processInbox({
+        ...h.options,
+        api: async (call) => {
+          if (
+            lost &&
+            failure === "journal read" &&
+            call.path === `/git/ref/heads/${stateBranch}`
+          ) {
+            failedRead = true;
+            throw Error("journal read unavailable");
+          }
+          const result = await h.f.api(call);
+          if (
+            call.method === "PATCH" &&
+            call.path === `/git/refs/heads/${stateBranch}` &&
+            h.f.state().lock === null
+          ) {
+            lost = true;
+            callsAtLoss = h.f.calls.length;
+            throw Error("archive confirmation lost");
+          }
+          if (lost && call.path.startsWith("/contents/history/")) {
+            failedRead = true;
+            result.data.content = Buffer.from("{}").toString("base64");
+          }
+          return result;
+        }
+      }),
+      (error) => {
+        assert.match(error.message, /journal read unavailable|archive/i);
+        assert.match(error.message, /inspect the journal/);
+        assert.doesNotMatch(error.message, /remains locked/);
+        return true;
+      }
+    );
+    assert.ok(lost && failedRead);
+    assert.equal(h.f.state().lock, null);
+    assert.deepEqual(h.f.state().batches, {});
+    const record = structuredClone(currentBatch(h.f));
+    const tickets = structuredClone(h.f.state().tickets);
+    const comments = structuredClone(h.f.comments);
+    assert.equal(h.dispatches(), 1);
+    assert.ok(
+      h.f.calls.slice(callsAtLoss).every((call) => call.method === "GET")
+    );
+
+    // Readable durable history permits a new run; there is no lock to resume.
+    await processInbox(h.options);
+    assert.deepEqual(currentBatch(h.f), record);
+    assert.deepEqual(h.f.state().tickets, tickets);
+    assert.deepEqual(h.f.comments, comments);
+    assert.equal(h.dispatches(), 1);
+  });
+}
+
+for (const failure of ["transport", 403, 422]) {
+  test(`archive ref update rejected with ${failure} preserves active evidence for resume`, async () => {
+    const h = harness();
+    let archiving = false,
+      rejected = false;
+    await assert.rejects(
+      processInbox({
+        ...h.options,
+        api: async (call) => {
+          if (call.path === "/git/trees" && call.body.tree.length > 1)
+            archiving = true;
+          if (
+            archiving &&
+            call.method === "PATCH" &&
+            call.path === `/git/refs/heads/${stateBranch}`
+          ) {
+            rejected = true;
+            if (failure === "transport") throw Error("ref update unavailable");
+            return { status: failure };
+          }
+          return h.f.api(call);
+        }
+      }),
+      /inspect the journal/
+    );
+    assert.equal(rejected, true);
+    const before = h.f.state();
+    const record = before.batches[before.lock.batch_fingerprint];
+    assert.ok(record.attempts.length);
+    assert.equal(Object.keys(before.history?.batches ?? {}).length, 0);
+    assert.equal(h.dispatches(), 1);
+    await processInbox({ ...h.options, resume: before.lock.run_id });
+    assert.deepEqual(currentBatch(h.f), record);
+    assert.equal(h.f.state().lock, null);
+    assert.equal(h.dispatches(), 1);
+  });
+}
+
+test("missing archive on an unchanged resumed batch cannot start a fresh attempt", async () => {
+  const h = await completed();
+  const journal = writer(h.f);
+  const { state, run } = await journal.acquire(
+    await h.f.identity(),
+    undefined,
+    {
+      workflow: inboxWorkflow,
+      issue_number: null,
+      close_test: false
+    }
+  );
+  const record = currentBatch(h.f);
+  state.lock.batch_fingerprint = record.fingerprint;
+  await journal.save(state, run, "fixture resume exact archived batch");
+  const history = structuredClone(h.f.state().history);
+  await assert.rejects(
+    processInbox({
+      ...h.options,
+      resume: run.run_id,
+      api: (call) =>
+        call.path.startsWith("/contents/history/")
+          ? Promise.resolve({ status: 404 })
+          : h.f.api(call)
+    }),
+    /GitHub GET|archive/
+  );
+  assert.equal(h.dispatches(), 1);
+  assert.deepEqual(h.f.state().batches, {});
+  assert.deepEqual(h.f.state().history, history);
+  assert.equal(h.f.state().lock.batch_fingerprint, record.fingerprint);
+});
+
+test("resume after saving only the first batch identity starts its first attempt once", async () => {
+  const h = harness();
+  let interrupted = false;
+  h.f.after = async (call) => {
+    if (call.method !== "PATCH" || !call.path.startsWith("/git/refs/")) return;
+    const state = h.f.state();
+    const fingerprint = state.lock?.batch_fingerprint;
+    if (!interrupted && fingerprint && !state.batches?.[fingerprint]) {
+      interrupted = true;
+      throw Error("interrupted after saving initial identity");
+    }
+  };
+  await assert.rejects(processInbox(h.options), /initial identity/);
+  assert.equal(interrupted, true);
+  assert.equal(h.dispatches(), 0);
+  const run = h.f.state().lock;
+  h.f.after = async () => {};
+  await processInbox({ ...h.options, resume: run.run_id });
+  assert.equal(currentBatch(h.f).fingerprint, run.batch_fingerprint);
   assert.equal(h.dispatches(), 1);
 });
 

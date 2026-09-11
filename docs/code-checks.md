@@ -64,6 +64,18 @@ Node 20, 22, and 24 using disposable GitHub runners. It runs on every PR targeti
 `main`, without path filters, and on pushes to `main`. Manual publishing also
 requires these checks. Each runner uses `npm ci --ignore-scripts`.
 
+CI also audits the exact shared lockfile, including workspace runtime dependencies
+and root development tools:
+
+```sh
+npm audit --package-lock-only --include=dev --workspaces --include-workspace-root --audit-level=low --ignore-scripts
+```
+
+This non-fixing command contacts the npm registry. Any reported vulnerability at
+low severity or higher, or an audit service error, fails verification and therefore
+`Check package`. It installs nothing and does not change the lockfile. It remains
+separate from the offline `npm run check`; the same command can be run locally.
+
 The existing **Check package** job always evaluates the combined result. Failed,
 cancelled, or skipped verification cannot produce a passing gate. Its name stays
 the same so the existing required-check rule continues to match it.
@@ -152,19 +164,33 @@ integration**, as in the product repositories. This avoids exposing a Snyk token
 to untrusted PR code. Snyk setup requires an authenticated organization account;
 there is no repository credential to use as a fallback.
 
-Import this repository's supported manifests/lockfile into that integration,
-enable automatic dependency PR checks and check that root and workspace
-dependencies are represented. Use checks for newly introduced vulnerabilities,
-including ones without a fix; do not silently exempt dependencies or dismiss
-existing findings to obtain a pass. Verify an actual check on a draft and after
-a new push, and then require the observed Snyk status on `main`. Some Snyk
-settings live in the service rather than a repository file. Until import and
-live checks are verified, Snyk remains pending rather than a passing empty job.
+The root-only import has zero production dependencies and is not useful coverage
+by itself. Import `packages/release-request/package.json` through **Add custom
+file location**. Its dedicated project scans the public CLI's six runtime
+libraries. The Coordinator workspace declares no separate dependencies.
+
+Snyk's GitHub integration does not explicitly support npm workspaces: for this
+nested manifest it resolves dependencies without the shared root lockfile.
+Its result is therefore not proof of the exact versions installed by CI. The
+separate npm audit above checks those locked versions and development tools.
+Do not add duplicate manifests or lockfiles, change dependency versions to match
+a scan, or expose a Snyk token to PR code just to accommodate this limitation.
+
+Configure the package project's PR check for newly introduced vulnerabilities
+at every severity, including ones without a fix. Disable automatic fix and
+upgrade PRs on the imported projects; organization-wide product settings stay
+unchanged. Do not exempt dependencies or dismiss findings to obtain a pass.
+Verify the actual dependency PR status on a draft after a push, then require that
+observed status on `main`. A result saying no manifest changed reuses the imported
+manifest's baseline; it is not a fresh lockfile scan. Some settings live in Snyk,
+not in this repository; progress records their current activation evidence.
 
 Sources: [6529bot configuration](https://github.com/6529-Collections/6529reviewbot/blob/main/docs/repository-config.md),
 [CodeRabbit configuration](https://docs.coderabbit.ai/reference/configuration),
 [CodeQL workflows](https://docs.github.com/en/code-security/reference/code-scanning/workflow-configuration-options),
-[Snyk PR checks](https://docs.snyk.io/scan-with-snyk/pull-requests/pull-request-checks/configure-pull-request-checks).
+[Snyk PR checks](https://docs.snyk.io/scan-with-snyk/pull-requests/pull-request-checks/configure-pull-request-checks),
+[Snyk npm workspace limitations](https://docs.snyk.io/supported-languages/supported-languages-list/javascript),
+[npm audit](https://docs.npmjs.com/cli/v11/commands/npm-audit/).
 
 ## Behavior tests and sandbox execution
 

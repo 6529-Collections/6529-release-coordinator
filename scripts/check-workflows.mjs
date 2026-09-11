@@ -186,7 +186,7 @@ export function validateWorkflows(sources) {
   });
   assert.equal(
     verify.steps.length,
-    4,
+    5,
     "Review changes to mandatory verification steps"
   );
   assert.ok(verify.steps[0].uses?.startsWith("actions/checkout@"));
@@ -199,6 +199,11 @@ export function validateWorkflows(sources) {
   assert.equal(verify.steps[1].with?.["node-version"], "${{ matrix.node }}");
   assert.equal(verify.steps[2].run, "npm ci --ignore-scripts");
   assert.equal(verify.steps[3].run, "npm run check");
+  assert.equal(
+    verify.steps[4].run,
+    "npm audit --package-lock-only --include=dev --workspaces --include-workspace-root --audit-level=low --ignore-scripts",
+    "Audit the lockfile for all workspaces and development tools without fixes"
+  );
   for (const step of verify.steps) {
     assert.equal(
       step.if,

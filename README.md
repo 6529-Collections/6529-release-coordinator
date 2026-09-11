@@ -219,6 +219,9 @@ The branch also configures CodeQL for JavaScript and Actions, CodeRabbit draft
 reviews, and a fixed 6529bot general/security/deployment/GLM set on PRs and pushes,
 with a follow-up review after pushes. Bot base-branch activation, Snyk integration
 and external merge enforcement have separate delivery evidence in progress.
+CI also runs a non-fixing npm audit of the shared lockfile, including every
+workspace and development tools. Snyk scans the public package's manifest;
+its npm workspace limitation makes the separate lockfile audit necessary.
 The existing required `Check package` result requires every configured Node
 version to pass. See [code checks](./docs/code-checks.md) for setup and boundaries
 and [progress](./docs/progress.md) for local versus merged/CI evidence.
