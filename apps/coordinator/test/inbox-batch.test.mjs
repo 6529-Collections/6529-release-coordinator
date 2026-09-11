@@ -78,3 +78,60 @@ test("an explicit issue keeps the single-ticket path and cannot silently expand 
   assert.equal(calls, 1);
   assert.equal(result.batch, undefined);
 });
+
+for (const exclusion of ["unsupported", "limit"]) {
+  test(`an excluded ${exclusion} ticket changing PR evidence cannot invalidate the eligible pool`, async () => {
+    const h = harness(exclusion === "limit" ? 11 : 2);
+    const excluded = h.samples.length;
+    if (exclusion === "unsupported")
+      h.samples.at(-1).entry.request.database_change = "unknown";
+    let batching = false;
+    const result = await processInbox({
+      ...h.options,
+      batch: async (options) => {
+        batching = true;
+        return h.options.batch(options);
+      },
+      observe: async (entry) => {
+        if (batching && entry.issue_number === excluded)
+          assert.fail(
+            "An excluded ticket must not participate in the batch's evidence recheck"
+          );
+        return h.options.observe(entry);
+      }
+    });
+    assert.deepEqual(
+      result.batch.selected,
+      Array.from({ length: excluded - 1 }, (_, i) => i + 1)
+    );
+    assert.equal(h.dispatches(), 1);
+    assert.ok(
+      h.f.issues
+        .at(-1)
+        .labels.includes(
+          `reason:batch-${exclusion === "limit" ? "limit" : "unsupported"}`
+        )
+    );
+  });
+}
+
+test("changed PR evidence inside the frozen pool still stops the batch before expensive checks", async () => {
+  const h = harness();
+  let batching = false;
+  const result = await processInbox({
+    ...h.options,
+    batch: async (options) => {
+      batching = true;
+      return h.options.batch(options);
+    },
+    observe: async (entry) => {
+      const result = await h.options.observe(entry);
+      if (batching && entry.issue_number === 1)
+        result.checks[0].status = "fail";
+      return result;
+    }
+  });
+  assert.deepEqual(result.batch.selected, []);
+  assert.equal(result.batch.stop.status, "stale");
+  assert.equal(h.dispatches(), 0);
+});

@@ -702,25 +702,33 @@ deployment, and the agreed execution rules still requiring implementation.
 
 ## History storage acceptance
 
-**Next refactor, planned September 11; none of these archive cases has run.**
-Use the actual journal/batch code with controlled GitHub responses first. Then,
-when separately authorized, verify migration and repeat behavior in the isolated
-sandbox inbox. Never migrate the real journal as part of offline tests.
+**Offline acceptance passed September 11; live migration has not run.**
+`apps/coordinator/test/inbox-history.test.mjs` uses the actual journal, selector
+and processor with a controlled GitHub API that models preserved base trees,
+atomic non-force ref updates and pinned archive reads. Separately authorized
+live sandbox migration/repeat remains the next proof step. Offline tests never
+migrate a real journal.
 
 | Case | Expected result | Status |
 | --- | --- | --- |
-| More than 100 completed batch histories | Archive finished records and accept later work without a lifetime stop. Keep per-search budgets enforced. | Not run |
-| Active work among completed histories | Running/uncertain operations, pending ticket writes and cleanup remain active; `finished` selection alone cannot authorize archiving. | Not run |
-| Same exact batch after archive | Load its original record on demand, revalidate remote proof, preserve attempt IDs/budgets and avoid duplicate PRs, workflows or ticket decisions. | Not run |
-| Missing, altered or wrong-profile archive | Stop with a specific evidence error; do not treat it as first use or trust a pass from a different inbox. | Not run |
-| Archive save fails or response is lost | Preserve active evidence or reconcile the already-committed archive/reference pair; no lost or duplicate authoritative record. | Not run |
-| Competing writer during compaction | At most one non-force commit advances; the loser does not discard data or proceed with external actions. | Not run |
-| Subsequent ordinary journal writes | Preserve all archived files and verify their references instead of recreating a state-only tree. | Not run |
-| Existing v4 migration and older writer | Preserve receipts, transitions, service/batch identities and budgets. Older writers reject the new marker before mutation. | Not run |
-| Standalone service history and linked records | Archive only fully finished, unneeded records; preserve active references and prevent the existing 1,000-record cap becoming another lifetime stop. | Not run |
+| More than 100 completed batch histories | Archive finished records and accept later work without a lifetime stop. Keep per-search budgets enforced. | Passed offline |
+| Active work among completed histories | Running/uncertain operations, pending ticket writes and cleanup remain active; `finished` selection alone cannot authorize archiving. | Passed offline |
+| Same exact batch after archive | Load its original record on demand, revalidate remote proof, preserve attempt IDs/budgets and avoid duplicate PRs, workflows or ticket decisions. | Passed offline |
+| Missing, altered or wrong-profile archive | Stop with a specific evidence error; do not treat it as first use or trust a pass from a different inbox. | Passed offline |
+| Archive save fails or response is lost | Preserve active evidence or reconcile the already-committed archive/reference pair; no lost or duplicate authoritative record. | Passed offline |
+| Competing writer during compaction | At most one non-force commit advances; the loser does not discard data or proceed with external actions. | Passed offline |
+| Subsequent ordinary journal writes | Preserve all archived files and index structure; validate full archive content on write/read, rather than recreating a state-only tree. | Passed offline |
+| Existing v4 migration and older writer | Preserve receipts, transitions, service/batch identities and budgets. Older writers reject the new marker before mutation. | Passed offline |
+| Standalone service history and linked records | Archive only fully finished, unneeded records; preserve active references and prevent the existing 1,000-record cap becoming another lifetime stop. | Passed offline |
 
-Finish when these cases pass, current repeat/resume/cleanup behavior remains
-covered, and an authorized live sandbox migration/repeat proves the same path.
+Offline cases also cover immutable snapshots for later stale observations,
+strict API path limits, uncertain final readback and a v4 batch resumed through
+the full processor. Existing repeat/resume/cleanup tests remain required.
+The three focused batch tests cover changed evidence on unsupported/over-limit
+tickets and changed evidence inside the frozen eligible pool.
+
+Finish live acceptance when an authorized sandbox migration/repeat proves the
+same path, including current repeat/resume/cleanup behavior.
 Keep local fixture results, live evidence and merge status separate in progress.
 Do not rerun product deployments or the full historical campaign for a storage
 change unless a concrete failure justifies it.

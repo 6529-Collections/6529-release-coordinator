@@ -1005,13 +1005,13 @@
             A staging request alone never authorizes production.
           </p>
           <p class="progress-rule" role="note">
-            <strong>Planned progress storage:</strong> Extend the existing GitHub journal:
+            <strong>Storage built locally; live migration pending:</strong> Use the existing GitHub journal:
             keep active work complete and archive finished records in the same repository.
             Read old details only when needed, preserving retries and cleanup evidence.
-            The 100-batch lifetime cap still exists until that refactor is built.
+            Lifetime record caps are removed; each search still has fixed work limits.
             No separate database, heartbeat or dashboard is required. The current journal
             is not yet an executing release queue. See the
-            <a href="./docs/inbox-processing.md#planned-history-storage">history plan</a>.
+            <a href="./docs/inbox-processing.md#history-storage">history storage</a>.
           </p>
           <article class="story" id="story" aria-label="Release process"></article>
         </div>
@@ -1182,7 +1182,7 @@
         },
         {
                 "title": "Close the successful release",
-                "story": "Save every required result, final versions and ticket outcome. Only after requested-target success and all obligations are complete may the global lane be released. Preserve existing autonomous release notes. When the archive refactor exists, save a verified finished record in the same GitHub repository and keep a compact reference; never archive ongoing work.",
+                "story": "Save every required result, final versions and ticket outcome. Only after requested-target success and all obligations are complete may the global lane be released. Preserve existing autonomous release notes. Use the journal archive boundary to save a verified finished record in the same GitHub repository and keep a compact reference; never archive ongoing work.",
                 "why": "The next release starts only after this one has a clear saved outcome.",
                 "failure": "A failed or uncertain final save keeps ownership and the release open for reconciliation."
         }

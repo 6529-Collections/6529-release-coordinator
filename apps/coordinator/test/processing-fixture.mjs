@@ -277,21 +277,41 @@ export function fixture(profile = realProfile) {
       const commit = f.objects.get(path.split("/").at(-1));
       return {
         status: 200,
-        data: { ...commit, parents: commit.parents.map((sha) => ({ sha })) }
+        data: {
+          ...commit,
+          tree: { sha: commit.tree },
+          parents: commit.parents.map((sha) => ({ sha }))
+        }
       };
     }
-    if (method === "GET" && path.startsWith(`/contents/${stateFile}?ref=`)) {
-      const commit = f.objects.get(path.split("=").at(-1)),
-        tree = f.objects.get(commit.tree),
-        blob = f.objects.get(tree.tree[0].sha);
+    if (method === "GET" && path.startsWith("/contents/")) {
+      const [filename, head] = path.slice("/contents/".length).split("?ref=");
+      const commit = f.objects.get(head),
+        tree = f.objects.get(commit.tree);
+      const entry = tree.tree.find((entry) => entry.path === filename);
+      if (!entry) return { status: 404 };
+      const blob = f.objects.get(entry.sha);
       return {
         status: 200,
         data: {
           type: "file",
-          path: stateFile,
+          path: filename,
           encoding: "base64",
           content: Buffer.from(blob.content).toString("base64")
         }
+      };
+    }
+    if (method === "POST" && path === "/git/trees") {
+      const entries = new Map(
+        (f.objects.get(body.base_tree)?.tree ?? []).map((entry) => [
+          entry.path,
+          entry
+        ])
+      );
+      for (const entry of body.tree) entries.set(entry.path, entry);
+      return {
+        status: 201,
+        data: { sha: object({ tree: [...entries.values()] }) }
       };
     }
     if (
@@ -324,8 +344,15 @@ export function fixture(profile = realProfile) {
   f.state = () => {
     const commit = f.objects.get(f.head),
       tree = f.objects.get(commit.tree),
-      blob = f.objects.get(tree.tree[0].sha);
+      blob = f.objects.get(
+        tree.tree.find((entry) => entry.path === stateFile).sha
+      );
     return JSON.parse(blob.content);
+  };
+  f.file = (path, head = f.head) => {
+    const tree = f.objects.get(f.objects.get(head).tree);
+    const entry = tree.tree.find((entry) => entry.path === path);
+    return entry ? JSON.parse(f.objects.get(entry.sha).content) : undefined;
   };
   f.now = () => new Date("2026-09-09T07:00:02.000Z");
   return f;

@@ -165,10 +165,11 @@ only when no database change is confirmed and restoration is safe. Database
 changes or uncertain recovery need a person. These are design decisions, not
 capabilities of today's `inbox:run`.
 
-Before execution work, refactor the journal to keep active work complete and
-archive finished batch records in the same GitHub repository. The current
-100-batch lifetime cap still exists. See the [history plan](./docs/inbox-processing.md#planned-history-storage)
-and [implementation review](./docs/progress.md#implementation-alignment-review-september-11).
+The local v5 journal keeps active work complete and archives finished batch and
+service records in the same GitHub repository. Exact retries retain their old
+attempts and budgets. The lifetime record caps are removed; live sandbox
+migration is still pending. See [history storage](./docs/inbox-processing.md#history-storage)
+and [implementation evidence](./docs/progress.md#controller-and-history-cleanup-september-11).
 
 ## Documentation map
 

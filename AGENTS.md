@@ -76,7 +76,7 @@ from first principles.
   public schema or production repository allowlist to accommodate test fixtures.
   Documentation is not permission to create external resources. Keep the runtime
   bundle identical to its source, verify its fixed branch/commit, and preserve
-  service and batch attempts in the v4 journal before dispatch.
+  service and batch attempts in the v5 journal before dispatch.
 - `docs/design.md` and the full process diagram contain the agreed execution
   direction, still unimplemented. Reuse existing product Actions and their
   environment-specific builds; no configuration redesign or portable artifacts.
@@ -87,8 +87,9 @@ from first principles.
   run diagnostics; logs never replace journal authority or prove a process stopped.
   Heartbeat and automatic process takeover remain deferred. Release rollback is
   future work, distinct from process restart. Keep state in the GitHub journal;
-  `docs/inbox-processing.md` owns planned verified archives and migration away
-  from the current 100-batch lifetime cap. A separate database/dashboard is not
+  `docs/inbox-processing.md` owns verified archives and v5 migration; preserve
+  unfinished work, archive checksums, original attempts and per-run budgets.
+  Lifetime record caps are removed locally; live migration needs separate evidence. A separate database/dashboard is not
   required. Its batch-testing section owns the bounded
   search before release mutations: keep tickets/dependencies whole,
   test the final exact combination, and never blame every member of a failed

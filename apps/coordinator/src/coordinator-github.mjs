@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { realProfile } from "./profiles.mjs";
+import { archivePath } from "./inbox-history.mjs";
 import { managedLabels } from "./ticket-presentation.mjs";
 
 export const stateBranch = "codex/inbox-state";
@@ -25,7 +26,10 @@ function allowed(method, path, body) {
       new RegExp(
         `^/contents/${stateFile.replace(".", "\\.")}\\?ref=[0-9a-f]{40}$`,
         "u"
-      ).test(path)
+      ).test(path) ||
+      /^\/contents\/history\/(batches|services)\/[0-9a-f]{64}\.json\?ref=[0-9a-f]{40}$/u.test(
+        path
+      )
     );
   if (method === "POST" && path === "/labels")
     return (
@@ -83,12 +87,19 @@ function allowed(method, path, body) {
     );
   if (method === "POST" && path === "/git/trees")
     return (
-      keys(body, ["tree"]) &&
-      body.tree?.length === 1 &&
-      body.tree[0].path === stateFile &&
-      body.tree[0].mode === "100644" &&
-      body.tree[0].type === "blob" &&
-      sha(body.tree[0].sha)
+      keys(body, ["tree", "base_tree"]) &&
+      (body.base_tree === undefined || sha(body.base_tree)) &&
+      Array.isArray(body.tree) &&
+      body.tree.filter((entry) => entry.path === stateFile).length === 1 &&
+      new Set(body.tree.map((entry) => entry.path)).size === body.tree.length &&
+      body.tree.every(
+        (entry) =>
+          keys(entry, ["path", "mode", "type", "sha"]) &&
+          (entry.path === stateFile || archivePath(entry.path)) &&
+          entry.mode === "100644" &&
+          entry.type === "blob" &&
+          sha(entry.sha)
+      )
     );
   if (method === "POST" && path === "/git/commits")
     return (

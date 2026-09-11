@@ -304,7 +304,7 @@ input/configuration or a resolved interrupted attempt is needed for new evidence
 
 ### Journal, temporary PRs and recovery
 
-`inbox-run-v4` preserves earlier ticket and service history and adds saved batch
+`inbox-run-v5` preserves earlier ticket, service and v4 batch history, including
 inputs, attempts, budgets, intermediate Git results, exact temporary PR identities,
 service attempts, results and cleanup. Older writers reject the marker. A saved
 selection remains fixed on resume; newly arriving tickets wait for a later run.
@@ -368,7 +368,7 @@ They do not enable deployment in the current command.
 | What gates production? | Successful staging deployment/version/health checks and completed successful required E2E for the recorded deployed versions. Failed E2E fails the release attempt; missing, cancelled, skipped-required, or uncertain results cannot pass. |
 | What happens after failure? | Stop advancement. After shared state changed, recover the recorded batch; never split it as a recovery shortcut. Database-changing or uncertain releases require a person. |
 | How does automatic rollback work? | Only for confirmed no-database-change releases: new commits undo the failed batch, required checks run, and ordinary deployment Actions rebuild and deploy the restored code. Verify recovery before releasing the lane. |
-| Where does state live? | Continue using the profile's GitHub inbox journal. Keep active records complete; archive finished records in the same repository and read them when needed. Remove the lifetime 100-batch cap through that storage refactor. |
+| Where does state live? | Continue using the profile's GitHub inbox journal. Keep active records complete; archive finished records in the same repository and read them when needed. The local v5 writer removes lifetime record caps; live migration remains pending. |
 
 The Coordinator owns selection, ordering, authorized merges/dispatch, waiting,
 evidence matching, ticket outcomes and recovery decisions. Product repositories
@@ -472,9 +472,9 @@ prove limited test behavior, not a real deployment or rollback.
 ## Where inbox and queue state live
 
 Use the existing independent `codex/inbox-state` branch in the selected inbox
-repository. The current implementation rewrites `inbox-state.json`; the
-[history storage plan](./inbox-processing.md#planned-history-storage) adds
-archived finished records in the same repository. A separate database or new
+repository. The local v5 implementation keeps active state in `inbox-state.json`
+and [archived finished records](./inbox-processing.md#history-storage) in the same
+branch, loading full old details only on demand. Live migration remains pending. A separate database or new
 operator dashboard is not required for this stage.
 
 Minimum release records are the requests and their trusted receipts, selected
@@ -679,8 +679,9 @@ ownership while any effect, cleanup or save is uncertain.
 
 ## Version-one scope and deferred work
 
-The next refactor is [history storage](./inbox-processing.md#planned-history-storage)
-with [planned acceptance](./merge-rehearsal-testing.md#history-storage-acceptance).
+The local [history refactor](./inbox-processing.md#history-storage) has offline
+[acceptance coverage](./merge-rehearsal-testing.md#history-storage-acceptance);
+its separately authorized live sandbox migration/repeat remains pending.
 Keep the current command, profile isolation, cheap-first selection, exact evidence,
 logs, no-database-change batch boundary and manual stop-before-resume procedure.
 

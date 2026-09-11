@@ -210,7 +210,16 @@ test("interrupted ticket updates retain run history; explicit resume appends and
   const events = after.trim().split("\n").map(JSON.parse);
   assert.equal(events.filter((e) => e.step === "run.resume").length, 1);
   assert.equal(new Set(events.map((e) => e.invocation_id)).size, 2);
-  assert.deepEqual(h.f.state().batches, attempts);
+  assert.deepEqual(h.f.state().batches, {});
+  assert.deepEqual(
+    Object.fromEntries(
+      Object.entries(h.f.state().history.batches).map(([identity, ref]) => [
+        identity,
+        h.f.file(ref.path).record
+      ])
+    ),
+    attempts
+  );
   assert.equal(h.dispatches(), 1);
   assert.equal(h.f.state().lock, null);
 });

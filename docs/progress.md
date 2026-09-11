@@ -6,40 +6,54 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 [execution design](./design.md) remains future work. There is no always-on release
 worker; each manual run exits after its work.
 
+## Controller and history cleanup, September 11
+
+**Implemented and verified locally on `main`; not pushed or live-migrated.** No remote inbox,
+product repository, workflow dispatch, package publication or deployment changed.
+Live sandbox journal migration/repeat remains a separate acceptance step.
+
+- Batch rechecks now use only the frozen eligible ticket pool. Unsupported or
+  over-limit tickets still receive reasons but cannot invalidate an unrelated
+  candidate through changing PR evidence. Included tickets still get exact input,
+  destination and remote proof checks.
+- The main processor now orders named scan, preparation, batch and presentation
+  steps. Ticket writes remain journaled and verified. This is a source split,
+  not a new framework or another operator command.
+- The v5 journal keeps complete active work and a compact history index. Finished
+  batch/service records move to checksum-named files in the same Git branch only
+  after verified cleanup and ticket presentation. Exact repeats load original
+  attempts and budgets on demand. Later observations get new immutable snapshots.
+- Archive and index changes use one non-force commit based on the prior tree,
+  followed by readback. Failed saves preserve active evidence; a lost archive ref
+  response can be reconciled only to the exact intended commit. Older writers
+  reject the v5 marker. No heartbeat or automatic process takeover was added.
+- Persistent 100-batch/1,000-service caps are removed. The per-search limits remain
+  10 tickets, 10 PRs per repository, 40 Git attempts, 12 check rounds and 45 minutes.
+  Compact references and ticket transitions still grow; this is not an unlimited
+  storage claim. No separate database, dashboard or retention service is needed now.
+
+Targeted verification passed, covering excluded/included evidence,
+exact archive reuse, more than 100 batches and 1,000 services, active cleanup and
+linked records, missing/corrupt/wrong-profile archives, failed/lost saves,
+competing writers, preserved files and v4 migration. Final review added explicit
+archive-readback uncertainty and full-processor v4 resume checks; all 16 history
+tests passed. Recovery messages now ask the operator to inspect the lock instead
+of assuming a failed final readback means it is still held. See
+[history acceptance](./merge-rehearsal-testing.md#history-storage-acceptance).
+Full `npm run check` passed on **Node 22.16.0: 395 tests passed, three optional
+Docker tests skipped**. Non-fixing lint, formatting, structural workflow policy,
+packed public-CLI installation/startup/schema checks, and the source-preservation
+check passed. Documentation file links, diagram JavaScript syntax and
+`git diff --check` also passed. No live archive acceptance is claimed.
+
 ## Implementation alignment review, September 11
 
-**Documentation updated; implementation reviewed read-only at main
-`cecbee6b1a9374581df2c0379bada59b78257e79`.** No runtime refactor, package
-publication, product repository change, workflow dispatch or deployment is part
-of this update. Earlier test results below are historical evidence, not new runs.
-
-Documentation validation passed: 164 local links across eight changed documents,
-process-diagram JavaScript syntax, complete text for 22 release/five recovery
-steps, valid recovery links, and `git diff --check`. Runtime tests were not rerun
-for this documentation-only update. New archive/execution cases remain planned.
-
-The [design](./design.md#agreed-execution-direction-september-11), process diagram,
-entry guide and inbox/storage plan now agree: use existing product Actions and
-their environment-specific builds, wait for successful matching staging E2E,
-merge into `main` only for authorized production, and keep one release active
-through completion or recovery. Confirmed no-database-change rollback uses new
-revert commits and ordinary deploy/check steps; database changes or uncertain
-state require a person. Separate state databases, heartbeat, automatic takeover,
-portable builds, new dashboards and overlapping releases are not prerequisites.
-
-### Refactor before regular use: history storage
-
-| Current implementation | Required change |
-| --- | --- |
-| [Batch validator](../apps/coordinator/src/batch-state.mjs) rejects more than 100 saved batches. [Journal](../apps/coordinator/src/inbox-journal.mjs) also caps standalone service records at 1,000 and reads/validates/rewrites all state. | Keep complete active work and verified archived finished records; remove lifetime caps through migration, while preserving per-run work budgets. |
-| [GitHub adapter](../apps/coordinator/src/coordinator-github.mjs) allows only the state-file read and a one-entry tree write. The journal creates a fresh tree containing only that file. | Add narrowly allowed archive paths, preserve the existing tree, and atomically save archives/references. Otherwise a later state save would drop archive files. Reject older writers with a new marker. |
-| [Batch runner](../apps/coordinator/src/inbox-batch.mjs) looks up full records directly in `state.batches`; [selection](../apps/coordinator/src/batch-selection.mjs) reuses attempts/budgets and rechecks remote proof. | Add a small journal load/save/archive boundary so exact repeats load archived attempts on demand, preserving identities, budgets and evidence validation. Never turn a missing archive into a fresh batch. |
-| [Processor failure reporting](../apps/coordinator/src/inbox-processor.mjs) scans full batch/service records for unfinished work. `finished` marks the end of selection, not release completion. | Archive only after cleanup, operation and presentation obligations are verified complete; keep active/resumable work discoverable and preserve per-ticket decision history. |
-
-This is one focused storage refactor, not a reason to rewrite the batch selector.
-The [history contract](./inbox-processing.md#planned-history-storage) and
-[acceptance cases](./merge-rehearsal-testing.md#history-storage-acceptance)
-define its finish line. The archive behavior is not built or tested yet.
+The preceding documentation commit `bbc644d` aligned the release design with
+existing product Actions: environment-specific builds, successful matching
+staging E2E before production, one release through completion/recovery, and
+verified revert commits only for confirmed no-database-change rollback. The
+local history and controller changes above now address its immediate storage
+refactor and the subsequent implementation review. No release executor exists.
 
 ### Build with the later execution step
 
@@ -63,7 +77,7 @@ Keep current cheap-before-expensive ordering, whole-ticket selection, exact-inpu
 checks, remote proof revalidation, no-database-change batch scope, logs and
 stop-before-resume behavior. No broad refactor or request/CLI change is needed
 for the agreed direction. Cross-ticket links and database-changing batches stay
-deferred. After history acceptance, exercise the execution sequence in test
+deferred. After live history acceptance, exercise the execution sequence in test
 repositories before enabling real adapters.
 
 ## v0.1 run logging, September 11

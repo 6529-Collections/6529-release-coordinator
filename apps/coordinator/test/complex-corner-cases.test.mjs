@@ -628,7 +628,7 @@ test("CT-16: sandbox journal and evidence cannot resume under real profile", asy
   const copied = structuredClone(state);
   copied.repository = realProfile.inbox.full_name;
   assert.throws(() => validateJournal(copied, realProfile));
-  const batch = Object.values(state.batches)[0];
+  const batch = h.f.file(Object.values(state.history.batches)[0].path).record;
   const prepared = batch.attempts.find((a) => a.phase === "git").result;
   const progress = batch.attempts.find((a) => a.phase === "checks").progress;
   let calls = 0;
