@@ -3,9 +3,11 @@
 Sandbox and real configurations use the same intake, receipt verification,
 readiness, local merge engine, and ticket updates. `inbox:run` joins inspection,
 rehearsal, supported sandbox service/database checks, and presentation into one
-manual run. Unscoped sandbox runs also filter and test complete tickets together;
-`--issue` retains one-ticket service/database checks. Real service execution, release
-ownership, release builds, and deployments remain later work. See
+manual run. Unscoped sandbox runs also filter and test complete tickets together,
+then move one selected no-database-change batch through protected fake staging,
+matching E2E, and protected fake production when requested. `--issue` retains
+one-ticket service/database checks. Real service execution, release ownership,
+release builds, and deployments remain later work. See
 [progress](./progress.md) for local, live sandbox, and remote merge evidence.
 
 ## Trusted configuration
@@ -24,6 +26,7 @@ credential through a request. An unknown name stops without falling back.
 | State journal | `codex/inbox-state` in the test inbox repository | Existing state branch in the real inbox repository |
 | Rehearsal destination | Current `main` of each selected test repository | Current `main` of each selected product repository |
 | Service/database checks | Fixed, pinned workflow in the test backend; temporary MySQL and sample programs | Not implemented; services are reported as `not-run` |
+| Release sequence | Protected `1a-staging` and `main` integration PRs plus a fixed, pinned fake release workflow in both test repositories | Not implemented; no real merge or deployment adapter is configured |
 | Local submissions | `.release-coordinator/profiles/sandbox/submissions/` | `.release-coordinator/profiles/real/submissions/` |
 | Rehearsal reports | `.release-coordinator/merge-rehearsal/sandbox/` | `.release-coordinator/merge-rehearsal/real/` |
 
@@ -79,9 +82,9 @@ sandbox profile. `--help` performs no reads or writes.
 initial blockers, and otherwise creates a plan and tries its exact PRs locally.
 It saves the generated plan in the journal before starting Git, then saves the
 report before publishing the result in the same ticket's comment and labels.
-A pass adds `rehearsal:passed`; the lifecycle stays waiting for independent
-execution/history evidence. A combined conflict adds `reason:rehearsal-blocked`.
-Unknown and changed evidence get distinct reasons. A pass never authorizes release.
+A pass adds `rehearsal:passed`; a scoped one-ticket run stays waiting. A combined
+conflict adds `reason:rehearsal-blocked`. Unknown and changed evidence get
+distinct reasons. A pass never authorizes a real release.
 
 Omit the ticket number to process all selected tickets:
 
@@ -90,9 +93,12 @@ RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 ```
 
 Every suitable ticket first gets its own generated plan and Git rehearsal.
-Unscoped sandbox runs then test compatible whole tickets together; real runs
-retain individual Git rehearsals. The old manual plan input and separate
-processing/rehearsal commands have been removed. Diagnostics stay read-only.
+Unscoped sandbox runs then test compatible whole tickets together. The selected
+batch continues through its saved sandbox release plan. A staging request stops
+after matching staging E2E; a production request repeats the protected sequence
+on test `main` only after that E2E passes. Real runs retain individual Git
+rehearsals and never receive a release executor. The old manual plan input and
+separate processing/rehearsal commands have been removed. Diagnostics stay read-only.
 
 ## Automatic plan for each ticket
 
@@ -129,7 +135,7 @@ Starting a new run captures current destination commits. See the
 
 Plans remain internal evidence: the journal stores the ticket/request binding,
 exact PR order and destinations; full reports record their resulting trees.
-The journal's `inbox-run-v5` marker prevents older writers from overwriting the
+The journal's `inbox-run-v6` marker prevents older writers from overwriting the
 run format or discarding archived history. See [history storage](./inbox-processing.md#history-storage)
 for active records, archive validation and migration evidence. A legacy interrupted v1 run retains its already recorded scope
 and plan on explicit resume.
@@ -193,3 +199,31 @@ Service evidence is kept in the sandbox journal's `service_attempts` and local
 `.release-coordinator/service-checks/sandbox/` reports, bound to both exact product
 sample versions. See [progress](./progress.md) for local, live and merge evidence.
 The public request schema and npm package are unchanged.
+
+## Sandbox release sequence
+
+The unscoped sandbox command creates one exact release plan from the selected
+passing batch. For each required environment it integrates backend first, runs
+`dbMigrationsLoop`, `worker`, and `api` in order, integrates frontend, runs the
+frontend workflow, and then waits for an E2E result tied to that exact backend
+and frontend pair. Production is never started before matching staging E2E.
+
+Each integration uses a protected PR and required `Sandbox check`. Each workflow
+result must match the saved release ID, operation ID, operation input hash, exact
+commits, environment, role, unit, runner repository, run, attempt, and fixed
+workflow commit. The journal saves an operation before dispatch and its verified
+result afterward. Resume reuses a completed matching operation; it does not run
+it again. A confirmed failure stops later steps and marks the release for a
+person. Unknown effects keep the lock for explicit reconciliation.
+
+When the final required E2E passes and owned branches are gone, the Coordinator
+marks the selected ticket `status:completed` with `reason:release-completed`,
+closes it, archives the full batch and release evidence, and releases the lock.
+The first live run and the safe recoveries found during it are recorded in the
+[September 11 acceptance report](./testing/release-sequence-2026-09-11.md).
+
+This exists only in the two public sample repositories. Their workflows use fake
+programs, fake data, read-only contents permission, and no product credentials.
+Selecting `real` cannot enable this adapter. Connecting real repositories means
+writing separate, narrow adapters for their existing Actions and completing a
+new acceptance run.

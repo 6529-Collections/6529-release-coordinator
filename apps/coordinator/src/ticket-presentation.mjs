@@ -48,7 +48,11 @@ export const reasons = [
   "batch-incompatible",
   "batch-limit",
   "batch-deferred",
-  "batch-unsupported"
+  "batch-unsupported",
+  "batch-target-deferred",
+  "release-completed",
+  "release-failed",
+  "release-unverified"
 ];
 export const batchStatuses = [
   "passed",
@@ -316,6 +320,15 @@ export function statusComment({
           `  ${prose(conflict.role)} conflicts: ${prose(JSON.stringify(conflict.paths))}.`
         );
     }
+    if (batch.release) {
+      lines.push(
+        `Sandbox release: ${prose(batch.release.status)}. ${prose(batch.release.message)}`
+      );
+      for (const operation of batch.release.operations ?? [])
+        lines.push(
+          `- ${prose(operation.step)}: ${prose(operation.status)}${operation.url ? `; ${prose(operation.url)}` : ""}.`
+        );
+    }
   }
   if (request) {
     lines.push(
@@ -341,7 +354,9 @@ export function statusComment({
     "",
     `**Last meaningful decision:** ${at}; ${prose(actor.login)} (GitHub ID ${actor.id}).`,
     "",
-    "This ticket status does not authorize a merge or deployment."
+    decision.status === "completed"
+      ? "This records sandbox-only release evidence. It authorizes no real merge or deployment."
+      : "This ticket status does not authorize a real merge or deployment."
   );
   const body = lines.join("\n");
   if (body.length > 60_000)

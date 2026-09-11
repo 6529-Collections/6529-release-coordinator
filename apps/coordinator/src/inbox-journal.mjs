@@ -35,12 +35,13 @@ export const receiptHash = (issue) =>
   digest({ id: issue.id, number: issue.number, body: issue.body });
 const validSha = (value) =>
   typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
-export const inboxWorkflow = "inbox-run-v5";
+export const inboxWorkflow = "inbox-run-v6";
 const workflows = [
   "inbox-run-v1",
   "inbox-run-v2",
   "inbox-run-v3",
   "inbox-run-v4",
+  "inbox-run-v5",
   inboxWorkflow
 ];
 
@@ -76,7 +77,7 @@ export function validateJournal(state, profile = realProfile) {
     throw new Error("Invalid inbox lock.");
   if (state.service_attempts !== undefined) {
     if (
-      !["inbox-run-v3", "inbox-run-v4", inboxWorkflow].includes(
+      !["inbox-run-v3", "inbox-run-v4", "inbox-run-v5", inboxWorkflow].includes(
         state.workflow
       ) ||
       !state.service_attempts ||
@@ -86,12 +87,14 @@ export function validateJournal(state, profile = realProfile) {
     validateServiceHistory(state.service_attempts, profile);
   }
   if (state.batches !== undefined) {
-    if (!["inbox-run-v4", inboxWorkflow].includes(state.workflow))
+    if (
+      !["inbox-run-v4", "inbox-run-v5", inboxWorkflow].includes(state.workflow)
+    )
       throw new Error("Batch history requires the current inbox writer.");
     validateBatchHistory(state.batches, profile);
   }
   if (state.history !== undefined) {
-    if (state.workflow !== inboxWorkflow)
+    if (!["inbox-run-v5", inboxWorkflow].includes(state.workflow))
       throw new Error("Archives require the current inbox writer.");
     validateHistoryReferences(state.history, profile);
   }
@@ -148,14 +151,19 @@ export function validateJournal(state, profile = realProfile) {
         record.decision.services &&
         (!serviceStatuses.includes(record.decision.services.status) ||
           typeof record.decision.services.message !== "string" ||
-          !["inbox-run-v3", "inbox-run-v4", inboxWorkflow].includes(
-            state.workflow
-          ))
+          ![
+            "inbox-run-v3",
+            "inbox-run-v4",
+            "inbox-run-v5",
+            inboxWorkflow
+          ].includes(state.workflow))
       )
         throw new Error("Invalid service decision history.");
       if (
         record.decision.batch &&
-        (!["inbox-run-v4", inboxWorkflow].includes(state.workflow) ||
+        (!["inbox-run-v4", "inbox-run-v5", inboxWorkflow].includes(
+          state.workflow
+        ) ||
           profile.name !== "sandbox" ||
           !batchStatuses.includes(record.decision.batch.status) ||
           typeof record.decision.batch.message !== "string")
@@ -198,7 +206,15 @@ export function appendDecision(ticket, record) {
   return transition;
 }
 
-export function createJournal(api, profile = realProfile, { workflow } = {}) {
+export function createJournal(
+  api,
+  profile = realProfile,
+  {
+    workflow,
+    pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    confirmationAttempts = 5
+  } = {}
+) {
   if (workflow !== undefined && !workflows.includes(workflow))
     throw new Error("Unsupported inbox workflow.");
   let snapshot;
@@ -310,6 +326,7 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
       },
       201
     );
+    let updateError;
     try {
       const updated = await api(
         prior
@@ -329,17 +346,33 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
           "Inbox journal changed concurrently or could not be saved; no further Issue writes are safe."
         );
     } catch (error) {
-      if (!archives.length) throw error;
-      // A lost response may follow a successful save. Only the exact commit
-      // and state permit continuing to archive verification below. A failed
-      // read propagates to the processor's stop-and-inspect recovery message.
-      const current = await read();
-      if (current.sha !== commit.sha || digest(current.state) !== digest(state))
-        throw error;
+      updateError = error;
     }
-    const verified = await read();
-    if (verified.sha !== commit.sha || digest(verified.state) !== digest(state))
-      throw new Error("Inbox journal write could not be verified.");
+    let verified, readError;
+    for (let attempt = 0; attempt < confirmationAttempts; attempt++) {
+      try {
+        const current = await read();
+        if (current.sha === commit.sha) {
+          if (digest(current.state) !== digest(state))
+            throw new Error("Inbox journal commit contains unexpected state.");
+          verified = current;
+          break;
+        }
+        if (current.sha !== prior)
+          throw new Error(
+            "Inbox journal changed concurrently; no further Issue writes are safe."
+          );
+      } catch (error) {
+        readError = error;
+      }
+      if (attempt + 1 < confirmationAttempts) await pause(1000);
+    }
+    if (!verified)
+      throw (
+        updateError ??
+        readError ??
+        new Error("Inbox journal write could not be verified.")
+      );
     for (const { archive, ref } of archives)
       verifyArchive(
         await readArchive(ref, verified.sha),
@@ -362,7 +395,8 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
             "inbox-run-v1",
             "inbox-run-v2",
             "inbox-run-v3",
-            "inbox-run-v4"
+            "inbox-run-v4",
+            "inbox-run-v5"
           ].includes(state.workflow) && workflow === inboxWorkflow
         )
       )
@@ -377,7 +411,8 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
         throw new Error("That interrupted run is not the current inbox lock.");
       const savedScope = state.lock?.scope;
       const comparableScope =
-        savedScope?.workflow === "inbox-run-v4" && workflow === inboxWorkflow
+        ["inbox-run-v4", "inbox-run-v5"].includes(savedScope?.workflow) &&
+        workflow === inboxWorkflow
           ? { ...savedScope, workflow: inboxWorkflow }
           : savedScope;
       if (resume && scope && digest(scope) !== digest(comparableScope))
@@ -389,7 +424,7 @@ export function createJournal(api, profile = realProfile, { workflow } = {}) {
         token: randomUUID(),
         actor,
         started_at: new Date().toISOString(),
-        scope: resume ? state.lock.scope : scope,
+        scope: resume ? comparableScope : scope,
         ...(workflow === inboxWorkflow
           ? {
               plans: resume ? structuredClone(state.lock.plans ?? {}) : {},

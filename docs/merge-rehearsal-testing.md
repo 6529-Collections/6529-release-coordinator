@@ -11,8 +11,10 @@ The one-ticket sandbox service/database stage is implemented and has local
 Docker and live ticket acceptance evidence. [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
 records the merged service extension; the sample repository setup is also merged.
 Sandbox batching has [local and live acceptance](#batch-acceptance). The v5 archive
-extension has offline and [live sandbox proof](./testing/history-2026-09-11.md). Each stage's evidence
-is separate from the original MR milestone.
+extension has offline and [live sandbox proof](./testing/history-2026-09-11.md).
+The v6 release sequence also has
+[live fake staging/E2E/production proof](./testing/release-sequence-2026-09-11.md).
+Each stage's evidence is separate from the original MR milestone.
 Documentation alone is not permission to execute external changes.
 
 ## What we will prove
@@ -43,9 +45,10 @@ correctness, runtime prerequisites, deployment, or permission to release.
 | 3. Live rehearsal | Run the same engine against the real test PRs, including deliberate failures and updates. | Each required live case has an expected and actual result, exact commits, and saved evidence. |
 | 4. Review and handoff | Repeat unchanged cases, verify boundaries and cleanup, update documentation, and integrate through normal PR checks. | Local and live results recorded separately; remaining limitations explicit; Coordinator implementation merged into `main`. |
 
-The original merge-only milestone stopped after phase 4. Ticket integration and
-sandbox service checks were delivered in the separately recorded stages below;
-real live rehearsal acceptance and release execution remain separate work.
+The original merge-only milestone stopped after phase 4. Ticket integration,
+sandbox service checks, batching, and the protected sandbox release sequence were
+delivered in the separately recorded stages below. Real product release adapters
+and rollback remain separate work.
 Do not keep adding cases to the completed MR matrix unless a concrete failure
 or uncovered requirement justifies one.
 
@@ -740,20 +743,30 @@ Keep local fixture results, live evidence and merge status separate in progress.
 Do not rerun product deployments or the full historical campaign for a storage
 change unless a concrete failure justifies it.
 
-## Later execution acceptance
+## Release-sequence acceptance
 
-These are future sandbox requirements, not tests already run or permission to
-deploy. Build the same coordinator sequence against test-repository Actions
-before connecting product workflows. See the [execution design](./design.md#agreed-execution-direction-september-11).
+The first sandbox sequence passed live on September 11. One production-target
+ticket moved through protected fake staging, matching E2E, protected fake
+production, and matching E2E. The Coordinator recorded all 14 exact operations,
+closed the ticket only after the final result, removed its owned branches, and
+released its journal lock. See the
+[dated evidence](./testing/release-sequence-2026-09-11.md).
 
-| Case | Required outcome |
+The same rules below remain the acceptance contract for future sandbox changes
+and the real-product adapters. A sandbox pass is not permission or proof of a
+real deployment. See the [execution design](./design.md#agreed-execution-direction-september-11).
+
+| Case | Required outcome and current proof |
 | --- | --- |
-| Compatible batch through staging then production | Cheap filtering precedes combined PR checks; ordinary staging merges/Actions run; production starts only after matching successful E2E and authorization. Environment-specific builds remain workflow-owned. |
-| Required E2E fails, is missing, cancelled or skipped | No production dispatch or successful release. A failed test fails the attempt; uncertain evidence gets its actual reason without blaming all tickets. |
-| E2E belongs to another run, code or environment | Reject it even if green. Changed staging during tests requires fresh matching evidence. Cover frontend-only, backend-only and coupled work. |
-| Main/staging moves or contains unrelated changes | Preserve shared history; recheck actual compositions before mutation and invalidate unmatched evidence. Never overwrite refs or promote all of staging. |
-| Sequential services and partial failure | Backend dependencies succeed before dependents/frontend; record partial effects and stop/recover rather than starting another batch. |
-| No-database-change rollback | Save prior deployed versions per service/environment; create verified revert commits, run required checks and ordinary deploys, then check recovery versions/health/E2E. Original release stays failed. |
-| Database change/unknown, conflicting revert or failed recovery | Stop automatic recovery for a person; keep release ownership while unresolved. Never blindly reset branches or restore incompatible code. |
-| Worker merges its own request / resumes / receives a new ticket | Retain execution ownership after PR merge, reconcile existing runs without duplicates, and keep the next release waiting until completion/recovery. |
-| Staging-only success and later production request | Stop after staging. Require explicit production authorization and revalidated composition/evidence for later continuation. |
+| Compatible batch through staging then production | **Passed live.** Cheap filtering preceded combined checks. Production began only after matching successful staging E2E. Each fake environment kept its own workflow run. |
+| Required E2E fails, is missing, cancelled or skipped | **Passed offline.** No production dispatch or successful release. A failed test fails the attempt; uncertain evidence gets its actual reason without blaming all tickets. |
+| E2E belongs to another run, code or environment | **Passed offline.** The result must match the release, operation, code pair, environment, runner and attempt. Changed staging requires fresh matching evidence. |
+| Main/staging moves or contains unrelated changes | **Passed offline and exercised live during setup.** Recheck the actual base before mutation; never overwrite refs or promote all of staging. |
+| Sequential services and partial failure | **Passed offline; successful order passed live.** Backend dependencies finish before frontend; partial failure stops the sequence and preserves completed effects. |
+| One active release, interruption and resume | **Passed offline and live.** A saved release owns the lane. Resume reuses verified completed operations and does not dispatch them again. |
+| Journal save response is lost or briefly stale | **Passed offline and live.** Read the intended commit back with bounded retries; accept only the exact saved state. A different state still stops. |
+| Ticket completion and cleanup | **Passed live.** Close the ticket only after its matching release finishes and owned branches are gone; archive the complete release evidence. |
+| Staging-only request | **Passed offline.** Stop after matching staging E2E. No production operation is planned. |
+| No-database-change rollback | **Future.** Create verified revert commits, then use ordinary checks and deployments. Keep the original release failed. |
+| Database change/unknown, conflicting revert or failed recovery | **Future.** Stop automatic recovery for a person and keep release ownership while unresolved. |
+| Real product workflow adapters | **Future.** Reuse the frontend/backend Actions and bind every result to the exact code and environment before the first real run. |

@@ -10,6 +10,7 @@ import {
   ServiceError
 } from "./service-contract.mjs";
 import { terminal } from "./ticket-presentation.mjs";
+import { releaseTicketResult } from "./release-execution.mjs";
 
 export function batchDecision(decision, result) {
   const next = structuredClone(decision);
@@ -19,7 +20,7 @@ export function batchDecision(decision, result) {
     result.status === "blocked"
       ? "Correct the specific recorded blocker and submit a new request for changed code."
       : result.status === "passed"
-        ? "Keep the exact tested candidate recorded. Release execution is not implemented or authorized."
+        ? "Continue the saved sandbox release sequence. This batch pass authorizes no real release."
         : "Reassess this whole ticket when the recorded dependency, compatibility, limit or evidence condition changes.";
   next.reasons.push({
     code: result.code,
@@ -39,6 +40,53 @@ export function batchDecision(decision, result) {
   return next;
 }
 
+function releasedDecision(decision, result) {
+  const next = structuredClone(decision);
+  next.reasons = next.reasons.filter(
+    (reason) =>
+      !["coordinator-incomplete", "batch-selected"].includes(reason.code)
+  );
+  const reason = {
+    code: result.code,
+    message: result.message,
+    action:
+      result.status === "completed"
+        ? "No further action is required for this sandbox request."
+        : "Inspect the saved failing release step before deciding recovery.",
+    owner: result.status === "completed" ? "None" : "Coordinator maintainers"
+  };
+  next.reasons.push(reason);
+  next.batch = {
+    fingerprint:
+      next.batch?.fingerprint ?? result.execution?.plan?.batch_fingerprint,
+    status:
+      next.batch?.status ??
+      (result.status === "completed" ? "passed" : "blocked"),
+    code: next.batch?.code ?? result.code,
+    message: next.batch?.message ?? result.message,
+    ...(next.batch ?? {}),
+    release: {
+      id: result.execution?.plan?.release_id,
+      status: result.execution?.status,
+      target: result.execution?.plan?.target,
+      message: result.execution?.message,
+      operations: Object.values(result.execution?.operations ?? {}).map(
+        (operation) => ({
+          id: operation.id,
+          step: operation.step.id,
+          status: operation.result?.status ?? operation.state,
+          url: operation.result?.url ?? operation.result?.workflow?.url ?? null
+        })
+      )
+    }
+  };
+  next.status = result.status === "completed" ? "completed" : "action-needed";
+  next.next_action = reason.action;
+  next.action_owner = reason.owner;
+  next.submitter_action = "None currently required.";
+  return next;
+}
+
 export async function coordinateInboxBatch({
   items,
   state,
@@ -52,15 +100,60 @@ export async function coordinateInboxBatch({
   prepare = prepareBatch,
   check = checkBatch,
   revalidate = verifySavedBatch,
-  select = selectBatch
+  select = selectBatch,
+  release
 }) {
   serviceAssert(
     profile === sandboxProfile,
     "batch-profile",
     "Batch execution requires the sandbox profile."
   );
+  const active = run.batch_fingerprint
+    ? await loadBatch(run.batch_fingerprint)
+    : null;
+  if (
+    active?.policy?.version === "sandbox-batch-v2" &&
+    active.status === "finished"
+  ) {
+    if (
+      release &&
+      (!active.execution ||
+        !["completed", "needs-human"].includes(active.execution.status))
+    )
+      await release?.({
+        batch: active,
+        state,
+        run,
+        signal,
+        guard,
+        save: async (message) => {
+          state.batches[active.fingerprint] = structuredClone(active);
+          await save(message);
+        }
+      });
+    for (const item of items.filter(
+      (value) =>
+        active.inputs.some((input) => input.number === value.number) &&
+        value.decision
+    )) {
+      item.decision = batchDecision(
+        item.decision,
+        batchTicketResult(active, item.number)
+      );
+      const result = release ? releaseTicketResult(active, item.number) : null;
+      if (result) item.decision = releasedDecision(item.decision, result);
+    }
+    return {
+      fingerprint: active.fingerprint,
+      status: active.execution?.status ?? "release-unverified",
+      selected: active.selected,
+      release: active.execution ?? null,
+      release_authorized: false
+    };
+  }
   const suitable = [],
     totals = { frontend: 0, backend: 0 };
+  let selectedTarget;
   runEvent({
     step: "batch.filter",
     outcome: "started",
@@ -80,13 +173,19 @@ export async function coordinateInboxBatch({
       };
     } else if (
       item.entry.request.database_change !== "no" ||
-      item.entry.request.target !== "staging"
+      !["staging", "production"].includes(item.entry.request.target)
     ) {
       result = {
         status: "waiting",
         code: "batch-unsupported",
         message:
-          "Batching currently supports staging tickets without database changes. This whole ticket is held for the appropriate capability."
+          "Batching currently supports staging or production tickets without database changes. This whole ticket is held for the appropriate capability."
+      };
+    } else if (selectedTarget && item.entry.request.target !== selectedTarget) {
+      result = {
+        status: "waiting",
+        code: "batch-target-deferred",
+        message: `This run is forming a ${selectedTarget} batch. This complete ${item.entry.request.target} ticket remains queued for a separate release.`
       };
     } else {
       try {
@@ -96,7 +195,8 @@ export async function coordinateInboxBatch({
           item.entry,
           item.coordinated.report,
           profile,
-          batchPolicy.runtime
+          batchPolicy.runtime,
+          { allowProduction: true }
         );
         const counts = Object.fromEntries(
           item.input.repositories.map((repo) => [
@@ -118,6 +218,7 @@ export async function coordinateInboxBatch({
               "The oldest suitable tickets filled this run's ticket/PR limit. This complete ticket remains queued."
           };
         } else {
+          selectedTarget ??= item.entry.request.target;
           suitable.push(item);
           for (const role of Object.keys(counts)) totals[role] += counts[role];
         }
@@ -162,6 +263,7 @@ export async function coordinateInboxBatch({
     return { status: "no-candidate", selected: [], release_authorized: false };
   const inputs = suitable.map((item) => ({
     number: item.entry.issue_number,
+    target: item.entry.request.target,
     input: item.input
   }));
   const freshFingerprint = serviceHash({ inputs, policy: batchPolicy });
@@ -183,7 +285,10 @@ export async function coordinateInboxBatch({
   const batch = await select({
     items: changed
       ? original.inputs.map((value) => ({
-          entry: { issue_number: value.number },
+          entry: {
+            issue_number: value.number,
+            request: { target: value.target }
+          },
           input: value.input
         }))
       : suitable,
@@ -200,6 +305,18 @@ export async function coordinateInboxBatch({
       await save(`batch ${fingerprint.slice(0, 12)} ${value.status}`);
     }
   });
+  if (batch.selected.length && release)
+    await release({
+      batch,
+      state,
+      run,
+      signal,
+      guard,
+      save: async (message) => {
+        state.batches[fingerprint] = structuredClone(batch);
+        await save(message);
+      }
+    });
   for (const item of changed
     ? items.filter(
         (item) =>
@@ -207,14 +324,19 @@ export async function coordinateInboxBatch({
           item.decision &&
           !terminal(item.decision)
       )
-    : suitable)
+    : suitable) {
     item.decision = batchDecision(
       item.decision,
       batchTicketResult(batch, item.number)
     );
+    const released = release ? releaseTicketResult(batch, item.number) : null;
+    if (released) item.decision = releasedDecision(item.decision, released);
+  }
   return {
     fingerprint,
-    status: batch.selected.length ? "passed-candidate" : "no-candidate",
+    status:
+      batch.execution?.status ??
+      (batch.selected.length ? "passed-candidate" : "no-candidate"),
     selected: batch.selected,
     attempts: batch.attempts.map(({ id, phase, members, result }) => ({
       id,
@@ -223,6 +345,7 @@ export async function coordinateInboxBatch({
       status: result?.status ?? "pending"
     })),
     stop: batch.stop ?? null,
+    release: batch.execution ?? null,
     release_authorized: false
   };
 }

@@ -8,6 +8,8 @@ import { rehearseInboxTicket } from "./rehearsal-runner.mjs";
 import { generateInboxPlan } from "./inbox-merge-plan.mjs";
 import { coordinateServices } from "./inbox-services.mjs";
 import { coordinateInboxBatch } from "./inbox-batch.mjs";
+import { executeRelease } from "./release-execution.mjs";
+import { createReleaseGitHub } from "./release-github.mjs";
 
 const help = `Check requests, filter conflicts before expensive batch checks, and update the same Issues and history.
 
@@ -19,11 +21,13 @@ Writes managed labels, titles, submitter assignment, one status comment, justifi
 Issue closures, and the selected inbox's codex/inbox-state journal branch. Runs once.
 Requires Node.js 20+, Git 2.38+, and gh with inbox write and selected PR-repository read access.
 Sandbox service checks also require gh 2.97.0+ and Actions write access to the pinned sample backend.
-Unscoped sandbox runs also need contents/PR write access to both sample repositories:
-they create and close owned temporary trial PRs, never merge them or change source PRs.
+Unscoped sandbox runs also need Actions and contents/PR write access to both sample repositories.
+They close temporary trial PRs, then merge the selected exact candidate through protected
+sandbox staging PRs. Production-target tests continue to protected sandbox main only after
+matching staging E2E passes. No source PR or real product repository is changed.
   --issue NUMBER  Process only this Issue. Default: open requests plus known history.
                   With --issue, retain the one-ticket service/database workflow.
-                  Without --issue, sandbox batches whole supported staging tickets.
+                  Without --issue, sandbox batches whole supported tickets by target.
                   Uses ticket dependencies/order and the profile's current main commits.
                   Obvious blockers skip rehearsal; plans/reports cannot be imported.
   --close-test    Explicitly retire your own verified test; requires --issue.
@@ -39,11 +43,13 @@ Exit codes: 0 = closed/preserved tickets or all selected tickets passed their re
 unverified presentation, or interrupted/partial processing; 3 = stale rehearsal.
 Sandbox batches finish cheap request, scope, database and combined Git checks before
 opening temporary PRs for normal CI, then check combined services on GitHub Actions.
+The selected batch goes backend -> frontend -> matching E2E in sandbox staging.
+A production-target batch repeats that sequence on sandbox main only after staging passes.
 Limits: 10 tickets, 10 PRs/repository, 40 combined Git attempts, 12 candidate check rounds,
 45 minutes to start new work. In-flight attempts must still reconcile and clean up.
 Only confirmed code failures trigger bounded splitting; uncertainty keeps tickets waiting.
 Real mode only rehearses Git. --issue still supports one-ticket database-change tests.
-No product merge, deployment, or release authorization.
+No product merge, deployment, or real release authorization.
 `;
 
 export async function runInboxRunCli(
@@ -58,6 +64,8 @@ export async function runInboxRunCli(
     rehearse = rehearseInboxTicket,
     services = coordinateServices,
     batch = coordinateInboxBatch,
+    executeSandboxRelease = executeRelease,
+    createReleaseClient = createReleaseGitHub,
     signal,
     logRoot,
     createLog = createRunLog,
@@ -128,6 +136,7 @@ export async function runInboxRunCli(
       client ??= createCoordinatorGitHub({ profile });
       get ??= createGitHubReader({ profile });
       github ??= createReadinessGitHub({ profile });
+      let releaseClient;
       await loggedStep(
         { step: "inbox.identity", message: "Verify the selected inbox." },
         () => get.identity?.()
@@ -142,6 +151,16 @@ export async function runInboxRunCli(
         github,
         services,
         batch,
+        release:
+          profile.name === "sandbox"
+            ? (options) => {
+                releaseClient ??= createReleaseClient({ profile });
+                return executeSandboxRelease({
+                  ...options,
+                  client: releaseClient
+                });
+              }
+            : undefined,
         plan: (entry) => plan(entry, { profile, signal }),
         rehearsal: (entry, plan) =>
           rehearse(entry, plan, { profile, get, signal })
@@ -165,7 +184,7 @@ export async function runInboxRunCli(
       stdout(
         seen.has("--json")
           ? `${JSON.stringify(report, null, 2)}\n`
-          : `Inbox run ${report.run_id}; no release authorized.\n${report.batch ? `Batch: ${report.batch.status}; selected tickets: ${report.batch.selected.map((number) => `#${number}`).join(", ") || "none"}.\n` : ""}${report.requests
+          : `Inbox run ${report.run_id}; no real release authorized.\n${report.batch ? `Batch: ${report.batch.status}; selected tickets: ${report.batch.selected.map((number) => `#${number}`).join(", ") || "none"}.\n` : ""}${report.requests
               .map(
                 (item) =>
                   `#${item.issue_number}: ${item.status}; ${item.applied ? "verified" : "left unchanged"}; rehearsal ${item.rehearsal?.status ?? "not-run"}; services ${item.services?.status ?? "not-run"}${item.reasons?.length ? `; ${item.reasons.join(", ")}` : ""}${item.rehearsal?.report_file ? `\nReport: ${item.rehearsal.report_file}` : ""}${item.services?.report_file ? `\nService report: ${item.services.report_file}` : ""}${item.assignment === "unavailable" ? "; submitter assignment unavailable; see status comment for lookup" : ""}`
@@ -225,6 +244,7 @@ export function inboxRunExitCode(report) {
       !["closed", "completed"].includes(item.status) &&
       (item.rehearsal?.status !== "passed" ||
         (item.batch && item.batch.status !== "passed") ||
+        item.batch?.release?.status === "needs-human" ||
         item.services?.status === "blocked")
   )
     ? 1

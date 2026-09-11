@@ -609,7 +609,7 @@ test("profile, scope, report-file and old-command validation fails before reads 
     );
 });
 
-test("uncertain generated-plan journal save stops before Git and resumes from the persisted plan", async () => {
+test("a lost generated-plan save response is confirmed before Git continues", async () => {
   const f = fixture();
   let failed = false;
   f.after = async (call) => {
@@ -623,22 +623,16 @@ test("uncertain generated-plan journal save stops before Git and resumes from th
       throw Error("Lost plan-save response");
     }
   };
-  const first = await invoke(f, {
-    rehearse: async () => assert.fail("plan save must complete before Git")
-  });
-  assert.equal(first.code, 2);
-  assert.equal(issueWrites(f).length, 0);
-  const lock = f.state().lock;
-  assert.ok(lock.plans[1]);
-  const next = await invoke(f, {
-    args: ["--resume", lock.run_id, "--json"],
-    plan: async () => assert.fail("must retain saved destinations"),
+  let usedPlan;
+  const result = await invoke(f, {
     rehearse: async (entry, plan) => {
-      assert.deepEqual(plan, lock.plans[1]);
+      usedPlan = structuredClone(plan);
       return fakeReport(entry, plan, f.profile);
     }
   });
-  assert.equal(next.code, 0);
+  assert.equal(result.code, 0);
+  assert.equal(failed, true);
+  assert.ok(usedPlan);
   assert.equal(f.comments.length, 1);
   assert.equal(f.state().lock, null);
 });

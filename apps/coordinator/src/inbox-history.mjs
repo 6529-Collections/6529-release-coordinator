@@ -79,6 +79,13 @@ function summary(archive) {
           Object.values(attempt.progress?.service_attempts ?? {})
         )
       : [record];
+  const releaseEvidence =
+    kind === "batches"
+      ? Object.values(record.execution?.operations ?? {}).map(
+          (operation) =>
+            operation.result?.url ?? operation.result?.workflow?.url
+        )
+      : [];
   return {
     path: `history/${kind}/${checksum}.json`,
     checksum,
@@ -94,7 +101,10 @@ function summary(archive) {
     })),
     evidence: [
       ...new Set(
-        services.map((attempt) => attempt.result?.workflow?.url).filter(Boolean)
+        [
+          ...services.map((attempt) => attempt.result?.workflow?.url),
+          ...releaseEvidence
+        ].filter(Boolean)
       )
     ]
   };
@@ -135,6 +145,9 @@ function historyComplete(kind, record) {
     return record.state === "completed" && cleanedService(record);
   return (
     record.status === "finished" &&
+    (record.policy?.version !== "sandbox-batch-v2" ||
+      !record.selected.length ||
+      record.execution?.status === "completed") &&
     record.attempts.every(
       (attempt) =>
         attempt.result &&

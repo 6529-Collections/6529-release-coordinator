@@ -958,12 +958,11 @@
         <div class="story-content">
           <p class="implementation-boundary" role="note">
             <strong>Implemented today:</strong> Frontend and backend record new release intents
-            through the public CLI and central GitHub Issue workflow. The local reader verifies
-            open request records and the readiness command inspects current PR and dependency evidence.
-            Both print reports without changing tickets or authorizing a release.
-            The release worker, durable release queue, product merges, release builds,
-            deployments, and recovery described below
-            remain proposed work. See <a href="./docs/progress.md">progress and evidence</a> and
+            through the public CLI and central GitHub Issue workflow. Read-only commands report
+            current evidence. The manual <code>inbox:run</code> command organizes tickets, selects
+            a sandbox batch, and can move it through protected fake staging, matching E2E, and
+            protected fake production. Product merges, product deployments, and rollback described
+            below remain proposed work. See <a href="./docs/progress.md">progress and evidence</a> and
             the <a href="./release-coordinator-architecture.html">implemented intake path</a>.
           </p>
           <p class="diagram-context">
@@ -996,21 +995,23 @@
             Progress separates local checks from live acceptance and source delivery.
           </p>
           <p class="diagram-context">
-            <strong>Agreed September 11; execution is not built:</strong> One release at a time.
-            Reuse existing product Actions and their separate staging/production builds.
-            Wait for successful matching staging E2E before merging into main for production.
+            <strong>Sandbox execution is built; real execution is not:</strong> One release at a time.
+            The fake repositories now prove protected integration, ordered checks, and matching
+            staging E2E before fake production. The future product adapters will reuse existing
+            Actions and their separate staging/production builds.
             Rollback uses new revert commits and ordinary deployments only when no database
             change is confirmed and restoration is safe; otherwise a person takes over.
-            See the <a href="./docs/design.md#agreed-execution-direction-september-11">agreed rules</a>.
+            See the <a href="./docs/design.md#agreed-execution-direction-september-11">agreed rules</a>
+            and <a href="./docs/testing/release-sequence-2026-09-11.md">live sandbox evidence</a>.
             A staging request alone never authorizes production.
           </p>
           <p class="progress-rule" role="note">
-            <strong>Storage built locally; live migration pending:</strong> Use the existing GitHub journal:
+            <strong>Storage is live in the sandbox:</strong> Use the existing GitHub journal:
             keep active work complete and archive finished records in the same repository.
             Read old details only when needed, preserving retries and cleanup evidence.
             Lifetime record caps are removed; each search still has fixed work limits.
-            No separate database, heartbeat or dashboard is required. The current journal
-            is not yet an executing release queue. See the
+            No separate database, heartbeat or dashboard is required. The v6 sandbox journal
+            stores the active release, exact operations, results, ticket closeout, and archive. See the
             <a href="./docs/inbox-processing.md#history-storage">history storage</a>.
           </p>
           <article class="story" id="story" aria-label="Release process"></article>
@@ -1023,7 +1024,7 @@
         {
           title: "Create and submit the release request",
           story:
-            "The product release skill gives completed input JSON to the installed public CLI submit command. Frontend and combined intents record from the frontend context; backend-only intents record from the backend. A combined release uses one shared request. The CLI saves a local run, creates and validates the request, saves valid JSON to the outbox, starts the central workflow, waits, and returns the request ID and inbox Issue result. The workflow creates or reuses one public Issue with the request, checksum, GitHub actor, and workflow evidence. Recording is observation only; ordinary returned outcomes continue the existing authorized release flow. The agent does not dispatch or poll the submission workflow separately. Requests and logs must not contain secrets. This implemented intake step does not start the future release steps below.",
+            "The product release skill gives completed input JSON to the installed public CLI submit command. Frontend and combined intents record from the frontend context; backend-only intents record from the backend. A combined release uses one shared request. The CLI saves a local run, creates and validates the request, saves valid JSON to the outbox, starts the central workflow, waits, and returns the request ID and inbox Issue result. The workflow creates or reuses one public Issue with the request, checksum, GitHub actor, and workflow evidence. Recording is observation only; it does not start release execution. Requests and logs must not contain secrets. The manual Coordinator command handles the sandbox steps; real product work continues through the existing authorized process until real adapters are built.",
           why:
             "The agent has one stable interface: ask the CLI for the shape, submit the completed JSON, and read the answer. The CLI hides GitHub and later Coordinator details. The central workflow gives every product the same submission path and GitHub supplies trusted proof of who started it.",
           failure:
@@ -1032,11 +1033,11 @@
         {
           title: "Confirm the central GitHub submission",
           story:
-            "The implemented local reader loads open release-request Issues, validates their saved JSON and checksum, and compares them with the expected successful inbox workflow result from main. That result must name the same request, exact JSON, Issue, run, and GitHub actor. The request's requested_by value remains supplied context, not identity proof. The reader prints its findings and exits. A future worker could save and use that verification before checking release readiness, but no automatic continuation or durable release-state save exists yet.",
+            "The implemented local reader loads open release-request Issues, validates their saved JSON and checksum, and compares them with the expected successful inbox workflow result from main. That result must name the same request, exact JSON, Issue, run, and GitHub actor. The request's requested_by value remains supplied context, not identity proof. The reader prints its findings and exits. The separate inbox:run command repeats this verification, saves its decision in the GitHub journal, and may continue through the sandbox workflow.",
           why:
             "There is one simple permission boundary. Anyone with Write access to the Release Coordinator repository may submit a request. The release repositories and exact code come from the JSON and are checked in the next steps. Submitting a request is not deployment approval.",
           failure:
-            "A changed or contradictory saved record is reported as invalid. Missing or unconfirmable workflow evidence is reported as unverified. An inbox listing failure is an error, not an empty inbox. The reader does not edit Issue labels or save a release result. A future worker must not treat any of those outcomes as permission to continue."
+            "A changed or contradictory saved record is reported as invalid. Missing or unconfirmable workflow evidence is reported as unverified. An inbox listing failure is an error, not an empty inbox. The reader does not edit Issue labels or save a release result. inbox:run stops on the same bad or missing evidence; it never turns an uncertain receipt into permission to continue."
         },
         {
           title: "Check pull request readiness",

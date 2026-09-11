@@ -1,16 +1,18 @@
 # Inbox processing contract
 
-**One-ticket workflow merged; sandbox service extension implemented and tested
-September 10, 2026.** See
+**One-ticket workflow merged; sandbox services, batching, and the fake release
+sequence implemented and tested by September 11, 2026.** See
 [progress](./progress.md) for test and rollout evidence. Submit a request, then
 run one explicit command to inspect its ticket, rehearse suitable exact PRs,
 run supported sandbox service checks, and record the result on that same ticket.
-Release execution remains separate.
+An unscoped sandbox run can continue one selected no-database-change batch through
+protected fake staging and production. Real product execution remains separate.
 
 This document owns the ticket states, labels, reasons, and first-processing
 rules. [Progress](./progress.md) owns dated implementation and live evidence.
 [The app guide](../apps/coordinator/README.md) owns commands that actually exist.
-[The execution design](./design.md) describes later release work.
+[The execution design](./design.md) describes the implemented sandbox subset and
+later real-product release work.
 
 ## Goal and boundary
 
@@ -25,16 +27,19 @@ active inbox with a recorded reason. Other requests that need evidence stay
 visible. Closing a ticket never silently claims that a release happened.
 
 The scope is intake defaults, ticket inspection, local merge rehearsal, supported
-sandbox service/database checks, status updates, decision history, and migration
-of existing tickets. Keep the installed CLI `0.0.4`
+sandbox service/database checks, sandbox batch execution, status updates,
+decision history, and migration of existing tickets. Keep the installed CLI `0.0.4`
 input and request schema `0.000001` unchanged. No new npm release or frontend/
 backend installation is needed for this scope.
 
-The rehearsal only merges in temporary local repositories. The release worker,
-scheduling, product merges, builds, deployments, and recovery remain later work. No ticket status or
-label authorizes release execution. The [agreed release rules](./design.md#agreed-execution-direction-september-11)
+The one-ticket rehearsal only merges in temporary local repositories. An unscoped
+sandbox run may merge its selected candidate into the protected branches of the
+two fake repositories and run their test Actions. Product merges, builds,
+deployments, and rollback remain later work. No sandbox ticket status or label
+authorizes them. The [agreed release rules](./design.md#agreed-execution-direction-september-11)
 reuse existing deployments, require successful staging E2E before production,
-and keep one release active through recovery. Those rules are not implemented here.
+and keep one release active through recovery. The sandbox subset implements those
+ordering and ownership rules without product access.
 
 ## Responsibility and commands
 
@@ -43,7 +48,7 @@ and keep one release active through recovery. Those rules are not implemented he
 | Public CLI | Continue sending the existing exact request. It does not supply trusted identity, lifecycle status, or release authorization. |
 | Central submission workflow and Issue-creation helper | Verify the request, identify the GitHub submitter, and create a consistently organized ticket. Preserve an existing ticket on a retry. |
 | `inbox:read` and `readiness:check` | Remain read-only. Share the inspection logic with processing, but never apply Issue changes. |
-| `inbox:run` | Inspect tickets, generate a plan from the ticket and configured destinations, rehearse its exact PRs, save evidence, and apply labels, status comment, assignment, and Issue state. Run manually and exit. |
+| `inbox:run` | Inspect tickets, generate plans from tickets and configured destinations, rehearse exact PRs, and apply the saved ticket presentation. An unscoped sandbox run also selects a batch and runs its fake release sequence. Run manually and exit. |
 
 The write command is `inbox:run`. It requires an explicit sandbox/real profile.
 The command automatically creates a separate plan for each suitable ticket. Its
@@ -131,6 +136,9 @@ explanation. Reasons are not permissions.
 | `reason:rehearsal-blocked` | Resolve the recorded combined conflict or other stable rehearsal blocker. |
 | `reason:rehearsal-unverified` | Restore missing evidence or report storage, then rerun. |
 | `reason:rehearsal-stale` | Inspect changed inputs, refresh the plan where appropriate, then rerun. |
+| `reason:release-completed` | The exact sandbox release plan reached its requested target and every matching check passed. Close the sandbox ticket as completed. |
+| `reason:release-failed` | A confirmed sandbox release step failed after execution began. Stop later steps and hand the saved partial state to a person. |
+| `reason:release-unverified` | The selected sandbox release is unfinished or its effect is uncertain. Keep the ticket waiting and reconcile the saved operation before retrying. |
 | `reason:cancelled` | Close after an authorized cancellation is recorded. |
 | `reason:replaced` | Close with an explicit replacement request link and recorded replacement decision. |
 | `reason:test` | Close a confirmed test after its purpose is complete. Editable title text alone does not establish this. |
@@ -169,9 +177,10 @@ For nonterminal tickets, use one managed outcome label, separate from lifecycle:
 
 The single maintained comment shows findings, exact destinations, resulting
 trees, and the plan fingerprint. A blocked rehearsal is action-needed; unknown
-or stale evidence waits. Passing rehearsal still waits for independent release
-history/ownership and future execution. It never produces eligible/completed,
-claims a tested build, or authorizes a release.
+or stale evidence waits. Passing rehearsal alone still waits for release
+evidence. A scoped run never produces completed status. An unscoped sandbox run
+may continue to its separately recorded release sequence; the rehearsal result
+itself does not claim a tested build or authorize a real release.
 
 Only freshly generated reports enter this policy. Reverify the receipt before
 and after rehearsal, recheck PRs/destinations, and save the report before recording
@@ -192,7 +201,7 @@ its lock; explicit resume uses the stored plan and fresh evidence.
 [one-ticket sandbox stage](./merge-rehearsal-testing.md#service-and-database-acceptance)
 comes before batching. Reuse the managed comment, submitter ownership, and
 decision history and original request/receipt. The sandbox writer uses
-`inbox-run-v5` (service attempts were introduced in v3); older writers must stop. The journal's `service_attempts` map saves
+`inbox-run-v6` (service attempts were introduced in v3); older writers must stop. The journal's `service_attempts` map saves
 exact plans and attempts before dispatch; finished results remain available for
 retries through the history index.
 
@@ -200,7 +209,7 @@ Managed labels are `services:not-run`, `services:passed`, `services:blocked`,
 `services:unknown`, and `services:stale`. Reasons are `database-unverified`,
 `database-declaration-mismatch`, `service-checks-failed`,
 `service-checks-unverified`, and `service-checks-stale`. These describe sandbox
-checks separately from Git rehearsal and any future release outcome.
+checks separately from Git rehearsal and any release outcome.
 
 | Evidence | Presentation and next action |
 | --- | --- |
@@ -227,19 +236,23 @@ would require a person; temporary-resource cleanup is not successful recovery.
 **Implemented for unscoped sandbox runs; see [progress](./progress.md) for evidence.**
 The [batch-selection policy](./design.md#proposed-batch-testing-and-selection)
 finishes cheap intake, scope, database and Git filtering before new combined
-PR/service checks. `--issue` retains one-ticket handling. Initial batching only
-supports self-contained staging requests with verified no-database-change scope.
+PR/service checks. `--issue` retains one-ticket handling. Batching supports
+self-contained staging or production requests with verified no-database-change
+scope. A batch contains only one target.
 Cross-ticket dependency declarations remain future work; inseparable changes
 must be submitted as one complete ticket.
 
-`inbox-run-v5` preserves the batch history introduced in v4 and archives completed
+`inbox-run-v6` preserves the batch history introduced in v4 and archives completed
 details without rewriting prior decisions or attempt identities. New managed labels are `batch:passed`, `batch:blocked`, `batch:waiting`,
 `batch:unknown` and `batch:stale`. Reasons are `batch-selected`,
 `batch-ticket-failed`, `batch-incompatible`, `batch-limit`, `batch-deferred` and
 `batch-unsupported`; the existing database-declaration-mismatch reason is reused.
-A selected passing group stays `status:waiting`, never completed or eligible for
-release execution. Excluded tickets retain the same comment, reasons, action
-owner, exact group/attempt and check links. Unknown results never blame a submitter.
+A selected passing group continues through the sandbox release sequence. It stays
+waiting while that sequence is incomplete, becomes action-needed if a confirmed
+release step fails, and becomes `status:completed` only after every step required
+by its target passes and owned branches are removed. Excluded tickets retain the
+same comment, reasons, action owner, exact group/attempt and check links. Unknown
+results never blame a submitter.
 Reusing a saved group requires fresh input checks and a fresh read of its actual
 GitHub CI/service evidence. Missing or changed proof stops reuse; a cached journal
 result alone is insufficient. This verification starts no new CI. Its scope is the frozen eligible pool after
@@ -253,7 +266,8 @@ release. Those capabilities are not implied by the new sandbox labels.
 
 Leaving a ticket out of a candidate keeps its PRs and Issue open. Keep the entire
 ticket and any inseparable dependency group together. Selection or a passing
-test never means completed; only verified release evidence can support that.
+batch test never means completed; only the matching saved release sequence can
+support that sandbox completion.
 
 | Evidence for exclusion | Proposed ticket state and next action |
 | --- | --- |
@@ -386,16 +400,16 @@ without turning each poll into a new ticket conversation.
 
 Missing release history is not evidence that a request was never completed or
 cancelled. Initial processing history can record its own new decisions; it must
-not invent earlier outcomes. `status:completed` is reserved until a supported
-source proves the exact release outcome. The first implementation need not be
-able to complete existing releases in order to organize the inbox honestly.
+not invent earlier outcomes. `status:completed` requires a supported source for
+the exact outcome. The sandbox executor supplies that source only for work it
+owns; it cannot complete earlier or real releases.
 
 The already-merged rule applies before Coordinator release execution, including
 to tickets previously marked received/waiting/action-needed. These are intake
-states, not execution ownership. No executor exists in this version. A future
-worker must record ownership before merging and retain responsibility after
-its own merge; this intake rule must not abandon that work. Unknown ownership
-fields in the journal already stop the current processor before ticket writes.
+states, not execution ownership. The sandbox executor records its batch and
+release before merging, then retains responsibility after its own merge. This
+intake rule must not abandon that work. Real execution ownership is unsupported;
+unknown ownership fields in the journal stop the processor before ticket writes.
 
 ## Decision history and safe retries
 
@@ -420,8 +434,9 @@ newer decisions or reset terminal outcomes.
 
 ### History storage
 
-**Merged and verified in the sandbox September 11.** The v5 writer
-keeps complete unfinished work in `inbox-state.json` and moves finished batch and
+**Merged history storage and locally implemented v6 release storage were verified
+in the sandbox September 11.** The writer keeps complete unfinished work in
+`inbox-state.json` and moves finished batch and
 standalone service details to the same independent `codex/inbox-state` branch.
 The former 100-batch and 1,000-service lifetime caps are removed. Per-search
 limits still apply: 10 tickets, 10 PRs per repository, 40 Git attempts, 12 check
@@ -437,7 +452,9 @@ rounds and 45 minutes. Closing a ticket does not erase its evidence.
   branch tree and their references remain in Git commit history.
 - Index summaries contain ticket/request IDs and request checksums, outcome,
   evidence links, file path and content checksum. Exact PR versions and full
-  result details are in the archive. The managed ticket still explains outcomes.
+  result details are in the archive. A selected release also keeps its exact plan,
+  starting versions, operations, results, and terminal state there. The managed
+  ticket still explains outcomes.
 - Exact repeats load only the required record, check its profile, identity,
   checksum and structure, then use the normal remote evidence revalidation.
   Old attempt IDs, deadlines and budgets remain intact. Missing or altered
@@ -448,10 +465,10 @@ command or a background worker. All referenced tickets must have their latest
 updates saved and no presentation error. Their history must contain the relevant
 batch/service outcome. Every operation must have a terminal result and verified
 cleanup, including temporary PRs and service resources. `batch.status: finished`
-only says the selection search ended; it is not enough on its own. Unfinished
-records stay active. A standalone service attempt referenced by an active batch
-also stays active. There is no implemented release executor needing to keep a
-candidate active; a future executor must add its own ownership check here.
+only says the selection search ended; a selected batch remains active until its
+sandbox release is completed or marked `needs-human` and every ticket update is
+saved. Unfinished release records and standalone service attempts referenced by
+an active batch also stay active.
 
 The writer builds on the verified previous Git tree, saves archives and the
 smaller state file in one non-force commit, and reads back the state and newly
@@ -470,8 +487,8 @@ its first attempt is different: it legitimately has no prior record yet. Resumin
 that initial gap may create its first attempt; a referenced but missing archive
 always stops processing, including when the batch inputs are unchanged.
 
-`workflow: "inbox-run-v5"` fences older writers before they can drop archive
-files. The first authorized v5 run upgrades a legacy/v1/v2/v3/v4 journal under its
+`workflow: "inbox-run-v6"` fences older writers before they can drop release or
+archive files. The first authorized v6 run upgrades a legacy/v1/v2/v3/v4/v5 journal under its
 lock, preserving receipts, transitions, plans, original results and resume scope.
 Cleanup and presentation obligations must still finish before details move out
 of the active file. Profile separation and stop-before-resume are unchanged.
@@ -538,14 +555,15 @@ replacement, completion, and terminal corrections remain reserved; no commands
 for those actions exist yet. No test is inferred from editable request/title text.
 
 The combined workflow uses policy `2026-09-10.2`. It upgrades the journal to
-`workflow: "inbox-run-v5"` without changing prior decisions or service identities;
-legacy/v1/v2/v3/v4 journals upgrade on an authorized write. Older
+`workflow: "inbox-run-v6"` without changing prior decisions or service identities;
+legacy/v1/v2/v3/v4/v5 journals upgrade on an authorized write. Older
 checkouts reject this field before writes, even if a pass adds no new reason.
 Once that marker is recorded, use a checkout supporting the combined workflow. Older processors reject unknown reasons and stop safely;
 update the checkout rather than rewriting history. No public CLI upgrade is needed.
 
-`status:eligible` and `status:completed` are also reserved in this first version.
-Unknown earlier release outcomes/active execution ownership currently produce
+`status:eligible` remains reserved. The v6 sandbox executor may write
+`status:completed` only from its own matching saved release. Unknown earlier real
+release outcomes or unsupported execution ownership still produce
 `reason:coordinator-incomplete`. This inbox journal proves its own dispositions;
 it is not independent evidence of a prior deployment, cancellation, or worker
 reservation. Unchanged scans create no new transitions/comments; acquire/release

@@ -22,6 +22,7 @@ export async function processInbox({
   rehearsal,
   services,
   batch,
+  release,
   plan,
   signal,
   now = () => new Date(),
@@ -67,6 +68,24 @@ export async function processInbox({
   let batchResult;
   let pendingNumber = null;
   try {
+    if (batching && !run.batch_fingerprint) {
+      const active = Object.values(state.batches ?? {}).filter(
+        (record) =>
+          record.policy?.version === "sandbox-batch-v2" &&
+          record.status === "finished" &&
+          record.selected.length &&
+          record.execution?.status !== "completed"
+      );
+      if (active.length > 1)
+        throw new Error("More than one unfinished sandbox release exists.");
+      if (active.length === 1) {
+        run.batch_fingerprint = active[0].fingerprint;
+        run.ticket_numbers = active[0].inputs.map(({ number }) => number);
+        state.lock.batch_fingerprint = run.batch_fingerprint;
+        state.lock.ticket_numbers = structuredClone(run.ticket_numbers);
+        await journal.save(state, run, "continue unfinished sandbox release");
+      }
+    }
     const scanned = await scanRunTickets({
       loadInbox,
       get,
@@ -83,6 +102,9 @@ export async function processInbox({
     });
     const preparedTickets = await prepareRunTickets({
       ...scanned,
+      activeBatch: run.batch_fingerprint
+        ? state.batches?.[run.batch_fingerprint]
+        : null,
       signal,
       state,
       results,
@@ -119,7 +141,8 @@ export async function processInbox({
             observe,
             github,
             plan
-          })
+          }),
+        release
       });
     }
     for (const item of preparedTickets) {

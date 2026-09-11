@@ -1,7 +1,8 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-11**, against merged source `f68294c` and the live sandbox
-history acceptance below. This page separates implemented behavior, source delivery
+Last reviewed: **2026-09-11**, against merged source `5f49a60`, the local
+`codex/sandbox-release-sequence` implementation, and the live sandbox acceptance
+below. This page separates implemented behavior, source delivery
 and live proof. Earlier GitHub/package observations carry their original dates;
 they were not repeated during this cleanup.
 
@@ -14,19 +15,51 @@ they were not repeated during this cleanup.
 | Sandbox service/database checks | One-ticket checks run sample services and temporary MySQL in GitHub Actions | Local and live acceptance passed; see [source delivery](#sandbox-source-delivery-september-10). |
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
-| v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66); [live sandbox migration and exact repeat passed](./testing/history-2026-09-11.md). The real inbox was not migrated. |
+| v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). The local v6 writer adds exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
 | PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | Node 20/22/24 CI, CodeQL and Snyk passed on final PR #66 head `2c801fc`; required merge rules remain active. All four configured opening reviews subsequently completed on [PR #70](https://github.com/6529-Collections/6529-release-coordinator/pull/70). Snyk's six-library workspace limitation remains below. |
+| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, ordered deploy checks, matching E2E, then protected test `main` for production requests | Implemented locally and proven live with all 14 operations passing; see [acceptance](./testing/release-sequence-2026-09-11.md). No real repository was used. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
-profile selection does not enable sandbox execution on real products. A passing
-candidate stays waiting and does not authorize a release.
+profile selection does not enable sandbox execution on real products. Sandbox
+completion is evidence only for the pinned test repositories.
 
 ## Next steps
 
-Build the release sequence in the test repositories before adding real adapters.
-[Later execution acceptance](./merge-rehearsal-testing.md#later-execution-acceptance)
-covers that future stage; it is not part of this cleanup.
+Review and merge the Coordinator source for the proven sandbox sequence. After
+that, add narrow real adapters that call the existing frontend/backend release
+workflows without redesigning their builds or environment settings. Automatic
+rollback, database-changing batches, linked tickets, heartbeat/takeover, and
+parallel releases remain deferred.
+
+## Sandbox release sequence acceptance, September 11
+
+The local branch installed a pinned, read-only sandbox release workflow in both
+public test repositories and protected each `1a-staging` branch with required
+`Sandbox check`. Production-target ticket
+[#15](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/15)
+then passed cheap filtering, exact combined PR checks, combined service checks,
+protected backend/frontend staging integration, ordered staging checks, matching
+staging E2E, protected backend/frontend test-`main` integration, ordered production
+checks, and matching production E2E. The ticket is closed as completed and the
+journal lock is clear.
+
+Two live interruptions improved the implementation rather than weakening proof:
+the first rejected a changed pinned check workflow before creating a trial PR;
+the second exposed a delayed GitHub journal confirmation after the exact commit
+had been saved. The latter now retries read-only confirmation and accepts only
+the exact expected commit/state. A resume-projection bug was also fixed so a
+completed release can finish its ticket without rerunning release operations.
+Focused regressions cover both recovery cases. A final code review also added a
+zero-write guard when sandbox staging moves after the release captures its start;
+that failure path passed offline and was not needed by the stable live run. Full
+links, commits and evidence are in the
+[dated acceptance record](./testing/release-sequence-2026-09-11.md).
+
+The final local `npm run check` passed **452 tests** on Node 25.6.1, with the
+three explicitly optional Docker cases skipped. Lint, formatting, workflow
+policy, packed-CLI installation/behavior, and source-preservation checks also
+passed. Node 20/22/24 and external review results remain PR evidence, not local proof.
 
 ## PR #66 delivery and live history acceptance, September 11
 
@@ -293,6 +326,7 @@ snapshot is historical, not a fresh scan.
 | [20 corner cases](./testing/complex-corner-cases.md) | Per-case results, evidence layers, reproduced gaps and unsupported future behavior. |
 | [Run logging](./testing/run-logging-2026-09-11.md) | Live logs, source/review boundaries, cleanup and test-ticket retirement. |
 | [v5 history](./testing/history-2026-09-11.md) | Merged source, live sandbox migration, preserved archives, exact repeat and test cleanup. |
+| [Sandbox release sequence](./testing/release-sequence-2026-09-11.md) | Protected fake staging and production, 14 matching operations, interruption/resume, ticket closeout, cleanup, and the post-run stale-start guard. |
 
 Keep current status and next steps here. Update behavior in its owning guide;
 keep dated acceptance reports unchanged unless explicitly recording a new run.

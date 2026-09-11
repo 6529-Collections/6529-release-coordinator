@@ -31,6 +31,7 @@ export async function selectBatch({
   );
   const inputs = ordered.map((item) => ({
     number: item.entry.issue_number,
+    target: item.entry.request?.target ?? item.target,
     input: item.input
   }));
   const fingerprint = serviceHash({ inputs, policy });
@@ -344,7 +345,7 @@ export function batchTicketResult(batch, number) {
     message: stale
       ? batch.stop.message
       : selected
-        ? "This exact group passed its combined checks; it remains waiting for future release execution."
+        ? "This exact group passed its combined checks and can continue through the saved sandbox release sequence."
         : singleton
           ? "This complete ticket failed against the saved base, with a passing unchanged baseline. A correction is required."
           : involved.length
