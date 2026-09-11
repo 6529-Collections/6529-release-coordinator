@@ -115,6 +115,9 @@ to an unscoped run. Lost journal-response confirmation also checks the same lock
 token directly. Focused offline tests cover each case, including a lost save
 response followed by failed staging E2E with no production operation. A read-only
 live identity check confirmed the three pinned runtime files after these changes.
+Owned-branch cleanup now needs two consecutive missing-ref reads, an unchanged
+role needs its explicit base-tree proof, and stale or unfinished release evidence
+cannot produce a successful command exit.
 
 ## Boundary and next step
 

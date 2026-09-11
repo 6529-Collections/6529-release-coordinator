@@ -244,7 +244,7 @@ export function inboxRunExitCode(report) {
       !["closed", "completed"].includes(item.status) &&
       (item.rehearsal?.status !== "passed" ||
         (item.batch && item.batch.status !== "passed") ||
-        item.batch?.release?.status === "needs-human" ||
+        (item.batch?.release && item.batch.release.status !== "completed") ||
         item.services?.status === "blocked")
   )
     ? 1

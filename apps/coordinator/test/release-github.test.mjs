@@ -43,6 +43,9 @@ function runtimeFile(endpoint, changed = false) {
   };
 }
 
+const apiResponse = (status, data) =>
+  `HTTP/2 ${status} Result\nContent-Type: application/json\n\n${data === undefined ? "" : JSON.stringify(data)}`;
+
 function fixture() {
   const operation = makeReleaseOperation({
     release_id: "11111111-1111-4111-8111-111111111111",
@@ -255,6 +258,113 @@ test("changed release runner stops before workflow lookup or dispatch", async ()
     calls.some(({ endpoint }) => endpoint.includes("/runs?")),
     false
   );
+});
+
+test("owned branch cleanup requires two consecutive missing reads", async () => {
+  const candidate = {
+    role: "backend",
+    base: "e".repeat(40),
+    commit: "c".repeat(40),
+    tree: "d".repeat(40),
+    changed: true
+  };
+  const actor = { id: "456", login: "tester" };
+  const record = {
+    id: "22222222-2222-4222-8222-222222222222",
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: {
+      id: "staging:integrate:backend",
+      kind: "integrate",
+      environment: "staging",
+      role: "backend"
+    },
+    state: "checking",
+    actor,
+    target_branch: "1a-staging",
+    branch:
+      "codex/release-11111111-1111-4111-8111-111111111111-staging-backend",
+    body: `Sandbox release 11111111-1111-4111-8111-111111111111\n\nBatch: ${candidate.tree}`,
+    base: candidate.base,
+    number: 7,
+    url: "https://example.invalid/pr/7",
+    created_at: "2026-09-11T12:00:00.000Z"
+  };
+  const pr = {
+    number: 7,
+    head: {
+      repo: { id: sandboxProfile.repositories.backend.id },
+      ref: record.branch,
+      sha: candidate.commit
+    },
+    base: {
+      repo: { id: sandboxProfile.repositories.backend.id },
+      ref: record.target_branch
+    },
+    user: { id: 456 },
+    body: record.body,
+    state: "open",
+    merged: false
+  };
+  let deleted = false;
+  let missingReads = 0;
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    wait: async () => {},
+    gates: {
+      pullRequest: async () => ({
+        headRefOid: candidate.commit,
+        headRefName: record.branch,
+        baseRefOid: record.base,
+        baseRefName: record.target_branch,
+        state: "OPEN",
+        mergeable: "MERGEABLE",
+        checks: [
+          {
+            __typename: "CheckRun",
+            isRequired: true,
+            name: "Sandbox check",
+            status: "COMPLETED",
+            conclusion: "FAILURE"
+          }
+        ]
+      })
+    },
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", { object: { sha: record.base } });
+      if (endpoint.endsWith(`/git/ref/heads/${record.branch}`)) {
+        if (deleted) {
+          missingReads++;
+          return apiResponse("404 Not Found", {});
+        }
+        return apiResponse("200 OK", {
+          object: { sha: candidate.commit }
+        });
+      }
+      if (method === "GET" && endpoint.endsWith("/pulls/7"))
+        return apiResponse("200 OK", pr);
+      if (method === "PATCH" && endpoint.endsWith("/pulls/7"))
+        return apiResponse("200 OK", { ...pr, state: "closed" });
+      if (method === "DELETE" && endpoint.includes("/git/refs/heads/")) {
+        deleted = true;
+        return apiResponse("204 No Content");
+      }
+      assert.fail(`${method} ${endpoint}`);
+    }
+  });
+  const result = await client.integrate({
+    record,
+    candidate,
+    actor,
+    expectedBase: candidate.base,
+    save: async () => {}
+  });
+  assert.equal(result.status, "failed");
+  assert.equal(record.cleanup, "removed");
+  assert.equal(missingReads, 2);
 });
 
 test("real profile and unpinned release runtime are refused", () => {

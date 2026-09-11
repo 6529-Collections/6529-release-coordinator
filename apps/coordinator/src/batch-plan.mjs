@@ -156,6 +156,7 @@ export async function prepareBatch(
     role: repo.role,
     repository: repo.repository,
     base: repo.destination.commit,
+    base_tree: repo.service_source.base_tree,
     tree: repo.final_tree,
     patch: repo.service_source.patch
   }));

@@ -71,7 +71,7 @@ export async function processInbox({
   try {
     if (batching && !run.batch_fingerprint) {
       serviceAssert(
-        run.scope.issue_number === null && run.scope.close_test === false,
+        run.scope?.issue_number === null && run.scope.close_test === false,
         "batch-scope",
         "Only an unscoped sandbox run can continue an unfinished release."
       );

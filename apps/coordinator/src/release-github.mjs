@@ -121,17 +121,33 @@ export function createReleaseGitHub({
   }
   async function deleteOwnedBranch(role, name, commit) {
     const current = await ref(role, name, [200, 404]);
-    if (current.status === 404) return;
-    serviceAssert(
-      current.data?.object?.sha === commit,
-      "release-ownership",
-      "The saved sandbox release branch moved; it was not deleted."
-    );
-    await call(role, "DELETE", `/git/refs/heads/${name}`, undefined, [204]);
-    serviceAssert(
-      (await ref(role, name, [200, 404])).status === 404,
+    if (current.status === 200) {
+      serviceAssert(
+        current.data?.object?.sha === commit,
+        "release-ownership",
+        "The saved sandbox release branch moved; it was not deleted."
+      );
+      await call(role, "DELETE", `/git/refs/heads/${name}`, undefined, [204]);
+    }
+    let consecutiveMissing = 0;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const observed = await ref(role, name, [200, 404]);
+      if (observed.status === 404) {
+        consecutiveMissing++;
+        if (consecutiveMissing === 2) return;
+      } else {
+        consecutiveMissing = 0;
+        serviceAssert(
+          observed.data?.object?.sha === commit,
+          "release-ownership",
+          "The owned sandbox release branch changed during cleanup."
+        );
+      }
+      if (attempt < 3) await wait(1000);
+    }
+    throw new ServiceError(
       "release-cleanup",
-      "Sandbox release branch cleanup could not be verified."
+      "Sandbox release branch cleanup could not be verified twice."
     );
   }
   function verifyPull(pr, record, candidate, { allowMerged = false } = {}) {

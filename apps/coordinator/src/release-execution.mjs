@@ -15,6 +15,7 @@ export function releaseTicketResult(batch, number) {
   if (batch.stop?.status === "stale")
     return {
       status: "waiting",
+      batch_status: "stale",
       code: "release-unverified",
       message:
         "The saved batch is stale, so its release result cannot complete this ticket.",
@@ -23,6 +24,7 @@ export function releaseTicketResult(batch, number) {
   if (execution?.status === "completed")
     return {
       status: "completed",
+      batch_status: "passed",
       code: "release-completed",
       message: `The exact selected sandbox batch passed ${execution.plan.target === "production" ? "staging and production" : "staging"} deployment checks and matching E2E.`,
       execution
@@ -30,12 +32,14 @@ export function releaseTicketResult(batch, number) {
   if (execution?.status === "needs-human")
     return {
       status: "blocked",
+      batch_status: "passed",
       code: "release-failed",
       message: execution.message,
       execution
     };
   return {
     status: "waiting",
+    batch_status: "passed",
     code: "release-unverified",
     message: "The selected batch has no complete sandbox release result.",
     execution

@@ -185,6 +185,7 @@ export function harness(count = 2) {
             publications: report.repositories.map((repo) => ({
               role: repo.role,
               base: repo.destination.commit,
+              base_tree: repo.service_source.base_tree,
               tree: repo.final_tree,
               patch: [
                 { path: "docs/batch.md", content: "Batch\n", mode: "100644" }

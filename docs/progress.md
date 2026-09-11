@@ -61,9 +61,11 @@ mapping, prevents stale batches from closing tickets, asserts that only an
 unscoped run may adopt unfinished release work, and pins the workflow, contract,
 and runner files at every exact fake environment commit. Focused regressions pass;
 a read-only live identity check confirmed the three runtime blobs in both test
-repositories and environment branches.
+repositories and environment branches. Cleanup now requires two consecutive
+missing-ref reads before an owned branch is recorded as removed, and an unchanged
+release role requires its explicit saved base tree.
 
-The final local `npm run check` passed **457 tests** on Node 25.6.1, with the
+The final local `npm run check` passed **460 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
 passed. Node 20/22/24 and external review results remain PR evidence, not local proof.

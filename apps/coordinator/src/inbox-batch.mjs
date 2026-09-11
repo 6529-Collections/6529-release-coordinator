@@ -63,8 +63,7 @@ function releasedDecision(decision, result) {
   const batch = next.batch ?? {};
   next.batch = {
     fingerprint: batch.fingerprint ?? result.execution?.plan?.batch_fingerprint,
-    status:
-      batch.status ?? (completed ? "passed" : waiting ? "waiting" : "blocked"),
+    status: result.batch_status,
     code: batch.code ?? result.code,
     message: batch.message ?? result.message,
     selected: Array.isArray(batch.selected) ? batch.selected : [],

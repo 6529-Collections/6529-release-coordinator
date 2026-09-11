@@ -37,13 +37,21 @@ export function selectedPreparation(batch) {
         (value) => value.role === role
       );
       const trial = check.progress.prs.find((value) => value.role === role);
+      const savedCandidate = batch.execution?.plan?.candidates?.[role];
+      const savedLegacyUnchanged =
+        !publication?.base_tree &&
+        savedCandidate?.changed === false &&
+        savedCandidate.base === publication?.base &&
+        savedCandidate.tree === publication?.tree &&
+        savedCandidate.commit === publication?.base;
       serviceAssert(
         publication &&
           sha(publication.base) &&
           sha(publication.tree) &&
           (publication.patch.length === 0
-            ? publication.tree === publication.base_tree ||
-              !publication.base_tree
+            ? (sha(publication.base_tree) &&
+                publication.tree === publication.base_tree) ||
+              savedLegacyUnchanged
             : sha(trial?.commit) && trial.tree === publication.tree),
         "release-input",
         `The ${role} selected candidate commit is unavailable.`

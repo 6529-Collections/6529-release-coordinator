@@ -16,6 +16,7 @@ import {
   releaseProtocol,
   verifyReleaseReport
 } from "../src/release-contract.mjs";
+import { makeReleasePlan } from "../src/release-plan.mjs";
 import { serviceHash } from "../src/service-contract.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
@@ -25,6 +26,8 @@ import {
   releaseEnvironmentsForTarget
 } from "../src/release-target.mjs";
 import { validateBatchHistory } from "../src/batch-state.mjs";
+import { batchStatuses } from "../src/ticket-presentation.mjs";
+import { inboxRunExitCode } from "../src/inbox-run-cli.mjs";
 
 const runFile = promisify(execFile);
 
@@ -203,6 +206,27 @@ test("request targets have one validated staging-to-production mapping", () => {
   );
 });
 
+test("a new unchanged role needs base-tree proof while a saved old plan remains readable", async () => {
+  const batch = await selectedBatch();
+  const publication = batch.attempts
+    .find((attempt) => attempt.phase === "git")
+    .result.publications.find(({ role }) => role === "frontend");
+  const checked = batch.attempts.find((attempt) => attempt.phase === "checks");
+  checked.progress.prs = checked.progress.prs.filter(
+    ({ role }) => role !== "frontend"
+  );
+  publication.patch = [];
+  publication.tree = publication.base_tree;
+  const savedPlan = makeReleasePlan(batch);
+  delete publication.base_tree;
+  assert.throws(
+    () => makeReleasePlan(batch),
+    /candidate commit is unavailable/u
+  );
+  batch.execution = { plan: savedPlan };
+  assert.doesNotThrow(() => makeReleasePlan(batch));
+});
+
 test("a resumed completed release adds a complete batch ticket result", async () => {
   const batch = await selectedBatch();
   const deferredInput = structuredClone(batch.inputs[0]);
@@ -284,9 +308,67 @@ test("a stale batch cannot project a completed release onto its ticket", async (
   const result = releaseTicketResult(batch, batch.selected[0]);
   assert.equal(result.status, "waiting");
   assert.equal(result.code, "release-unverified");
+  const item = {
+    number: batch.selected[0],
+    decision: {
+      status: "waiting",
+      reasons: [],
+      next_action: "Continue.",
+      action_owner: "Coordinator",
+      submitter_action: "None currently required."
+    }
+  };
+  await coordinateInboxBatch({
+    items: [item],
+    state: { batches: { [batch.fingerprint]: batch } },
+    run: { batch_fingerprint: batch.fingerprint },
+    profile: sandboxProfile,
+    save: async () => {},
+    loadBatch: async () => batch,
+    release: async () => assert.fail("terminal release must not run again")
+  });
+  assert.equal(item.decision.status, "waiting");
+  assert.equal(item.decision.batch.status, "stale");
+  assert.equal(batchStatuses.includes(item.decision.batch.status), true);
+  assert.deepEqual(
+    item.decision.reasons.map(({ code }) => code),
+    ["batch-deferred", "release-unverified"]
+  );
+  assert.equal(
+    inboxRunExitCode({
+      requests: [
+        {
+          applied: true,
+          status: item.decision.status,
+          rehearsal: { status: "passed" },
+          batch: item.decision.batch
+        }
+      ]
+    }),
+    3
+  );
   assert.throws(
     () => validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile),
     /Only a selected v2 batch can own release execution/u
+  );
+});
+
+test("an unfinished release cannot produce a successful command exit", () => {
+  assert.equal(
+    inboxRunExitCode({
+      requests: [
+        {
+          applied: true,
+          status: "waiting",
+          rehearsal: { status: "passed" },
+          batch: {
+            status: "passed",
+            release: { status: "running" }
+          }
+        }
+      ]
+    }),
+    1
   );
 });
 
