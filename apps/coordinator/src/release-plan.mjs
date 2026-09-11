@@ -5,13 +5,14 @@ import {
   releaseHash
 } from "./release-contract.mjs";
 import { serviceAssert } from "./service-contract.mjs";
+import {
+  isReleaseRequestTarget,
+  releaseEnvironmentsForTarget
+} from "./release-target.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
   /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(value ?? "");
-const environments = (target) =>
-  target === "production" ? ["staging", "prod"] : ["staging"];
-
 export function selectedPreparation(batch) {
   const check = batch.attempts.find(
     (attempt) =>
@@ -79,7 +80,7 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
     )
   ];
   serviceAssert(
-    targets.length === 1 && ["staging", "production"].includes(targets[0]),
+    targets.length === 1 && isReleaseRequestTarget(targets[0]),
     "release-input",
     "A release batch must have one shared target."
   );
@@ -87,7 +88,7 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
   const releaseId = nextUuid();
   serviceAssert(uuid(releaseId), "release-input", "Invalid release identity.");
   const steps = [];
-  for (const environment of environments(targets[0])) {
+  for (const environment of releaseEnvironmentsForTarget(targets[0])) {
     for (const role of ["backend", "frontend"])
       steps.push({
         id: `${environment}:integrate:${role}`,

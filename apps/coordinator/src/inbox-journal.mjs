@@ -353,7 +353,10 @@ export function createJournal(
       try {
         const current = await read();
         if (current.sha === commit.sha) {
-          if (digest(current.state) !== digest(state))
+          if (
+            digest(current.state) !== digest(state) ||
+            current.state.lock?.token !== state.lock?.token
+          )
             throw new Error("Inbox journal commit contains unexpected state.");
           verified = current;
           break;

@@ -48,7 +48,7 @@ Two live interruptions improved the implementation rather than weakening proof:
 the first rejected a changed pinned check workflow before creating a trial PR;
 the second exposed a delayed GitHub journal confirmation after the exact commit
 had been saved. The latter now retries read-only confirmation and accepts only
-the exact expected commit/state. A resume-projection bug was also fixed so a
+the exact expected commit/state and lock token. A resume-projection bug was also fixed so a
 completed release can finish its ticket without rerunning release operations.
 Focused regressions cover both recovery cases. A final code review also added a
 zero-write guard when sandbox staging moves after the release captures its start;
@@ -56,7 +56,14 @@ that failure path passed offline and was not needed by the stable live run. Full
 links, commits and evidence are in the
 [dated acceptance record](./testing/release-sequence-2026-09-11.md).
 
-The final local `npm run check` passed **452 tests** on Node 25.6.1, with the
+PR review hardening now uses one validated `production` to `staging, prod`
+mapping, prevents stale batches from closing tickets, asserts that only an
+unscoped run may adopt unfinished release work, and pins the workflow, contract,
+and runner files at every exact fake environment commit. Focused regressions pass;
+a read-only live identity check confirmed the three runtime blobs in both test
+repositories and environment branches.
+
+The final local `npm run check` passed **457 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
 passed. Node 20/22/24 and external review results remain PR evidence, not local proof.

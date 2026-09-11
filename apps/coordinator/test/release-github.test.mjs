@@ -13,10 +13,35 @@ const runtime = {
   step: "Run sandbox release operation",
   branches: { staging: "1a-staging", prod: "main" },
   repositories: {
-    backend: { workflow_blob: "a".repeat(40) },
-    frontend: { workflow_blob: "b".repeat(40) }
+    backend: {
+      files: {
+        ".github/workflows/sandbox-release.yml": "a".repeat(40),
+        "coordinator/src/release-contract.mjs": "b".repeat(40),
+        "coordinator/sandbox/release-run.mjs": "c".repeat(40)
+      }
+    },
+    frontend: {
+      files: {
+        ".github/workflows/sandbox-release.yml": "d".repeat(40),
+        "coordinator/src/release-contract.mjs": "e".repeat(40),
+        "coordinator/sandbox/release-run.mjs": "f".repeat(40)
+      }
+    }
   }
 };
+
+function runtimeFile(endpoint, changed = false) {
+  const role = endpoint.includes("release-coordinator-test-frontend")
+    ? "frontend"
+    : "backend";
+  const path = endpoint.match(/\/contents\/(.+)\?ref=/u)?.[1];
+  assert.ok(path);
+  return {
+    type: "file",
+    path,
+    sha: changed ? "0".repeat(40) : runtime.repositories[role].files[path]
+  };
+}
 
 function fixture() {
   const operation = makeReleaseOperation({
@@ -108,7 +133,8 @@ test("release workflow result binds exact operation, commits, actor and rerun at
     execute: async (args) => {
       const endpoint = args[args.indexOf("--method") + 2];
       let value;
-      if (endpoint.includes("/runs?"))
+      if (endpoint.includes("/contents/")) value = runtimeFile(endpoint);
+      else if (endpoint.includes("/runs?"))
         value = { total_count: 1, workflow_runs: [f.run] };
       else if (endpoint.includes("/attempts/2/jobs"))
         value = { total_count: 1, jobs: [f.job] };
@@ -135,9 +161,11 @@ test("release workflow rejects a report for another exact version", async () => 
     runtime,
     execute: async (args) => {
       const endpoint = args[args.indexOf("--method") + 2];
-      const value = endpoint.includes("/runs?")
-        ? { total_count: 1, workflow_runs: [f.run] }
-        : { total_count: 1, jobs: [f.job] };
+      const value = endpoint.includes("/contents/")
+        ? runtimeFile(endpoint)
+        : endpoint.includes("/runs?")
+          ? { total_count: 1, workflow_runs: [f.run] }
+          : { total_count: 1, jobs: [f.job] };
       return `HTTP/2 200 OK\nContent-Type: application/json\n\n${JSON.stringify(value)}`;
     },
     logs: async () =>
@@ -197,6 +225,38 @@ test("staging movement stops before an integration branch or PR is created", asy
   assert.deepEqual(writes, []);
 });
 
+test("changed release runner stops before workflow lookup or dispatch", async () => {
+  const f = fixture();
+  const calls = [];
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      calls.push({ method, endpoint });
+      assert.match(endpoint, /\/contents\//u);
+      return `HTTP/2 200 OK\nContent-Type: application/json\n\n${JSON.stringify(runtimeFile(endpoint, true))}`;
+    }
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => {}
+    }),
+    /runtime file changed/u
+  );
+  assert.equal(
+    calls.some(({ method }) => method !== "GET"),
+    false
+  );
+  assert.equal(
+    calls.some(({ endpoint }) => endpoint.includes("/runs?")),
+    false
+  );
+});
+
 test("real profile and unpinned release runtime are refused", () => {
   assert.throws(
     () => createReleaseGitHub({ profile: realProfile, runtime }),
@@ -210,7 +270,12 @@ test("real profile and unpinned release runtime are refused", () => {
           ...runtime,
           repositories: {
             ...runtime.repositories,
-            backend: { workflow_blob: "PENDING" }
+            backend: {
+              files: {
+                ...runtime.repositories.backend.files,
+                "coordinator/sandbox/release-run.mjs": "PENDING"
+              }
+            }
           }
         }
       }),

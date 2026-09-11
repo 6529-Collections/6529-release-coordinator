@@ -6,6 +6,7 @@ import {
   ServiceError
 } from "./service-contract.mjs";
 import { batchPolicy } from "./batch-plan.mjs";
+import { isReleaseRequestTarget } from "./release-target.mjs";
 
 const members = (items) => items.map((item) => item.entry.issue_number);
 const key = (items) => members(items).join(",");
@@ -34,6 +35,11 @@ export async function selectBatch({
     target: item.entry.request?.target ?? item.target,
     input: item.input
   }));
+  serviceAssert(
+    inputs.every(({ target }) => isReleaseRequestTarget(target)),
+    "batch-unsupported",
+    "Every batch ticket must have a staging or production target."
+  );
   const fingerprint = serviceHash({ inputs, policy });
   const created = now();
   const state = previous

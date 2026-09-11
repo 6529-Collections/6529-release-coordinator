@@ -8,6 +8,7 @@ import {
 } from "./service-plan.mjs";
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { sandboxServiceRuntime } from "./service-runtime-config.mjs";
+import { isReleaseRequestTarget } from "./release-target.mjs";
 
 export const batchPolicy = Object.freeze({
   version: "sandbox-batch-v2",
@@ -34,7 +35,7 @@ export function batchMergePlan(items, profile = sandboxProfile) {
   );
   const targets = [...new Set(items.map((item) => item.entry.request.target))];
   serviceAssert(
-    targets.length === 1 && ["staging", "production"].includes(targets[0]),
+    targets.length === 1 && isReleaseRequestTarget(targets[0]),
     "batch-unsupported",
     "Every ticket in one batch must have the same staging or production target."
   );

@@ -16,6 +16,11 @@ const uuid = (value) =>
     value ?? ""
   );
 const positive = (value) => Number.isSafeInteger(value) && value > 0;
+const runtimePaths = Object.freeze([
+  ".github/workflows/sandbox-release.yml",
+  "coordinator/src/release-contract.mjs",
+  "coordinator/sandbox/release-run.mjs"
+]);
 const branch = (record) =>
   `codex/release-${record.release_id}-${record.step.environment}-${record.step.role}`;
 const target = (runtime, environment) => runtime.branches[environment];
@@ -35,9 +40,14 @@ export function createReleaseGitHub({
       runtime.workflow === "sandbox-release.yml" &&
       runtime.branches?.staging === "1a-staging" &&
       runtime.branches?.prod === "main" &&
-      ["backend", "frontend"].every((role) =>
-        /^[0-9a-f]{40}$/u.test(runtime.repositories?.[role]?.workflow_blob)
-      ),
+      ["backend", "frontend"].every((role) => {
+        const files = runtime.repositories?.[role]?.files;
+        return (
+          files &&
+          Object.keys(files).length === runtimePaths.length &&
+          runtimePaths.every((path) => /^[0-9a-f]{40}$/u.test(files[path]))
+        );
+      }),
     "release-runtime",
     "The pinned sandbox release runtime is unavailable; real repositories are never a fallback."
   );
@@ -90,6 +100,24 @@ export function createReleaseGitHub({
   }
   async function ref(role, name, allowed = [200]) {
     return call(role, "GET", `/git/ref/heads/${name}`, undefined, allowed);
+  }
+  async function verifyRuntime(role, commit) {
+    serviceAssert(
+      sha(commit),
+      "release-runtime",
+      "The sandbox release runtime commit is invalid."
+    );
+    for (const path of runtimePaths) {
+      const file = (await call(role, "GET", `/contents/${path}?ref=${commit}`))
+        .data;
+      serviceAssert(
+        file?.type === "file" &&
+          file.path === path &&
+          file.sha === runtime.repositories[role].files[path],
+        "release-runtime",
+        "A pinned sandbox release runtime file changed."
+      );
+    }
   }
   async function deleteOwnedBranch(role, name, commit) {
     const current = await ref(role, name, [200, 404]);
@@ -251,13 +279,6 @@ export function createReleaseGitHub({
       for (const role of ["backend", "frontend"]) {
         const expected = profile.repositories[role];
         const repo = (await call(role, "GET", "")).data;
-        const file = (
-          await call(
-            role,
-            "GET",
-            `/contents/.github/workflows/${runtime.workflow}?ref=main`
-          )
-        ).data;
         const workflow = (
           await call(role, "GET", `/actions/workflows/${runtime.workflow}`)
         ).data;
@@ -266,8 +287,6 @@ export function createReleaseGitHub({
             repo.full_name === expected.full_name &&
             repo.private === false &&
             repo.permissions?.push === true &&
-            file.type === "file" &&
-            file.sha === runtime.repositories[role].workflow_blob &&
             workflow.path === `.github/workflows/${runtime.workflow}` &&
             workflow.state === "active" &&
             positive(workflow.id),
@@ -275,10 +294,12 @@ export function createReleaseGitHub({
           "Sandbox release repository, access or pinned workflow changed."
         );
         workflows[role] = { workflow_id: workflow.id };
-        for (const environment of ["staging", "prod"])
-          versions[environment][role] = (
-            await ref(role, target(runtime, environment))
-          ).data.object.sha;
+        for (const environment of ["staging", "prod"]) {
+          const commit = (await ref(role, target(runtime, environment))).data
+            .object.sha;
+          versions[environment][role] = commit;
+          await verifyRuntime(role, commit);
+        }
       }
       return {
         actor: { id: String(actor.id), login: actor.login },
@@ -473,6 +494,7 @@ export function createReleaseGitHub({
         "release-state",
         "Release operation lacks saved actor or workflow identity."
       );
+      await verifyRuntime(role, operation[`${role}_commit`]);
       let run = record.workflow_run_id
         ? (await call(role, "GET", `/actions/runs/${record.workflow_run_id}`))
             .data

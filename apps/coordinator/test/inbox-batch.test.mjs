@@ -25,7 +25,11 @@ test("one unscoped sandbox command finishes all cheap work, tests one group and 
     assert.ok(issue.labels.includes("reason:release-completed"));
   }
   const archive = Object.values(h.f.state().history.batches)[0];
-  assert.ok(archive.evidence.includes("https://example.invalid/integration"));
+  assert.ok(
+    archive.evidence.some(
+      (url) => url === "https://example.invalid/integration"
+    )
+  );
   assert.ok(
     archive.evidence.some((url) =>
       url.startsWith("https://example.invalid/release/")

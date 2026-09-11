@@ -7,7 +7,10 @@ import { promisify } from "node:util";
 import test from "node:test";
 import { processInbox } from "../src/inbox-processor.mjs";
 import { coordinateInboxBatch } from "../src/inbox-batch.mjs";
-import { executeRelease } from "../src/release-execution.mjs";
+import {
+  executeRelease,
+  releaseTicketResult
+} from "../src/release-execution.mjs";
 import {
   makeReleaseOperation,
   releaseProtocol,
@@ -17,6 +20,11 @@ import { serviceHash } from "../src/service-contract.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
 import { harness } from "./inbox-batch-harness.mjs";
+import {
+  isReleaseRequestTarget,
+  releaseEnvironmentsForTarget
+} from "../src/release-target.mjs";
+import { validateBatchHistory } from "../src/batch-state.mjs";
 
 const runFile = promisify(execFile);
 
@@ -143,6 +151,58 @@ test("failed staging E2E stops a production request before prod", async () => {
   );
 });
 
+test("a lost save response cannot bypass failed staging E2E on resume", async () => {
+  const batch = await selectedBatch();
+  for (const input of batch.inputs) input.target = "production";
+  batch.fingerprint = serviceHash({
+    inputs: batch.inputs,
+    policy: batch.policy
+  });
+  const calls = [];
+  let lost = false;
+  await assert.rejects(
+    executeRelease({
+      batch,
+      client: client(calls, { failE2e: true }),
+      guard: async () => {},
+      save: async (message) => {
+        if (!lost && message === "release step staging:e2e operation") {
+          lost = true;
+          throw new Error("save response lost");
+        }
+      }
+    }),
+    /save response lost/u
+  );
+  const execution = await executeRelease({
+    batch,
+    client: client(calls, { failE2e: true }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.status, "needs-human");
+  assert.equal(calls.at(-1), "staging:e2e");
+  assert.equal(
+    calls.some((value) => value.startsWith("prod:")),
+    false
+  );
+});
+
+test("request targets have one validated staging-to-production mapping", () => {
+  assert.equal(isReleaseRequestTarget("staging"), true);
+  assert.equal(isReleaseRequestTarget("production"), true);
+  assert.equal(isReleaseRequestTarget("prod"), false);
+  assert.deepEqual(releaseEnvironmentsForTarget("staging"), ["staging"]);
+  assert.deepEqual(releaseEnvironmentsForTarget("production"), [
+    "staging",
+    "prod"
+  ]);
+  assert.throws(
+    () => releaseEnvironmentsForTarget("prod"),
+    /must be staging or production/u
+  );
+});
+
 test("a resumed completed release adds a complete batch ticket result", async () => {
   const batch = await selectedBatch();
   const deferredInput = structuredClone(batch.inputs[0]);
@@ -195,8 +255,39 @@ test("a resumed completed release adds a complete batch ticket result", async ()
   assert.equal(item.decision.batch.fingerprint, batch.fingerprint);
   assert.match(item.decision.reasons.at(-1).message, /passed staging/u);
   assert.equal(item.decision.batch.release.status, "completed");
+  assert.deepEqual(Object.keys(item.decision.batch).sort(), [
+    "code",
+    "evidence",
+    "fingerprint",
+    "message",
+    "release",
+    "selected",
+    "status"
+  ]);
   assert.equal(deferred.decision.status, "waiting");
   assert.equal(deferred.decision.batch.code, "batch-deferred");
+});
+
+test("a stale batch cannot project a completed release onto its ticket", async () => {
+  const batch = await selectedBatch();
+  batch.execution = await executeRelease({
+    batch,
+    client: client([]),
+    guard: async () => {},
+    save: async () => {}
+  });
+  batch.stop = {
+    status: "stale",
+    kind: "evidence",
+    message: "The saved main commit changed."
+  };
+  const result = releaseTicketResult(batch, batch.selected[0]);
+  assert.equal(result.status, "waiting");
+  assert.equal(result.code, "release-unverified");
+  assert.throws(
+    () => validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile),
+    /Only a selected v2 batch can own release execution/u
+  );
 });
 
 test("release operation/report are exact and reject changed versions", () => {

@@ -42,6 +42,8 @@ Without `--issue`, a selected sandbox batch continues in dependency order throug
 protected test staging. A production-target request continues to protected test
 `main` only after matching staging E2E passes. Every integration PR, workflow
 operation, exact commit pair and result is saved before the ticket is completed.
+The Coordinator checks the pinned workflow, contract, and runner files at the
+exact fake environment commit before dispatch.
 
 A passing one-ticket rehearsal adds `rehearsal:passed`. A selected unscoped
 sandbox batch completes only after its required test release sequence passes.

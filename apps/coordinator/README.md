@@ -409,8 +409,10 @@ runs these steps in order for each required environment:
 A staging request stops after step 5. A production request repeats the same
 sequence on test `main`, but only after matching staging E2E passes. Each
 operation is saved before it starts and verified against its release ID, input
-hash, actor, repository, workflow commit, run/attempt, environment, and exact
-code. A confirmed failure stops later steps and needs a person. An uncertain
+hash, actor, repository, all three pinned workflow/runtime files at the exact
+environment commit, run/attempt, environment, and exact code. The request target
+`production` has one fixed mapping: `staging` first, then `prod`; `prod` is never
+accepted as an inbox target. A confirmed failure stops later steps and needs a person. An uncertain
 effect keeps the lock for explicit resume. Completed matching operations are
 reused on resume instead of being dispatched again.
 

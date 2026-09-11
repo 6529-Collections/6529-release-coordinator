@@ -764,9 +764,10 @@ real deployment. See the [execution design](./design.md#agreed-execution-directi
 | Main/staging moves or contains unrelated changes | **Passed offline and exercised live during setup.** Recheck the actual base before mutation; never overwrite refs or promote all of staging. |
 | Sequential services and partial failure | **Passed offline; successful order passed live.** Backend dependencies finish before frontend; partial failure stops the sequence and preserves completed effects. |
 | One active release, interruption and resume | **Passed offline and live.** A saved release owns the lane. Resume reuses verified completed operations and does not dispatch them again. |
-| Journal save response is lost or briefly stale | **Passed offline and live.** Read the intended commit back with bounded retries; accept only the exact saved state. A different state still stops. |
+| Journal save response is lost or briefly stale | **Passed offline and live.** Read the intended commit back with bounded retries; accept only the exact saved state and lock token. A different state still stops. |
 | Ticket completion and cleanup | **Passed live.** Close the ticket only after its matching release finishes and owned branches are gone; archive the complete release evidence. |
 | Staging-only request | **Passed offline.** Stop after matching staging E2E. No production operation is planned. |
+| Pinned release runtime changes | **Passed offline; current blobs confirmed live by read-only inspection.** Verify the workflow, contract and runner at the exact environment commit before dispatch; any mismatch stops without a workflow write. |
 | No-database-change rollback | **Future.** Create verified revert commits, then use ordinary checks and deployments. Keep the original release failed. |
 | Database change/unknown, conflicting revert or failed recovery | **Future.** Stop automatic recovery for a person and keep release ownership while unresolved. |
 | Real product workflow adapters | **Future.** Reuse the frontend/backend Actions and bind every result to the exact code and environment before the first real run. |

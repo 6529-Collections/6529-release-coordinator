@@ -11,6 +11,7 @@ import {
 } from "./service-contract.mjs";
 import { terminal } from "./ticket-presentation.mjs";
 import { releaseTicketResult } from "./release-execution.mjs";
+import { isReleaseRequestTarget } from "./release-target.mjs";
 
 export function batchDecision(decision, result) {
   const next = structuredClone(decision);
@@ -46,25 +47,28 @@ function releasedDecision(decision, result) {
     (reason) =>
       !["coordinator-incomplete", "batch-selected"].includes(reason.code)
   );
+  const completed = result.status === "completed";
+  const waiting = result.status === "waiting";
   const reason = {
     code: result.code,
     message: result.message,
-    action:
-      result.status === "completed"
-        ? "No further action is required for this sandbox request."
+    action: completed
+      ? "No further action is required for this sandbox request."
+      : waiting
+        ? "Recheck the saved batch and release evidence before continuing."
         : "Inspect the saved failing release step before deciding recovery.",
-    owner: result.status === "completed" ? "None" : "Coordinator maintainers"
+    owner: completed ? "None" : "Coordinator maintainers"
   };
   next.reasons.push(reason);
+  const batch = next.batch ?? {};
   next.batch = {
-    fingerprint:
-      next.batch?.fingerprint ?? result.execution?.plan?.batch_fingerprint,
+    fingerprint: batch.fingerprint ?? result.execution?.plan?.batch_fingerprint,
     status:
-      next.batch?.status ??
-      (result.status === "completed" ? "passed" : "blocked"),
-    code: next.batch?.code ?? result.code,
-    message: next.batch?.message ?? result.message,
-    ...(next.batch ?? {}),
+      batch.status ?? (completed ? "passed" : waiting ? "waiting" : "blocked"),
+    code: batch.code ?? result.code,
+    message: batch.message ?? result.message,
+    selected: Array.isArray(batch.selected) ? batch.selected : [],
+    evidence: Array.isArray(batch.evidence) ? batch.evidence : [],
     release: {
       id: result.execution?.plan?.release_id,
       status: result.execution?.status,
@@ -80,7 +84,7 @@ function releasedDecision(decision, result) {
       )
     }
   };
-  next.status = result.status === "completed" ? "completed" : "action-needed";
+  next.status = completed ? "completed" : waiting ? "waiting" : "action-needed";
   next.next_action = reason.action;
   next.action_owner = reason.owner;
   next.submitter_action = "None currently required.";
@@ -173,7 +177,7 @@ export async function coordinateInboxBatch({
       };
     } else if (
       item.entry.request.database_change !== "no" ||
-      !["staging", "production"].includes(item.entry.request.target)
+      !isReleaseRequestTarget(item.entry.request.target)
     ) {
       result = {
         status: "waiting",

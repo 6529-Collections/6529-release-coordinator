@@ -9,6 +9,7 @@ import {
   verifyBatchInputs
 } from "./inbox-preparation.mjs";
 import { presentRunTicket } from "./inbox-ticket-writer.mjs";
+import { serviceAssert } from "./service-contract.mjs";
 const isNumber = (value) => Number.isSafeInteger(value) && value > 0;
 
 export async function processInbox({
@@ -69,6 +70,11 @@ export async function processInbox({
   let pendingNumber = null;
   try {
     if (batching && !run.batch_fingerprint) {
+      serviceAssert(
+        run.scope.issue_number === null && run.scope.close_test === false,
+        "batch-scope",
+        "Only an unscoped sandbox run can continue an unfinished release."
+      );
       const active = Object.values(state.batches ?? {}).filter(
         (record) =>
           record.policy?.version === "sandbox-batch-v2" &&

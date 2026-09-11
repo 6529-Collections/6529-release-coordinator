@@ -12,6 +12,14 @@ const successful = (result) => result?.status === "passed";
 export function releaseTicketResult(batch, number) {
   const execution = batch.execution;
   if (!batch.selected.includes(number)) return null;
+  if (batch.stop?.status === "stale")
+    return {
+      status: "waiting",
+      code: "release-unverified",
+      message:
+        "The saved batch is stale, so its release result cannot complete this ticket.",
+      execution
+    };
   if (execution?.status === "completed")
     return {
       status: "completed",

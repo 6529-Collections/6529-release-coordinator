@@ -695,6 +695,9 @@ Keep the current command, profile isolation, cheap-first selection, exact eviden
 logs, no-database-change batch boundary and manual stop-before-resume procedure.
 The sandbox release sequence is implemented locally and has
 [live acceptance](./testing/release-sequence-2026-09-11.md).
+Its request target mapping is fixed in one module: `staging` runs staging only,
+while `production` runs staging and then `prod`. Each fake workflow dispatch
+requires the pinned workflow, contract, and runner blobs at its exact commit.
 
 Later execution work adds trusted product workflow adapters, deployed recovery
 targets and conditional rollback. Connect the already tested order to real

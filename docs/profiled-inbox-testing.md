@@ -207,11 +207,14 @@ passing batch. For each required environment it integrates backend first, runs
 `dbMigrationsLoop`, `worker`, and `api` in order, integrates frontend, runs the
 frontend workflow, and then waits for an E2E result tied to that exact backend
 and frontend pair. Production is never started before matching staging E2E.
+The inbox accepts `staging` or `production`; one shared mapping turns
+`production` into the ordered release environments `staging`, then `prod`.
 
 Each integration uses a protected PR and required `Sandbox check`. Each workflow
 result must match the saved release ID, operation ID, operation input hash, exact
-commits, environment, role, unit, runner repository, run, attempt, and fixed
-workflow commit. The journal saves an operation before dispatch and its verified
+commits, environment, role, unit, runner repository, run, attempt, and every
+fixed workflow/runtime file at the exact environment commit. The journal saves
+an operation before dispatch and its verified
 result afterward. Resume reuses a completed matching operation; it does not run
 it again. A confirmed failure stops later steps and marks the release for a
 person. Unknown effects keep the lock for explicit reconciliation.

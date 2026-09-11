@@ -5,6 +5,7 @@ import {
   verifyServiceReport
 } from "./service-contract.mjs";
 import { validateReleaseExecution } from "./release-state.mjs";
+import { isReleaseRequestTarget } from "./release-target.mjs";
 
 const hash = (value) => /^[0-9a-f]{64}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -54,7 +55,7 @@ export function validateBatchHistory(batches, profile) {
             batch.inputs[i].input.inbox?.issue_number === number &&
             batch.inputs[i].input.inbox.repository_id === profile.inbox.id &&
             (batch.policy.version === "sandbox-batch-v1" ||
-              ["staging", "production"].includes(batch.inputs[i].target))
+              isReleaseRequestTarget(batch.inputs[i].target))
         ),
       "batch-state",
       "Batch ticket scope changed."
@@ -197,7 +198,9 @@ export function validateBatchHistory(batches, profile) {
     );
     if (batch.execution) {
       serviceAssert(
-        batch.policy.version === "sandbox-batch-v2" && batch.selected.length,
+        batch.policy.version === "sandbox-batch-v2" &&
+          batch.selected.length &&
+          batch.stop?.status !== "stale",
         "release-state",
         "Only a selected v2 batch can own release execution."
       );
