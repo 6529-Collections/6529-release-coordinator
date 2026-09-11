@@ -6,9 +6,10 @@ merges, and runs supported one-ticket sandbox service/database checks and
 bounded sandbox batches without database changes.
 It does not authorize or execute releases. See [progress](./progress.md) for
 that boundary.
-This document retains the written execution baseline formerly embedded in the
-root README. The [process diagram](../release-coordinator-process.html) is a
-separate step-by-step draft; it currently differs in the ways listed below.
+The [agreed execution direction](#agreed-execution-direction-september-11)
+and [process diagram](../release-coordinator-process.html) describe the same
+September 11 decisions. They are requirements for later implementation, not
+evidence that product release execution is available.
 
 ## Inbox stage before execution
 
@@ -31,11 +32,10 @@ ticket processing are not execution ownership.
 
 That document owns the first-processing contract. It keeps the existing CLI input
 and read-only commands; `inbox:run` combines inspection, rehearsal, supported
-sandbox checks, and Issue updates. It does not authorize release execution or
-settle the choices below.
-The full execution design's lane, batch, and worker database should not be
-introduced merely to organize tickets. The smaller processing stage still
-uses its own GitHub decision journal, not the future worker database.
+sandbox checks, and Issue updates. It does not authorize release execution.
+Keep the existing GitHub journal and manual operation. A separate database,
+heartbeat, dashboard and automatic takeover are not prerequisites for the next
+step. The future release lane is different from today's per-command inbox lock.
 
 <a id="next-step-v01-run-logging"></a>
 
@@ -165,8 +165,8 @@ merge evidence. Git rehearsal changes no product branches and runs no builds
 or deployments; the sandbox service extension below runs application tests.
 
 This scope requires explicit destinations and one documented merge method.
-It does not settle the real release lane, timing of `main` changes, or artifact
-policy below. The ticket contract now owns rehearsal outcomes; later release
+It does not implement the agreed real release lane, timing of `main` changes, or
+build policy below. The ticket contract now owns rehearsal outcomes; later release
 execution still requires its own decisions and evidence.
 
 <a id="next-bounded-stage-sandbox-services-and-database"></a>
@@ -194,8 +194,8 @@ decisions in the same ticket's history without claiming release completion.
 
 The shared profile selects configuration and available actions, not permissions.
 Real execution adapters remain absent. Testing the order and data behavior in
-sandbox does not settle the real lane, merge timing, builds, production database
-inspection, or deployment/recovery choices. The later batch stage still starts
+sandbox does not implement the real lane, merge timing, builds, production database
+inspection, or deployment/recovery rules. The later batch stage still starts
 with requests without database changes.
 
 <a id="proposed-batch-testing-and-selection"></a>
@@ -353,526 +353,365 @@ earlier release as satisfying a prerequisite needs later, verified release
 evidence. Until then, put inseparable work in one complete ticket; CT-20 records
 the current rejection behavior, not proof of this future feature.
 
-## Decisions to settle before execution
+<a id="decisions-to-settle-before-execution"></a>
 
-These are pre-existing differences, not changes introduced by the inbox reader.
-The written baseline dates from commit `6980d965` (August 25); the differing
-process steps were revised in `7834ebfd` (August 28). Housekeeping has made the
-conflict explicit rather than treating both drafts as an agreed implementation.
+## Agreed execution direction, September 11
 
-| Question | Written baseline below | Process diagram draft |
-| --- | --- | --- |
-| How many releases may progress at once? | One global lane stays reserved across main, staging, production, and recovery. | Staging and production have separate reservations; staging is released after validation. |
-| When does `main` change? | After combined tests, before release builds and staging. | After staging validation, the production decision/build, and a saved recovery point. |
-| What files reach production? | The same saved builds that passed staging. | Fresh production builds from the same validated commits, with environment-specific files/settings. |
+These decisions replace the conflicting August written and visual drafts.
+They do not enable deployment in the current command.
 
-Before a worker can merge, build, or deploy, choose and record these policies,
-then update both views together. Also define how a `target: staging` request
-stops after staging and what authorizes any later production continuation.
-The request schema permits both targets; a full production story must not be
-read as permission to promote a staging-only request.
+| Question | Agreed rule |
+| --- | --- |
+| How many releases progress at once? | One batch from selection through staging, production, or completed recovery. Later requests may arrive and ordinary PR CI may run, but the next release does not start. |
+| When does `main` change? | After staging E2E passes and production is authorized. Merge the selected exact PR versions through normal protected Git merges. |
+| What builds reach production? | Existing product workflows build separately for staging and production. Reuse their settings; no portable-build or environment-variable redesign. |
+| What gates production? | Successful staging deployment/version/health checks and completed successful required E2E for the recorded deployed versions. Failed E2E fails the release attempt; missing, cancelled, skipped-required, or uncertain results cannot pass. |
+| What happens after failure? | Stop advancement. After shared state changed, recover the recorded batch; never split it as a recovery shortcut. Database-changing or uncertain releases require a person. |
+| How does automatic rollback work? | Only for confirmed no-database-change releases: new commits undo the failed batch, required checks run, and ordinary deployment Actions rebuild and deploy the restored code. Verify recovery before releasing the lane. |
+| Where does state live? | Continue using the profile's GitHub inbox journal. Keep active records complete; archive finished records in the same repository and read them when needed. Remove the lifetime 100-batch cap through that storage refactor. |
 
-The design below is retained for review, including its older choices. It is
-not a second operational authority alongside the current product release
-instructions. The historical Release Bus implementation has no design authority
-for this new Coordinator.
+The Coordinator owns selection, ordering, authorized merges/dispatch, waiting,
+evidence matching, ticket outcomes and recovery decisions. Product repositories
+own builds, environment settings, secrets, deployment internals, tests and release
+notes. Their existing deploy skills/workflows remain the integration interfaces.
+Current product skills allow E2E to run separately without gating promotion;
+the new Coordinator deliberately adds a staging E2E gate. It does not invent a
+second test suite or weaken required PR/security checks.
 
-## The problem
+A `target: staging` request finishes after successful staging validation and
+saving its result; it never reaches production implicitly. A later explicitly
+authorized production continuation must revalidate selected versions,
+destinations and evidence. If another release changed those inputs, test the new
+combination. A production-intended batch keeps its lane through production or
+recovery, including while waiting for any required approval.
 
-Many developers and agents want to release work at the same time. Today, merge
-and deployment are too tightly connected:
+One lane serializes this Coordinator; it cannot stop unrelated humans or Actions.
+Check current refs and conflicting runs before mutations and match deployed
+versions to E2E. Shared staging may contain other changes: inspect and record its
+actual merge composition, preserve others' work, and do not claim staging
+validated a different production composition. Changed bases or scope require
+fresh matching combined evidence; if that cannot be established, stop.
 
-- one deployment may require `main` to stay unchanged for a long time;
-- another PR can merge while a deployment is running and invalidate a later
-  `main` equality check;
-- frontend and backend PRs may need a specific order;
-- shared staging and production cannot safely accept overlapping mutations;
-- someone must keep watching workflows, tests, retries, and recovery;
-- it is difficult to answer what is queued, what is running, and what exact
-  code is deployed.
-
-The Coordinator should make release submission asynchronous and durable:
-
-> Submit exact ready PRs and their dependencies. The system owns the release
-> until it finishes or reaches a problem that genuinely needs a human.
+Verified integration references on September 11: frontend
+[`deploy-6529`](https://github.com/6529-Collections/6529seize-frontend/blob/faf4aa616bc3a25ccab5a0db8162980d9cdaedd1/ops/skills/deploy-6529/SKILL.md),
+[`Web Deploy - STAGING`](https://github.com/6529-Collections/6529seize-frontend/blob/faf4aa616bc3a25ccab5a0db8162980d9cdaedd1/.github/workflows/deploy-staging.yml),
+[`Web Deploy - PROD`](https://github.com/6529-Collections/6529seize-frontend/blob/faf4aa616bc3a25ccab5a0db8162980d9cdaedd1/.github/workflows/build-upload-deploy-prod.yml),
+backend [`deploy-6529`](https://github.com/6529-Collections/6529seize-backend/blob/a367473904f83816fd2b67ab5a88d9bfe19e288e/ops/skills/deploy-6529/SKILL.md)
+and [`Deploy a service`](https://github.com/6529-Collections/6529seize-backend/blob/a367473904f83816fd2b67ab5a88d9bfe19e288e/.github/workflows/deploy.yml).
+These are source observations, not deployments performed in this review.
+The retired Release Bus has no design authority here.
 
 ## Core rule: one release lane
 
-Only one batch may use the release lane at a time.
+Many requests may wait, but only one release batch progresses at a time.
+The active batch holds the lane until its requested target succeeds or recovery
+reaches a verified and saved safe result. A human-required or uncertain state
+keeps the lane reserved. Later release selection/testing does not overlap it.
+Developers may continue their PRs, ordinary CI and request submission.
 
-The active batch keeps the lane until the release finishes or recovery is
-complete. While it owns the lane, no other batch may:
+Save the lane, batch identity and current step in the GitHub journal. Today's
+per-command inbox lock does not yet provide this release-spanning ownership.
+Manual resume still requires stopping the old process and settling in-flight
+calls. Logs do not prove a silent process is dead. Heartbeat, automatic expiry,
+automatic takeover and speculative testing against an active release are deferred.
+Speculative future releases would need revalidation when the active batch changes.
 
-- freeze its versions;
-- change `main`;
-- use staging;
-- deploy to production.
+## Product promise and ownership
 
-Developers may keep working on pull requests. Review and CI may also continue.
-Those changes wait for a later batch before they can merge.
+One request names exact frontend/backend PRs, commits, release-part dependencies,
+selected backend services and order, target and database-change answer. The
+requester's stated name is context; the central workflow records the verified
+GitHub actor. Submission, a passing rehearsal and profile selection grant no
+merge or deployment authority.
 
-This is slower than running several releases at once. It is also easier to
-understand and recover in version one. The Coordinator always knows which one
-batch owns `main`, staging, and production.
+The Coordinator should eventually perform the authorized sequence and save a
+clear result without requiring the submitter to watch every Action. It owns:
 
-## Product promise
+- request verification, queue order, whole-ticket selection and reasons;
+- batch identity, current phase, lane ownership, bounded retries and recovery;
+- normal authorized Git merges, workflow dispatch, and matching results;
+- ticket projections and links to the product workflows' evidence.
 
-A developer, automation, or agent can submit one release request containing:
+Product repositories continue owning:
 
-- exact frontend and backend PR numbers and 40-character head SHAs;
-- dependencies between release parts;
-- selected backend deploy units and any release-specific dependencies;
-- whether the frontend, backend, or both will change;
-- whether the database changes;
-- the requester's stated identity and request time.
+- PR reviews, required checks, security gates and branch protections;
+- builds, dependency installation, environment configuration and secrets;
+- backend/frontend deployment and any database change mechanism;
+- runtime version/health proof and E2E entry points;
+- autonomous release notes, including PR/service grouping metadata.
 
-The release JSON says what should be released. It does not prove who submitted
-it. One trusted workflow in this Release Coordinator repository adds the real
-GitHub actor, actor ID, and workflow run when it sends the request to the inbox.
-The repositories, branches, and commits to release come from the JSON itself.
-
-Once accepted, the Coordinator queues, merges, builds, deploys, tests, retries,
-recovers, and reports the exact outcome. The submitter does not need to keep a
-browser, terminal, or agent task open.
+Do not copy those implementations into the Coordinator or restore the old
+Release Bus. The current request schema needs no change for these decisions.
+Cross-ticket links and database-changing batches remain deferred.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    U[Developer or agent] --> S[Product release skill]
-    S --> CLI[Release-request CLI]
-    CLI --> LOCAL[Local run and outbox files]
-    CLI -->|submit| GHIN[Central GitHub submission workflow]
-    GHIN --> INBOX[Public GitHub Issue inbox]
-    INBOX --> R[Local read-only inbox reader]
-    INBOX --> RC[Local read-only readiness observations]
-    INBOX --> IP[inbox:run - inspect and rehearse]
-    IP -->|record reasons and result| INBOX
-    INBOX -. later .-> W[Coordinator worker]
-    W --> DB[(Coordinator database)]
-
-    W --> GH[GitHub API and merge rules]
-    W --> FE[Frontend workflows]
-    W --> BE[Backend workflows]
-    W --> DBC[Database change workflow]
-    FE --> ART[Saved builds]
-    BE --> ART
-    FE --> STG[Staging]
-    BE --> STG
-    FE --> PROD[Production]
-    BE --> PROD
-    DBC --> STG
-    DBC --> PROD
-
-    STG --> E2E[Version and journey checks]
-    PROD --> E2E
-    E2E --> DB
-    DB --> C[Final result]
-    W -. status .-> INBOX
+    U[Developer or agent] --> CLI[Product skill and request CLI]
+    CLI --> INBOX[Verified GitHub Issue inbox]
+    INBOX --> IP[inbox:run - checks and sandbox trials]
+    IP --> J[(Profile-specific GitHub journal)]
+    INBOX -. later .-> W[Release worker - one batch]
+    W --> J
+    W --> GH[Normal protected merges]
+    W --> BE[Existing backend Actions - one service at a time]
+    W --> FE[Existing frontend Actions]
+    BE --> STG[Staging]
+    FE --> STG
+    STG --> E2E[Matching versions and successful staging E2E]
+    E2E -->|with production authorization| PROD[Existing production Actions]
+    PROD --> VERIFY[Versions, health and required safe E2E]
+    VERIFY --> J
+    J --> INBOX
 ```
 
-The Coordinator is a separate system. It coordinates the product repositories
-but does not copy their build, deployment, journey-test, notification, or release-note
-logic.
-
-### Coordinator owns
-
-- authenticated release submission;
-- the durable cross-repository queue;
-- dependency resolution and stable ordering;
-- release state, attempts, ownership records, errors, and history;
-- one global release lane;
-- staging and production environment ownership;
-- workflow dispatch and result correlation;
-- exact saved batch records and build identities;
-- retries, safe recovery, and notifications.
-
-### Product repositories own
-
-- PR review and CI;
-- how frontend and backend code is built;
-- how the backend is deployed;
-- how the frontend is deployed;
-- how database changes are applied;
-- runtime version reporting;
-- repository-specific checks and journey-test entry points;
-- deployment communication and release-note implementations.
+This is an execution design. Current sandbox trials and their temporary MySQL
+prove limited test behavior, not a real deployment or rollback.
 
 ## Where inbox and queue state live
 
-The first inbox is a set of GitHub Issues in this public repository. One issue
-stores one accepted release request and its trusted submission proof. This is
-enough to collect requests before the Coordinator starts doing release work.
+Use the existing independent `codex/inbox-state` branch in the selected inbox
+repository. The current implementation rewrites `inbox-state.json`; the
+[history storage plan](./inbox-processing.md#planned-history-storage) adds
+archived finished records in the same repository. A separate database or new
+operator dashboard is not required for this stage.
 
-Before release execution, the [inbox-processing plan](./inbox-processing.md)
-adds a separate lifecycle for organizing these tickets. Its statuses and
-decision history must not be confused with an executing release batch. Its
-durable history lives on the inbox repository's independent `codex/inbox-state`
-branch; editable labels alone are not that history.
+Minimum release records are the requests and their trusted receipts, selected
+PR heads, actual destination compositions, target, ordered services, phase,
+operation/run IDs and attempts, result links, recorded deployed versions,
+pre-release recovery targets, blockers and human decisions. Preserve useful
+checksums supplied by workflows; do not create another artifact store.
 
-The inbox is not the full release queue. When the Coordinator starts batching,
-merging, building, and deploying requests, it will use its own database, such as
-PostgreSQL. GitHub has one merge queue per repository, so it cannot hold the full
-truth for one release that includes both frontend and backend.
-
-Minimum durable records:
-
-- release request and stated requester;
-- trusted GitHub actor, actor ID, and central workflow run;
-- ordered release items and dependency edges;
-- exact PR heads and captured `main` SHAs;
-- current state and state-transition history;
-- merge, build, staging, production, and journey-test attempts;
-- GitHub workflow run IDs and links;
-- saved build checksums and running version identities;
-- retry limits, blockers, ownership records, and human decisions.
-
-Only the Coordinator changes queue state. GitHub statuses and PR comments are
-useful projections, but they are not the authoritative queue.
+GitHub Issues show the result, but editable labels/comments alone are not the
+trusted journal. Archived results remain readable on demand. Retain enough
+identity to avoid treating repeated work as a brand-new batch or resetting its
+attempt budget. Never archive unfinished operations or pending cleanup.
 
 ## How progress is saved
 
-Before each step starts, the Coordinator saves what it is about to do. It also
-saves which worker is doing the work and when that worker last reported that it
-was active.
+Before an external step starts, save its intended action, exact inputs and owner.
+Afterward, verify what happened and save the result before advancing. A missing
+or uncertain save stops further actions and keeps ownership. Partial saves or
+responses require inspecting the recorded operation, not starting a duplicate.
 
-After the step finishes, the Coordinator saves the result and the proof. It
-moves to the next step only after this save succeeds.
-
-Each release record shows:
-
-- the current step and status;
-- when the step started and finished;
-- which worker is responsible;
-- the result and its proof;
-- the current blocker, if there is one;
-- what should happen next.
-
-If a worker stops, another worker reads this record and checks what really
-happened before it continues. It does not trust browser memory or a workflow
-success message.
-
-If the start or result cannot be saved, the release stops. It does not move to
-the next step or open the release lane while its state is unclear. Saving the
-same progress again must be safe and must not create a second result.
-
-## Sources of truth
+Explicit resume after the old process stops reuses those identities and checks
+remote truth. It does not trust browser state, local logs or a success message
+alone. The known paused-process overlap case remains outside automatic recovery.
 
 | Fact | Source of truth |
 | --- | --- |
-| Accepted request and trusted submission proof | Public GitHub Issue plus verified central workflow evidence |
-| Queue, order, and current release phase | Coordinator database, once processing exists |
-| PR number, current exact head, review, and CI | GitHub |
-| Saved build identity | Trusted build storage |
-| What is actually running | Runtime version proof |
-| Whether the running release works | Journey tests and health signals linked to the saved batch |
+| Accepted request and trusted submission proof | Issue plus verified central workflow evidence |
+| Queue, phase, ownership and attempts | Profile-specific GitHub journal and verified archived records |
+| PR head, destination refs, reviews and required CI | GitHub |
+| Built/deployed code identity | Existing workflow evidence plus actual runtime/service version proof |
+| Whether that deployed combination passed | Required E2E and health results matched to its versions |
 
-## How `main` is protected
+## How shared branches are changed
 
-`main` is always protected by GitHub repository rules. Normal users and agents
-cannot push or merge directly. A narrowly permitted Release Coordinator GitHub
-App is the normal merge actor.
+Preserve ordinary repository protections and authorized merge paths. Do not
+require new exclusive GitHub App ownership just to integrate this workflow.
+The execution identity and permissions still need verification before building
+that adapter; journal ownership is not permission to merge.
 
-The database queue decides order. GitHub rules enforce authority.
+Freeze exact PR heads and destination commits. Finish cheap elimination before
+expensive combined PR checks. Re-read refs and required checks immediately before
+normal protected merges and verify each result afterward. If a destination
+moved, recompute and obtain evidence for the changed combination. Never force
+an old tree over somebody else's work, or claim a client-side check makes two
+GitHub repository merges atomic.
 
-When a batch reaches the front of the queue, the Coordinator:
+Shared `1a-staging` may differ from `main`. Rehearsing only against `main`, as the
+current sandbox does, is insufficient proof for an actual staging merge. Inspect
+staging contents and candidate merge before pushing; frontend staging pushes can
+start deployment immediately. Keep backend dependencies ready before the
+frontend merge. Likewise, do not merge all of staging into production: use the
+selected PR changes and verify the actual production composition.
 
-1. reserves the global release lane;
-2. freezes the exact pull request versions and current `main` versions;
-3. combines and tests candidates on temporary branches, using the bounded
-   selection rules above before choosing one exact passing batch;
-4. checks the pull requests, approvals, CI, dependencies, and `main` again;
-5. moves the tested result to `main`;
-6. keeps the lane until the release or recovery is complete.
-
-The final recheck and the change to `main` happen together. If anything changed,
-`main` does not move.
-
-GitHub cannot atomically merge two different repositories. Therefore:
-
-- all cross-repository changes are fully preflighted before the first merge;
-- backend changes must be safe to land before dependent frontend changes,
-  normally through backward compatibility or a feature flag;
-- if only part of the cross-repository merge succeeds, the release stops,
-  records exact truth, and requires a deliberate repair;
-- the system never claims that two repository merges were atomic.
-
-An emergency administrator bypass may exist, but it is not part of the normal
-release path and must be audited.
-
-## Queue and release lane
-
-**Future release-execution concept, outside the v0.1 logging milestone.** The
-database, heartbeat and takeover below are not current inbox behavior or part
-of the next implementation step.
-
-Many requests may wait in the durable queue. Only one batch may become active.
-
-The active batch owns one global lane across `main`, staging, and production.
-No later batch may overtake it. A later batch starts only after the active
-release finishes or recovery reaches a known safe result.
-
-The lane is saved in the Coordinator database. It has an owner, a heartbeat,
-and a current step. If the worker stops, another worker must prove that it can
-continue safely before it takes over.
+If only part of a cross-repository merge or deployment succeeds, save exactly
+which refs/services changed and stop advancement. Recover that recorded state;
+uncertain or incompatible partial state requires a person. Never mark the batch
+successful or begin subset selection after shared state changed.
 
 ## Release lifecycle
 
-The first state model is:
+The proposed successful production path is:
 
 ```text
-SUBMITTED
-  -> CHECKING
-  -> WAITING
-  -> ACTIVE
-  -> PREPARING
-  -> TESTING
-  -> MOVING_MAIN
-  -> BUILDING
-  -> STAGING
-  -> STAGING_VALIDATED
-  -> PRODUCTION
-  -> VERIFYING
-  -> DONE
+CHECKING -> WAITING -> ACTIVE -> PREPARING -> TESTING
+  -> MOVING_STAGING -> STAGING -> STAGING_E2E -> STAGING_VALIDATED
+  -> MOVING_MAIN -> PRODUCTION -> VERIFYING -> DONE
 ```
 
-This is the successful path. If a release fails after `main`, staging, or
-production changed, it leaves this path and enters `RECOVERING`. A successful
-release never passes through recovery.
-
-Important final or side states:
-
-- `CANCELLED`
-- `NEEDS_HUMAN`
-- `RECOVERING`
-- `RECOVERED`
-- `FAILED`
-
-Every transition is saved before later work begins. Operations are designed to
-be safe to retry, and workers claim durable ownership so a restart cannot create
-two owners for one mutation.
+A staging-only request ends successfully after `STAGING_VALIDATED` and saving its
+outcome. Other states include `FAILED`, `RECOVERING`, `RECOVERED`, `NEEDS_HUMAN`
+and `CANCELLED`. A recovered release still records that the original release
+failed. Release states are different from today's inbox labels; do not teach
+intake to close a worker-owned request merely because that worker merged its PRs.
 
 ## Staging
 
-For each release, the Coordinator:
+1. Save current staging refs and actually deployed frontend/service versions as
+   recovery targets before the first shared change.
+2. Verify the actual merge composition with `1a-staging`, merge backend changes
+   normally, then dispatch `Deploy a service` with `environment=staging`.
+3. Wait for each selected backend service before dispatching the next in
+   dependency order. When database-changing execution is later supported, use
+   and verify the existing database service before its dependent services.
+4. After backend prerequisites succeed, merge frontend changes into
+   `1a-staging`. Its push starts `Web Deploy - STAGING`; use its documented
+   manual dispatch for an authorized ops-only deployment.
+5. Save the exact runs, source commits, deployed versions and existing artifact/
+   health results. Actions own the separate staging builds and settings.
+6. Wait for required staging E2E to finish successfully for the recorded deployed
+   frontend/backend combination. Reuse existing tests, including an appropriate
+   trigger and version coverage for backend-only releases.
+7. Recheck deployed versions and record `STAGING_VALIDATED` only when all required
+   results match. A deployment success alone does not pass this gate.
 
-1. applies the saved database change when the batch has one;
-2. checks that the staging database change worked;
-3. deploys the selected backend services from saved builds in dependency order, verifying each before its dependents;
-4. deploys the saved frontend build after the backend is ready;
-5. confirms the exact frontend and backend versions;
-6. tests the important user journeys;
-7. records `STAGING_VALIDATED` only when the versions and tests pass.
-
-Staging validation belongs to the saved batch. A successful workflow is not
-enough. The running versions and the user journeys must both pass.
+Match repository, environment, workflow/run attempt, source and deployed service
+versions. If staging changes during E2E, the old run cannot validate the new
+combination. Failed required E2E fails the release attempt and blocks production.
+Missing, cancelled, skipped-required, or unconfirmable results stop advancement
+with a clear reason; they are never converted into a pass or automatic code blame.
 
 ## Production
 
-Production receives the same saved builds that passed staging.
+Production uses the selected PR versions and a verified `main` composition.
+Existing workflows build fresh production packages with their normal production
+settings. Staging bytes are not promoted and the Coordinator does not redesign
+how the apps receive configuration.
 
-The Coordinator:
-
-1. checks and saves the current production versions and last working builds;
-2. applies and verifies the saved database change when the batch has one;
-3. deploys the selected backend services from saved builds in dependency order, verifying each before its dependents;
-4. deploys the frontend build after the backend is ready;
-5. gives the release to more users slowly when the platform supports it;
-6. confirms the exact production versions;
-7. runs safe tests of important user journeys;
-8. watches health for the full agreed time;
-9. closes the successful release only when every check passes.
-
-The Coordinator compares production with the saved batch. It never trusts a
-deployment success message on its own.
+1. Require matching successful staging validation and production authorization.
+2. Save the currently deployed frontend and each affected backend service version,
+   source and workflow/build identity. Current `main` is not necessarily the last
+   working deployed version; services may have different prior versions.
+3. Recheck the destination compositions, selected PRs and required gates. Changed
+   bases or scope require fresh matching combined evidence before proceeding.
+4. Merge backend changes into `main` and dispatch `Deploy a service` with
+   `environment=prod`, one selected service at a time in dependency order.
+5. After backend prerequisites pass, merge frontend changes into `main` and
+   dispatch `Web Deploy - PROD`. Preserve existing release-note grouping.
+6. Confirm exact running versions and existing health checks, and wait for the
+   configured required production-safe E2E results.
+7. Save the result before closing the successful release and freeing its lane.
+   A new gradual-rollout or monitoring platform is outside this step.
 
 ## Recovery path
 
-Recovery is a separate path. It runs only after `main`, staging, or production
-changed and the release later failed.
+Recovery starts only after shared refs or an environment changed and the release
+later failed. Before any mutation, failure simply holds/fails the candidate and
+cleans its owned trials. Never split a deployed batch to recover it.
 
-The Coordinator:
+The process diagram groups recovery as `R1` through `R5`:
 
-1. stops the release and saves the exact current state;
-2. chooses automatic recovery only when the database did not change and
-   restoring the old code is safe;
-3. restores the last working builds and adds new commits that undo the failed
-   code, or follows the plan chosen by a person;
-4. confirms the running versions, tests important user journeys, and checks
-   system health;
-5. closes the failed release and releases the lane only when the system is safe
-   and its exact state is known.
+1. **Stop and save.** Stop new steps, inspect in-flight Actions and record which
+   refs and services changed. Do not launch recovery against an unknown operation.
+2. **Choose automatic or human recovery.** A database-changing release, unknown
+   database answer/effect, missing recovery target or uncertain state requires a
+   person. Confirmed no database change is necessary but not sufficient: restoring
+   the selected code must also be safe and verifiable.
+3. **Revert and deploy normally.** Prepare new commits on the affected current
+   shared branches undoing this batch's changes. Preserve unrelated work and
+   branch protections. Verify restored source against the saved deployed targets,
+   run required checks, then rebuild/deploy through ordinary Actions in a verified
+   compatible service order. Do not blindly reverse the original order.
+4. **Verify recovery.** New deployment identities must map to the intended
+   restored source. Check versions, health and required E2E in every affected
+   environment. New commits/builds need not have the old IDs or identical bytes.
+5. **Close the failed release.** Save the original failure and recovery outcome.
+   Release the lane only after recovery is verified and saved, or a person records
+   a known safe resolution. Successful recovery does not turn the release green.
 
-These steps are shown as `R1` to `R5` in the process diagram. If the database
-changed or anything is unclear, a person chooses how to recover. The lane stays
-reserved until recovery is complete.
+Frontend production currently rejects deploying an older commit directly. A new
+revert commit preserves history and uses its existing release path. Do not reset
+shared refs, force-push, blindly copy old packages, or assume reverting source also
+reverses a database change. A conflict, moved destination, incompatible per-service
+recovery targets, failed recovery check or uncertain save stops automatic work for
+a person. Do not repeatedly improvise different rollback combinations.
 
 ## Failure and recovery rules
 
 ### Database changes
 
-These are proposed real-release rules. The sandbox implements their limited
-sample equivalent; real database inspection/execution remains absent. The request's `database_change` answer covers release-specific schema
-changes and one-off data changes. Normal application reads/writes still happen
-for `no` requests; a test database must still be prepared.
+The request answer covers release-specific schema and one-off data changes, not
+ordinary application writes. Compare it with inspected exact source using trusted
+rules, including entities/schema and data-change code. Absence of a familiar
+migration filename does not prove `no`. Unknown coverage/identity holds execution;
+a false `no` requires a corrected request, without rewriting its original receipt.
 
-Compare the declaration with inspected changes at the exact saved commits using
-trusted rules. Include entity/schema definitions and one-off data-change code,
-not just a migration directory. A yes from either source means database change.
-An `unknown` answer, incomplete coverage, or missing change identity holds
-execution. Absence of a familiar filename does not prove `no`. A declared `no`
-contradicted by inspected code is recorded as database-changing and held for a
-corrected request; never modify the accepted receipt or silently run it as `no`.
+Single-ticket sandbox database tests exist. Real database inspection/execution
+and database-changing batches remain deferred. When real execution is built,
+reuse the backend's selected database service (which may require deploying and
+invoking `dbMigrationsLoop`), verify its effects before dependents and never repeat
+a one-off change merely because a response was lost. Database-changing releases
+never roll back automatically. Temporary MySQL cleanup is not real recovery proof.
 
-The same saved database change runs in staging first and production later. It
-must finish and be verified before dependent backend services start. In the real
-backend this may involve deploying and invoking `dbMigrationsLoop`; that adapter
-and its proof remain to be designed, rather than assuming a separate SQL command.
-Each environment must report the exact change, starting state, and verified result.
+### Changed PRs, bases or environments
 
-Only selected services run in dependency order. Omitted prerequisites need exact
-existing-state proof; do not add them automatically. Retry/resume must verify
-prior effects and avoid applying the same one-off data change twice. Unknown
-partial state stops dependent work and requires reconciliation.
+Before shared mutation, changed requested heads or bases invalidate the candidate;
+never substitute a new PR version silently. After mutation starts, keep the saved
+batch identity, stop advancement if a required input moved, and reconcile actual
+state. A later source-branch commit is not added to an active deployment. Do not
+claim old E2E proves new code. Staging-to-production continuation rechecks inputs.
 
-A database-changing release never recovers automatically. If it fails after the
-database changed, the Coordinator saves the exact state and waits for a person.
-Cleaning up a disposable sandbox database proves test isolation, not real rollback.
+### Failed preflight, infrastructure or build
 
-### A waiting PR moves
+Before shared mutation, confirmed Git/code failures may use the bounded selection
+rules above. Infrastructure/unknown failures get their own reasons and bounded
+same-operation retries, not PR blame. Missing evidence or cleanup stops work.
+After a staging ref, `main` or an environment changed, even a build failure needs
+recorded recovery/reconciliation; do not assume nothing changed because deploy
+never finished. Preserve existing workflow checks and verify retry run identity.
 
-Cancel or supersede the old exact request. Never silently deploy the new head.
+### Failed staging or production E2E/health
 
-### An active PR branch moves
-
-The release continues with its already saved `main` commits and builds.
-The newer PR head belongs to another request.
-
-### Merge conflict or failed preflight
-
-Before `main` or a shared deployment environment changes, apply the bounded
-batch-selection rules above. A confirmed code conflict or failing combined check
-may lead to a smaller passing candidate. Save each attempt; leave excluded
-tickets waiting or action-needed according to evidence. Never declare every
-member broken because the group failed. No release is authorized by these tests.
-If nothing passes within the limits, stop with recorded reasons. Keep ownership
-while work or state is uncertain; release it only after safe cleanup and saving.
-
-### Partial cross-repository merge
-
-Stop. Record which `main` branch changed and which did not. Do not deploy or
-pretend the merge was atomic. A human chooses the exact repair.
-
-### Infrastructure failure
-
-Retry only the same exact command and build within a fixed limit. An
-AWS, GitHub, network, or runner failure is not evidence that a PR is bad.
-
-### Build failure
-
-Stop before staging. Because `main` already changed, the batch moves to the
-recovery path. The lane stays reserved until `main` is repaired or a person
-chooses another safe result.
-
-### Staging application or journey-test failure
-
-Do not validate the release. Move to recovery. A non-database batch may restore
-the last working staging builds when every safety check passes. A
-database-changing batch waits for a person.
-
-After staging or another shared release state has changed, do not search for a
-smaller batch as a recovery shortcut. Stop with a clear reason and recover the
-recorded release. Bounded splitting belongs to pre-release candidate testing only.
-
-### Production failure
-
-Stop giving the release to more users. Save the exact running versions and
-database state. A non-database batch may restore the saved builds and add new
-commits to `main` that undo the failed code when every safety check passes. A
-database-changing or unclear result waits for a person.
-
-Recovery is complete only after the restored versions and health are checked.
-The system never reports success from a workflow message alone.
+Fail the release attempt and stop advancement. Staging failure blocks production.
+Confirmed no-database-change recovery uses the ordinary revert/deploy path;
+database-changing or unclear state requires a person. Keep every ticket's reason
+and evidence without labelling every batch member as independently broken.
 
 ### Stop request
 
-- Before mutation, Stop cancels the release immediately.
-- After mutation begins, Stop means safe stop. Finish or stop the active command,
-  save the exact state, and enter recovery.
+Before mutation, cancel and clean owned trials. After mutation, stop new steps,
+settle/inspect in-flight operations, save actual state and enter recovery. Keep
+ownership while any effect, cleanup or save is uncertain.
 
-## Submit and almost forget
+## Version-one scope and deferred work
 
-The API acknowledges a durable release ID. From that point, event-driven
-workers and workflow callbacks continue the release without browser or agent
-polling.
+The next refactor is [history storage](./inbox-processing.md#planned-history-storage)
+with [planned acceptance](./merge-rehearsal-testing.md#history-storage-acceptance).
+Keep the current command, profile isolation, cheap-first selection, exact evidence,
+logs, no-database-change batch boundary and manual stop-before-resume procedure.
 
-The submitter is notified only for meaningful outcomes:
+Later execution work adds the single release lane, trusted product workflow
+adapters, protected staging/main merges, matching E2E waits, deployed recovery
+targets, conditional rollback and ticket closeout. Exercise the same sequence in
+the test repositories first, then connect real repositories with verified
+configuration and permissions. Profile selection does not grant authority.
 
-- request accepted;
-- staging validated;
-- production completed;
-- request cancelled because exact code changed;
-- recovery completed;
-- human action required, with the exact blocker and evidence links.
+Explicitly deferred: cross-ticket links, database-changing batches, portable
+staging-to-production builds, environment-variable redesign, a separate state
+database, heartbeat, automatic takeover, a new dashboard, overlapping/speculative
+releases, exhaustive subset search, new canary infrastructure and automatic
+recovery after a database change. Preserve existing autonomous notifications and
+release notes rather than creating parallel implementations.
 
-## Version-one scope
+## Remaining integration decisions
 
-Version one should include:
+- Authorized execution identity and existing repository merge rules.
+- Actual staging/main composition handling, including unrelated staging changes.
+- Trusted workflow/run/result and runtime-version contracts for each service.
+- Existing E2E trigger and deployed-version coverage, especially backend-only
+  releases; required production-safe tests and existing health completion signals.
+- Verified recovery ordering and source restoration when prior service versions
+  differ, plus clear human ownership for anything uncertain.
+- Explicit production continuation evidence and protection against a worker's own
+  merged PRs being retired by intake.
+- Archive migration, verification and focused tests in the history plan; later
+  retention/disaster-recovery operations when actual usage justifies them.
 
-- exact frontend and backend PR submission;
-- explicit dependencies and deployment order;
-- bounded batch selection and combined PR checks before release mutations;
-- visible reasons and next actions for every excluded ticket;
-- one durable database queue;
-- one global release lane;
-- GitHub-enforced protected `main` branches;
-- one final safety check before `main` changes;
-- saved batch records and builds that cannot change;
-- clear database, backend, and frontend deployment steps;
-- exact version checks and important journey tests;
-- safe automatic recovery only for non-database releases;
-- human recovery for database-changing or unclear releases;
-- bounded infrastructure retries;
-- final notifications and an operator dashboard.
-
-## Explicit non-goals for version one
-
-- automatic PR discovery;
-- large automatic release trains;
-- exhaustive search for the largest passing batch;
-- splitting a release after shared state changed instead of recovering it;
-- more than one active release batch;
-- automatic recovery after a database change;
-- pretending cross-repository merges are atomic;
-- copying product build and deployment logic into the Coordinator;
-- allowing two deployment authorities for the same environment;
-- treating a successful workflow message as proof that deployment worked.
-
-## Open decisions
-
-- when the GitHub Issue inbox should move into the Coordinator database;
-- GitHub App permissions and emergency access;
-- maximum release size;
-- real execution equivalents for the sandbox workflow/result, retry and cleanup contracts;
-- the batch implementation choices listed under the batch milestone sequence;
-- exact merge implementation and repository rules;
-- real database inspection coverage, change commands, and version/effect proof;
-- gradual rollout support;
-- runtime version proof for the frontend and backend;
-- production health signals and limits;
-- how the Coordinator proves workflow results are real and handles timeouts;
-- retention and audit requirements;
-- human recovery roles;
-- disaster recovery for the Coordinator itself;
-- how the Coordinator is deployed without depending on its own release path.
-
-## Design influences
-
-- [GitHub merge queues](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue)
-- [GitHub deployment environments](https://docs.github.com/en/actions/reference/workflows-and-actions/deployments-and-environments)
-- [Google Cloud CI/CD guidance](https://cloud.google.com/solutions/best-practices-continuous-integration-delivery-kubernetes)
-- [Google SRE canary guidance](https://sre.google/workbook/canarying-releases/)
-
-These sources informed the draft. Settle the decisions above and align the
-written plan with the process diagram before implementing release execution.
-A future implementation must not silently choose between conflicting drafts.
+These are bounded integration details, not permission to revive the conflicting
+old design or introduce a new build/deployment platform. See
+[progress and implementation review](./progress.md#implementation-alignment-review-september-11)
+for which changes are needed now versus later.

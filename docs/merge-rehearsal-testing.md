@@ -370,7 +370,7 @@ deployment on its own; the existing `inbox:run` command coordinates rehearsal
 with ticket processing, while deployment remains absent.
 
 Multi-ticket application checks, real release builds, release ownership,
-scheduling, deployment, existing-runtime prerequisites, recovery, and the unresolved choices in
+scheduling, deployment, existing-runtime prerequisites, recovery, and the agreed but unimplemented rules in
 [the execution design](./design.md#decisions-to-settle-before-execution) remain
 outside this stage. The sandbox can be extended for those tests later, but the
 success of the completed merge-rehearsal stage does not count as that later evidence.
@@ -697,4 +697,48 @@ live GitHub proof. The finish line is a bounded search that returns a directly
 tested candidate or an honest no-candidate result, with correct visible outcomes
 for every deferred request. It is not proof of the largest possible batch or of
 release readiness. Stop before product merges, shared-environment mutations,
-deployment, and the unresolved execution choices.
+deployment, and the agreed execution rules still requiring implementation.
+
+
+## History storage acceptance
+
+**Next refactor, planned September 11; none of these archive cases has run.**
+Use the actual journal/batch code with controlled GitHub responses first. Then,
+when separately authorized, verify migration and repeat behavior in the isolated
+sandbox inbox. Never migrate the real journal as part of offline tests.
+
+| Case | Expected result | Status |
+| --- | --- | --- |
+| More than 100 completed batch histories | Archive finished records and accept later work without a lifetime stop. Keep per-search budgets enforced. | Not run |
+| Active work among completed histories | Running/uncertain operations, pending ticket writes and cleanup remain active; `finished` selection alone cannot authorize archiving. | Not run |
+| Same exact batch after archive | Load its original record on demand, revalidate remote proof, preserve attempt IDs/budgets and avoid duplicate PRs, workflows or ticket decisions. | Not run |
+| Missing, altered or wrong-profile archive | Stop with a specific evidence error; do not treat it as first use or trust a pass from a different inbox. | Not run |
+| Archive save fails or response is lost | Preserve active evidence or reconcile the already-committed archive/reference pair; no lost or duplicate authoritative record. | Not run |
+| Competing writer during compaction | At most one non-force commit advances; the loser does not discard data or proceed with external actions. | Not run |
+| Subsequent ordinary journal writes | Preserve all archived files and verify their references instead of recreating a state-only tree. | Not run |
+| Existing v4 migration and older writer | Preserve receipts, transitions, service/batch identities and budgets. Older writers reject the new marker before mutation. | Not run |
+| Standalone service history and linked records | Archive only fully finished, unneeded records; preserve active references and prevent the existing 1,000-record cap becoming another lifetime stop. | Not run |
+
+Finish when these cases pass, current repeat/resume/cleanup behavior remains
+covered, and an authorized live sandbox migration/repeat proves the same path.
+Keep local fixture results, live evidence and merge status separate in progress.
+Do not rerun product deployments or the full historical campaign for a storage
+change unless a concrete failure justifies it.
+
+## Later execution acceptance
+
+These are future sandbox requirements, not tests already run or permission to
+deploy. Build the same coordinator sequence against test-repository Actions
+before connecting product workflows. See the [execution design](./design.md#agreed-execution-direction-september-11).
+
+| Case | Required outcome |
+| --- | --- |
+| Compatible batch through staging then production | Cheap filtering precedes combined PR checks; ordinary staging merges/Actions run; production starts only after matching successful E2E and authorization. Environment-specific builds remain workflow-owned. |
+| Required E2E fails, is missing, cancelled or skipped | No production dispatch or successful release. A failed test fails the attempt; uncertain evidence gets its actual reason without blaming all tickets. |
+| E2E belongs to another run, code or environment | Reject it even if green. Changed staging during tests requires fresh matching evidence. Cover frontend-only, backend-only and coupled work. |
+| Main/staging moves or contains unrelated changes | Preserve shared history; recheck actual compositions before mutation and invalidate unmatched evidence. Never overwrite refs or promote all of staging. |
+| Sequential services and partial failure | Backend dependencies succeed before dependents/frontend; record partial effects and stop/recover rather than starting another batch. |
+| No-database-change rollback | Save prior deployed versions per service/environment; create verified revert commits, run required checks and ordinary deploys, then check recovery versions/health/E2E. Original release stays failed. |
+| Database change/unknown, conflicting revert or failed recovery | Stop automatic recovery for a person; keep release ownership while unresolved. Never blindly reset branches or restore incompatible code. |
+| Worker merges its own request / resumes / receives a new ticket | Retain execution ownership after PR merge, reconcile existing runs without duplicates, and keep the next release waiting until completion/recovery. |
+| Staging-only success and later production request | Stop after staging. Require explicit production authorization and revalidated composition/evidence for later continuation. |

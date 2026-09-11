@@ -152,6 +152,24 @@ merge proof as unknown: it has no verified release-outcome source and does not
 consume the separate merge-rehearsal reports.
 See [readiness checks](./apps/coordinator/README.md#readiness-checks) for details.
 
+## Agreed next direction
+
+The future worker will find a passing batch, use existing frontend/backend
+Actions to deploy it to staging, wait for successful E2E for its deployed
+versions, then merge into `main` and run existing production Actions when
+authorized. Product workflows keep their separate environment-specific builds.
+One release stays active until completion or verified recovery.
+
+Rollback uses new commits undoing the failed batch and ordinary deployments,
+only when no database change is confirmed and restoration is safe. Database
+changes or uncertain recovery need a person. These are design decisions, not
+capabilities of today's `inbox:run`.
+
+Before execution work, refactor the journal to keep active work complete and
+archive finished batch records in the same GitHub repository. The current
+100-batch lifetime cap still exists. See the [history plan](./docs/inbox-processing.md#planned-history-storage)
+and [implementation review](./docs/progress.md#implementation-alignment-review-september-11).
+
 ## Documentation map
 
 | Need | Document |
@@ -168,13 +186,12 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 | Review sandbox batching, limits, and excluded-ticket handling | [Batch design](./docs/design.md#proposed-batch-testing-and-selection) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
-| Review the future release design and unsettled choices | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |
+| Review agreed release rules and remaining integration work | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |
 | Publish and adopt the next exact package version | [Publishing guide](./docs/npm-publishing.md) |
 | Read completed migration/review evidence | [Migration history](./docs/history/npm-migration.md) |
 
-The future design and process diagram still differ on release ownership, when
-`main` changes, and production builds. Those differences are recorded together
-in the design document and must be settled before release execution is built.
+The future design and process diagram reflect the September 11 decisions.
+Implementation and acceptance evidence remain separate in progress.
 
 ## Code and ownership
 

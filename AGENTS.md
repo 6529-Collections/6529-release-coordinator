@@ -77,11 +77,19 @@ from first principles.
   Documentation is not permission to create external resources. Keep the runtime
   bundle identical to its source, verify its fixed branch/commit, and preserve
   service and batch attempts in the v4 journal before dispatch.
-- `docs/design.md` contains the proposed execution design and unresolved
-  differences with the full process diagram. Its v0.1 logging section owns local
+- `docs/design.md` and the full process diagram contain the agreed execution
+  direction, still unimplemented. Reuse existing product Actions and their
+  environment-specific builds; no configuration redesign or portable artifacts.
+  Wait for successful matching staging E2E before production merges into `main`.
+  Keep one release active through completion or recovery. Automatic rollback
+  requires confirmed no database change, verified revert commits and ordinary
+  deploy/check steps; otherwise stop for a person. Its v0.1 logging section owns local
   run diagnostics; logs never replace journal authority or prove a process stopped.
-  Heartbeat and automatic recovery remain deferred. Settle the execution choices
-  before implementing release execution. Its batch-testing section owns the bounded
+  Heartbeat and automatic process takeover remain deferred. Release rollback is
+  future work, distinct from process restart. Keep state in the GitHub journal;
+  `docs/inbox-processing.md` owns planned verified archives and migration away
+  from the current 100-batch lifetime cap. A separate database/dashboard is not
+  required. Its batch-testing section owns the bounded
   search before release mutations: keep tickets/dependencies whole,
   test the final exact combination, and never blame every member of a failed
   group. Batch ticket projections belong in `docs/inbox-processing.md`; planned

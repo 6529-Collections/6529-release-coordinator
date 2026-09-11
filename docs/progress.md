@@ -6,6 +6,66 @@ Runtime behavior comes from code and live evidence. The [ticket contract](./inbo
 [execution design](./design.md) remains future work. There is no always-on release
 worker; each manual run exits after its work.
 
+## Implementation alignment review, September 11
+
+**Documentation updated; implementation reviewed read-only at main
+`cecbee6b1a9374581df2c0379bada59b78257e79`.** No runtime refactor, package
+publication, product repository change, workflow dispatch or deployment is part
+of this update. Earlier test results below are historical evidence, not new runs.
+
+Documentation validation passed: 164 local links across eight changed documents,
+process-diagram JavaScript syntax, complete text for 22 release/five recovery
+steps, valid recovery links, and `git diff --check`. Runtime tests were not rerun
+for this documentation-only update. New archive/execution cases remain planned.
+
+The [design](./design.md#agreed-execution-direction-september-11), process diagram,
+entry guide and inbox/storage plan now agree: use existing product Actions and
+their environment-specific builds, wait for successful matching staging E2E,
+merge into `main` only for authorized production, and keep one release active
+through completion or recovery. Confirmed no-database-change rollback uses new
+revert commits and ordinary deploy/check steps; database changes or uncertain
+state require a person. Separate state databases, heartbeat, automatic takeover,
+portable builds, new dashboards and overlapping releases are not prerequisites.
+
+### Refactor before regular use: history storage
+
+| Current implementation | Required change |
+| --- | --- |
+| [Batch validator](../apps/coordinator/src/batch-state.mjs) rejects more than 100 saved batches. [Journal](../apps/coordinator/src/inbox-journal.mjs) also caps standalone service records at 1,000 and reads/validates/rewrites all state. | Keep complete active work and verified archived finished records; remove lifetime caps through migration, while preserving per-run work budgets. |
+| [GitHub adapter](../apps/coordinator/src/coordinator-github.mjs) allows only the state-file read and a one-entry tree write. The journal creates a fresh tree containing only that file. | Add narrowly allowed archive paths, preserve the existing tree, and atomically save archives/references. Otherwise a later state save would drop archive files. Reject older writers with a new marker. |
+| [Batch runner](../apps/coordinator/src/inbox-batch.mjs) looks up full records directly in `state.batches`; [selection](../apps/coordinator/src/batch-selection.mjs) reuses attempts/budgets and rechecks remote proof. | Add a small journal load/save/archive boundary so exact repeats load archived attempts on demand, preserving identities, budgets and evidence validation. Never turn a missing archive into a fresh batch. |
+| [Processor failure reporting](../apps/coordinator/src/inbox-processor.mjs) scans full batch/service records for unfinished work. `finished` marks the end of selection, not release completion. | Archive only after cleanup, operation and presentation obligations are verified complete; keep active/resumable work discoverable and preserve per-ticket decision history. |
+
+This is one focused storage refactor, not a reason to rewrite the batch selector.
+The [history contract](./inbox-processing.md#planned-history-storage) and
+[acceptance cases](./merge-rehearsal-testing.md#history-storage-acceptance)
+define its finish line. The archive behavior is not built or tested yet.
+
+### Build with the later execution step
+
+- **Actual staging/main integration:** current plans rehearse against `main`;
+  product Actions use `1a-staging` and `main`. Inspect actual compositions before
+  pushing, preserve unrelated staging changes, and revalidate changed bases.
+- **One release lane and deployment ownership:** the current lock lasts one
+  inbox command, not a release across staging/E2E/production. Future worker-owned
+  requests must survive their own PR merges rather than being retired by intake's
+  `already-merged` rule. Keep today's intake behavior until that ownership exists.
+- **Workflow and E2E adapters:** the current batch policy/checks are explicitly
+  sandbox-only. Reuse product Actions with verified run/version identities,
+  sequential services, matching E2E gates and backend-only E2E coverage. A profile
+  switch alone cannot enable this. Preserve product release-note metadata.
+- **Rollback evidence:** there is no real deployed-version snapshot, revert or
+  recovery executor. Save previous deployed versions per environment/service,
+  verify safe restoration, and test the ordinary deploy path before real use.
+
+These are missing execution features, not regressions in today's sandbox path.
+Keep current cheap-before-expensive ordering, whole-ticket selection, exact-input
+checks, remote proof revalidation, no-database-change batch scope, logs and
+stop-before-resume behavior. No broad refactor or request/CLI change is needed
+for the agreed direction. Cross-ticket links and database-changing batches stay
+deferred. After history acceptance, exercise the execution sequence in test
+repositories before enabling real adapters.
+
 ## v0.1 run logging, September 11
 
 Pre-merge review in [PR #61](https://github.com/6529-Collections/6529-release-coordinator/pull/61)

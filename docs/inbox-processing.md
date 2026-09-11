@@ -32,8 +32,9 @@ backend installation is needed for this scope.
 
 The rehearsal only merges in temporary local repositories. The release worker,
 scheduling, product merges, builds, deployments, and recovery remain later work. No ticket status or
-label authorizes release execution. The execution design's unresolved branch,
-release ownership, and production-build choices remain unresolved.
+label authorizes release execution. The [agreed release rules](./design.md#agreed-execution-direction-september-11)
+reuse existing deployments, require successful staging E2E before production,
+and keep one release active through recovery. Those rules are not implemented here.
 
 ## Responsibility and commands
 
@@ -408,6 +409,62 @@ decisions, including decisions later corrected. If a GitHub update succeeds only
 partly, report it and reconcile against the recorded intended result. Never
 describe an unapplied update as complete. Concurrent runs must not overwrite
 newer decisions or reset terminal outcomes.
+
+### Planned history storage
+
+**Agreed September 11; not implemented.** The current single-file journal keeps
+all batch inputs, attempts and results together. `validateBatchHistory` rejects
+more than 100 saved batches; standalone service history has a separate 1,000-record
+cap. These count persistent records across commands, not tickets or work per run.
+Closing a ticket does not remove them. Do not delete history or merely raise caps
+to simulate the planned refactor.
+
+Keep the same inbox repository and independent `codex/inbox-state` branch:
+
+- `inbox-state.json` holds complete active work, current ticket decisions,
+  ownership and compact references/summaries for finished batches.
+- `history/batches/<batch-fingerprint>.json` holds each finished batch's full
+  verified inputs, policy/budgets, attempts, results and cleanup evidence.
+- Summaries identify the batch, tickets/versions, outcome, archive path and
+  checksum, plus GitHub evidence links. Tickets retain readable outcomes.
+- Load an archive only when its exact batch is needed. Repeated input must find
+  the old attempts, revalidate their remote evidence and preserve their original
+  budgets. Missing or corrupt archives stop with a reason; never treat them as
+  a fresh batch or automatically repeat external effects.
+
+Archive only after all operations are terminal, owned trials/resources are
+verified cleaned, ticket updates are saved, and no lock/resume or later execution
+step needs the full record active. `batch.status: finished` currently means the
+selection search ended, not that a release completed or all recovery obligations
+ended. It is insufficient by itself. Uncertain/running work stays active.
+
+Write archive bytes and replace active details with their reference in one
+non-force Git commit based on the verified previous tree, then read back and
+verify both. Preserve every existing archive on all subsequent writes. A lost
+response requires reconciling that commit; a failed or competing write cannot
+discard active evidence or create a second authoritative archive. Archives are
+immutable once final; a later changed batch has a different identity. Rechecks
+may record new current observations or stale evidence without rewriting the
+original archived result. Standalone service records still referenced by unfinished work must not be removed. Handle
+their separate cap and linked evidence with the same lifecycle rules rather
+than introducing a second silent lifetime limit.
+
+Introduce a new writer/schema marker so older single-file writers reject the
+journal before mutation. Migrate existing v4 records under the journal lock;
+preserve receipts, ticket transition chains, identities and original results.
+Restrict archive paths and Git operations explicitly in the API adapter. Keep
+profile separation and stop-before-resume; this is storage maintenance, not
+automatic recovery or a new CLI command.
+
+Remove the 100-batch lifetime restriction as part of this migration. Keep the
+independent per-search limits (10 tickets, 10 PRs per repository, 40 Git attempts,
+12 check rounds, 45 minutes) and bounded input/record validation. Full historical
+payloads leave normal reads; compact references may remain in the main file for
+this stage. A separate database, dashboard and automatic archive deletion are
+not required. Larger indexes/long-term retention can follow measured usage.
+
+See [history acceptance](./merge-rehearsal-testing.md#history-storage-acceptance)
+and [implementation gaps](./progress.md#implementation-alignment-review-september-11).
 
 ### Storage and trusted writers
 

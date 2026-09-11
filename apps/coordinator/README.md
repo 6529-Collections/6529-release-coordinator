@@ -174,8 +174,9 @@ An empty inbox is not release authorization either.
 
 These are observations, not an atomic snapshot, reservation, or GitHub lock.
 Facts can change immediately after the last read. Future execution must recheck
-its exact plan and authorization. The unresolved execution design remains in
-[design](../../docs/design.md); this checker does not settle it.
+its exact plan and authorization. The agreed future execution rules remain in
+[design](../../docs/design.md#agreed-execution-direction-september-11);
+this checker does not implement them.
 
 ## Profiled inbox and submission
 
@@ -452,6 +453,12 @@ The fixed GitHub branch `codex/inbox-state` holds only `inbox-state.json` on an
 independent commit history. **Never merge it into main, delete it, or force-push
 it.** It is runtime state, not a source branch. See the
 [storage and trust contract](../../docs/inbox-processing.md#storage-and-trusted-writers).
+
+Current storage keeps all batch histories in that file and rejects more than
+100 across runs; this is not a per-run ticket limit. The [planned archive refactor](../../docs/inbox-processing.md#planned-history-storage)
+will keep finished records in the same GitHub branch and load them on demand.
+It is not implemented: do not remove records, reset budgets or hand-edit the
+journal to bypass the cap. Existing resume and cleanup require saved identities.
 
 Policy `2026-09-10.2` generates Git, sandbox service and batch plans internally. The journal marker is now
 `workflow: "inbox-run-v4"`. First use upgrades a legacy/v1/v2/v3 journal without
