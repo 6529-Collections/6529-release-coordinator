@@ -17,7 +17,8 @@ Documentation alone is not permission to execute external changes.
 
 This section records the original merge-only milestone. The implemented
 [service/database stage](#service-and-database-acceptance) extends it below;
-the [batch matrix](#planned-batch-acceptance) remains a later plan.
+the [batch matrix](#planned-batch-acceptance) now has a sandbox implementation;
+progress separates its local tests, live evidence and source delivery.
 
 Given exact PR commits, an explicit destination in each repository, and an
 explicit order, can Git combine those changes in temporary local repositories?
@@ -358,8 +359,8 @@ does not make current readiness results eligible or take execution ownership.
 The implemented sandbox service stage below tests one complete ticket's service
 order and database behavior through the same command. Its separate service
 runner has local and live acceptance evidence; the Git merge engine itself
-remains read-only outside its temporary local repositories. Multi-ticket
-selection and tests of combined tickets remain unimplemented.
+remains read-only outside its temporary local repositories. The separate batch
+adapter now creates owned sandbox trial PRs; see the batch acceptance section.
 
 Before a real rollout, verify real permissions and repository limits with a
 separately authorized live read-only run. Real mode rejects test manifests and
@@ -533,7 +534,8 @@ reviewing that boundary and the pinned runtime together. A killed container is
 reported as unknown unless its cause and attribution can be verified; an exit
 code alone does not establish a ticket defect.
 
-`inbox-run-v3` saves the exact service plan and unique attempt before dispatch.
+The journal saves the exact service plan and unique attempt before dispatch
+(introduced in `inbox-run-v3`, retained in the current v4 writer).
 A lost dispatch response is reconciled, never blindly repeated. Subsequent runs
 reverify the same workflow result; changed inputs require a different plan.
 Lookup filters by the saved actor and creation time with a five-minute clock-skew
@@ -630,19 +632,31 @@ existing non-database batch matrix.
 
 ## Planned batch acceptance
 
-**Later-stage plan recorded September 9 and resequenced September 10, 2026;
-every case below is unimplemented and unrun.** This section follows the
+**Batch acceptance requirements, implemented in the sandbox stage September 10,
+2026.** See [progress](./progress.md) and the [dated batch acceptance record](./testing/batch-2026-09-10.md) for
+which cases have offline versus live proof. This section follows the
 [batch-selection design](./design.md#proposed-batch-testing-and-selection) and
 [proposed ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes).
 It does not change the completed MR matrix or its dated evidence above.
 
+The subsequent [20-case stress campaign](./testing/complex-corner-cases.md)
+records individual results, test layers, the reproduced ownership race, and
+unsupported future behavior. Its local simulations do not upgrade earlier
+evidence into live GitHub race or release-execution proof.
+
 The [one-ticket service/database matrix](#service-and-database-acceptance)
-has local and live evidence; merge its Coordinator implementation before starting
-batch work. The original one-ticket command and this repository's code-check
-gate are already merged. Keep using the two existing sample repositories and
-separate sandbox inbox. Add selection across several
-real sandbox tickets, preserving existing initial checks, and reuse the small
-programs and meaningful required PR checks against selected combined candidates.
+has local and live evidence and its source merged in PR #45 before batch work.
+The batch implementation uses the same two sample repositories, test inbox,
+initial checks and meaningful application checks. All cheap ticket/database/Git
+filtering precedes temporary PR CI; there is no extra per-ticket service run in
+the unscoped sandbox path.
+
+If the combined trees have no changes against saved main, hold the candidate
+during cheap preparation with a Coordinator-owned explanation. It cannot create
+a useful temporary PR, so do not run services or infer a pass from an empty list
+of PR checks. Fresh and reused passing batches require at least one recorded,
+verified trial. An unchanged repository may still be covered by the combined
+service run when another repository has a verified trial.
 
 Use independent requests without database changes first. Earlier one-ticket
 database proof does not authorize database-changing batches. Select whole tickets
@@ -650,11 +664,10 @@ and validated dependency groups. Define the trusted representation of dependenci
 between tickets before adding those fixtures; the public schema does not already
 provide it. Keep the shared profile/engine direction, but only the sandbox's
 temporary branches, PRs, checks, ticket projection, and owned trial state are in
-this next live stage. The current operator command does not have those new
-repository-write capabilities. Configure isolated test runners and define result
-verification, durable attempts/limits, interruption handling, and cleanup before
-running the new workflow. Merely reading a workflow name is not proof its required
-checks ran against the intended combined commit.
+this stage. The sandbox adapter has those restricted repository-write capabilities.
+The policy saves limits, verifies the required workflow/commit/tree and service
+results, and closes/removes only owned trials. Merely reading a workflow name is
+not proof its required checks ran against the intended combined commit.
 
 Create a deterministic sample incompatibility: A and B each pass their normal
 checks against the same baseline; A+B merges without a Git conflict but fails a
@@ -669,7 +682,7 @@ passing groups must never be used as a substitute for testing their union.
 | BA-04: Both halves pass but their union fails | Do not assume passing groups work together or invent a culprit. Retain a verified candidate using the saved priority and explain the incompatible combination. |
 | BA-05: A/B incompatibility and changed base | A passes, B passes, A+B fails. B waits when A is selected. In an isolated fixture simulate A becoming the base; B's subsequent attributable failure becomes action-needed. Baseline-only failure must not be blamed on B. No actual sandbox `main` merge is needed. |
 | BA-06: One ticket contains multiple frontend/backend PRs | Splitting never drops a part, PR, or selected service from a ticket. Rebuild each candidate's complete service plan. |
-| BA-07: Requests must ship together | Required groups remain whole; missing/ambiguous dependency proof prevents selection. An inseparable incompatibility gets a group correction/scope reason. |
+| BA-07: Requests must ship together | Inseparable work stays inside one complete ticket. The first implementation does not accept cross-ticket dependency declarations; a trusted representation and group acceptance remain deferred. |
 | BA-08: Changed candidate inputs | Changed base, PR commit, membership, order, scope, or required workflow configuration cannot inherit a pass from different inputs. Source-head movement never silently replaces the accepted version. |
 | BA-09: Search reaches a limit | Stop at the configured attempt/time limits. Preserve a verified candidate if present; otherwise none proceeds. Untested/excluded tickets stay visible with incomplete-investigation reasons. |
 | BA-10: Infrastructure or evidence failure | Runner outage, pending/missing result, baseline failure, and unavailable proof do not become individual code blame or automatic group splitting. Bounded retries and maintainer ownership are recorded. |

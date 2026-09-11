@@ -3,7 +3,8 @@
 Sandbox and real configurations use the same intake, receipt verification,
 readiness, local merge engine, and ticket updates. `inbox:run` joins inspection,
 rehearsal, supported sandbox service/database checks, and presentation into one
-manual run. Real service execution, multiple-ticket merge batches, release
+manual run. Unscoped sandbox runs also filter and test complete tickets together;
+`--issue` retains one-ticket service/database checks. Real service execution, release
 ownership, release builds, and deployments remain later work. See
 [progress](./progress.md) for local, live sandbox, and remote merge evidence.
 
@@ -88,8 +89,9 @@ Omit the ticket number to process all selected tickets:
 RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 ```
 
-Every suitable ticket gets its own generated plan and rehearsal. Different
-tickets are not merged together. The old manual plan input and separate
+Every suitable ticket first gets its own generated plan and Git rehearsal.
+Unscoped sandbox runs then test compatible whole tickets together; real runs
+retain individual Git rehearsals. The old manual plan input and separate
 processing/rehearsal commands have been removed. Diagnostics stay read-only.
 
 ## Automatic plan for each ticket
@@ -127,7 +129,7 @@ Starting a new run captures current destination commits. See the
 
 Plans remain internal evidence: the journal stores the ticket/request binding,
 exact PR order and destinations; full reports record their resulting trees.
-The journal's `inbox-run-v3` marker prevents older writers from overwriting the
+The journal's `inbox-run-v4` marker prevents older writers from overwriting the
 new run format. A legacy interrupted v1 run retains its already recorded scope
 and plan on explicit resume.
 
@@ -163,7 +165,10 @@ real-profile tests are not real-system runtime proof.
 The local `inbox:run` implementation includes tested
 [one-ticket service/database acceptance](./merge-rehearsal-testing.md#service-and-database-acceptance).
 See progress for Coordinator source delivery, separate local/live evidence,
-and merged sample setup. Multi-ticket batching remains future work.
+and merged sample setup. Unscoped sandbox runs now add
+[bounded batching](./design.md#proposed-batch-testing-and-selection), with cheap
+elimination before expensive combined checks and durable temporary PR ownership.
+The batch writer is sandbox-only; choosing `real` does not enable it.
 The same repositories, test inbox,
 exact-input bindings and automatically generated plans are retained.
 

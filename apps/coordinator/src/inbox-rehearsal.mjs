@@ -1,10 +1,11 @@
 import { digest } from "./inbox-journal.mjs";
+import { loggedStep, runEvent, logOutcome } from "./run-log.mjs";
 import { inboxMergePlan } from "./inbox-merge-plan.mjs";
 import { decideTicket } from "./inbox-policy.mjs";
 import { terminal } from "./ticket-presentation.mjs";
 import { safeRehearsalError } from "./rehearsal.mjs";
 
-export const runPolicyVersion = "2026-09-10.1";
+export const runPolicyVersion = "2026-09-10.2";
 const check = (checks, id) => checks.find((value) => value.id === id);
 const pullChecks = [
   "requested_code",
@@ -148,7 +149,15 @@ export async function coordinateTicket({
   } else {
     let input, plan;
     try {
-      input = await preparePlan();
+      input = await loggedStep(
+        {
+          step: "ticket.plan",
+          issue_number: entry.issue_number,
+          request_id: entry.request.request_id,
+          message: "Prepare the ticket's exact merge plan."
+        },
+        preparePlan
+      );
       plan = inboxMergePlan(input, entry, profile);
     } catch (error) {
       const invalid = ["invalid_inbox_plan", "invalid_manifest"].includes(
@@ -173,9 +182,60 @@ export async function coordinateTicket({
     if (plan) {
       // Journal failure must escape and retain the lock. Never start Git or
       // publish a ticket result when saving the pinned inputs was uncertain.
-      await savePlan(input);
+      await loggedStep(
+        {
+          step: "ticket.plan.save",
+          issue_number: entry.issue_number,
+          message: "Preserve pinned inputs in the journal before Git work."
+        },
+        () => savePlan(input)
+      );
+      for (const repo of input.repositories) {
+        for (const pr of repo.pull_requests)
+          runEvent({
+            step: "ticket.input",
+            outcome: "succeeded",
+            issue_number: entry.issue_number,
+            request_id: entry.request.request_id,
+            role: repo.role,
+            repository: profile.repositories[repo.role].full_name,
+            pr_number: pr.number,
+            head_commit: pr.commit,
+            expected_commit: repo.destination.commit,
+            url: `https://github.com/${profile.repositories[repo.role].full_name}/pull/${pr.number}`,
+            message: `Saved PR ${pr.commit} for rehearsal against ${repo.destination.branch} ${repo.destination.commit}.`
+          });
+      }
       try {
-        const report = await rehearse(entry, input);
+        const report = await loggedStep(
+          {
+            step: "ticket.git",
+            issue_number: entry.issue_number,
+            request_id: entry.request.request_id,
+            message:
+              "Rehearse this ticket's exact PRs in temporary Git repositories."
+          },
+          () => rehearse(entry, input),
+          (report) => ({
+            outcome: logOutcome(report.status),
+            result_status: report.status,
+            cleanup_status: report.cleanup?.status,
+            report_file: report.report_file
+          })
+        );
+        runEvent({
+          step: "ticket.git.cleanup",
+          issue_number: entry.issue_number,
+          outcome: logOutcome(report.cleanup?.status),
+          cleanup_status: report.cleanup?.status,
+          message:
+            report.cleanup?.status === "removed"
+              ? "Temporary Git workspace cleanup was verified."
+              : "Temporary Git workspace cleanup is incomplete or unknown; inspect the rehearsal report.",
+          remaining: report.cleanup?.owned_path
+            ? [report.cleanup.owned_path]
+            : []
+        });
         result = summary(report, plan);
         const { report_file, ...durableReport } = report;
         evidence = {

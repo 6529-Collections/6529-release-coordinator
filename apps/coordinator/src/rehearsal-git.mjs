@@ -261,6 +261,69 @@ export async function createRehearsalGit({
           await supportedTree(commit);
         }
         return {
+          tree: (commit) => {
+            if (!isSha(commit))
+              throw new RehearsalError("invalid_commit", "Invalid tree input.");
+            return oid(["rev-parse", "--verify", `${commit}^{tree}`]);
+          },
+          async patch(base, commit, names) {
+            if (
+              !isSha(base) ||
+              !isSha(commit) ||
+              !Array.isArray(names) ||
+              names.length > 40
+            )
+              throw new RehearsalError(
+                "invalid_snapshot",
+                "Unsupported candidate patch."
+              );
+            const patch = [];
+            for (const name of names) {
+              if (
+                !/^(?:src\/[a-zA-Z0-9_./-]+|docs\/[a-zA-Z0-9_./-]+\.md|README\.md|shared\.txt)$/u.test(
+                  name
+                ) ||
+                name.includes("..")
+              )
+                throw new RehearsalError(
+                  "invalid_snapshot",
+                  "Candidate patch is outside sample paths."
+                );
+              const entry = (await git(cwd, ["ls-tree", commit, "--", name]))
+                .stdout;
+              if (!entry) {
+                patch.push({
+                  path: name,
+                  mode: "100644",
+                  type: "blob",
+                  sha: null
+                });
+                continue;
+              }
+              const mode = entry.split(" ")[0];
+              if (!["100644", "100755"].includes(mode))
+                throw new RehearsalError(
+                  "unsupported_tree",
+                  "Candidate patches require regular files."
+                );
+              const file = await blob(commit, name);
+              if (
+                Buffer.byteLength(file.text) > 12_000 ||
+                file.text.includes("\u0000")
+              )
+                throw new RehearsalError(
+                  "resource_limit",
+                  "Candidate patch file exceeds sample limits."
+                );
+              patch.push({
+                path: name,
+                mode,
+                type: "blob",
+                content: file.text
+              });
+            }
+            return patch;
+          },
           async files(commit, names) {
             if (
               !isSha(commit) ||

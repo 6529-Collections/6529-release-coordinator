@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile, access } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { readFile, access, mkdtemp, rm } from "node:fs/promises";
 import { fixture } from "./processing-fixture.mjs";
 import { rehearsalFixture } from "./rehearsal-fixture.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
@@ -72,31 +74,38 @@ async function invoke(
   { args = ["--issue", "1", "--json"], ...options } = {}
 ) {
   let output = "";
-  const code = await runInboxRunCli(args, {
-    env: { RELEASE_COORDINATOR_PROFILE: f.profile.name },
-    client: { identity: f.identity, request: f.api },
-    get: f.get,
-    github: f.github,
-    plan: (entry, options) =>
-      generateInboxPlan(entry, {
-        ...options,
-        github: {
-          destination: async (role, branch) => ({
-            repository: f.profile.repositories[role],
-            branch,
-            commit: f.pr.baseRefOid
-          })
-        }
-      }),
-    stdout: (text) => {
-      output += text;
-    },
-    // This suite isolates the existing Git/ticket stage. Service integration
-    // has its own complete application fixtures and workflow-adapter tests.
-    services: null,
-    ...options
-  });
-  return { code, report: JSON.parse(output) };
+  const logRoot = await mkdtemp(path.join(tmpdir(), "coordinator-log-test-"));
+  try {
+    const code = await runInboxRunCli(args, {
+      logRoot,
+      stderr: () => {},
+      env: { RELEASE_COORDINATOR_PROFILE: f.profile.name },
+      client: { identity: f.identity, request: f.api },
+      get: f.get,
+      github: f.github,
+      plan: (entry, options) =>
+        generateInboxPlan(entry, {
+          ...options,
+          github: {
+            destination: async (role, branch) => ({
+              repository: f.profile.repositories[role],
+              branch,
+              commit: f.pr.baseRefOid
+            })
+          }
+        }),
+      stdout: (text) => {
+        output += text;
+      },
+      // This suite isolates the existing Git/ticket stage. Service integration
+      // has its own complete application fixtures and workflow-adapter tests.
+      services: null,
+      ...options
+    });
+    return { code, report: JSON.parse(output) };
+  } finally {
+    await rm(logRoot, { recursive: true, force: true });
+  }
 }
 function fakeReport(entry, input, profile, status = "pass") {
   const plan = inboxMergePlan(input, entry, profile);
@@ -210,7 +219,7 @@ test("one inbox command saves a service attempt before dispatch, presents its re
   assert.equal(first.report.requests[0].services.status, "passed");
   assert.equal(first.report.requests[0].status, "waiting");
   assert.ok(f.issue.labels.includes("services:passed"));
-  assert.equal(f.state().workflow, "inbox-run-v3");
+  assert.equal(f.state().workflow, inboxWorkflow);
   assert.equal(Object.values(f.state().service_attempts)[0].state, "completed");
   const second = await invoke(f, options);
   assert.equal(second.code, 0, JSON.stringify(second.report));
@@ -677,7 +686,15 @@ test("legacy service verification uses its saved plan and still detects destinat
     services: async ({ decision, verifyInputs }) => {
       assert.equal(await verifyInputs(), true);
       current.repositories[0].destination.commit = "f".repeat(40);
-      assert.equal(await verifyInputs(), false);
+      await assert.rejects(verifyInputs(), (error) => {
+        assert.equal(error.status, "stale");
+        assert.match(error.message, /backend main changed/);
+        assert.ok(
+          error.message.includes(input.repositories[0].destination.commit)
+        );
+        assert.ok(error.message.includes("f".repeat(40)));
+        return true;
+      });
       verified = true;
       return {
         decision,

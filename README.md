@@ -45,8 +45,10 @@ The ticket already supplies the exact PRs, services, target, and dependencies.
 The Coordinator creates the rehearsal plan itself. Both profiles currently test
 against each repository's current `main`; this does not change `main` or choose
 a deployment policy. See the [profiled inbox guide](./docs/profiled-inbox-testing.md).
-Omit `--issue` to process the inbox, giving each suitable ticket its own plan and
-rehearsal. Different tickets are not merged together.
+Omit `--issue` to process the inbox. Sandbox runs first check each ticket, then
+test suitable whole tickets together through the bounded batch flow below.
+Real runs retain individual ticket plans and Git rehearsals. These rehearsals
+do not merge source PRs into `main`.
 
 `inbox:run` replaces the old `inbox:process` and `merge:rehearse` commands; those
 entry points have been removed. `inbox:read` and `readiness:check` remain read-only
@@ -61,6 +63,10 @@ not handle that request; it does not claim deployment. Mixed merged/open request
 remain open for a scope decision. See the
 [command guide](./apps/coordinator/README.md#run-the-ticket-workflow) for permissions,
 exit codes and recovery, and [ticket rules](./docs/inbox-processing.md) for labels.
+
+The command prints live progress to stderr and saves per-run logs outside this
+checkout, under `~/.6529-release-coordinator/logs/`. It reports the exact path and
+preserves earlier history on explicit resume. See [run logs](./apps/coordinator/README.md#run-logs).
 
 The developer [fixture harness](./apps/coordinator/README.md#merge-engine-and-fixture-tests)
 still tests the merge engine against sample PRs, including deliberate failures.
@@ -90,16 +96,16 @@ acceptance cases have passed; [PR #45](https://github.com/6529-Collections/6529-
 tracks source delivery, review, and CI. Real execution adapters remain absent; switching
 profiles does not enable deployment.
 
-## Planned later stage: test a batch of tickets
+## Test a batch of sandbox tickets
 
-After the tested service/database extension is merged, keep the existing checks
-for each ticket, select complete compatible requests, and run normal PR checks on
-their combined code. Avoid
-another full build/test run per ticket by default. If a batch fails, try smaller
-groups within time/attempt limits, preserving dependencies. Test the final
-selected combination; do not assume separately passing groups work together.
-Batching is unimplemented. Start with requests without database changes;
-passing the earlier database tests does not enable database-changing batches.
+Without `--issue`, sandbox `inbox:run` now finishes cheap ticket, scope, database
+and Git checks first, then runs normal PR checks on a compatible group's combined
+code using temporary PRs. Combined service checks follow. `--issue NUMBER` keeps
+the one-ticket service/database path. There is no extra full run per ticket by
+default. Confirmed test failures can divide the group within fixed limits; the
+final selected combination must itself pass. The first batch stage only supports
+complete staging tickets without database changes. See progress for local versus
+merged and live evidence.
 
 Excluded tickets stay visible with a reason and next action. If A and B pass
 alone but fail together, use a saved priority order to select one independent
@@ -151,6 +157,7 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 | Need | Document |
 | --- | --- |
 | What has shipped, what is local, and what comes next | [Progress](./docs/progress.md) |
+| Read live and saved run logs, including interruptions and cleanup | [Run logging](./docs/design.md#next-step-v01-run-logging) |
 | Check changes to this repository before merging | [Repository code checks](./docs/code-checks.md) |
 | Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
 | Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
@@ -158,7 +165,7 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 | Select sandbox or real, submit a request, and run its ticket workflow | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
 | Understand the sandbox merge-rehearsal test matrix and evidence | [Merge rehearsal testing plan](./docs/merge-rehearsal-testing.md) |
 | Understand the implemented one-ticket service/database checks and evidence | [Service and database acceptance](./docs/merge-rehearsal-testing.md#service-and-database-acceptance) |
-| Review proposed batching, limited retries, and excluded-ticket handling | [Batch design](./docs/design.md#proposed-batch-testing-and-selection) |
+| Review sandbox batching, limits, and excluded-ticket handling | [Batch design](./docs/design.md#proposed-batch-testing-and-selection) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
 | Review the future release design and unsettled choices | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |

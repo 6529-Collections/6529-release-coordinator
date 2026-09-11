@@ -58,6 +58,17 @@ export function buildServicePlan(entry, report, profile, runtime) {
     "unsupported-target",
     "The sample service executor only supports isolated staging simulations."
   );
+  return servicePlanFromSources({
+    request: canonicalRequest(entry.request, profile),
+    binding: report.inbox,
+    report,
+    runtime
+  });
+}
+
+// Internal adapter for an already verified ticket or batch. This is not an
+// operator input, and does not manufacture a ticket receipt for a batch.
+export function servicePlanFromSources({ request, binding, report, runtime }) {
   const sources = {};
   for (const repo of report.repositories) {
     const snapshot = repo.service_source;
@@ -95,7 +106,7 @@ export function buildServicePlan(entry, report, profile, runtime) {
   const before = databaseSpec(sources.backend.baseline),
     after = databaseSpec(sources.backend.files);
   const observed = serviceHash(before) === serviceHash(after) ? "no" : "yes";
-  const declared = entry.request.database_change;
+  const declared = request.database_change;
   const database = {
     declared,
     observed,
@@ -128,10 +139,7 @@ export function buildServicePlan(entry, report, profile, runtime) {
     "The sandbox backend catalog cannot use the reserved frontend name.",
     "blocked"
   );
-  const graph = inspectServiceGraph(
-    canonicalRequest(entry.request, profile),
-    catalog
-  );
+  const graph = inspectServiceGraph(request, catalog);
   serviceAssert(
     graph.status === "pass",
     "invalid-services",
@@ -166,7 +174,7 @@ export function buildServicePlan(entry, report, profile, runtime) {
     protocol: serviceProtocol,
     profile: "sandbox",
     target: "staging",
-    binding: report.inbox,
+    binding,
     rehearsal_input_hash: report.input_hash,
     runtime,
     sources,

@@ -1,8 +1,8 @@
 # Checks for this repository
 
 These checks protect changes to the Release Coordinator's own code. They are
-separate from processing release tickets, running sandbox applications, and the
-future tests of combined tickets. See [progress](./progress.md) for delivery status.
+separate from processing release tickets and executing sandbox applications or
+combined-ticket CI. See [progress](./progress.md) for delivery status.
 
 ## Local command
 
@@ -94,6 +94,17 @@ The live `inbox:run` command dispatches GitHub Actions, so it does not require
 Docker on the operator's machine. See the
 [service acceptance record](./testing/service-database-2026-09-10.md).
 
-Add batch membership, bounded splitting and exact-combination tests with the
-future batch implementation. A new general test runner, product builds and the
-frontend's large test-selection system are not needed for this repo's gate.
+Batch membership, bounded splitting, exact-combination and recovery tests now
+run in the offline suite. The [complex corner-case campaign](./testing/complex-corner-cases.md)
+also includes three explicit Docker cases (CT-14/15/17), skipped unless
+`COORDINATOR_CT_DOCKER=1` is supplied. Optional live evidence readback in CT-12
+requires `COORDINATOR_CT_LIVE_JOURNAL`; the normal gate stays offline. CT-09
+characterizes the known takeover race, so its passing assertion is not a claim
+that recovery can safely take over a still-running process.
+
+Run logging tests exercise the real CLI and journal with controlled GitHub
+responses, plus actual temporary Git candidates. They cover live-before-result
+output, JSON stdout, interrupted/resumed history, lost responses, exact changed
+main reasons, partial cleanup, private/profile-separated paths, redaction and
+storage failures. Test logs use disposable temporary directories; they do not
+populate the operator's persistent log directory. See the [logging contract](./design.md#next-step-v01-run-logging).

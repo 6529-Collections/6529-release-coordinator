@@ -1,10 +1,139 @@
 # Progress and next steps
 
-Last updated: **2026-09-10**. Evidence below carries its own date; the earlier
+Last updated: **2026-09-11**. Evidence below carries its own date; the earlier
 package and consumer observations were not all rechecked during this update.
 Runtime behavior comes from code and live evidence. The [ticket contract](./inbox-processing.md) describes the local manual processor;
 [execution design](./design.md) remains future work. There is no always-on release
 worker; each manual run exits after its work.
+
+## v0.1 run logging, September 11
+
+Pre-merge review in [PR #61](https://github.com/6529-Collections/6529-release-coordinator/pull/61)
+corrected trial workflow links and removed the workflow definition ID from the
+dispatch event; `workflow_id` in logs identifies a run. It also closes a batch
+evidence gap: when combined trees have no changes against saved main, cheap
+preparation holds the candidate before CI/services. A passing or reused batch
+must contain at least one verified temporary PR. The inbox fixture now records
+trial PRs, and its repeat assertion requires remote evidence revalidation.
+Live output inspection also led to explicit service names in terminal result lines.
+The updated full local check passed on Node 22.16.0: **376 passed, 0 failed,
+3 opt-in Docker cases skipped**, with all other check phases passing.
+
+Implemented [live and saved run logs](./design.md#next-step-v01-run-logging) in the
+existing `inbox:run` command. Events show meaningful steps starting and finishing,
+verified versus uncertain outcomes, ticket/PR/workflow and attempt identities,
+step durations, interruption and actual cleanup. Logs live outside checkouts at
+`~/.6529-release-coordinator/logs/PROFILE/INBOX_REPOSITORY_ID/RUN_ID.jsonl`.
+Explicit resume appends history and preserves the original attempt IDs. JSON stdout
+stays machine-readable; progress goes to stderr and the final result names its log.
+
+The real input-verification path now names the repository whose `main` changed
+and its saved/current commits. A stale batch's ticket reasons also report verified
+trial cleanup or remaining work. This addresses the explanation gap from CT-05;
+the earlier dated campaign remains unchanged. Missing current-commit evidence
+stays unknown rather than being described as a verified branch change.
+
+Added ten logging acceptance tests using the real CLI/journal/selection/check
+logic with controlled GitHub responses; trial cases prepare actual temporary Git
+repositories. They cover lost dispatch responses, partial cleanup, explicit resume
+without duplicate service execution, private separated paths, redaction, JSON output,
+a crash-truncated log and disk failure. A startup storage failure stops before inbox
+work; a mid-run log failure preserves existing journal/cleanup work and returns
+exit `2` with `logging.complete: false`.
+
+The full `npm run check` passed on **Node 22.16.0: 374 passed, 0 failed,
+3 opt-in Docker cases skipped**, plus lint, formatting, workflow policy, packed
+CLI/schema smoke checks and source preservation. The ten new cases passed, and
+CT-10 still proves recovery after a lost response/save with optional runtime
+metadata. Evidence: `.release-coordinator/run-logging-check.log`. These are local
+checks; the Docker cases were not rerun for this logging-only change.
+
+The initial logging commit `40d7d86` included the implementation, earlier
+corner-case tests and documentation. It did not itself run live acceptance.
+Source delivery is tracked in [PR #61](https://github.com/6529-Collections/6529-release-coordinator/pull/61),
+which also includes the earlier bounded batch work. The existing journal writer, profile permissions, batch budgets and
+manual stop-before-resume rule remain. Logs do not solve CT-09's overlapping-process
+gap. No heartbeat, board, ownership lock or automatic recovery was added.
+
+The authorized [live logging acceptance](./testing/run-logging-2026-09-11.md)
+passed with sandbox ticket #13: exact backend/frontend trial CI and all four service
+steps passed, temporary PRs/branches/database were removed, and the journal was
+unlocked. The private log contains 122 complete events, including real CI links and
+start/finish evidence. Exit 2 correctly retains older ticket #1's existing hold;
+ticket #13 passed. The owned test ticket was then retired with `--close-test`,
+preserving its request, comment and batch history. Only older #1 remains open.
+Source PRs, test main refs, runtime and the real journal were unchanged.
+The latest code check at `21cf6f3` also passed [GitHub PR CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34570629958)
+on Node 20/22/24 and the required gate. See the acceptance record for the tested
+source and subsequent display/evidence fixes. No package publication or deployment ran.
+[Links between separate tickets](./design.md#deferred-links-between-separate-tickets)
+remain later work: directional prerequisites and inseparable groups use immutable
+request IDs and initially require prerequisites in the same tested batch. CT-20
+remains partial until that feature and its submission integrations are implemented.
+
+## Complex corner-case campaign, September 10
+
+Ran [CT-01 through CT-20](./testing/complex-corner-cases.md) sequentially on the
+local `codex/bounded-sandbox-batches` branch after commit `1697d3b`. **17 passed
+at their recorded layer, 2 were partial, and 1 ownership gap was reproduced.**
+Most tests use controlled GitHub responses and real Coordinator logic; five also
+use temporary Git repositories. Three cases ran actual local Docker/MySQL, and
+CT-12 re-read an existing passing GitHub workflow without dispatching new work.
+The tests created no remote resources; all owned local containers were removed.
+
+CT-09 confirms that replacing a paused process's journal token cannot fence a
+GitHub write already past its last ownership guard. Stop the previous process
+before explicit recovery, as the current command requires; takeover of a still
+running process is not proven safe. CT-05 holds stale code and cleans trials,
+but its generic reason does not name the moved repository base. CT-20 verifies
+rejection of unsupported cross-ticket declarations; future dependency-aware
+splitting remains unimplemented.
+
+Added repeatable CT assertions and shared test fixtures. At this campaign checkpoint,
+the changes were local and uncommitted, with no production source change; they are
+included in the logging commit recorded above. The full `npm run check`
+passed on Node 24.19.0: **364 passed, 0 failed, 3 explicit Docker cases skipped**
+in the offline suite, plus lint, formatting, workflow policy, package smoke and
+source-preservation checks. Those three Docker cases each passed separately in
+the sequential campaign. Log: `.release-coordinator/corner-cases/repository-check.log`.
+This is local validation, not pushed PR CI, a merge or a deployment.
+
+## Sandbox batch implementation, September 10
+
+The service extension merged in [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
+at `02fb6a645a4dd40d909f8346e06eba7057a01333`; this batch work started from that clean main.
+Local branch `codex/bounded-sandbox-batches` extends the same `inbox:run` command.
+Without `--issue`, sandbox runs finish cheap ticket/scope/database and Git conflict
+filtering before normal CI on temporary combined PRs and combined service checks.
+`--issue` keeps the one-ticket path, including supported database changes.
+
+The implementation saves whole tickets, exact inputs, deterministic Issue-number
+order, temporary PR identities, attempts and cleanup in `inbox-run-v4`, preserving
+v3 service history. Limits are 10 tickets, 10 PRs per repository, 40 combined Git
+attempts, 12 candidate check rounds and 45 minutes to start new rounds. Only
+confirmed code failures with a passing unchanged baseline trigger splitting.
+Every selected final combination has its own passing evidence; excluded tickets
+retain reasons, ownership and check links. No source PR is merged or altered.
+
+The full local `npm run check` passed **347 tests on Node 24.19.0**, lint,
+formatting, workflow policy, packed CLI/schema smoke checks and source preservation.
+The 33 new tests include actual temporary Git repositories, cheap-before-expensive
+ordering, splitting and attribution, limits, repeat/resume, GitHub identity and
+cleanup verification, and the complete inbox/journal/presentation path.
+Live [sandbox acceptance](./testing/batch-2026-09-10.md) verified a compatible
+pair, a repeat with no duplicate tests/comments/decisions, and an A/B pair whose
+combined code fails while each complete ticket passes alone. The bounded search
+selected #11 and left #12 waiting as incompatible after exactly three candidate
+rounds. Recovery reused existing PRs after a GitHub server error and after fixing
+an overly strict check of descriptions appended by CodeRabbit. All eight trial
+PRs were closed unmerged, temporary refs removed, and all source heads and
+protected refs were unchanged. At this September 10 checkpoint, source delivery
+was limited to the local branch. The later PR checks and logging acceptance are
+recorded above; this earlier snapshot does not claim them or a deployment.
+
+Cross-ticket must-ship-together declarations remain unsupported; inseparable work
+belongs in one complete ticket. Database-changing batches, real adapters and
+release execution remain future work.
 
 **Baseline before the sandbox service extension:** [PR #40](https://github.com/6529-Collections/6529-release-coordinator/pull/40)
 merged September 10 at `430cae629fac12fe78a57bc57e00d3ef411c6742`.
@@ -137,7 +266,8 @@ This fixture models order, baseline upgrades and data/output checks. It does not
 prove AWS deployment, real database change detection, persistent service health,
 existing-runtime prerequisites or real rollback. Missing prerequisites remain
 held. Source delivery through normal PR checks and merge precedes bounded batches
-of complete requests without database changes. No batch command exists yet.
+of complete requests without database changes. This historical snapshot predates
+the batch implementation recorded above; no separate batch command was added.
 
 ## Documentation alignment, September 10
 
@@ -148,8 +278,8 @@ The testing guide
 also identifies where temporary MySQL runs and separates the sample `staging`
 target from a product staging database. Older section links remain valid.
 
-The next sequence is delivery of this extension, then bounded sandbox batching
-without database changes. Historical acceptance records remain dated evidence;
+The next sequence at that checkpoint was delivery of the service extension, then
+bounded sandbox batching without database changes. Historical acceptance records remain dated evidence;
 real service execution, deployment, and recovery remain future work. This
 housekeeping changes documentation only; the earlier 306-test result is not a
 new test run, and external state was not rechecked for this wording update.
@@ -205,7 +335,7 @@ a product deployment or a repeat of the complete live ticket matrix.
 
 ## Planned later stage: batch selection and tests, September 9
 
-**Documentation only; not implemented or tested.** The
+**Historical September 9 plan; see the September 10 implementation above.** The
 [batch design](./design.md#proposed-batch-testing-and-selection) now puts full
 application checks on the selected combination of tickets, after the existing
 checks for each request. It avoids an extra full build/test run per ticket by
@@ -362,9 +492,9 @@ workflow uses fresh rehearsal reports to update the same ticket. The Coordinator
 code-check delivery is tracked above.
 The [service/database stage](#sandbox-services-and-database-september-10) is
 implemented with local and live acceptance evidence; its Coordinator source
-delivery is tracked above. The later
-[batch stage](#planned-later-stage-batch-selection-and-tests-september-9) remains
-documented but unimplemented. Real-project live acceptance, the larger release
+delivery is tracked above. The
+[batch stage](#sandbox-batch-implementation-september-10) now has a local
+implementation and its own acceptance record. Real-project live acceptance, the larger release
 worker, execution permissions, deployment evidence sources, and recovery remain
 later work.
 

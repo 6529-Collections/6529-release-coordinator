@@ -321,8 +321,10 @@ Omit the ticket selector to process all selected tickets through the same flow:
 RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 ```
 
-Each suitable ticket gets a separate plan; different tickets are not merged
-together. Use `npm run --silent inbox:run` to suppress npm's banner for JSON.
+Sandbox runs first inspect and rehearse each ticket, then test suitable whole
+tickets together through the bounded batch flow described below. Real runs
+retain individual ticket plans and Git rehearsals. Use
+`npm run --silent inbox:run` to suppress npm's banner for JSON.
 
 For a complete supported sandbox ticket, the same command continues through
 [service and database checks](../../docs/merge-rehearsal-testing.md#service-and-database-acceptance).
@@ -333,7 +335,8 @@ and read access to its jobs/logs, in addition to the existing inbox permissions.
 No local Docker installation is needed for `inbox:run`.
 Sandbox service logs require GitHub CLI **2.97.0 or later** because the reader
 uses `gh api --allow-escape-sequences` ([upstream release](https://github.com/cli/cli/releases/tag/v2.97.0)).
-Raw logs stay in memory and are never printed to the operator's terminal.
+Raw GitHub Actions logs stay in memory and are never printed to the operator's
+terminal.
 
 The job runs isolated temporary MySQL and sample programs in the test backend
 repository's GitHub Actions runner. It uses fake data and removes the owned
@@ -361,9 +364,31 @@ that the requested code failed.
 `real` retains inspection/Git rehearsal and reports services as `not-run`.
 
 [Combining tickets](../../docs/design.md#proposed-batch-testing-and-selection)
-is still future work. There are no batch-selection flags or per-candidate GitHub
-PR creation in this command. Later full checks belong at the batch level by
-default, starting with requests without database changes.
+is now the default for an unscoped **sandbox** run:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
+```
+
+The command completes cheap intake/scope/database and Git conflict filtering
+before creating temporary PRs for normal required CI, then runs the combined
+sample services. Each ticket must be self-contained, target staging and have a
+verified no-database-change answer. Inseparable work belongs in one ticket;
+cross-ticket dependency declarations are not supported yet.
+
+The account also needs contents/PR write access to both sample repositories.
+Only owned `codex/batch-trial-<UUID>` PRs/branches are created and cleaned up; source
+PRs and main are not changed. Limits are 10 tickets, 10 PRs per repository,
+40 combined Git attempts, 12 candidate check rounds and 45 minutes to start new
+rounds. Pending or interrupted attempts retain the inbox lock and their owned
+identities for explicit `--resume`; stop the previous process first. Completed
+identical candidates reuse their evidence after fresh input checks and re-reading
+the actual GitHub CI/service results. This starts no new CI; missing or changed
+proof stops reuse.
+
+`batch:passed` means that exact selected group passed. Excluded tickets remain
+visible with `batch:waiting` or `batch:blocked`, reasons and links. A+B failing
+does not mark both tickets broken. No passing result authorizes a release.
 
 The default selection is every open `release-request` Issue plus ticket IDs
 already recorded in the journal, even if someone removed their labels. Both
@@ -428,9 +453,9 @@ independent commit history. **Never merge it into main, delete it, or force-push
 it.** It is runtime state, not a source branch. See the
 [storage and trust contract](../../docs/inbox-processing.md#storage-and-trusted-writers).
 
-Policy `2026-09-10.1` generates Git and supported sandbox service plans internally. The journal marker is now
-`workflow: "inbox-run-v3"`. First use upgrades a legacy/v1/v2 journal without
-rewriting its decisions. Older writers reject the v3 marker before changes. Keep the marker
+Policy `2026-09-10.2` generates Git, sandbox service and batch plans internally. The journal marker is now
+`workflow: "inbox-run-v4"`. First use upgrades a legacy/v1/v2/v3 journal without
+rewriting its decisions or service history. Older writers reject the v4 marker before changes. Keep the marker
 and history intact; use current code instead of removing unfamiliar fields or
 reasons. Read-only diagnostics and the public CLI do not change.
 
@@ -475,3 +500,33 @@ without known disposition, or externally rewritten state before proceeding.
 Code 2 takes precedence, then 3, then 1. Help makes no GitHub calls. A failure
 report does not claim all prior writes were rolled back. A pass is an observation
 of exact inputs, not release authorization or a reservation of product branches.
+
+### Run logs
+
+`inbox:run` now prints step progress to stderr and saves a chronological JSON-lines
+log at `~/.6529-release-coordinator/logs/PROFILE/INBOX_REPOSITORY_ID/RUN_ID.jsonl`.
+It prints the exact path at startup and finish. The initial `startup-UUID.jsonl`
+file becomes the assigned run's file after journal acquisition; early acquisition
+failures retain their startup file. There are no additional command flags.
+
+The log records starts, verified results, uncertainty, interruptions, exact
+identities/links, step durations and cleanup. `--resume` appends to the same history
+with a new invocation ID. A crash can leave a partial last line; it is preserved
+and reported as incomplete. Reading a log never grants permission to resume.
+
+`--json` stdout remains one final result. Its `logging` object reports `file`,
+`complete`, `invocation_id`, `run_id` and `previous_tail_incomplete`. Use
+`npm run --silent inbox:run` to suppress npm's banner. Progress still goes to stderr.
+A log initialization failure stops before inbox work. A later disk failure lets
+existing journal/cleanup work continue, warns that the log is incomplete and returns
+exit `2`, even if ticket processing succeeded. The ticket results remain visible.
+
+Remote service step details arrive with the verified final workflow report; their
+source times are recorded separately from when the Coordinator observed them.
+Raw Actions logs and full requests are not copied into these logs.
+
+See the [logging contract](../../docs/design.md#next-step-v01-run-logging) and
+[validation record](../../docs/progress.md#v01-run-logging-september-11). This adds
+no heartbeat, status command, board, automatic restart or takeover. The existing
+manual recovery procedure remains required; a quiet log is not proof a process
+has stopped.

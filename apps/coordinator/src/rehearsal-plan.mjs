@@ -85,9 +85,15 @@ export function normalizeMergePlan(manifest, profile) {
   ]);
   requireValue(
     manifest.schema_version === "1" &&
-      ["test-manifest", "verified-inbox"].includes(manifest.source) &&
+      ["test-manifest", "verified-inbox", "verified-batch"].includes(
+        manifest.source
+      ) &&
       manifest.profile === profile.name,
     "Manifest version, source, or profile does not match sandbox input."
+  );
+  requireValue(
+    manifest.source !== "verified-batch" || profile.name === "sandbox",
+    "Batch trials are restricted to the sandbox."
   );
   requireValue(
     typeof manifest.case_id === "string" &&

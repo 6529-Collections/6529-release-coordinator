@@ -2,7 +2,8 @@
 
 **Draft, not implemented release behavior.** The live system submits requests;
 the local app verifies intake, inspects readiness, organizes tickets, rehearses
-merges, and runs supported one-ticket sandbox service/database checks.
+merges, and runs supported one-ticket sandbox service/database checks and
+bounded sandbox batches without database changes.
 It does not authorize or execute releases. See [progress](./progress.md) for
 that boundary.
 This document retains the written execution baseline formerly embedded in the
@@ -35,6 +36,116 @@ settle the choices below.
 The full execution design's lane, batch, and worker database should not be
 introduced merely to organize tickets. The smaller processing stage still
 uses its own GitHub decision journal, not the future worker database.
+
+<a id="next-step-v01-run-logging"></a>
+
+## v0.1 run logging
+
+**Implemented September 11, 2026.** Here, v0.1 names this small Coordinator
+milestone, not a new public npm package version. The existing `inbox:run` command
+shows progress and saves diagnostic history. The manual recovery procedure is
+unchanged. See [progress](./progress.md#v01-run-logging-september-11) for validation
+and delivery evidence, including [live sandbox logging acceptance](./testing/run-logging-2026-09-11.md).
+
+### What the logs show
+
+- Show progress as each meaningful step starts and finishes: intake, filtering,
+  Git rehearsal, temporary PR creation, waiting for checks, service execution,
+  ticket updates and cleanup. Log a changed outcome, not every unchanged poll.
+- Save the same events in chronological order for each run. Include UTC time,
+  run ID, step, outcome and a plain explanation; include ticket/request,
+  candidate/attempt, repository, PR or workflow identity and links where relevant.
+  Completed steps include elapsed time.
+- Distinguish **started**, **succeeded**, **failed**, **unknown** and
+  **interrupted**. Starting a GitHub request is not proof that it succeeded.
+  A lost response stays uncertain until the existing reconciliation verifies it.
+- Explain stops precisely. If backend `main` changes, name that repository and
+  record the expected and observed commits. Say that the old result cannot be
+  used. Report cleanup separately: what was verified removed, what remains,
+  and what is unknown. Do not claim cleanup succeeded merely because it started.
+- On explicit resume, append a visible resume boundary to the same run's history
+  and retain existing attempt identities. End a normal run with its outcome,
+  unfinished work, any existing recovery instruction, and the log location.
+
+For example: “Backend main changed during testing. These results belong to the
+previous version. The temporary test PRs were cleaned up; a fresh run is needed.”
+That cleanup sentence is valid only after cleanup has been verified. If cleanup
+is incomplete, name the remaining owned PRs/branches and the required next action.
+This addresses the explanation gap recorded in CT-05; it does not change when
+stale evidence is rejected.
+
+### Where the information lives
+
+Detailed logs live on the machine running the command, outside individual
+checkouts: `~/.6529-release-coordinator/logs/PROFILE/INBOX_REPOSITORY_ID/RUN_ID.jsonl`.
+The command reports the actual path. Profile and immutable inbox repository ID
+separate histories; files contain one JSON event per line and use private local
+permissions. Each command invocation has its own ID inside the events.
+
+Before acquiring the journal lock, a new command writes a `startup-UUID.jsonl`
+file. After acquisition, it moves that same history to the assigned run ID without
+replacing an existing file. An early failure retains the startup file. Explicit
+resume appends to the run's existing file, including a resume boundary. If a crash
+left a partial final line, preserve those bytes, begin new events on a separate
+line and report the old incomplete tail. Logs are diagnostics, not replay input.
+They survive changing checkout or branch but are not a shared board or journal backup.
+
+The existing `codex/inbox-state` journal remains the source for recorded intent,
+ownership, attempts and recovery decisions. Save those records before the same
+external actions as today. Local logs are for explanation, never imported as
+passing evidence or permission to continue. Preserve the v4 writer boundary,
+current attempt budgets and profile permissions.
+
+Logs contain selected Coordinator events and bounded error codes, not raw Actions
+output, exception dumps, environment dumps or full request bodies. Known credential
+values and token patterns are redacted from diagnostic text. Live progress goes to
+stderr; `--json` stdout remains one final result with `logging.file`, `complete`,
+`invocation_id`, `run_id` and `previous_tail_incomplete` metadata.
+
+Failure to initialize a log stops before inbox work. A later write failure warns
+once and marks `logging.complete: false`; existing journal decisions and cleanup
+continue under their existing rules. The command exits `2` even if ticket processing
+finished successfully. A log failure does not erase a verified ticket result.
+
+Remote service steps are reported when the completed workflow report is verified,
+with the source start/finish times separate from local observation time. Waiting
+for that workflow is visible immediately. This does not stream raw Actions logs
+or poll for a heartbeat.
+
+### Limits and finish line
+
+There is **no heartbeat** in this step. No new live-status file or command,
+GitHub status Issue/Project, dashboard, background service, automatic restart,
+takeover, machine ownership/OS-lock hardening, or stop/restart control system.
+Logs can show the last observed action; silence cannot distinguish slow work,
+a paused process, a crash or a lost connection.
+
+Existing Ctrl+C handling and explicit `--resume` remain. Record interruption
+when the process can do so; an abrupt crash may leave only a “started” event.
+Stop the old process and let in-flight requests settle before manual recovery,
+following the [command guide](../apps/coordinator/README.md#journal-concurrency-and-interrupted-runs).
+The CT-09 overlapping-process gap remains open: logs do not prevent a paused
+process from finishing a GitHub write after ownership changes.
+
+The cases below are covered by
+[run logging tests](../apps/coordinator/test/run-log.test.mjs), using the real CLI,
+journal, selection and check logic with controlled GitHub responses. The trial
+cases also prepare real temporary Git repositories. These are local tests, not
+new live GitHub acceptance.
+
+| Case | Required result |
+| --- | --- |
+| Normal run | Ordered start/result events identify the run, relevant tickets/attempts, elapsed steps and final outcome in terminal and saved log. |
+| Failure or lost response | Verified failure and unknown outcome are distinct; an attempted operation is never logged as confirmed success. |
+| Main changes during checks | Name the changed repository and both commits, reject stale proof, and report verified cleanup or remaining resources accurately. |
+| Interruption and explicit resume | Preserve earlier events and attempt IDs, mark the resume, and use journal reconciliation; a missing final event never authorizes takeover. |
+| Storage and output | Separate profiles/inboxes outside checkouts, report the path and any write failure, and preserve parseable `--json` stdout. |
+| Sensitive output | Useful step/errors remain visible without credentials, raw workflow output or request-body dumps. |
+
+This bounded step requires no request-schema change, consumer integration update,
+package publication,
+source-PR merge or deployment. The dated corner-case results remain evidence of
+the earlier behavior; new tests must record their own results in progress.
 
 ## Bounded stage: sandbox merge rehearsal
 
@@ -87,169 +198,160 @@ sandbox does not settle the real lane, merge timing, builds, production database
 inspection, or deployment/recovery choices. The later batch stage still starts
 with requests without database changes.
 
-## Proposed batch testing and selection
+<a id="proposed-batch-testing-and-selection"></a>
+## Batch testing and selection
 
-**Direction recorded September 9, 2026; not implemented.** Today `inbox:run`
-processes each ticket separately, reads existing PR checks, tries local Git
-merges, and runs supported sandbox application checks for that ticket. It does
-not combine different tickets, test their combined code, or open temporary PRs.
-This later stage follows the one-ticket service/database matrix and stays in the
-two sample repositories and test inbox. Extend the same operator workflow;
-do not add a separate operator command or manual plan file.
+**Sandbox implementation, September 10, 2026.** See [progress](./progress.md)
+for local checks versus live acceptance and source delivery. An unscoped sandbox
+`inbox:run` now selects and tests whole tickets together. `--issue NUMBER` keeps
+the existing one-ticket service/database path. Real mode remains inspection and
+Git rehearsal only. No manual plan, extra batch command, product merge or release
+permission is introduced.
 
-### Where the expensive checks belong
+### Cheap elimination before expensive checks
 
-Keep the initial checks for each ticket: verify intake, exact PR versions,
-existing required checks and reviews, scope, dependencies, and local merges.
-Ordinary PR CI still runs in the source repositories. Do not add another full
-build/test run for every ticket by default before testing their combined batch.
+1. Verify immutable intake, exact PR versions, existing required PR checks and
+   reviews, scope, dependencies and per-ticket Git merges. Reading existing CI
+   results does not rerun them.
+2. Inspect the supported sample files, complete service scope and database answer.
+   Only self-contained staging tickets with verified `database_change: no` enter
+   batching. A false no is action-needed; unsupported scope or unresolved answers
+   stay visible with a reason.
+3. Save the ordered selection and starting main commits. Try the whole group's
+   Git merge. If it conflicts, build a compatible group in saved priority order,
+   recording exclusions. Complete this cheap filtering before starting new CI.
+4. For that group's changed repositories, open owned temporary PRs to run the
+   normal required `Sandbox check`. Their exact trees must equal the locally
+   rehearsed trees, and GitHub's test merge must use the saved base and head.
+5. Once required PR checks pass, run the combined backend/frontend sample service
+   plan through the existing pinned runtime. Passing independent repository CI
+   alone is not combined application proof.
 
-Select compatible, complete requests, combine their exact code, and run each
-affected repository's normal required PR checks on that combined result. A
-temporary PR per affected repository is the proposed way to trigger these checks
-on isolated GitHub Actions runners. The Coordinator reads the results and links
-them to the inbox tickets. Temporary PRs are not merged. Their ownership,
-cleanup, required workflow triggers, and permissions must be defined before
-implementation. Passing frontend and backend checks separately does not prove
-that the applications work together; that needs explicit integration coverage.
+Ordinary source-PR CI continues normally. The Coordinator adds no mandatory full
+application run per ticket before selecting a batch. A tree that merges cleanly
+can still fail application tests; that is why later test failures may require
+additional candidate checks.
 
 ```mermaid
 flowchart TD
-    A[Inspect each ticket and existing PR checks] --> B[Select complete compatible requests]
-    B --> C[Save exact inputs and try the combined batch]
-    C --> D{Merge and required checks pass?}
-    D -->|Yes| E[Record this exact passing candidate]
-    D -->|Code conflict or test failure| F[Divide into smaller complete groups within limits]
-    F --> C
-    D -->|Runner problem or missing proof| G[Record uncertainty and retry within limits]
-    F -->|Limit reached| H[Keep a verified candidate if one exists and explain deferred tickets]
+    A[Read tickets and existing PR results] --> B[Cheap scope, database and Git checks]
+    B --> C[Find a compatible group of whole tickets]
+    C --> D[Temporary PR checks on combined code]
+    D -->|Pass| E[Combined services and frontend checks]
+    E -->|Pass| F[Save exact passing group and ticket reasons]
+    D -->|Confirmed code failure| G[Verify unchanged baseline]
+    E -->|Confirmed code failure| G
+    G -->|Baseline passes| H[Try smaller whole groups within limits]
+    H --> C
+    D -->|Missing evidence| I[Wait or reconcile saved attempt]
+    E -->|Missing evidence| I
+    G -->|Baseline fails or unknown| I
 ```
 
-A recorded passing candidate is not release approval or a completed ticket.
-Release ownership, final checks, and authorization remain separate requirements.
+### Saved order, scope and limits
 
-### Keep complete requests and use a predictable order
+The code-owned `sandbox-batch-v1` policy uses ascending GitHub Issue number as a
+stable intake order. The requester cannot choose priority through `created_at`.
+Each ticket is indivisible: all its parts, PRs and selected services stay together.
+The current intake contract describes dependencies within a ticket. Cross-ticket
+must-ship-together groups are **not yet represented or supported**; put inseparable
+work in one complete ticket. Overlapping PR requests remain held by the initial
+policy, without choosing a version by age.
 
-- A ticket is the smallest selectable unit. Its frontend/backend PRs, services,
-  target, and dependencies stay together. Never release a successful subset of
-  one ticket because another part failed.
-- Requests that must ship together form an indivisible group. Split only where
-  all required dependencies remain satisfied. The current public schema names
-  dependencies within a request, not a general graph between inbox tickets;
-  the trusted representation of relationships between tickets is still to be
-  designed. Do not invent dependencies or resolve overlapping PR versions by age.
-- Proposed priority is oldest suitable verified request first. Dependencies take
-  precedence. Save the order, its trusted source, and exclusions so retries do
-  not pick a different winner by chance. Exact tie-breaking is an implementation
-  decision to record before coding.
-- Preserve target and database-safety boundaries. The first sandbox selection
-  stage uses requests without database changes and does not mix deployment
-  targets. A database-changing or inseparable group is not broken apart to
-  obtain a passing result. Broader database batching remains a separate decision.
+A selection contains at most **10 tickets and 10 PRs per repository**. Its saved
+search permits **40 combined Git attempts and 12 candidate check rounds**, with
+**45 minutes to start new rounds**. Each round can run one normal PR workflow per
+changed repository, one combined service workflow, and an unchanged-baseline
+workflow only when diagnosing a code failure. Existing attempts still reconcile
+and clean up after the search deadline; a deadline does not erase ownership.
+Ticket/PR overflow stays waiting instead of breaking up a ticket.
 
-### Divide a failing batch within limits
+All candidates in one search use the same saved main commits and PR versions.
+Each candidate rebuilds the full service graph. Its identity includes exact
+intake bindings, membership/order, code and test/runtime configuration. A changed
+PR head never silently replaces accepted code; corrected code requires a new
+request. Changed main or gates invalidate the usable candidate. Owned temporary
+PRs are reconciled/closed before a fresh run can start.
 
-Try the selected batch first. On a confirmed code/test failure or merge conflict,
-divide it into smaller groups of complete tickets and required dependencies.
-For ten independent requests, this could mean five plus five, then two plus
-three inside a failing half. These numbers are an example, not fixed settings.
-Dependency groups may require unequal divisions or prevent division entirely.
+### Bounded splitting and failure attribution
 
-Keep passing groups as candidates and investigate failing groups within saved
-attempt and elapsed-time limits. Rebuild the requested services and dependency
-order for every candidate. Try adding compatible groups in the saved priority
-order when the budget permits. The final selected combination must itself pass
-all required checks; separate passing groups cannot simply be joined and called
-passing. This finds useful work that can proceed, without promising the largest
-possible batch or searching every subset.
+Try the compatible group first. Split a confirmed failing group into two ordered
+halves, recursively within limits. Keep earlier passing candidates. If useful
+parts from both halves survive, test their union before selecting it. An identical
+candidate is not tested again merely to spend another attempt. The search returns
+a directly tested candidate or an honest no-candidate result; it does not promise
+the largest possible passing group.
 
-At the limit, preserve the evidence for a verified passing candidate, if one
-exists. Requests without a conclusive result remain waiting with an explicit
-next action. If no candidate has passed, nothing is ready to continue. A runner
-outage, timeout, unavailable result, or uncertain save is not a code failure and
-must not trigger splitting to identify a faulty request. Retry infrastructure failures within
-their own limit; stop safely if state or cleanup cannot be verified.
+Every later command re-reads the saved trials' GitHub checks and service reports
+before reusing their result. The checkout log must identify a commit whose tree
+and parents match the saved combination. Closed temporary PRs retain this proof;
+rechecking it does not reopen them or rerun CI. Missing or changed evidence stops
+reuse and requires reconciliation.
 
-Record each attempt before starting it: original selection, candidate membership,
-exclusions, parent attempt, dependency groups/order, exact inputs, test plan, and
-remaining budget. Save workflow identities, links, results, and cleanup afterward.
-Resuming must preserve those inputs and limits. Do not retest an identical
-candidate merely to consume another attempt; any evidence reuse requires the
-same complete inputs and fresh required gates. Current `inbox:run` runs fresh
-Git rehearsals and can reuse its verified saved sandbox service attempt. Batch
-search and its candidate cache remain future work.
+If A passes, B passes, but A+B fails, the saved priority selects A and leaves B
+waiting with the exact failure and selected candidate. B is not labelled broken.
+Once A actually reaches main through a future authorized release process, B must
+be checked against that new base. A specific failure caused by B's addition can
+then require a correction. The priority policy does not prove which author made
+an error.
 
-### When A and B pass alone but fail together
+Only a verified code failure with a passing unchanged baseline permits splitting
+for attribution. Runner outages, pending/skipped/cancelled checks, wrong result
+identity, baseline failures and uncertain saves do not identify a bad ticket.
+Missing evidence stops the search or preserves an interrupted attempt for
+explicit reconciliation. Unchanged completed unknown results are retained; a new
+input/configuration or a resolved interrupted attempt is needed for new evidence.
 
-This proves an incompatibility, not that both tickets are broken. If they are
-independent, keep the earlier suitable passing candidate under the saved order.
-For example, choose A and leave B waiting with the exact A+B test failure and a
-link to A. If they must ship together, hold the whole group for a correction or
-scope decision. Do not select half of that group.
+### Journal, temporary PRs and recovery
 
-Once A is actually in `main`, B's next candidate includes A through the new base.
-Waiting for a later batch does not remove that incompatibility. Recheck B against
-the actual new base. If a specific code failure remains attributable to B's
-addition, mark B action-needed with the evidence and correction owner. Choosing
-B first could require A to be adjusted instead; the selected order is a policy,
-not proof of which author made a mistake.
+`inbox-run-v4` preserves earlier ticket and service history and adds saved batch
+inputs, attempts, budgets, intermediate Git results, exact temporary PR identities,
+service attempts, results and cleanup. Older writers reject the marker. A saved
+selection remains fixed on resume; newly arriving tickets wait for a later run.
+State/ownership errors retain the existing inbox lock for explicit `--resume`.
 
-### Evidence belongs to the code that was tested
+Only branches named `codex/batch-trial-<attempt UUID>` can be created or removed by
+the batch adapter. The branch/commit is saved before PR creation. Lost creation
+responses reconcile by that unique head; they cannot create a replacement PR.
+The original Coordinator identity block must remain unchanged at the start of the
+PR description. Appended review summaries are ignored and cannot supply inputs.
+The adapter verifies repository IDs, actor, required workflow blob, workflow/run
+attempt, job/step, required checks, head/base commits and combined tree. It never
+merges trial PRs, edits source PRs or writes product repositories/workflows.
+Completed evidence is saved before trial PR closure and branch removal. An
+interruption preserves owned identities until an explicit resume can finish.
+Normal Actions jobs remain isolated and time-limited by the existing workflow.
 
-Save the starting `main` commits, request identities/checksums, exact PR commits,
-membership, dependency and merge order, selected services/target, combined results,
-and required workflow/test configuration for each attempt. All candidates in one
-search use the same saved starting commits and requested PR versions.
+[Ticket projections](./inbox-processing.md#proposed-batch-ticket-outcomes) own
+labels and submitter-facing reasons. The [acceptance matrix](./merge-rehearsal-testing.md#planned-batch-acceptance)
+records expected cases and the dated evidence distinguishes local tests from live
+GitHub proof. Database-changing batches, cross-ticket dependency declarations,
+real application execution and deployment remain future work.
 
-If A+B+C passed, adding D might break it; removing B might remove something A
-or C needs. Updating a PR or starting from a changed `main` can also change the
-code. A changed candidate needs its own matching evidence. The old result remains
-true for its old inputs; it does not prove the new candidate. Never silently
-substitute a new PR head into an accepted request. Corrected code needs a new
-request under the current intake contract.
+### Deferred: links between separate tickets
 
-Before future execution changes `main`, verify the selected inputs and required
-gates again. If the base or request evidence moved, stop that execution attempt
-and reconcile before preparing and testing a new candidate. Do not carry over a
-passing label as permission to merge different code.
+The agreed future direction distinguishes two rules: **“B needs A”** allows A
+to proceed alone but requires A with B; **“A and B must stay together”** makes
+the group indivisible. Neither rule is part of the logging milestone, and the
+current request format still rejects unsupported declarations.
 
-### Excluded tickets and failure attribution
+When this feature is built:
 
-The [proposed ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes)
-own how these results appear in the inbox. Exclusion alone never closes a PR or
-ticket, marks a request failed, or claims completion. A failed group does not
-justify assigning the same code failure to every member.
+1. Reference immutable request IDs. A replacement request must not silently
+   satisfy a link to the original.
+2. Validate missing requests, incompatible targets/scopes, circular requirements
+   and oversized groups before expensive tests.
+3. Make selection and splitting respect the links. If A is excluded, B waits
+   with a specific reason. Never split a must-stay-together group.
+4. Save links with the exact selection so resume preserves them, and show the
+   prerequisite/group and waiting reason on affected tickets.
+5. Test the feature in sandbox and update the schema, submission CLI, intake and
+   frontend/backend submission integrations together before real adoption.
 
-Record a specific action-needed blocker only with evidence: a required check on
-an exact requested PR, an internal/base merge conflict, an invalid request, or a
-reproducible failure attributable to the ticket with its required dependencies.
-If the unchanged base also fails the same test, do not claim the ticket introduced
-it. If only an inseparable group has been tested, name the group and unresolved
-attribution instead of guessing one culprit. Infrastructure and evidence problems
-belong to the responsible maintainer, not automatically to the submitter.
-
-### Sequence before the batch milestone
-
-The one-ticket workflow and this repository's code-check gate are merged.
-The [one-ticket service/database extension](./merge-rehearsal-testing.md#service-and-database-acceptance)
-has local and live sandbox acceptance evidence. Its source delivery is tracked
-in [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45).
-Complete normal PR checks and merge before adding
-selection across several sandbox tickets, keeping the existing ticket checks.
-Reuse the small sample programs and meaningful PR checks
-from that earlier stage on selected combined candidates. Full checks belong on
-the chosen batch by default; the earlier one-ticket acceptance exercise does not
-add another mandatory full run for every incoming ticket.
-Use the [planned batch acceptance cases](./merge-rehearsal-testing.md#planned-batch-acceptance)
-to prove splitting, attribution, deferred-ticket handling, and exact-input rules.
-No product merge, deployment, npm publication, or automatic release ownership is
-part of that sandbox milestone.
-
-Before implementation, specify maximum batch/attempt/time limits, deterministic
-tie-breaking, trusted dependencies between tickets, batch journal/lock/resume
-storage, temporary PR/branch ownership and cleanup, GitHub runner permissions,
-and verified workflow-result matching. Select and register new batch reason codes
-with the journal compatibility rules. This design update implements none of them.
+The first version requires prerequisites in the same tested batch. Accepting an
+earlier release as satisfying a prerequisite needs later, verified release
+evidence. Until then, put inseparable work in one complete ticket; CT-20 records
+the current rejection behavior, not proof of this future feature.
 
 ## Decisions to settle before execution
 
@@ -499,6 +601,10 @@ An emergency administrator bypass may exist, but it is not part of the normal
 release path and must be audited.
 
 ## Queue and release lane
+
+**Future release-execution concept, outside the v0.1 logging milestone.** The
+database, heartbeat and takeover below are not current inbox behavior or part
+of the next implementation step.
 
 Many requests may wait in the durable queue. Only one batch may become active.
 

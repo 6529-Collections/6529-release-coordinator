@@ -985,14 +985,15 @@
             <a href="./docs/merge-rehearsal-testing.md#service-and-database-acceptance">service/database guide and evidence</a>.
           </p>
           <p class="diagram-context">
-            <strong>Next development stage, after merging this extension:</strong> Keep initial
-            checks for each ticket, then test a selected batch without database changes.
+            <strong>Sandbox batching:</strong> Complete cheap checks for every ticket
+            and filter Git conflicts, then test a selected group without database changes.
             Divide confirmed failures within limits while keeping tickets
             and required dependencies whole. Excluded tickets keep a reason and next action;
             a failed combination does not make every request broken. See the
             <a href="./docs/design.md#proposed-batch-testing-and-selection">batch rules</a>
             and <a href="./docs/inbox-processing.md#proposed-batch-ticket-outcomes">ticket outcomes</a>.
-            Batch selection and checks of several tickets' combined code are not implemented yet.
+            The local implementation uses temporary PR checks followed by combined service tests.
+            Progress separates local checks from live acceptance and source delivery.
           </p>
           <p class="diagram-context">
             <strong>Draft differences to settle:</strong> This diagram and the older written

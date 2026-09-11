@@ -1,3 +1,4 @@
+import { createRunLog, loggedStep } from "./run-log.mjs";
 import { selectProfile } from "./profiles.mjs";
 import { createCoordinatorGitHub } from "./coordinator-github.mjs";
 import { createGitHubReader } from "./github-reader.mjs";
@@ -6,8 +7,9 @@ import { processInbox } from "./inbox-processor.mjs";
 import { rehearseInboxTicket } from "./rehearsal-runner.mjs";
 import { generateInboxPlan } from "./inbox-merge-plan.mjs";
 import { coordinateServices } from "./inbox-services.mjs";
+import { coordinateInboxBatch } from "./inbox-batch.mjs";
 
-const help = `Check requests, rehearse suitable tickets, and update the same Issues and history.
+const help = `Check requests, filter conflicts before expensive batch checks, and update the same Issues and history.
 
 RELEASE_COORDINATOR_PROFILE=sandbox|real npm run inbox:run -- [--issue NUMBER] [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real npm run inbox:run -- --issue NUMBER --close-test [--json]
@@ -17,22 +19,30 @@ Writes managed labels, titles, submitter assignment, one status comment, justifi
 Issue closures, and the selected inbox's codex/inbox-state journal branch. Runs once.
 Requires Node.js 20+, Git 2.38+, and gh with inbox write and selected PR-repository read access.
 Sandbox service checks also require gh 2.97.0+ and Actions write access to the pinned sample backend.
+Unscoped sandbox runs also need contents/PR write access to both sample repositories:
+they create and close owned temporary trial PRs, never merge them or change source PRs.
   --issue NUMBER  Process only this Issue. Default: open requests plus known history.
-                  Each suitable ticket gets its own automatically saved merge plan.
+                  With --issue, retain the one-ticket service/database workflow.
+                  Without --issue, sandbox batches whole supported staging tickets.
                   Uses ticket dependencies/order and the profile's current main commits.
                   Obvious blockers skip rehearsal; plans/reports cannot be imported.
   --close-test    Explicitly retire your own verified test; requires --issue.
   --resume ID     Resume the stored action and selection after an interrupted run.
                   Stop the original process and wait at least 60 seconds first.
                   Never resume while the original process may still be running.
-  --json         Print structured results.
+  --json         Print structured results; live progress goes to stderr.
+                 Per-run logs are saved under ~/.6529-release-coordinator/logs/.
   --help         Show this help without contacting GitHub.
 
-Exit codes: 0 = closed/preserved tickets or a saved passing rehearsal;
+Exit codes: 0 = closed/preserved tickets or all selected tickets passed their required trial;
 1 = blocked or waiting for initial evidence; 2 = usage, unknown rehearsal/planning,
 unverified presentation, or interrupted/partial processing; 3 = stale rehearsal.
-Sandbox continues suitable complete sample tickets through isolated MySQL/service checks
-on GitHub Actions and reuses verified saved attempts. Real mode only rehearses Git.
+Sandbox batches finish cheap request, scope, database and combined Git checks before
+opening temporary PRs for normal CI, then check combined services on GitHub Actions.
+Limits: 10 tickets, 10 PRs/repository, 40 combined Git attempts, 12 candidate check rounds,
+45 minutes to start new work. In-flight attempts must still reconcile and clean up.
+Only confirmed code failures trigger bounded splitting; uncertainty keeps tickets waiting.
+Real mode only rehearses Git. --issue still supports one-ticket database-change tests.
 No product merge, deployment, or release authorization.
 `;
 
@@ -47,7 +57,10 @@ export async function runInboxRunCli(
     plan = generateInboxPlan,
     rehearse = rehearseInboxTicket,
     services = coordinateServices,
+    batch = coordinateInboxBatch,
     signal,
+    logRoot,
+    createLog = createRunLog,
     stdout = (value) => process.stdout.write(value),
     stderr = (value) => process.stderr.write(value)
   } = {}
@@ -97,71 +110,123 @@ export async function runInboxRunCli(
     stderr(help);
     return 2;
   }
-  let profile;
+  let profile, log;
   try {
     profile = selectProfile(env.RELEASE_COORDINATOR_PROFILE);
-    client ??= createCoordinatorGitHub({ profile });
-    get ??= createGitHubReader({ profile });
-    github ??= createReadinessGitHub({ profile });
-    await get.identity?.();
-    const report = await run({
-      ...options,
-      signal,
+    log = createLog({
       profile,
-      api: client.request,
-      identity: client.identity,
-      get,
-      github,
-      services,
-      plan: (entry) => plan(entry, { profile, signal }),
-      rehearsal: (entry, plan) =>
-        rehearse(entry, plan, { profile, get, signal })
+      resume: options.resume,
+      root: logRoot,
+      stderr,
+      env
     });
-    stdout(
-      seen.has("--json")
-        ? `${JSON.stringify(report, null, 2)}\n`
-        : `Inbox run ${report.run_id}; no release authorized.\n${report.requests
-            .map(
-              (item) =>
-                `#${item.issue_number}: ${item.status}; ${item.applied ? "verified" : "left unchanged"}; rehearsal ${item.rehearsal?.status ?? "not-run"}; services ${item.services?.status ?? "not-run"}${item.reasons?.length ? `; ${item.reasons.join(", ")}` : ""}${item.rehearsal?.report_file ? `\nReport: ${item.rehearsal.report_file}` : ""}${item.services?.report_file ? `\nService report: ${item.services.report_file}` : ""}${item.assignment === "unavailable" ? "; submitter assignment unavailable; see status comment for lookup" : ""}`
-            )
-            .join("\n")}\n`
-    );
-    if (
-      report.requests.some(
-        (item) =>
-          !item.applied ||
-          item.rehearsal?.status === "unknown" ||
-          item.services?.status === "unknown"
-      )
-    )
-      return 2;
-    if (
-      report.requests.some(
-        (item) =>
-          item.rehearsal?.status === "stale" ||
-          item.services?.status === "stale"
-      )
-    )
-      return 3;
-    return report.requests.some(
-      (item) =>
-        !["closed", "completed"].includes(item.status) &&
-        (item.rehearsal?.status !== "passed" ||
-          item.services?.status === "blocked")
-    )
-      ? 1
-      : 0;
+    if (!log.snapshot().complete)
+      throw new Error(
+        "Run log could not be initialized; no inbox work started."
+      );
+    return await log.run(async () => {
+      client ??= createCoordinatorGitHub({ profile });
+      get ??= createGitHubReader({ profile });
+      github ??= createReadinessGitHub({ profile });
+      await loggedStep(
+        { step: "inbox.identity", message: "Verify the selected inbox." },
+        () => get.identity?.()
+      );
+      const report = await run({
+        ...options,
+        signal,
+        profile,
+        api: client.request,
+        identity: client.identity,
+        get,
+        github,
+        services,
+        batch,
+        plan: (entry) => plan(entry, { profile, signal }),
+        rehearsal: (entry, plan) =>
+          rehearse(entry, plan, { profile, get, signal })
+      });
+      const exitCode = inboxRunExitCode(report);
+      report.logging = log.finish({
+        exitCode,
+        remaining: report.requests
+          .filter(
+            (item) =>
+              !item.applied ||
+              item.status === "action-needed" ||
+              item.batch?.status === "waiting" ||
+              ["unknown", "stale", "blocked"].includes(item.services?.status) ||
+              ["unknown", "stale", "blocked"].includes(item.rehearsal?.status)
+          )
+          .map((item) => `Ticket #${item.issue_number}: ${item.status}`)
+      });
+      log.close();
+      report.logging = log.snapshot();
+      stdout(
+        seen.has("--json")
+          ? `${JSON.stringify(report, null, 2)}\n`
+          : `Inbox run ${report.run_id}; no release authorized.\n${report.batch ? `Batch: ${report.batch.status}; selected tickets: ${report.batch.selected.map((number) => `#${number}`).join(", ") || "none"}.\n` : ""}${report.requests
+              .map(
+                (item) =>
+                  `#${item.issue_number}: ${item.status}; ${item.applied ? "verified" : "left unchanged"}; rehearsal ${item.rehearsal?.status ?? "not-run"}; services ${item.services?.status ?? "not-run"}${item.reasons?.length ? `; ${item.reasons.join(", ")}` : ""}${item.rehearsal?.report_file ? `\nReport: ${item.rehearsal.report_file}` : ""}${item.services?.report_file ? `\nService report: ${item.services.report_file}` : ""}${item.assignment === "unavailable" ? "; submitter assignment unavailable; see status comment for lookup" : ""}`
+              )
+              .join("\n")}\n`
+      );
+      return log.snapshot().complete ? exitCode : 2;
+    });
   } catch (error) {
+    const logging = log?.finish({
+      exitCode: 2,
+      interrupted: signal?.aborted,
+      remaining: [
+        "Processing may be partial; inspect the journal and recorded attempts."
+      ],
+      recovery: log.snapshot().run_id
+        ? `Stop the original process and let in-flight requests settle before --resume ${log.snapshot().run_id}.`
+        : "Inspect the inbox lock before retrying; acquisition may be uncertain."
+    });
+    log?.close();
     const failure = {
       mode: "write",
       profile: profile?.name ?? null,
       repository: profile?.inbox.full_name ?? null,
       release_authorized: false,
-      error: error.message
+      error: log ? log.redact(error.message) : error.message,
+      ...(logging ? { logging: log.snapshot() } : {})
     };
     if (seen.has("--json")) stdout(`${JSON.stringify(failure, null, 2)}\n`);
     else stderr(`${failure.error}\n`);
     return 2;
   }
+}
+
+export function inboxRunExitCode(report) {
+  if (
+    report.requests.some(
+      (item) =>
+        !item.applied ||
+        item.rehearsal?.status === "unknown" ||
+        item.services?.status === "unknown" ||
+        item.batch?.status === "unknown"
+    )
+  )
+    return 2;
+  if (
+    report.requests.some(
+      (item) =>
+        item.rehearsal?.status === "stale" ||
+        item.services?.status === "stale" ||
+        item.batch?.status === "stale"
+    )
+  )
+    return 3;
+  return report.requests.some(
+    (item) =>
+      !["closed", "completed"].includes(item.status) &&
+      (item.rehearsal?.status !== "passed" ||
+        (item.batch && item.batch.status !== "passed") ||
+        item.services?.status === "blocked")
+  )
+    ? 1
+    : 0;
 }
