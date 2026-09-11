@@ -48,14 +48,24 @@ CT-10 still proves recovery after a lost response/save with optional runtime
 metadata. Evidence: `.release-coordinator/run-logging-check.log`. These are local
 checks; the Docker cases were not rerun for this logging-only change.
 
-This commit includes the logging implementation, the earlier corner-case tests,
-and their documentation. No live inbox, GitHub trial creation, package publication, merge or deployment was run for this
-logging step. The existing journal writer, profile permissions, batch budgets and
+The initial logging commit `40d7d86` included the implementation, earlier
+corner-case tests and documentation. It did not itself run live acceptance.
+Source delivery is tracked in [PR #61](https://github.com/6529-Collections/6529-release-coordinator/pull/61),
+which also includes the earlier bounded batch work. The existing journal writer, profile permissions, batch budgets and
 manual stop-before-resume rule remain. Logs do not solve CT-09's overlapping-process
 gap. No heartbeat, board, ownership lock or automatic recovery was added.
 
-The next delivery step is pushing the branch and running the existing PR checks. A separately
-authorized sandbox run can verify the new terminal/log output against real GitHub.
+The authorized [live logging acceptance](./testing/run-logging-2026-09-11.md)
+passed with sandbox ticket #13: exact backend/frontend trial CI and all four service
+steps passed, temporary PRs/branches/database were removed, and the journal was
+unlocked. The private log contains 122 complete events, including real CI links and
+start/finish evidence. Exit 2 correctly retains older ticket #1's existing hold;
+ticket #13 passed. The owned test ticket was then retired with `--close-test`,
+preserving its request, comment and batch history. Only older #1 remains open.
+Source PRs, test main refs, runtime and the real journal were unchanged.
+The latest code check at `21cf6f3` also passed [GitHub PR CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34570629958)
+on Node 20/22/24 and the required gate. See the acceptance record for the tested
+source and subsequent display/evidence fixes. No package publication or deployment ran.
 [Links between separate tickets](./design.md#deferred-links-between-separate-tickets)
 remain later work: directional prerequisites and inseparable groups use immutable
 request IDs and initially require prerequisites in the same tested batch. CT-20
@@ -117,8 +127,9 @@ selected #11 and left #12 waiting as incompatible after exactly three candidate
 rounds. Recovery reused existing PRs after a GitHub server error and after fixing
 an overly strict check of descriptions appended by CodeRabbit. All eight trial
 PRs were closed unmerged, temporary refs removed, and all source heads and
-protected refs were unchanged. Source delivery is limited to the local branch;
-this is not PR CI, a merge, package publication or deployment.
+protected refs were unchanged. At this September 10 checkpoint, source delivery
+was limited to the local branch. The later PR checks and logging acceptance are
+recorded above; this earlier snapshot does not claim them or a deployment.
 
 Cross-ticket must-ship-together declarations remain unsupported; inseparable work
 belongs in one complete ticket. Database-changing batches, real adapters and

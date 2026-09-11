@@ -41,11 +41,11 @@ uses its own GitHub decision journal, not the future worker database.
 
 ## v0.1 run logging
 
-**Implemented locally September 11, 2026.** Here, v0.1 names this small Coordinator
+**Implemented September 11, 2026.** Here, v0.1 names this small Coordinator
 milestone, not a new public npm package version. The existing `inbox:run` command
 shows progress and saves diagnostic history. The manual recovery procedure is
 unchanged. See [progress](./progress.md#v01-run-logging-september-11) for validation
-and delivery evidence.
+and delivery evidence, including [live sandbox logging acceptance](./testing/run-logging-2026-09-11.md).
 
 ### What the logs show
 
