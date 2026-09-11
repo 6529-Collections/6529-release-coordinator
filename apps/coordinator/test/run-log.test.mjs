@@ -280,6 +280,8 @@ test("lost workflow dispatch is unknown first, then reconciled to verified step 
     ),
     new Set(result.report.steps.map((step) => step.unit))
   );
+  for (const step of result.report.steps)
+    assert.ok(f.terminal().includes(`service ${step.unit}`));
   assert.ok(
     events.some(
       (e) => e.step === "services.cleanup" && e.cleanup_status === "removed"

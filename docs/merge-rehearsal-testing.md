@@ -651,6 +651,13 @@ initial checks and meaningful application checks. All cheap ticket/database/Git
 filtering precedes temporary PR CI; there is no extra per-ticket service run in
 the unscoped sandbox path.
 
+If the combined trees have no changes against saved main, hold the candidate
+during cheap preparation with a Coordinator-owned explanation. It cannot create
+a useful temporary PR, so do not run services or infer a pass from an empty list
+of PR checks. Fresh and reused passing batches require at least one recorded,
+verified trial. An unchanged repository may still be covered by the combined
+service run when another repository has a verified trial.
+
 Use independent requests without database changes first. Earlier one-ticket
 database proof does not authorize database-changing batches. Select whole tickets
 and validated dependency groups. Define the trusted representation of dependencies

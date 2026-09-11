@@ -195,6 +195,7 @@ export function createRunLog({
         data.tickets?.length && `tickets ${data.tickets.join(",")}`,
         data.attempt_id && `attempt ${data.attempt_id}`,
         data.repository,
+        data.unit && `service ${data.unit}`,
         data.pr_number && `PR #${data.pr_number}`,
         data.url,
         data.duration_ms !== undefined && `${data.duration_ms}ms`,

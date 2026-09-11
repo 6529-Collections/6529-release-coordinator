@@ -15,6 +15,7 @@ evidence gap: when combined trees have no changes against saved main, cheap
 preparation holds the candidate before CI/services. A passing or reused batch
 must contain at least one verified temporary PR. The inbox fixture now records
 trial PRs, and its repeat assertion requires remote evidence revalidation.
+Live output inspection also led to explicit service names in terminal result lines.
 The updated full local check passed on Node 22.16.0: **376 passed, 0 failed,
 3 opt-in Docker cases skipped**, with all other check phases passing.
 
