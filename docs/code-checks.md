@@ -80,8 +80,8 @@ The existing **Check package** job always evaluates the combined result. Failed,
 cancelled, or skipped verification cannot produce a passing gate. Its name stays
 the same so the existing required-check rule continues to match it.
 
-The repository rules require that result, both CodeQL language jobs and an
-up-to-date branch before merging. A separate code-scanning rule enforces the
+The repository rules require that result, both CodeQL language jobs,
+`security/snyk (6529)` and an up-to-date branch before merging. A separate code-scanning rule enforces the
 alert thresholds below. GitHub also checks merge conflicts. These server settings
 cannot be enforced by a local command; see the dated readback in progress. New
 workflow behavior only becomes live after the change is pushed and merged as
@@ -180,8 +180,9 @@ Configure the package project's PR check for newly introduced vulnerabilities
 at every severity, including ones without a fix. Disable automatic fix and
 upgrade PRs on the imported projects; organization-wide product settings stay
 unchanged. Do not exempt dependencies or dismiss findings to obtain a pass.
-Verify the actual dependency PR status on a draft after a push, then require that
-observed status on `main`. A result saying no manifest changed reuses the imported
+The observed draft PR status `security/snyk (6529)` is required on `main`; verify
+it still includes the package project when changing the integration. A result
+saying no manifest changed reuses the imported
 manifest's baseline; it is not a fresh lockfile scan. Some settings live in Snyk,
 not in this repository; progress records their current activation evidence.
 

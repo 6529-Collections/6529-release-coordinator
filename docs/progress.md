@@ -1,7 +1,7 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-11**, against pushed source `27a1db3` and the dependency
-coverage/history verification changes below. This page separates implemented behavior, source delivery
+Last reviewed: **2026-09-11**, against pushed source `7c3c398` and the dependency
+coverage/history verification below. This page separates implemented behavior, source delivery
 and live proof. Earlier GitHub/package observations carry their original dates;
 they were not repeated during this cleanup.
 
@@ -15,7 +15,7 @@ they were not repeated during this cleanup.
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Included in open [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66); not merged or live-migrated. |
-| PR reviews/security | Fixed bot reviews, CodeRabbit drafts and CodeQL configured; a complete lockfile audit added to CI | Prior CI and CodeQL passed; CodeQL merge rules are active. Snyk now scans the CLI's six libraries, with the workspace limitation below. Expanded 6529bot activation needs the base-branch merge. |
+| PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | Node 20/22/24 CI, CodeQL and Snyk passed on `7c3c398`; CodeQL and Snyk merge rules are active. Snyk scans the CLI's six libraries, with the workspace limitation below. Expanded 6529bot activation needs the base-branch merge. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -24,8 +24,8 @@ candidate stays waiting and does not authorize a release.
 
 ## Next steps
 
-1. Verify the new CI audit and Snyk dependency PR status, then finish review of
-   open PR #66, which contains v5 history, cleanup and the review/security setup.
+1. Finish review of open PR #66, which contains v5 history, cleanup and the
+   review/security setup. The new CI audit and Snyk dependency PR status passed.
    The history concerns have the focused verification below. Verify the expanded 6529bot set after the separately
    authorized merge makes its configuration available on `main`.
 2. On a separately authorized sandbox run, verify migration of the existing
@@ -124,7 +124,13 @@ without installing packages or changing either lockfile. The fixtures were remov
 The CLI project's Snyk dependency PR check is enabled for newly introduced issues
 of every severity, including issues without a fix. Automatic fix and upgrade PRs
 are disabled for this project. These settings were saved and verified in Snyk;
-the resulting GitHub status and required-check activation await a fresh push.
+the pushed `7c3c398` received a passing
+[Snyk PR result](https://app.snyk.io/org/6529/pr-checks/63ea8730-a65c-4a66-a482-1c7f7e9b0d0c)
+including this package. Its "No manifest changes detected" result reuses the
+six-library baseline; it is not a fresh exact-lock scan. The observed
+`security/snyk (6529)` status is now required by active `Protect main` ruleset
+`22272421`, with existing status, up-to-date branch and CodeQL alert rules
+preserved and read back after the update.
 The organization's separate Snyk Code import also reported three low findings on
 main; this dependency work does not assess or dismiss those source-code findings.
 
@@ -141,11 +147,22 @@ All 23 focused history tests and 66 workflow/review policy tests passed.
 | Clone mutation, migration shim and summary assumptions | Existing clone isolation, archive checksum/structure validation and v4 migration/resume tests already cover the stated guarantees. No demonstrated correctness defect warrants the suggested rewrite. |
 | Repeated service-reference scan and duplicated path regex | Optional maintenance suggestions, with no demonstrated failure in the current scope. Left unchanged. |
 
-The latest 6529bot comment on `27a1db3` claimed code/test fixes in a docs-only
-commit and used truncated context. The verification above, rather than that
-claim, settles these concerns. Full local `npm run check` passed: 438 tests passed,
+The 6529bot comment on `27a1db3` claimed code/test fixes in a docs-only commit;
+its `7c3c398` follow-up also used partial context and misdescribed some existing
+behavior. The verification above, rather than those claims, settles these concerns.
+Full local `npm run check` passed: 438 tests passed,
 three optional Docker tests skipped, with lint, formatting, workflow policy and
-packed CLI checks passing. The new CI audit and tests await push and live CI.
+packed CLI checks passing. On pushed implementation `7c3c398`,
+[Node 20/22/24 CI](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34598243936)
+and the required `Check package` gate passed; each explicit audit reported zero
+known vulnerabilities. Both
+[CodeQL analyses](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34598244059)
+passed with zero findings on test merge `7f3e393` (parents `cecbee6` and `7c3c398`).
+CodeRabbit reviewed the new tests/audit without actionable comments; its waiting
+for three CI results timed out, but those jobs subsequently passed as verified
+above. Its advisory docstring-coverage warning remains. The 6529bot follow-up
+reported no new findings with partial context. The following documentation-only
+commit records this evidence; PR #66 remains a draft and is not merged.
 
 ## Controller and history cleanup, September 11
 
