@@ -253,7 +253,6 @@ export function createReleaseGitHub({
     const filters = new URLSearchParams({
       event: "workflow_dispatch",
       branch: target(runtime, operation.environment),
-      actor: record.actor.login,
       created: `>=${created}`,
       per_page: "100"
     });
@@ -272,7 +271,9 @@ export function createReleaseGitHub({
       "Sandbox release workflow history is incomplete."
     );
     const matches = list.workflow_runs.filter(
-      (run) => run.display_title === runTitle(record.id)
+      (run) =>
+        run.display_title === runTitle(record.id) &&
+        String(run.actor?.id) === record.actor.id
     );
     serviceAssert(
       matches.length <= 1,

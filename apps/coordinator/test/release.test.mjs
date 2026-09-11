@@ -382,7 +382,14 @@ test("release operation/report are exact and reject changed versions", () => {
     frontend_commit: "b".repeat(40)
   });
   const record = { operation };
-  assert.equal(report(record).status, "passed");
+  const exact = report(record);
+  assert.equal(exact.status, "passed");
+  assert.equal(exact.role, null);
+  assert.equal(exact.unit, null);
+  assert.throws(
+    () => verifyReleaseReport({ ...exact, role: "backend" }, operation),
+    /does not match/u
+  );
   assert.throws(
     () =>
       verifyReleaseReport(

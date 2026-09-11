@@ -118,6 +118,8 @@ live identity check confirmed the three pinned runtime files after these changes
 Owned-branch cleanup now needs two consecutive missing-ref reads, an unchanged
 role needs its explicit base-tree proof, and stale or unfinished release evidence
 cannot produce a successful command exit.
+Workflow recovery filters by the saved actor ID, so a renamed login cannot strand
+an already-dispatched operation.
 
 ## Boundary and next step
 

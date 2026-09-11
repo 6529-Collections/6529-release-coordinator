@@ -130,6 +130,7 @@ function fixture() {
 
 test("release workflow result binds exact operation, commits, actor and rerun attempt", async () => {
   const f = fixture();
+  let runSearch;
   const client = createReleaseGitHub({
     profile: sandboxProfile,
     runtime,
@@ -137,9 +138,10 @@ test("release workflow result binds exact operation, commits, actor and rerun at
       const endpoint = args[args.indexOf("--method") + 2];
       let value;
       if (endpoint.includes("/contents/")) value = runtimeFile(endpoint);
-      else if (endpoint.includes("/runs?"))
+      else if (endpoint.includes("/runs?")) {
+        runSearch = endpoint;
         value = { total_count: 1, workflow_runs: [f.run] };
-      else if (endpoint.includes("/attempts/2/jobs"))
+      } else if (endpoint.includes("/attempts/2/jobs"))
         value = { total_count: 1, jobs: [f.job] };
       else assert.fail(endpoint);
       return `HTTP/2 200 OK\nContent-Type: application/json\n\n${JSON.stringify(value)}`;
@@ -154,6 +156,7 @@ test("release workflow result binds exact operation, commits, actor and rerun at
   });
   assert.equal(result.status, "passed");
   assert.equal(result.report.runner.attempt, 2);
+  assert.doesNotMatch(runSearch, /[?&]actor=/u);
 });
 
 test("release workflow rejects a report for another exact version", async () => {
