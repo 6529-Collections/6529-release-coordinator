@@ -18,10 +18,17 @@ const load = async (relative) =>
   import(pathToFileURL(path.join(root, relative)).href);
 const checks = [];
 let status = "passed";
-const safeError = (error) =>
-  String(error?.message ?? "Unknown failure")
-    .replace(/[\p{Cc}\p{Cf}]/gu, " ")
-    .slice(0, 500);
+const safeError = (error) => {
+  const message = String(error?.message ?? "Unknown failure").replace(
+    /[\p{Cc}\p{Cf}]/gu,
+    " "
+  );
+  const limit = 500;
+  const splitPair =
+    /[\uD800-\uDBFF]/u.test(message[limit - 1] ?? "") &&
+    /[\uDC00-\uDFFF]/u.test(message[limit] ?? "");
+  return message.slice(0, splitPair ? limit - 1 : limit);
+};
 
 async function check(name, work) {
   try {

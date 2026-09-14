@@ -795,4 +795,31 @@ test("sandbox runner exercises the exact backend/frontend combination", async ()
     }
   });
   assert.match(result.stdout, /COORDINATOR_RELEASE_RESULT:/u);
+
+  const failure = `${"a".repeat(499)}😀tail`;
+  await writeFile(
+    path.join(directory, "candidates/backend/src/worker.mjs"),
+    `export function run() { throw new Error(${JSON.stringify(failure)}); }\n`
+  );
+  let failed;
+  try {
+    await runFile(process.execPath, [script], {
+      cwd: directory,
+      env: {
+        ...process.env,
+        OPERATION_ID: operation.operation_id,
+        OPERATION_JSON: JSON.stringify(operation),
+        GITHUB_REPOSITORY: sandboxProfile.repositories.backend.full_name,
+        GITHUB_RUN_ID: "124",
+        GITHUB_RUN_ATTEMPT: "1",
+        GITHUB_SHA: operation.backend_commit
+      }
+    });
+  } catch (error) {
+    failed = error;
+  }
+  assert.equal(failed?.code, 1);
+  const encoded = failed.stdout.match(/COORDINATOR_RELEASE_RESULT:(\S+)/u)?.[1];
+  const failedReport = JSON.parse(Buffer.from(encoded, "base64url"));
+  assert.equal(failedReport.checks[0].message, "a".repeat(499));
 });
