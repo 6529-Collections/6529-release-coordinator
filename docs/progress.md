@@ -81,7 +81,8 @@ provenance.
 
 The final review guard also requires every step behind the saved release position
 to contain a passing result. A merely present failed result cannot be projected
-as completed release evidence.
+as completed release evidence. Workflow reports also require numeric GitHub run
+and attempt IDs; string-shaped lookalikes are rejected.
 
 The final local `npm run check` passed **465 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow

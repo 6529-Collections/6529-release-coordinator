@@ -105,8 +105,8 @@ export function verifyReleaseReport(report, operation) {
     report.versions.backend !== operation.backend_commit ||
     report.versions.frontend !== operation.frontend_commit ||
     !object(report.runner) ||
-    !Number.isSafeInteger(Number(report.runner.run_id)) ||
-    Number(report.runner.run_id) < 1 ||
+    !Number.isSafeInteger(report.runner.run_id) ||
+    report.runner.run_id < 1 ||
     !Number.isSafeInteger(report.runner.attempt) ||
     report.runner.attempt < 1 ||
     !sha(report.runner.commit) ||

@@ -520,6 +520,18 @@ test("release operation/report are exact and reject changed versions", () => {
     () => verifyReleaseReport({ ...exact, role: "backend" }, operation),
     /does not match/u
   );
+  for (const field of ["run_id", "attempt"])
+    assert.throws(
+      () =>
+        verifyReleaseReport(
+          {
+            ...exact,
+            runner: { ...exact.runner, [field]: String(exact.runner[field]) }
+          },
+          operation
+        ),
+      /does not match/u
+    );
   assert.throws(
     () =>
       verifyReleaseReport(

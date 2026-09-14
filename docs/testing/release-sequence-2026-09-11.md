@@ -140,6 +140,8 @@ runner provenance.
 The final saved-state regression changes a completed operation's result to
 `failed` while leaving it behind the saved step position. Validation rejects that
 history, so a merely present result can no longer stand in for passing evidence.
+Report validation now also rejects string-shaped GitHub run or attempt IDs; the
+sandbox runner emits and the adapter verifies one exact numeric shape.
 
 ## Boundary and next step
 
