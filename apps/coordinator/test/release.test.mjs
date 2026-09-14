@@ -626,15 +626,18 @@ test("a stale batch cannot project a completed release onto its ticket", async (
       submitter_action: "None currently required."
     }
   };
-  await coordinateInboxBatch({
-    items: [item],
-    state: { batches: { [batch.fingerprint]: batch } },
-    run: { batch_fingerprint: batch.fingerprint },
-    profile: sandboxProfile,
-    save: async () => {},
-    loadBatch: async () => batch,
-    release: async () => assert.fail("terminal release must not run again")
-  });
+  const coordinate = () =>
+    coordinateInboxBatch({
+      items: [item],
+      state: { batches: { [batch.fingerprint]: batch } },
+      run: { batch_fingerprint: batch.fingerprint },
+      profile: sandboxProfile,
+      save: async () => {},
+      loadBatch: async () => batch,
+      release: async () => assert.fail("terminal release must not run again")
+    });
+  await coordinate();
+  await coordinate();
   assert.equal(item.decision.status, "waiting");
   assert.equal(item.decision.batch.status, "stale");
   assert.equal(batchStatuses.includes(item.decision.batch.status), true);
@@ -658,6 +661,43 @@ test("a stale batch cannot project a completed release onto its ticket", async (
   assert.throws(
     () => validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile),
     /Only a selected v2 batch can own release execution/u
+  );
+});
+
+test("a needs-human release projects one stable failure reason", async () => {
+  const batch = await selectedBatch();
+  batch.execution = await executeRelease({
+    batch,
+    client: client([], { failE2e: true }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  const item = {
+    number: batch.selected[0],
+    decision: {
+      status: "waiting",
+      reasons: [],
+      next_action: "Continue.",
+      action_owner: "Coordinator",
+      submitter_action: "None currently required."
+    }
+  };
+  const coordinate = () =>
+    coordinateInboxBatch({
+      items: [item],
+      state: { batches: { [batch.fingerprint]: batch } },
+      run: { batch_fingerprint: batch.fingerprint },
+      profile: sandboxProfile,
+      save: async () => {},
+      loadBatch: async () => batch,
+      release: async () => assert.fail("terminal release must not run again")
+    });
+  await coordinate();
+  await coordinate();
+  assert.equal(item.decision.status, "action-needed");
+  assert.deepEqual(
+    item.decision.reasons.map(({ code }) => code),
+    ["release-failed"]
   );
 });
 

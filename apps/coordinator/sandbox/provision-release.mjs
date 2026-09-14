@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { executeGitHub } from "../src/coordinator-github.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
+import { writeFileAtomically } from "./atomic-file.mjs";
 import { sampleFiles } from "./fixtures.mjs";
 import { publishFixturePr } from "./fixture-pr.mjs";
 
@@ -189,7 +190,7 @@ async function saveEntry(role, entry) {
     ...(entry.number ? { number: entry.number, pr: entry.number } : {}),
     ...(entry.url ? { url: entry.url } : {})
   };
-  await writeFile(provisionFile, JSON.stringify(record, null, 2));
+  await writeFileAtomically(provisionFile, JSON.stringify(record, null, 2));
 }
 const pullRequests = (repository, branch) => {
   const owner = repository.full_name.split("/")[0];

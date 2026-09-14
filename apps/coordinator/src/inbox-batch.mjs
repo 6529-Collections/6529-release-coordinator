@@ -28,6 +28,7 @@ export function batchDecision(decision, result) {
       : result.status === "passed"
         ? "Continue the saved sandbox release sequence. This batch pass authorizes no real release."
         : "Reassess this whole ticket when the recorded dependency, compatibility, limit or evidence condition changes.";
+  next.reasons = next.reasons.filter((reason) => reason.code !== result.code);
   next.reasons.push({
     code: result.code,
     message: result.message,
@@ -50,7 +51,9 @@ function releasedDecision(decision, result) {
   const next = structuredClone(decision);
   next.reasons = next.reasons.filter(
     (reason) =>
-      !["coordinator-incomplete", "batch-selected"].includes(reason.code)
+      !["coordinator-incomplete", "batch-selected", result.code].includes(
+        reason.code
+      )
   );
   const completed = result.status === "completed";
   const waiting = result.status === "waiting";

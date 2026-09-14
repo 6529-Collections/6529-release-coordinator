@@ -98,8 +98,9 @@ directory.
 The developer-only sandbox release provisioning helper now saves its exact
 branch and commit before pushing, reconciles only that branch and one matching
 open PR on retry, and stops on missing, changed, closed, ambiguous or unsaved
-resources. Its Git operations have a 60-second timeout. This is local setup
-hardening; the live sandbox was not reprovisioned.
+resources. Its Git operations have a 60-second timeout. Its local checkpoint is
+replaced atomically, so an interrupted write leaves the prior checkpoint readable.
+This is local setup hardening; the live sandbox was not reprovisioned.
 
 The final resume guard preserves tickets that already reached `closed` or
 `completed`. Reopening the same saved batch can still project results onto its
@@ -111,8 +112,10 @@ Workflow polling now saves a newly discovered run identity even when the operati
 was already marked running. A merged integration also reconciles its owned branch
 cleanup before any missing branch could be recreated after a lost final save, and
 validates the saved merge commit identity before using it in a GitHub API path.
+Repeated projection of the same resumed batch replaces its prior reason instead
+of accumulating duplicate deferred or failed explanations.
 
-The final local `npm run check` passed **471 tests** on Node 25.6.1, with the
+The final local `npm run check` passed **473 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
 passed. Node 20/22/24 and external review results remain PR evidence, not local proof.
