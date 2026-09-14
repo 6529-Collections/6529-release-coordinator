@@ -1,24 +1,23 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-14**, against merged source `5f49a60`, the local
-`codex/sandbox-release-sequence` implementation, and the live sandbox acceptance
-below. This page separates implemented behavior, source delivery
-and live proof. Earlier GitHub/package observations carry their original dates;
-they were not repeated during this cleanup.
+Last reviewed: **2026-09-14**, against merged source `ebb0edb` and the live
+sandbox acceptance below. This page separates implemented behavior, source
+delivery and live proof. Earlier GitHub/package observations carry their original
+dates; they were not repeated during this cleanup.
 
 ## Current state
 
 | Area | What is available | Evidence boundary |
 | --- | --- | --- |
-| Request submission | Public npm CLI `0.0.4`, plus local `0.0.5` source with schema `0.000002`; old `0.000001` requests remain readable | Earlier frontend/backend delivery tests passed. The monitoring shape is local and not published or adopted; see [publication guide](./npm-publishing.md). |
-| Operational monitoring intake | Monitoring-only backend requests can be created, validated, displayed, labeled, and have their exact PR checked | Local automated tests pass. Deployment and target-health checks are deliberately unavailable, so these tickets stay waiting and cannot enter rehearsal/execution. |
+| Request submission | Public npm CLI `0.0.4`, plus merged `0.0.5` source with schema `0.000002`; old `0.000001` requests remain readable | Earlier frontend/backend delivery tests passed. The monitoring shape is merged but not published or adopted; see [publication guide](./npm-publishing.md). |
+| Operational monitoring intake | Monitoring-only backend requests can be created, validated, displayed, labeled, and have their exact PR checked | Merged in [PR #72](https://github.com/6529-Collections/6529-release-coordinator/pull/72) with automated coverage. Deployment and target-health checks are deliberately unavailable, so these tickets stay waiting and cannot enter rehearsal/execution. |
 | Ticket workflow | One manual `inbox:run` command reads requests, checks exact PRs and updates the same tickets | Unified workflow and subsequent sandbox work are merged; [command guide](../apps/coordinator/README.md#run-the-ticket-workflow). |
 | Sandbox service/database checks | One-ticket checks run sample services and temporary MySQL in GitHub Actions | Local and live acceptance passed; see [source delivery](#sandbox-source-delivery-september-10). |
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
-| v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). The local v6 writer adds exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
-| PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | Node 20/22/24 CI, CodeQL and Snyk passed on final PR #66 head `2c801fc`; required merge rules remain active. All four configured opening reviews subsequently completed on [PR #70](https://github.com/6529-Collections/6529-release-coordinator/pull/70). Snyk's six-library workspace limitation remains below. |
-| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, ordered deploy checks, matching E2E, then protected test `main` for production requests | Implemented locally and proven live with all 14 operations passing; see [acceptance](./testing/release-sequence-2026-09-11.md). No real repository was used. |
+| v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). PR #72 merged the v6 writer with exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
+| PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #72 and its merge commit passed Node 20/22/24, package, CodeQL and Snyk checks. All five exact-head 6529bot lanes completed without required changes; CodeRabbit passed and no review thread remained. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
+| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, ordered deploy checks, matching E2E, then protected test `main` for production requests | Merged in PR #72 and proven live with all 14 operations passing; see [acceptance](./testing/release-sequence-2026-09-11.md). No real repository was used. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -27,12 +26,28 @@ completion is evidence only for the pinned test repositories.
 
 ## Next steps
 
-Review and merge the Coordinator source, then publish and adopt the exact CLI
-version if this new request shape is approved. After that, add narrow real
-adapters that call the existing frontend, backend-service, and operational-
-monitoring release workflows without redesigning their builds or environment settings. Automatic
-rollback, database-changing batches, linked tickets, heartbeat/takeover, and
-parallel releases remain deferred.
+Publish and adopt the exact CLI version if the new request shape is approved.
+After that, add narrow real adapters that call the existing frontend,
+backend-service, and operational-monitoring release workflows without redesigning
+their builds or environment settings. Automatic rollback, database-changing
+batches, linked tickets, heartbeat/takeover, and parallel releases remain
+deferred.
+
+## PR #72 delivery, September 14
+
+[PR #72](https://github.com/6529-Collections/6529-release-coordinator/pull/72)
+merged at `ebb0edb54d90ed04e136a317f4be87d31302f631`. Its tree matches the
+reviewed final head `2f9391a01f2c66de6c3770888f1e5b8e1325b5b5`. The final PR
+head passed Node 20/22/24, package, both CodeQL jobs, Snyk and CodeRabbit. The
+exact-head 6529bot general, security, deployment/Actions and follow-up lanes found
+no required changes; the GLM lane was advisory. No review thread remained.
+
+The merge commit's
+[repository checks](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34846523680)
+and [CodeQL](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34846523747)
+also passed. This delivers the sandbox release sequence, v6 release evidence,
+recovery hardening and recording-only monitoring intake to `main`. It does not
+publish CLI `0.0.5`, migrate the real inbox, or enable real product releases.
 
 ## Sandbox release sequence acceptance, September 11
 
