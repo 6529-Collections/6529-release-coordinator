@@ -99,6 +99,11 @@ open PR on retry, and stops on missing, changed, closed, ambiguous or unsaved
 resources. Its Git operations have a 60-second timeout. This is local setup
 hardening; the live sandbox was not reprovisioned.
 
+The final resume guard preserves tickets that already reached `closed` or
+`completed`. Reopening the same saved batch can still project results onto its
+active tickets, but it cannot replace a terminal ticket's saved decision. The
+focused release regression keeps both behaviors in one resumed-batch case.
+
 The final local `npm run check` passed **468 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
