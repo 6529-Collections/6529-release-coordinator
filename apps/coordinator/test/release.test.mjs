@@ -320,109 +320,121 @@ test("a resumed empty batch stays a no-candidate result", async () => {
   );
 });
 
-test("an interrupted v1 batch is reconciled, preserved and retired before release", async () => {
-  const batch = await selectedBatch();
-  batch.inputs = batch.inputs.map(({ number, input }) => ({ number, input }));
-  batch.policy = structuredClone(legacyBatchPolicy);
-  batch.fingerprint = serviceHash({
-    inputs: batch.inputs,
-    policy: batch.policy
+for (const { cleanup, name } of [
+  {
+    cleanup: "pending",
+    name: "an interrupted v1 batch cleans pending work before retirement"
+  },
+  {
+    cleanup: "removed",
+    name: "a v1 batch copies a saved cleanup result before retirement"
+  }
+])
+  test(name, async () => {
+    const batch = await selectedBatch();
+    batch.inputs = batch.inputs.map(({ number, input }) => ({ number, input }));
+    batch.policy = structuredClone(legacyBatchPolicy);
+    batch.fingerprint = serviceHash({
+      inputs: batch.inputs,
+      policy: batch.policy
+    });
+    batch.status = "searching";
+    batch.selected = [];
+    delete batch.execution;
+    const interrupted = batch.attempts.find(
+      (attempt) => attempt.phase === "checks"
+    );
+    delete interrupted.result;
+    interrupted.progress.cleanup = cleanup;
+    for (const pr of interrupted.progress.prs) pr.cleanup = cleanup;
+    const attemptIds = batch.attempts.map((attempt) => attempt.id);
+    const item = {
+      number: batch.inputs[0].number,
+      entry: {
+        issue_number: batch.inputs[0].number,
+        request: { target: "staging", database_change: "no" }
+      },
+      input: batch.inputs[0].input,
+      decision: {
+        status: "waiting",
+        reasons: [],
+        next_action: "Continue.",
+        action_owner: "Coordinator",
+        submitter_action: "None currently required."
+      }
+    };
+    const state = { batches: { [batch.fingerprint]: batch } };
+    const saves = [];
+    let cleanupCalls = 0;
+    const result = await coordinateInboxBatch({
+      items: [item],
+      state,
+      run: { batch_fingerprint: batch.fingerprint },
+      profile: sandboxProfile,
+      guard: async () => {},
+      save: async (message) => saves.push(message),
+      verify: async () => assert.fail("v1 retirement starts no new checks"),
+      loadBatch: async () => batch,
+      prepare: async () => assert.fail("v1 retirement starts no new Git work"),
+      check: async (_prepared, options) => {
+        cleanupCalls++;
+        assert.equal(options.id, interrupted.id);
+        assert.equal(options.previous.cleanup, cleanup);
+        assert.equal(options.policy.version, "sandbox-batch-v1");
+        const progress = structuredClone(options.previous);
+        if (cleanup === "pending") {
+          progress.cleanup = "removed";
+          for (const pr of progress.prs) pr.cleanup = "removed";
+          progress.result = {
+            status: "stale",
+            kind: "policy",
+            message: "Retired v1 trial."
+          };
+          await options.save(progress);
+        } else assert.equal(progress.result.status, "passed");
+        return progress.result;
+      },
+      revalidate: async () => {},
+      release: async () => assert.fail("v1 evidence must not start a release")
+    });
+    const saved = state.batches[batch.fingerprint];
+    assert.equal(result.status, "no-candidate");
+    assert.deepEqual(result.selected, []);
+    assert.deepEqual(
+      saved.attempts.map((attempt) => attempt.id),
+      attemptIds
+    );
+    assert.equal(saved.policy.version, "sandbox-batch-v1");
+    assert.equal(saved.status, "finished");
+    assert.deepEqual(saved.selected, []);
+    assert.equal(saved.stop.status, "stale");
+    assert.match(saved.stop.message, /fresh command to create a v2 batch/u);
+    assert.equal(item.decision.batch.code, "batch-deferred");
+    assert.equal(cleanupCalls, 1);
+    assert.equal(
+      saved.attempts.find((attempt) => attempt.id === interrupted.id).progress
+        .cleanup,
+      "removed"
+    );
+    assert.ok(saves.includes("retire recovered v1 batch"));
+    assert.doesNotThrow(() =>
+      validateBatchHistory({ [saved.fingerprint]: saved }, sandboxProfile)
+    );
+    const untrusted = structuredClone(saved);
+    untrusted.policy.max_check_attempts++;
+    untrusted.fingerprint = serviceHash({
+      inputs: untrusted.inputs,
+      policy: untrusted.policy
+    });
+    assert.throws(
+      () =>
+        validateBatchHistory(
+          { [untrusted.fingerprint]: untrusted },
+          sandboxProfile
+        ),
+      /not a trusted Coordinator policy/u
+    );
   });
-  batch.status = "searching";
-  batch.selected = [];
-  delete batch.execution;
-  const interrupted = batch.attempts.find(
-    (attempt) => attempt.phase === "checks"
-  );
-  delete interrupted.result;
-  interrupted.progress.cleanup = "pending";
-  for (const pr of interrupted.progress.prs) pr.cleanup = "pending";
-  const attemptIds = batch.attempts.map((attempt) => attempt.id);
-  const item = {
-    number: batch.inputs[0].number,
-    entry: {
-      issue_number: batch.inputs[0].number,
-      request: { target: "staging", database_change: "no" }
-    },
-    input: batch.inputs[0].input,
-    decision: {
-      status: "waiting",
-      reasons: [],
-      next_action: "Continue.",
-      action_owner: "Coordinator",
-      submitter_action: "None currently required."
-    }
-  };
-  const state = { batches: { [batch.fingerprint]: batch } };
-  const saves = [];
-  let cleanupCalls = 0;
-  const result = await coordinateInboxBatch({
-    items: [item],
-    state,
-    run: { batch_fingerprint: batch.fingerprint },
-    profile: sandboxProfile,
-    guard: async () => {},
-    save: async (message) => saves.push(message),
-    verify: async () => assert.fail("v1 retirement starts no new checks"),
-    loadBatch: async () => batch,
-    prepare: async () => assert.fail("v1 retirement starts no new Git work"),
-    check: async (_prepared, options) => {
-      cleanupCalls++;
-      assert.equal(options.id, interrupted.id);
-      assert.equal(options.previous.cleanup, "pending");
-      assert.equal(options.policy.version, "sandbox-batch-v1");
-      const progress = structuredClone(options.previous);
-      progress.cleanup = "removed";
-      for (const pr of progress.prs) pr.cleanup = "removed";
-      progress.result = {
-        status: "stale",
-        kind: "policy",
-        message: "Retired v1 trial."
-      };
-      await options.save(progress);
-      return progress.result;
-    },
-    revalidate: async () => {},
-    release: async () => assert.fail("v1 evidence must not start a release")
-  });
-  const saved = state.batches[batch.fingerprint];
-  assert.equal(result.status, "no-candidate");
-  assert.deepEqual(result.selected, []);
-  assert.deepEqual(
-    saved.attempts.map((attempt) => attempt.id),
-    attemptIds
-  );
-  assert.equal(saved.policy.version, "sandbox-batch-v1");
-  assert.equal(saved.status, "finished");
-  assert.deepEqual(saved.selected, []);
-  assert.equal(saved.stop.status, "stale");
-  assert.match(saved.stop.message, /fresh command to create a v2 batch/u);
-  assert.equal(item.decision.batch.code, "batch-deferred");
-  assert.equal(cleanupCalls, 1);
-  assert.equal(
-    saved.attempts.find((attempt) => attempt.id === interrupted.id).progress
-      .cleanup,
-    "removed"
-  );
-  assert.ok(saves.includes("retire recovered v1 batch"));
-  assert.doesNotThrow(() =>
-    validateBatchHistory({ [saved.fingerprint]: saved }, sandboxProfile)
-  );
-  const untrusted = structuredClone(saved);
-  untrusted.policy.max_check_attempts++;
-  untrusted.fingerprint = serviceHash({
-    inputs: untrusted.inputs,
-    policy: untrusted.policy
-  });
-  assert.throws(
-    () =>
-      validateBatchHistory(
-        { [untrusted.fingerprint]: untrusted },
-        sandboxProfile
-      ),
-    /not a trusted Coordinator policy/u
-  );
-});
 
 test("completed release history requires every exact operation and report", async () => {
   const batch = await selectedBatch();

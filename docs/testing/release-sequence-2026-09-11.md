@@ -121,42 +121,6 @@ cannot produce a successful command exit.
 Workflow recovery filters by the saved actor ID, so a renamed login cannot strand
 an already-dispatched operation.
 
-The September 14 review follow-up added fail-closed offline coverage for the
-remaining resume and history cases: an empty saved batch stays `no-candidate`,
-every completed workflow step needs its exact operation and report, saved version
-maps cannot be arrays, malformed saved scope gets a controlled error, and a lost
-plan-save response must reuse the exact saved plan. This did not change the pinned
-workflow, contract, or runner installed in the test repositories, so no new live
-release was needed.
-
-The next review pass saves a recoverable `cleaning` state before closing a failed
-integration PR. The focused test loses the close response, resumes from that saved
-state, verifies the same closed PR, removes the owned branch with two missing-ref
-reads, and does not close the PR twice. Terminal `needs-human` releases are no
-longer selected by later unscoped runs. Role-aware fixtures and an adapter
-rejection test also prove that frontend workflow evidence cannot claim backend
-runner provenance.
-
-The final saved-state regression changes a completed operation's result to
-`failed` while leaving it behind the saved step position. Validation rejects that
-history, so a merely present result can no longer stand in for passing evidence.
-Report validation now also rejects string-shaped GitHub run or attempt IDs; the
-sandbox runner emits and the adapter verifies one exact numeric shape.
-The journal migration regression now runs the same preservation and older-writer
-fence against both v4 and v5 saved runs. Ticket projection also asserts the real
-selected group and evidence remain populated, while an empty group cannot retain
-release execution.
-
-The final recovery review found that v1 batch records were still readable but an
-interrupted one had no explicit retirement path under the v2 Coordinator. The
-recovery path now validates the original targetless fingerprint and pinned v1
-policy, reconciles and cleans only already-started work, and starts no new v1
-trial. It preserves attempt IDs and evidence, then clears the selection and marks
-it stale. A fresh v2 command is required before any release. A focused test
-covers the full reconcile-clean-preserve-retire path. The sandbox runner test
-also resolves its script from the test module, so its result no longer depends
-on the caller's directory.
-
 ## Boundary and next step
 
 This proves ordering, protected test merges, exact-version workflow evidence,

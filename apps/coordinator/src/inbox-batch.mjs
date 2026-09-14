@@ -172,7 +172,7 @@ export async function coordinateInboxBatch({
       (attempt) =>
         attempt.phase === "checks" &&
         attempt.progress &&
-        attempt.progress.cleanup !== "removed"
+        (!attempt.result || attempt.progress.cleanup !== "removed")
     )) {
       const prepared = batch.attempts.find(
         (attempt) =>

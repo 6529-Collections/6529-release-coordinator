@@ -93,7 +93,7 @@ it cannot enter the v2 release sequence. The reason guide now documents
 target-deferred tickets, and the runner-path regression works from any current
 directory.
 
-The final local `npm run check` passed **467 tests** on Node 25.6.1, with the
+The final local `npm run check` passed **468 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
 passed. Node 20/22/24 and external review results remain PR evidence, not local proof.
