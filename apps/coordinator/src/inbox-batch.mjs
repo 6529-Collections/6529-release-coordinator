@@ -125,6 +125,7 @@ export async function coordinateInboxBatch({
   ) {
     if (
       active.selected.length &&
+      active.stop?.status !== "stale" &&
       release &&
       (!active.execution ||
         !["completed", "needs-human"].includes(active.execution.status))

@@ -558,6 +558,48 @@ test("a terminal failed release is not adopted by the next unscoped run", async 
   assert.equal(saves, 0);
 });
 
+test("a stale batch cannot start release execution", async () => {
+  const batch = await selectedBatch();
+  batch.stop = {
+    status: "stale",
+    kind: "evidence",
+    message: "The saved main commit changed."
+  };
+  const item = {
+    number: batch.selected[0],
+    decision: {
+      status: "waiting",
+      reasons: [],
+      next_action: "Continue.",
+      action_owner: "Coordinator",
+      submitter_action: "None currently required."
+    }
+  };
+  const result = await coordinateInboxBatch({
+    items: [item],
+    state: { batches: { [batch.fingerprint]: batch } },
+    run: { batch_fingerprint: batch.fingerprint },
+    profile: sandboxProfile,
+    save: async () => {},
+    loadBatch: async () => batch,
+    release: async () => assert.fail("a stale batch must not call release")
+  });
+  assert.equal(result.status, "release-unverified");
+  assert.equal(item.decision.status, "waiting");
+  assert.equal(item.decision.batch.status, "stale");
+  await assert.rejects(
+    executeRelease({
+      batch,
+      client: {
+        identity: async () => assert.fail("must stop before identity")
+      },
+      guard: async () => {},
+      save: async () => {}
+    }),
+    /stale batch cannot start/u
+  );
+});
+
 test("a stale batch cannot project a completed release onto its ticket", async () => {
   const batch = await selectedBatch();
   batch.execution = await executeRelease({

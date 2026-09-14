@@ -55,6 +55,11 @@ export async function executeRelease({
   uuid = randomUUID,
   now = () => new Date()
 }) {
+  serviceAssert(
+    batch.stop?.status !== "stale",
+    "release-stale",
+    "A stale batch cannot start or resume release execution."
+  );
   const execution = batch.execution
     ? structuredClone(batch.execution)
     : {
