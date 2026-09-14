@@ -658,9 +658,8 @@ test("a stale batch cannot project a completed release onto its ticket", async (
     }),
     3
   );
-  assert.throws(
-    () => validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile),
-    /Only a selected v2 batch can own release execution/u
+  assert.doesNotThrow(() =>
+    validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile)
   );
 });
 

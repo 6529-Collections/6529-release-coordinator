@@ -489,8 +489,6 @@ test("later stale observation gets a new immutable snapshot, preserving the orig
     kind: "evidence",
     message: "Backend main changed."
   };
-  record.selected = [];
-  delete record.execution;
   state.batches[record.fingerprint] = record;
   for (const number of [1, 2])
     presented(state.tickets[number], {
@@ -502,6 +500,7 @@ test("later stale observation gets a new immutable snapshot, preserving the orig
   assert.notEqual(after.path, before.path);
   assert.deepEqual(h.f.file(before.path), original);
   assert.equal(h.f.file(after.path).record.stop.status, "stale");
+  assert.equal(h.f.file(after.path).record.execution.status, "completed");
 });
 
 test("standalone services archive past 1000 while preserving pending or linked attempts", async () => {

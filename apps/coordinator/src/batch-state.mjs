@@ -202,9 +202,10 @@ export function validateBatchHistory(batches, profile) {
       serviceAssert(
         batch.policy.version === "sandbox-batch-v2" &&
           batch.selected.length &&
-          batch.stop?.status !== "stale",
+          (batch.stop?.status !== "stale" ||
+            ["completed", "needs-human"].includes(batch.execution.status)),
         "release-state",
-        "Only a selected v2 batch can own release execution."
+        "Only a selected v2 batch can own release execution; stale batches can retain only terminal evidence."
       );
       validateReleaseExecution(batch.execution, batch);
     }

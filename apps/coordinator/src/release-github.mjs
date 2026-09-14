@@ -284,31 +284,50 @@ export function createReleaseGitHub({
     return { role, run };
   }
   async function findRun(role, record, workflowId) {
+    const perPage = 100;
+    const maxPages = 10;
     const created = new Date(Date.parse(record.created_at) - 5 * 60_000)
       .toISOString()
       .replace(/\.\d{3}Z$/u, "Z");
+    const observedThrough = new Date().toISOString().replace(/\.\d{3}Z$/u, "Z");
     const operation = record.operation;
     const filters = new URLSearchParams({
       event: "workflow_dispatch",
       branch: target(runtime, operation.environment),
-      created: `>=${created}`,
-      per_page: "100"
+      created: `${created}..${observedThrough}`,
+      per_page: String(perPage)
     });
-    const list = (
-      await call(
-        role,
-        "GET",
-        `/actions/workflows/${runtime.workflow}/runs?${filters}&page=1`
-      )
-    ).data;
+    const runs = [];
+    let total;
+    for (let page = 1; page <= maxPages; page++) {
+      const list = (
+        await call(
+          role,
+          "GET",
+          `/actions/workflows/${runtime.workflow}/runs?${filters}&page=${page}`
+        )
+      ).data;
+      serviceAssert(
+        Number.isSafeInteger(list.total_count) &&
+          list.total_count >= 0 &&
+          Array.isArray(list.workflow_runs) &&
+          list.workflow_runs.length <= perPage &&
+          (total === undefined || list.total_count === total),
+        "release-workflow",
+        "Sandbox release workflow history changed or is unreadable."
+      );
+      total ??= list.total_count;
+      runs.push(...list.workflow_runs);
+      if (runs.length >= total) break;
+    }
     serviceAssert(
-      Number.isSafeInteger(list.total_count) &&
-        list.total_count <= 100 &&
-        list.workflow_runs?.length === list.total_count,
+      total <= perPage * maxPages &&
+        runs.length === total &&
+        new Set(runs.map(({ id }) => id)).size === runs.length,
       "release-workflow",
-      "Sandbox release workflow history is incomplete."
+      "Sandbox release workflow history exceeds the bounded search or is incomplete."
     );
-    const matches = list.workflow_runs.filter(
+    const matches = runs.filter(
       (run) =>
         run.display_title === runTitle(record.id) &&
         String(run.actor?.id) === record.actor.id

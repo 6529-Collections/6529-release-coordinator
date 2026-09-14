@@ -117,8 +117,12 @@ cleanup before any missing branch could be recreated after a lost final save, an
 validates the saved merge commit identity before using it in a GitHub API path.
 Repeated projection of the same resumed batch replaces its prior reason instead
 of accumulating duplicate deferred or failed explanations.
+If a later observation makes a batch stale, its validated terminal release
+evidence remains readable while the stale guard still prevents any release resume.
+Workflow-run recovery reads up to ten stable 100-run pages for the exact saved
+operation, instead of becoming permanently stuck when the first page is full.
 
-The final local `npm run check` passed **474 tests** on Node 25.6.1, with the
+The final local `npm run check` passed **482 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
 passed. Node 20/22/24 and external review results remain PR evidence, not local proof.

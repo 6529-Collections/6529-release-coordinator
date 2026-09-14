@@ -171,6 +171,52 @@ test("release workflow result binds exact operation, commits, actor and rerun at
   );
 });
 
+test("workflow recovery searches a bounded second page for the exact run", async () => {
+  const f = fixture();
+  const pages = [];
+  const unrelated = Array.from({ length: 100 }, (_, index) => ({
+    id: index + 1,
+    display_title: "Another sandbox operation",
+    actor: { id: 456 }
+  }));
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      if (endpoint.includes("/runs?")) {
+        const page = Number(
+          new URL(endpoint, "https://api.github.invalid").searchParams.get(
+            "page"
+          )
+        );
+        pages.push(page);
+        return apiResponse("200 OK", {
+          total_count: 101,
+          workflow_runs: page === 1 ? unrelated : [f.run]
+        });
+      }
+      if (endpoint.includes("/attempts/2/jobs"))
+        return apiResponse("200 OK", {
+          total_count: 1,
+          jobs: [f.job]
+        });
+      assert.fail(endpoint);
+    },
+    logs: async () =>
+      `COORDINATOR_RELEASE_RESULT:${Buffer.from(JSON.stringify(f.report)).toString("base64url")}\n`
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.deepEqual(pages, [1, 2]);
+});
+
 test("e2e workflow accepts only backend runner provenance", async () => {
   const run = async (f) => {
     const client = createReleaseGitHub({
