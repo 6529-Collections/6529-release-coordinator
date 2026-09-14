@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -84,19 +84,35 @@ test("an interrupted atomic fixture checkpoint preserves the prior file", async 
   await writeFile(destination, "previous");
   await assert.rejects(
     writeFileAtomically(destination, "replacement", {
-      writeFile: async (temporary, contents) => {
-        await writeFile(temporary, contents);
+      writeFile: async (temporary, contents, options) => {
+        assert.equal(options.flag, "wx");
+        await writeFile(temporary, contents, options);
       },
       rename: async () => {
         throw new Error("interrupted before replace");
       },
-      rm
+      rm,
+      uuid: () => "interrupted"
     }),
     /interrupted before replace/u
   );
   assert.equal(await readFile(destination, "utf8"), "previous");
   await writeFileAtomically(destination, "replacement");
   assert.equal(await readFile(destination, "utf8"), "replacement");
+});
+
+test("simultaneous atomic fixture writes use separate temporary files", async (t) => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "fixture-concurrent-checkpoint-")
+  );
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const destination = path.join(directory, "provision.json");
+  await Promise.all([
+    writeFileAtomically(destination, "first"),
+    writeFileAtomically(destination, "second")
+  ]);
+  assert.ok(["first", "second"].includes(await readFile(destination, "utf8")));
+  assert.deepEqual(await readdir(directory), ["provision.json"]);
 });
 
 test("fixture recovery rejects ambiguous, closed or changed PRs without replacement", async () => {

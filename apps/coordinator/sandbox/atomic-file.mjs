@@ -1,15 +1,16 @@
+import { randomUUID } from "node:crypto";
 import { rename, rm, writeFile } from "node:fs/promises";
 
-const systemFiles = { rename, rm, writeFile };
+const systemFiles = { rename, rm, writeFile, uuid: randomUUID };
 
 export async function writeFileAtomically(
   destination,
   contents,
   files = systemFiles
 ) {
-  const temporary = `${destination}.${process.pid}.tmp`;
+  const temporary = `${destination}.${files.uuid()}.tmp`;
   try {
-    await files.writeFile(temporary, contents);
+    await files.writeFile(temporary, contents, { flag: "wx" });
     await files.rename(temporary, destination);
   } catch (error) {
     try {
