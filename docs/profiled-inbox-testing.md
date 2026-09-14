@@ -234,3 +234,11 @@ programs, fake data, read-only contents permission, and no product credentials.
 Selecting `real` cannot enable this adapter. Connecting real repositories means
 writing separate, narrow adapters for their existing Actions and completing a
 new acceptance run.
+
+The explicit developer-only release provisioning script keeps its setup record
+outside the operator command. It saves each exact base, branch and commit before
+push. On retry it accepts only the same remote branch and one matching open PR;
+missing, closed, changed, ambiguous or unsaved resources stop with recovery
+information instead of creating a replacement. Every Git command has a finite
+timeout. These guards are locally tested; the already-completed live setup was
+not rerun for this review change.

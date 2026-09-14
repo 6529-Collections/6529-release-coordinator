@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { executeGitHub } from "../src/coordinator-github.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "./fixtures.mjs";
+import { publishFixturePr } from "./fixture-pr.mjs";
 
 if (
   process.argv.length !== 3 ||
@@ -20,8 +21,9 @@ if (
 const root = fileURLToPath(new URL("../../../", import.meta.url));
 const output = `${root}/.release-coordinator/release-development`;
 await mkdir(output, { recursive: true });
+const provisionFile = `${output}/provision.json`;
 const exec = promisify(execFile);
-async function api(endpoint, method = "GET", body) {
+async function api(endpoint, method = "GET", body, allowed = [200, 201, 204]) {
   const args = [
     "api",
     "--hostname",
@@ -40,8 +42,9 @@ async function api(endpoint, method = "GET", body) {
   const match = raw.match(
     /^HTTP\/\S+ (\d{3})[^\n]*\r?\n[\s\S]*?\r?\n\r?\n([\s\S]*)$/u
   );
-  if (!match || ![200, 201, 204].includes(Number(match[1])))
+  if (!match || !allowed.includes(Number(match[1])))
     throw new Error(`Fixture API ${method} ${endpoint} failed.`);
+  if (Number(match[1]) === 404) return null;
   return match[2].trim() ? JSON.parse(match[2]) : null;
 }
 
@@ -125,7 +128,83 @@ for (const name of ["src/release-contract.mjs", "sandbox/release-run.mjs"])
     "utf8"
   );
 
-const record = { created_at: new Date().toISOString(), repositories: {} };
+let record;
+try {
+  record = JSON.parse(await readFile(provisionFile, "utf8"));
+} catch (error) {
+  if (error.code !== "ENOENT")
+    throw new Error("Saved release provisioning state is unreadable.", {
+      cause: error
+    });
+  record = { created_at: new Date().toISOString(), repositories: {} };
+}
+if (
+  !record ||
+  typeof record !== "object" ||
+  Array.isArray(record) ||
+  !record.repositories ||
+  typeof record.repositories !== "object" ||
+  Array.isArray(record.repositories)
+)
+  throw new Error("Saved release provisioning state is invalid.");
+
+const runtimeBranch = "codex/sandbox-release-runtime-v1";
+const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
+const savedEntry = (role, repository) => {
+  const saved = record.repositories[role];
+  if (!saved) return null;
+  const entry = {
+    repository: {
+      id: saved.repository?.id ?? saved.id,
+      full_name: saved.repository?.full_name ?? saved.full_name
+    },
+    base: saved.base,
+    branch: saved.branch ?? runtimeBranch,
+    commit: saved.commit ?? saved.head,
+    directory: saved.directory,
+    ...(saved.number || saved.pr
+      ? { number: saved.number ?? saved.pr, url: saved.url }
+      : {})
+  };
+  if (
+    entry.repository.id !== repository.id ||
+    entry.repository.full_name !== repository.full_name ||
+    entry.branch !== runtimeBranch ||
+    !sha(entry.base) ||
+    !sha(entry.commit)
+  )
+    throw new Error(
+      `Saved ${role} release provisioning identity is invalid; inspect ${provisionFile}.`
+    );
+  return entry;
+};
+async function saveEntry(role, entry) {
+  record.repositories[role] = {
+    ...entry.repository,
+    base: entry.base,
+    branch: entry.branch,
+    commit: entry.commit,
+    head: entry.commit,
+    directory: entry.directory,
+    ...(entry.number ? { number: entry.number, pr: entry.number } : {}),
+    ...(entry.url ? { url: entry.url } : {})
+  };
+  await writeFile(provisionFile, JSON.stringify(record, null, 2));
+}
+const pullRequests = (repository, branch) => {
+  const owner = repository.full_name.split("/")[0];
+  return api(
+    `repos/${repository.full_name}/pulls?state=all&base=main&head=${encodeURIComponent(`${owner}:${branch}`)}&per_page=100`
+  );
+};
+const branchRef = (repository, branch) =>
+  api(
+    `repos/${repository.full_name}/git/ref/heads/${branch}`,
+    "GET",
+    undefined,
+    [200, 404]
+  );
+
 for (const role of ["backend", "frontend"]) {
   const identity = sandboxProfile.repositories[role];
   const repo = await api(`repos/${identity.full_name}`);
@@ -136,6 +215,41 @@ for (const role of ["backend", "frontend"]) {
   )
     throw new Error("Sample repository identity/access changed.");
   const base = await api(`repos/${identity.full_name}/git/ref/heads/main`);
+  const saved = savedEntry(role, identity);
+  if (saved) {
+    if (base.object.sha !== saved.base)
+      throw new Error(
+        `Saved ${role} setup uses an older main commit; inspect ${provisionFile} before retrying.`
+      );
+    const completed = await publishFixturePr(saved, {
+      save: (entry) => saveEntry(role, entry),
+      push: async (entry) => {
+        const remote = await branchRef(entry.repository, entry.branch);
+        if (remote?.object?.sha !== entry.commit)
+          throw new Error(
+            `Saved ${role} setup branch is missing or changed; inspect ${provisionFile}.`
+          );
+      },
+      find: (entry) => pullRequests(entry.repository, entry.branch),
+      create: (entry) =>
+        api(`repos/${entry.repository.full_name}/pulls`, "POST", {
+          title: "Add sandbox release sequence runtime",
+          head: entry.branch,
+          base: "main",
+          body: "Add the generated sandbox-only deployment/E2E runner and make Sandbox check cover staging integration PRs. No product repository, secret, environment, or deployment is used."
+        })
+    });
+    console.log(`${role}: ${completed.url}`);
+    continue;
+  }
+  const existingRef = await branchRef(identity, runtimeBranch);
+  const existingPulls = await pullRequests(identity, runtimeBranch);
+  if (!Array.isArray(existingPulls))
+    throw new Error(`The ${role} setup PR list is unreadable.`);
+  if (existingRef || existingPulls.length)
+    throw new Error(
+      `Unsaved ${role} setup resources already exist; inspect them before retrying and do not create replacements.`
+    );
   const directory = await mkdtemp(path.join(output, `${role}-`));
   const git = async (args) =>
     (
@@ -152,7 +266,11 @@ for (const role of ["backend", "frontend"]) {
           "user.email=rehearsal@example.invalid",
           ...args
         ],
-        { cwd: directory, maxBuffer: 4 * 1024 * 1024 }
+        {
+          cwd: directory,
+          maxBuffer: 4 * 1024 * 1024,
+          timeout: 60_000
+        }
       )
     ).stdout.trim();
   await git([
@@ -165,8 +283,7 @@ for (const role of ["backend", "frontend"]) {
   ]);
   if ((await git(["rev-parse", "HEAD"])) !== base.object.sha)
     throw new Error("Sample main moved before release fixture setup.");
-  const name = "codex/sandbox-release-runtime-v1";
-  await git(["checkout", "-b", name]);
+  await git(["checkout", "-b", runtimeBranch]);
   const files = {
     ...bundle,
     ".github/workflows/sandbox-check.yml": checkWorkflow,
@@ -185,21 +302,26 @@ for (const role of ["backend", "frontend"]) {
   await git(["add", "--", ...Object.keys(files)]);
   await git(["commit", "-m", "Add sandbox release sequence runtime"]);
   const head = await git(["rev-parse", "HEAD"]);
-  await git(["push", "origin", name]);
-  const pr = await api(`repos/${identity.full_name}/pulls`, "POST", {
-    title: "Add sandbox release sequence runtime",
-    head: name,
-    base: "main",
-    body: "Add the generated sandbox-only deployment/E2E runner and make Sandbox check cover staging integration PRs. No product repository, secret, environment, or deployment is used."
-  });
-  record.repositories[role] = {
-    ...identity,
-    base: base.object.sha,
-    head,
-    directory,
-    pr: pr.number,
-    url: pr.html_url
-  };
-  await writeFile(`${output}/provision.json`, JSON.stringify(record, null, 2));
-  console.log(`${role}: ${pr.html_url}`);
+  const completed = await publishFixturePr(
+    {
+      repository: identity,
+      base: base.object.sha,
+      branch: runtimeBranch,
+      commit: head,
+      directory
+    },
+    {
+      save: (entry) => saveEntry(role, entry),
+      push: (entry) => git(["push", "origin", entry.branch]),
+      find: (entry) => pullRequests(entry.repository, entry.branch),
+      create: (entry) =>
+        api(`repos/${entry.repository.full_name}/pulls`, "POST", {
+          title: "Add sandbox release sequence runtime",
+          head: entry.branch,
+          base: "main",
+          body: "Add the generated sandbox-only deployment/E2E runner and make Sandbox check cover staging integration PRs. No product repository, secret, environment, or deployment is used."
+        })
+    }
+  );
+  console.log(`${role}: ${completed.url}`);
 }

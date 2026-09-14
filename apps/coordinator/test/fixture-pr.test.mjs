@@ -8,7 +8,8 @@ const entry = {
     full_name: "6529-Collections/release-coordinator-test-backend"
   },
   branch: "codex/services-case-example",
-  commit: "a".repeat(40)
+  commit: "a".repeat(40),
+  base: "b".repeat(40)
 };
 const pr = () => ({
   number: 42,
@@ -18,7 +19,11 @@ const pr = () => ({
     sha: entry.commit,
     repo: { id: entry.repository.id }
   },
-  base: { ref: "main", repo: { id: entry.repository.id } },
+  base: {
+    ref: "main",
+    sha: entry.base,
+    repo: { id: entry.repository.id }
+  },
   html_url: `https://github.com/${entry.repository.full_name}/pull/42`
 });
 
@@ -70,7 +75,8 @@ test("fixture recovery rejects ambiguous, closed or changed PRs without replacem
   for (const matches of [
     [pr(), pr()],
     [{ ...pr(), state: "closed" }],
-    [{ ...pr(), head: { ...pr().head, sha: "b".repeat(40) } }]
+    [{ ...pr(), head: { ...pr().head, sha: "c".repeat(40) } }],
+    [{ ...pr(), base: { ...pr().base, sha: "c".repeat(40) } }]
   ]) {
     await assert.rejects(
       publishFixturePr(entry, {
@@ -82,4 +88,16 @@ test("fixture recovery rejects ambiguous, closed or changed PRs without replacem
       /ambiguous|no longer matches/
     );
   }
+  await assert.rejects(
+    publishFixturePr(
+      { ...entry, number: 42, url: pr().html_url },
+      {
+        save: async () => {},
+        push: async () => {},
+        find: async () => [],
+        create: async () => assert.fail("must not create a replacement")
+      }
+    ),
+    /saved fixture PR is missing/u
+  );
 });

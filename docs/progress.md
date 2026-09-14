@@ -93,6 +93,12 @@ it cannot enter the v2 release sequence. The reason guide now documents
 target-deferred tickets, and the runner-path regression works from any current
 directory.
 
+The developer-only sandbox release provisioning helper now saves its exact
+branch and commit before pushing, reconciles only that branch and one matching
+open PR on retry, and stops on missing, changed, closed, ambiguous or unsaved
+resources. Its Git operations have a 60-second timeout. This is local setup
+hardening; the live sandbox was not reprovisioned.
+
 The final local `npm run check` passed **468 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
