@@ -54,6 +54,7 @@ export function validateReleaseExecution(execution, batch) {
           "branch-prepared",
           "creating-pr",
           "checking",
+          "cleaning",
           "merging",
           "merged",
           "dispatching",

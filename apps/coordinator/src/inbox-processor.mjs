@@ -87,7 +87,8 @@ export async function processInbox({
           record.policy?.version === "sandbox-batch-v2" &&
           record.status === "finished" &&
           record.selected.length &&
-          record.execution?.status !== "completed"
+          (!record.execution ||
+            ["prepared", "running"].includes(record.execution.status))
       );
       if (active.length > 1)
         throw new Error("More than one unfinished sandbox release exists.");

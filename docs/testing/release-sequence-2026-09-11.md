@@ -129,6 +129,14 @@ plan-save response must reuse the exact saved plan. This did not change the pinn
 workflow, contract, or runner installed in the test repositories, so no new live
 release was needed.
 
+The next review pass saves a recoverable `cleaning` state before closing a failed
+integration PR. The focused test loses the close response, resumes from that saved
+state, verifies the same closed PR, removes the owned branch with two missing-ref
+reads, and does not close the PR twice. Terminal `needs-human` releases are no
+longer selected by later unscoped runs. Role-aware fixtures and an adapter
+rejection test also prove that frontend workflow evidence cannot claim backend
+runner provenance.
+
 ## Boundary and next step
 
 This proves ordering, protected test merges, exact-version workflow evidence,

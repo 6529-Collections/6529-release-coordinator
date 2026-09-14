@@ -33,6 +33,8 @@ import { inboxRunExitCode } from "../src/inbox-run-cli.mjs";
 const runFile = promisify(execFile);
 
 function report(record, status = "passed", runId = 100) {
+  const runnerRole =
+    record.operation.operation === "e2e" ? "backend" : record.operation.role;
   const value = {
     protocol: releaseProtocol,
     profile: "sandbox",
@@ -50,10 +52,10 @@ function report(record, status = "passed", runId = 100) {
       frontend: record.operation.frontend_commit
     },
     runner: {
-      repository: sandboxProfile.repositories.backend.full_name,
+      repository: sandboxProfile.repositories[runnerRole].full_name,
       run_id: runId,
       attempt: 1,
-      commit: record.operation.backend_commit
+      commit: record.operation[`${runnerRole}_commit`]
     },
     completed_at: new Date().toISOString()
   };
@@ -368,6 +370,49 @@ test("a malformed resumed run scope fails with a controlled error", async () => 
     }),
     (error) => error.code === "run-scope"
   );
+});
+
+test("a terminal failed release is not adopted by the next unscoped run", async () => {
+  let saves = 0;
+  await assert.rejects(
+    processInbox({
+      identity: async () => ({ id: "456", login: "tester" }),
+      profile: sandboxProfile,
+      rehearsal: async () => {},
+      batch: async () => {},
+      journal: {
+        acquire: async () => ({
+          state: {
+            lock: {},
+            batches: {
+              failed: {
+                fingerprint: "f".repeat(64),
+                policy: { version: "sandbox-batch-v2" },
+                status: "finished",
+                selected: [1],
+                attempts: [],
+                execution: { status: "needs-human" }
+              }
+            }
+          },
+          run: {
+            run_id: "11111111-1111-4111-8111-111111111111",
+            scope: {
+              issue_number: null,
+              close_test: false,
+              workflow: "inbox-run-v6"
+            }
+          }
+        }),
+        save: async () => saves++
+      },
+      loadInbox: async () => {
+        throw new Error("continued to the next inbox scan");
+      }
+    }),
+    /continued to the next inbox scan/u
+  );
+  assert.equal(saves, 0);
 });
 
 test("a stale batch cannot project a completed release onto its ticket", async () => {

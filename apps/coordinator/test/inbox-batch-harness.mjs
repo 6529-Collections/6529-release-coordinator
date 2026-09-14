@@ -96,6 +96,10 @@ export function harness(count = 2) {
         }),
         run: async ({ record }) => {
           const runId = releaseRun++;
+          const runnerRole =
+            record.operation.operation === "e2e"
+              ? "backend"
+              : record.operation.role;
           const report = {
             protocol: releaseProtocol,
             profile: "sandbox",
@@ -113,10 +117,10 @@ export function harness(count = 2) {
               frontend: record.operation.frontend_commit
             },
             runner: {
-              repository: sandboxProfile.repositories.backend.full_name,
+              repository: sandboxProfile.repositories[runnerRole].full_name,
               run_id: runId,
               attempt: 1,
-              commit: record.operation.backend_commit
+              commit: record.operation[`${runnerRole}_commit`]
             },
             completed_at: new Date().toISOString()
           };

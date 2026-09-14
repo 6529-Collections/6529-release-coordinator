@@ -46,14 +46,15 @@ function runtimeFile(endpoint, changed = false) {
 const apiResponse = (status, data) =>
   `HTTP/2 ${status} Result\nContent-Type: application/json\n\n${data === undefined ? "" : JSON.stringify(data)}`;
 
-function fixture() {
+function fixture(role = "backend") {
+  const unit = role === "backend" ? "worker" : "frontend";
   const operation = makeReleaseOperation({
     release_id: "11111111-1111-4111-8111-111111111111",
     operation_id: "22222222-2222-4222-8222-222222222222",
     operation: "deploy",
     environment: "staging",
-    role: "backend",
-    unit: "worker",
+    role,
+    unit,
     backend_commit: "c".repeat(40),
     frontend_commit: "d".repeat(40)
   });
@@ -61,11 +62,11 @@ function fixture() {
     id: operation.operation_id,
     release_id: operation.release_id,
     step: {
-      id: "staging:deploy:backend:worker",
+      id: `staging:deploy:${role}:${unit}`,
       kind: "deploy",
       environment: "staging",
-      role: "backend",
-      unit: "worker"
+      role,
+      unit
     },
     state: "running",
     actor: { id: "456", login: "tester" },
@@ -76,11 +77,11 @@ function fixture() {
   const run = {
     id: 101,
     repository: {
-      id: sandboxProfile.repositories.backend.id,
-      full_name: sandboxProfile.repositories.backend.full_name
+      id: sandboxProfile.repositories[role].id,
+      full_name: sandboxProfile.repositories[role].full_name
     },
-    head_repository: { id: sandboxProfile.repositories.backend.id },
-    head_sha: operation.backend_commit,
+    head_repository: { id: sandboxProfile.repositories[role].id },
+    head_sha: operation[`${role}_commit`],
     head_branch: "1a-staging",
     event: "workflow_dispatch",
     run_attempt: 2,
@@ -109,7 +110,7 @@ function fixture() {
       frontend: operation.frontend_commit
     },
     runner: {
-      repository: sandboxProfile.repositories.backend.full_name,
+      repository: sandboxProfile.repositories[role].full_name,
       run_id: run.id,
       attempt: run.run_attempt,
       commit: run.head_sha
@@ -184,6 +185,34 @@ test("release workflow rejects a report for another exact version", async () => 
       save: async () => {}
     }),
     /does not match/
+  );
+});
+
+test("frontend workflow rejects backend runner provenance", async () => {
+  const f = fixture("frontend");
+  f.report.runner.repository = sandboxProfile.repositories.backend.full_name;
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const endpoint = args[args.indexOf("--method") + 2];
+      const value = endpoint.includes("/contents/")
+        ? runtimeFile(endpoint)
+        : endpoint.includes("/runs?")
+          ? { total_count: 1, workflow_runs: [f.run] }
+          : { total_count: 1, jobs: [f.job] };
+      return apiResponse("200 OK", value);
+    },
+    logs: async () =>
+      `COORDINATOR_RELEASE_RESULT:${Buffer.from(JSON.stringify(f.report)).toString("base64url")}\n`
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => {}
+    }),
+    /conclusion contradicts its exact report/u
   );
 });
 
@@ -310,6 +339,8 @@ test("owned branch cleanup requires two consecutive missing reads", async () => 
   };
   let deleted = false;
   let missingReads = 0;
+  let closeResponseLost = false;
+  let patchCalls = 0;
   const client = createReleaseGitHub({
     profile: sandboxProfile,
     runtime,
@@ -349,8 +380,15 @@ test("owned branch cleanup requires two consecutive missing reads", async () => 
       }
       if (method === "GET" && endpoint.endsWith("/pulls/7"))
         return apiResponse("200 OK", pr);
-      if (method === "PATCH" && endpoint.endsWith("/pulls/7"))
-        return apiResponse("200 OK", { ...pr, state: "closed" });
+      if (method === "PATCH" && endpoint.endsWith("/pulls/7")) {
+        patchCalls++;
+        pr.state = "closed";
+        if (!closeResponseLost) {
+          closeResponseLost = true;
+          throw new Error("lost close response");
+        }
+        return apiResponse("200 OK", pr);
+      }
       if (method === "DELETE" && endpoint.includes("/git/refs/heads/")) {
         deleted = true;
         return apiResponse("204 No Content");
@@ -358,16 +396,21 @@ test("owned branch cleanup requires two consecutive missing reads", async () => 
       assert.fail(`${method} ${endpoint}`);
     }
   });
-  const result = await client.integrate({
+  const input = {
     record,
     candidate,
     actor,
     expectedBase: candidate.base,
     save: async () => {}
-  });
+  };
+  await assert.rejects(client.integrate(input), /lost close response/u);
+  assert.equal(record.state, "cleaning");
+  assert.equal(record.cleanup, undefined);
+  const result = await client.integrate(input);
   assert.equal(result.status, "failed");
   assert.equal(record.cleanup, "removed");
   assert.equal(missingReads, 2);
+  assert.equal(patchCalls, 1);
 });
 
 test("real profile and unpinned release runtime are refused", () => {

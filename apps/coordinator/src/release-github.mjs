@@ -150,7 +150,12 @@ export function createReleaseGitHub({
       "Sandbox release branch cleanup could not be verified twice."
     );
   }
-  function verifyPull(pr, record, candidate, { allowMerged = false } = {}) {
+  function verifyPull(
+    pr,
+    record,
+    candidate,
+    { allowClosed = false, allowMerged = false } = {}
+  ) {
     const repo = profile.repositories[record.step.role];
     serviceAssert(
       positive(pr?.number) &&
@@ -164,7 +169,8 @@ export function createReleaseGitHub({
         pr.body === record.body &&
         (allowMerged
           ? pr.merged === true
-          : pr.state === "open" && pr.merged === false),
+          : ["open", ...(allowClosed ? ["closed"] : [])].includes(pr.state) &&
+            pr.merged === false),
       "release-ownership",
       "Sandbox integration PR identity or exact code changed."
     );
@@ -221,6 +227,38 @@ export function createReleaseGitHub({
       "release-checks-pending",
       "Sandbox integration checks are still pending; resume the saved release."
     );
+  }
+  async function cleanupFailedPull(role, record, candidate, save) {
+    serviceAssert(
+      record.state === "cleaning" && positive(record.number),
+      "release-state",
+      "Failed integration cleanup has no saved PR identity."
+    );
+    let pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
+    verifyPull(pr, record, candidate, { allowClosed: true });
+    if (pr.state === "open") {
+      pr = (
+        await call(role, "PATCH", `/pulls/${record.number}`, {
+          state: "closed"
+        })
+      ).data;
+      verifyPull(pr, record, candidate, { allowClosed: true });
+    }
+    serviceAssert(
+      pr.state === "closed" && pr.merged === false,
+      "release-cleanup",
+      "The failed sandbox integration PR is not closed."
+    );
+    await deleteOwnedBranch(role, record.branch, candidate.commit);
+    record.cleanup = "removed";
+    await save();
+    return {
+      status: "failed",
+      kind: "checks",
+      commit: null,
+      url: record.url,
+      message: "The sandbox integration PR checks failed."
+    };
   }
   const runTitle = (id) => `Sandbox release ${id}`;
   function verifyRun(run, record, workflowId) {
@@ -367,13 +405,15 @@ export function createReleaseGitHub({
         );
         record.state = "branch-prepared";
         await save();
-      } else if (!["merging", "merged"].includes(record.state)) {
+      } else if (!["cleaning", "merging", "merged"].includes(record.state)) {
         serviceAssert(
           (await ref(role, targetBranch)).data.object.sha === record.base,
           "release-stale",
           `Sandbox ${record.step.environment} changed before integration.`
         );
       }
+      if (record.state === "cleaning")
+        return cleanupFailedPull(role, record, candidate, save);
       let current = await ref(role, record.branch, [200, 404]);
       if (current.status === 404) {
         await call(
@@ -431,18 +471,9 @@ export function createReleaseGitHub({
         verifyPull(pr, record, candidate);
         const checked = await waitForPull(role, record, candidate);
         if (!checked.passed) {
-          await call(role, "PATCH", `/pulls/${record.number}`, {
-            state: "closed"
-          });
-          await deleteOwnedBranch(role, record.branch, candidate.commit);
-          record.cleanup = "removed";
-          return {
-            status: "failed",
-            kind: "checks",
-            commit: null,
-            url: record.url,
-            message: "The sandbox integration PR checks failed."
-          };
+          record.state = "cleaning";
+          await save();
+          return cleanupFailedPull(role, record, candidate, save);
         }
         pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
         verifyPull(pr, record, candidate);

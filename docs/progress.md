@@ -72,7 +72,14 @@ scope into a controlled error. The lost-plan-response regression now proves that
 the exact saved plan is reused. These changes do not alter the pinned sandbox
 workflow bundle, so the earlier live sequence remains the runtime acceptance.
 
-The final local `npm run check` passed **463 tests** on Node 25.6.1, with the
+A second review pass makes failed integration cleanup resumable: the Coordinator
+saves `cleaning` before closing the owned PR, then a retry verifies that exact
+open or closed PR and completes branch cleanup. Terminal `needs-human` releases
+are not adopted by later unscoped runs. Test reports now use the actual frontend
+or backend runner identity, and the adapter test rejects mismatched frontend
+provenance.
+
+The final local `npm run check` passed **465 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
 passed. Node 20/22/24 and external review results remain PR evidence, not local proof.
