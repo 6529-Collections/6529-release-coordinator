@@ -19,19 +19,27 @@ test("one unscoped sandbox command finishes all cheap work, tests one group and 
   assert.equal(h.f.state().workflow, inboxWorkflow);
   assert.equal(h.f.state().lock, null);
   for (const issue of h.f.issues) {
-    assert.equal(issue.state, "open");
+    assert.equal(issue.state, "closed");
     assert.ok(issue.labels.includes("batch:passed"));
-    assert.ok(issue.labels.includes("status:waiting"));
+    assert.ok(issue.labels.includes("status:completed"));
+    assert.ok(issue.labels.includes("reason:release-completed"));
   }
+  const archive = Object.values(h.f.state().history.batches)[0];
+  assert.ok(
+    archive.evidence.some(
+      (url) => url === "https://example.invalid/integration"
+    )
+  );
+  assert.ok(
+    archive.evidence.some((url) =>
+      url.startsWith("https://example.invalid/release/")
+    )
+  );
   const writes = h.f.calls.filter(
     (call) => call.method !== "GET" && !call.path.startsWith("/git/")
   ).length;
   const second = await processInbox(h.options);
-  assert.deepEqual(second.batch.selected, [1, 2]);
-  assert.equal(
-    h.events.filter((event) => event === "reverify-evidence").length,
-    1
-  );
+  assert.deepEqual(second.batch.selected, []);
   assert.equal(h.dispatches(), 1);
   assert.equal(h.f.comments.length, 2);
   assert.equal(

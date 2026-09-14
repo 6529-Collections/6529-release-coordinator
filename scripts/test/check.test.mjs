@@ -55,8 +55,8 @@ test("check rejects modified source and unexpected new source files", (t) => {
 
 const archive = {
   name: "@6529-collections/release-request",
-  version: "0.0.4",
-  filename: "6529-collections-release-request-0.0.4.tgz",
+  version: "0.0.5",
+  filename: "6529-collections-release-request-0.0.5.tgz",
   integrity: "sha512-Zml4dHVyZQ==",
   files: [
     "LICENSE",
@@ -64,28 +64,30 @@ const archive = {
     "package.json",
     "bin/6529-release-request.mjs",
     "release-request.example.json",
+    "release-request.monitoring.example.json",
     "release-request.schema.json",
+    "release-request.schema.v0.000001.json",
     "src/github-submission.mjs",
     "src/inbox-issue.mjs",
     "src/index.mjs"
   ].map((path) => ({ path }))
 };
 test("package contract rejects a missing schema, a leaked file, and wrong version", () => {
-  validatePackageContents(archive, { version: "0.0.4" });
+  validatePackageContents(archive, { version: "0.0.5" });
   assert.throws(() =>
     validatePackageContents(
       {
         ...archive,
         files: archive.files.filter((f) => !f.path.endsWith("schema.json"))
       },
-      { version: "0.0.4" }
+      { version: "0.0.5" }
     )
   );
   assert.throws(() =>
     validatePackageContents(
       { ...archive, files: [...archive.files, { path: ".env" }] },
-      { version: "0.0.4" }
+      { version: "0.0.5" }
     )
   );
-  assert.throws(() => validatePackageContents(archive, { version: "0.0.5" }));
+  assert.throws(() => validatePackageContents(archive, { version: "0.0.6" }));
 });

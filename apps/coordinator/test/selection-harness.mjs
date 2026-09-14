@@ -4,7 +4,7 @@ import { batchPolicy } from "../src/batch-plan.mjs";
 
 export const items = (count = 4) =>
   Array.from({ length: count }, (_, i) => ({
-    entry: { issue_number: i + 1 },
+    entry: { issue_number: i + 1, request: { target: "staging" } },
     input: { number: i + 1, code: `commit-${i}` }
   }));
 export function harness({

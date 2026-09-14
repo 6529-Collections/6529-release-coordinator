@@ -1,0 +1,25 @@
+{
+  "schema_version": "0.000002",
+  "request_id": "22222222-2222-4222-8222-222222222222",
+  "created_at": "2026-09-14T09:00:00Z",
+  "requested_by": "simo",
+  "target": "staging",
+  "database_change": "no",
+  "release_parts": [
+    {
+      "id": "monitoring",
+      "repository": "6529seize-backend",
+      "pull_requests": [
+        {
+          "number": 2047,
+          "branch": "feature/operational-monitoring",
+          "commit": "cccccccccccccccccccccccccccccccccccccccc"
+        }
+      ],
+      "depends_on": [],
+      "deploy_units": [],
+      "deploy_dependencies": [],
+      "operational_deployments": ["monitoring"]
+    }
+  ]
+}

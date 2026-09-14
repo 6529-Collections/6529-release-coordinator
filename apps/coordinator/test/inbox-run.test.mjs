@@ -322,6 +322,25 @@ test("obvious outdated, merged, failing-check, draft, and unverified requests sk
   }
 });
 
+test("monitoring-only intake is checked but cannot enter rehearsal or execution", async () => {
+  const f = fixture();
+  f.request.schema_version = "0.000002";
+  f.request.release_parts[0].id = "monitoring";
+  f.request.release_parts[0].deploy_units = [];
+  f.request.release_parts[0].operational_deployments = ["monitoring"];
+  sync(f);
+
+  const { report } = await invoke(f, {
+    plan: async () => assert.fail("must not plan"),
+    rehearse: async () => assert.fail("must not rehearse")
+  });
+
+  assert.equal(report.requests[0].status, "waiting");
+  assert.equal(report.requests[0].rehearsal.status, "not-run");
+  assert.ok(report.requests[0].reasons.includes("coordinator-incomplete"));
+  assert.equal(report.release_authorized, false);
+});
+
 test("two individually mergeable PRs conflict together and the same ticket records the real Git finding", async (t) => {
   const f = fixture(sandboxProfile),
     git = await rehearsalFixture(t);
@@ -609,9 +628,10 @@ test("profile, scope, report-file and old-command validation fails before reads 
     );
 });
 
-test("uncertain generated-plan journal save stops before Git and resumes from the persisted plan", async () => {
+test("a lost generated-plan save response is confirmed before Git continues", async () => {
   const f = fixture();
   let failed = false;
+  let savedPlan;
   f.after = async (call) => {
     if (
       !failed &&
@@ -619,26 +639,21 @@ test("uncertain generated-plan journal save stops before Git and resumes from th
       call.path.includes("/git/refs/") &&
       f.state().lock?.plans?.[1]
     ) {
+      savedPlan = structuredClone(f.state().lock.plans[1]);
       failed = true;
       throw Error("Lost plan-save response");
     }
   };
-  const first = await invoke(f, {
-    rehearse: async () => assert.fail("plan save must complete before Git")
-  });
-  assert.equal(first.code, 2);
-  assert.equal(issueWrites(f).length, 0);
-  const lock = f.state().lock;
-  assert.ok(lock.plans[1]);
-  const next = await invoke(f, {
-    args: ["--resume", lock.run_id, "--json"],
-    plan: async () => assert.fail("must retain saved destinations"),
+  let usedPlan;
+  const result = await invoke(f, {
     rehearse: async (entry, plan) => {
-      assert.deepEqual(plan, lock.plans[1]);
+      usedPlan = structuredClone(plan);
       return fakeReport(entry, plan, f.profile);
     }
   });
-  assert.equal(next.code, 0);
+  assert.equal(result.code, 0);
+  assert.equal(failed, true);
+  assert.deepEqual(usedPlan, savedPlan);
   assert.equal(f.comments.length, 1);
   assert.equal(f.state().lock, null);
 });

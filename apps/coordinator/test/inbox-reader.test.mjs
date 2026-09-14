@@ -168,6 +168,33 @@ test("verifies both product parts and distinguishes supplied requester from GitH
   }
 });
 
+test("shows a monitoring-only request as recorded but not deployable", async () => {
+  const data = fixture();
+  data.request.schema_version = "0.000002";
+  data.request.release_parts = [
+    {
+      ...data.request.release_parts[0],
+      id: "monitoring",
+      deploy_units: [],
+      deploy_dependencies: [],
+      operational_deployments: ["monitoring"]
+    }
+  ];
+  data.issue.body = buildReleaseRequestIssueBody({
+    request: data.request,
+    checksum: releaseRequestChecksum(data.request),
+    actor: "trusted-user",
+    actorId: "456",
+    workflowRunUrl: `${web}/actions/runs/123`,
+    submittedAt: "2026-09-08T10:00:01.000Z"
+  });
+  data.result.request = structuredClone(data.request);
+
+  const output = formatReport(await readInbox(github(data)));
+  assert.match(output, /Operational deployments: monitoring/);
+  assert.match(output, /recording only; deployment is not implemented/);
+});
+
 for (const [name, mutate, expected] of [
   [
     "missing body",

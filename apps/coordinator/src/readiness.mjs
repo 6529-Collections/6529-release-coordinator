@@ -241,7 +241,11 @@ async function inspectCatalogs(request, github, checks) {
   const commits = [
     ...new Set(
       request.release_parts
-        .filter((part) => part.repository === "6529seize-backend")
+        .filter(
+          (part) =>
+            part.repository === "6529seize-backend" &&
+            part.deploy_units.length > 0
+        )
         .flatMap((part) => part.pull_requests.map((pr) => pr.commit))
     )
   ];
@@ -289,6 +293,25 @@ async function inspectCatalogs(request, github, checks) {
   } catch (error) {
     checks.push(check("backend_services", "unknown", error.message));
   }
+}
+
+function inspectOperationalDeployments(request, checks) {
+  const selected = request.release_parts.flatMap((part) =>
+    (part.operational_deployments ?? []).map((name) => ({
+      part: part.id,
+      repository: part.repository,
+      name
+    }))
+  );
+  if (!selected.length) return;
+  checks.push(
+    check(
+      "operational_deployments",
+      "unknown",
+      "Operational monitoring is recorded in this request, but the Coordinator cannot deploy it or verify its target health yet.",
+      { selected }
+    )
+  );
 }
 
 export async function inspectReadiness(
@@ -339,6 +362,7 @@ export async function inspectReadiness(
       { declared_part_order: graph.order }
     )
   );
+  inspectOperationalDeployments(request, checks);
 
   const observed = [];
   for (const part of request.release_parts) {

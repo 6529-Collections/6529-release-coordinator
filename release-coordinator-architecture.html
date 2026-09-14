@@ -287,13 +287,13 @@
         },
         plan: {
           title: "Record deployment needs",
-          text: "The tool records the target and whether the database changes. A release part may depend on another part. Backend parts list selected deploy units and any dependency that is special to this release. Frontend is one app, so it has no deploy-unit list.",
+          text: "The tool records the target and whether the database changes. A release part may depend on another part. Backend application parts list deploy units; operational monitoring is named separately because it uses its own workflow. Frontend is one app, so it has no deploy-unit list.",
         },
         validate: {
           title: "Create and validate JSON",
           text: "The CLI first saves a run record. It then creates one JSON request and checks it against release-request.schema.json. The schema checks the file shape. The requested_by value is useful context, but it does not prove who submitted the request.",
           example: `{
-  "schema_version": "0.000001",
+  "schema_version": "0.000002",
   "request_id": "11111111-1111-4111-8111-111111111111",
   "created_at": "2026-08-31T09:00:00Z",
   "requested_by": "simo",
@@ -310,7 +310,8 @@
       }],
       "depends_on": [],
       "deploy_units": ["api"],
-      "deploy_dependencies": []
+      "deploy_dependencies": [],
+      "operational_deployments": []
     }
   ]
 }`,

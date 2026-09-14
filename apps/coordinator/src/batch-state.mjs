@@ -4,6 +4,9 @@ import {
   validateServicePlan,
   verifyServiceReport
 } from "./service-contract.mjs";
+import { validateReleaseExecution } from "./release-state.mjs";
+import { isReleaseRequestTarget } from "./release-target.mjs";
+import { trustedBatchPolicy } from "./batch-plan.mjs";
 
 const hash = (value) => /^[0-9a-f]{64}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -19,6 +22,7 @@ export function validateBatchHistory(batches, profile) {
     "Invalid batch history."
   );
   for (const [key, batch] of Object.entries(batches)) {
+    trustedBatchPolicy(batch?.policy);
     serviceAssert(
       hash(key) &&
         key === batch?.fingerprint &&
@@ -26,7 +30,9 @@ export function validateBatchHistory(batches, profile) {
         Array.isArray(batch.inputs) &&
         batch.inputs.length > 0 &&
         batch.inputs.length <= 10 &&
-        batch.policy?.version === "sandbox-batch-v1" &&
+        ["sandbox-batch-v1", "sandbox-batch-v2"].includes(
+          batch.policy?.version
+        ) &&
         key === serviceHash({ inputs: batch.inputs, policy: batch.policy }) &&
         Number.isFinite(Date.parse(batch.created_at)) &&
         batch.deadline ===
@@ -49,7 +55,9 @@ export function validateBatchHistory(batches, profile) {
             (!i || number > numbers[i - 1]) &&
             batch.inputs[i].input?.profile === "sandbox" &&
             batch.inputs[i].input.inbox?.issue_number === number &&
-            batch.inputs[i].input.inbox.repository_id === profile.inbox.id
+            batch.inputs[i].input.inbox.repository_id === profile.inbox.id &&
+            (batch.policy.version === "sandbox-batch-v1" ||
+              isReleaseRequestTarget(batch.inputs[i].target))
         ),
       "batch-state",
       "Batch ticket scope changed."
@@ -190,5 +198,16 @@ export function validateBatchHistory(batches, profile) {
       "batch-state",
       "Selected candidate has no exact completed check evidence."
     );
+    if (batch.execution) {
+      serviceAssert(
+        batch.policy.version === "sandbox-batch-v2" &&
+          batch.selected.length &&
+          (batch.stop?.status !== "stale" ||
+            ["completed", "needs-human"].includes(batch.execution.status)),
+        "release-state",
+        "Only a selected v2 batch can own release execution; stale batches can retain only terminal evidence."
+      );
+      validateReleaseExecution(batch.execution, batch);
+    }
   }
 }

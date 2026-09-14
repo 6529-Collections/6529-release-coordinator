@@ -15,6 +15,7 @@ import {
   terminal,
   ticketTitle
 } from "./ticket-presentation.mjs";
+import { validateReleaseExecution } from "./release-state.mjs";
 const latest = (ticket) => ticket?.transitions.at(-1);
 const isNumber = (value) => Number.isSafeInteger(value) && value > 0;
 
@@ -311,6 +312,24 @@ export async function presentRunTicket(
           const freshIssue = await response(api, "GET", `/issues/${number}`);
           if (receiptHash(freshIssue) !== ticket.receipt_hash)
             throw new Error("Receipt changed before closure.");
+          if (
+            latest(ticket).decision.reasons.some(
+              (reason) => reason.code === "release-completed"
+            )
+          ) {
+            const fingerprint = latest(ticket).decision.batch?.fingerprint;
+            const saved = state.batches?.[fingerprint];
+            if (
+              !saved ||
+              !saved.selected.includes(number) ||
+              validateReleaseExecution(saved.execution, saved).status !==
+                "completed"
+            )
+              throw new Error(
+                "Saved sandbox release evidence changed before closure."
+              );
+            return;
+          }
           const freshEntry = await inspect(freshIssue, { get, profile });
           const freshObservation = await observe(freshEntry, {
             github,

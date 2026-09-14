@@ -74,6 +74,34 @@ function validRequest() {
   };
 }
 
+function validMonitoringRequest() {
+  return {
+    schema_version: "0.000002",
+    request_id: "33333333-3333-4333-8333-333333333333",
+    created_at: fixedTime,
+    requested_by: "simo",
+    target: "staging",
+    database_change: "no",
+    release_parts: [
+      {
+        id: "monitoring",
+        repository: "6529seize-backend",
+        pull_requests: [
+          {
+            number: 2047,
+            branch: "feature/operational-monitoring",
+            commit: "c".repeat(40)
+          }
+        ],
+        depends_on: [],
+        deploy_units: [],
+        deploy_dependencies: [],
+        operational_deployments: ["monitoring"]
+      }
+    ]
+  };
+}
+
 function idSequence(...ids) {
   let index = 0;
   return () => ids[index++] || `temporary-${index}`;
@@ -145,6 +173,7 @@ test("template describes agent input and leaves generated fields to the CLI", ()
   assert.equal(template.request_id, undefined);
   assert.equal(template.created_at, undefined);
   assert.equal(template.release_parts[0].repository, "6529seize-backend");
+  assert.deepEqual(template.release_parts[0].operational_deployments, []);
   assert.equal(template.release_parts[1].repository, "6529seize-frontend");
 });
 
@@ -153,6 +182,27 @@ test("a complete release request can be validated again", () => {
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.errors, []);
+});
+
+test("a monitoring-only request can be recorded in schema v0.000002", () => {
+  const result = validateReleaseRequest(validMonitoringRequest());
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.errors, []);
+});
+
+test("schema v0.000002 rejects an empty backend release part", () => {
+  const request = validMonitoringRequest();
+  request.release_parts[0].operational_deployments = [];
+
+  assert.equal(validateReleaseRequest(request).ok, false);
+});
+
+test("schema v0.000001 remains valid and does not accept monitoring fields", () => {
+  const legacy = validRequest();
+  assert.equal(validateReleaseRequest(legacy).ok, true);
+  legacy.release_parts[0].operational_deployments = ["monitoring"];
+  assert.equal(validateReleaseRequest(legacy).ok, false);
 });
 
 test("complete request validation returns clear schema errors", () => {
@@ -309,7 +359,7 @@ test("valid input saves a succeeded run and one outbox request", async (t) => {
       `${requestId}.json`
     )
   );
-  assert.equal(request.schema_version, "0.000001");
+  assert.equal(request.schema_version, "0.000002");
   assert.equal(request.request_id, requestId);
   assert.equal(request.created_at, fixedTime);
   assert.deepEqual(request.release_parts, validDraft().release_parts);

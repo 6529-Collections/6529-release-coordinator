@@ -7,16 +7,23 @@ export async function publishFixturePr(entry, { save, push, find, create }) {
   const matches = await find(entry);
   if (!Array.isArray(matches) || matches.length > 1)
     throw new Error("The fixture branch has ambiguous PR history.");
+  if (!matches.length && entry.number)
+    throw new Error(
+      "The saved fixture PR is missing; do not create a replacement."
+    );
   const pr = matches[0] ?? (await create(entry));
   if (
     !Number.isSafeInteger(pr?.number) ||
     pr.number < 1 ||
+    (entry.number && pr.number !== entry.number) ||
     pr.state !== "open" ||
     pr.head?.ref !== entry.branch ||
     pr.head.sha !== entry.commit ||
     pr.head.repo?.id !== entry.repository.id ||
     pr.base?.ref !== "main" ||
+    (entry.base && pr.base.sha !== entry.base) ||
     pr.base.repo?.id !== entry.repository.id ||
+    (entry.url && pr.html_url !== entry.url) ||
     pr.html_url !==
       `https://github.com/${entry.repository.full_name}/pull/${pr.number}`
   )

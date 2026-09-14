@@ -36,7 +36,13 @@ export async function captureServiceSource(workspace, repo, commit) {
   }
 }
 
-export function buildServicePlan(entry, report, profile, runtime) {
+export function buildServicePlan(
+  entry,
+  report,
+  profile,
+  runtime,
+  { allowProduction = false } = {}
+) {
   serviceAssert(
     profile === sandboxProfile &&
       entry.status === "valid" &&
@@ -54,7 +60,8 @@ export function buildServicePlan(entry, report, profile, runtime) {
     "Service checks require this ticket's fresh passing Git rehearsal."
   );
   serviceAssert(
-    entry.request.target === "staging",
+    entry.request.target === "staging" ||
+      (allowProduction && entry.request.target === "production"),
     "unsupported-target",
     "The sample service executor only supports isolated staging simulations."
   );

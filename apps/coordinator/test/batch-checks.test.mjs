@@ -212,7 +212,11 @@ test("durable batch history requires the exact selected group and completed clea
   assert.equal(
     state.fingerprint,
     serviceHash({
-      inputs: items.map((item) => ({ number: item.number, input: item.input })),
+      inputs: items.map((item) => ({
+        number: item.number,
+        target: item.entry.request.target,
+        input: item.input
+      })),
       policy: batchPolicy
     })
   );

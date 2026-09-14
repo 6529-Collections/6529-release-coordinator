@@ -9,6 +9,7 @@ import {
   verifyBatchInputs
 } from "./inbox-preparation.mjs";
 import { presentRunTicket } from "./inbox-ticket-writer.mjs";
+import { serviceAssert } from "./service-contract.mjs";
 const isNumber = (value) => Number.isSafeInteger(value) && value > 0;
 
 export async function processInbox({
@@ -22,6 +23,7 @@ export async function processInbox({
   rehearsal,
   services,
   batch,
+  release,
   plan,
   signal,
   now = () => new Date(),
@@ -55,6 +57,13 @@ export async function processInbox({
     () => journal.acquire(actor, resume, scope)
   );
   bindRunLog(run.run_id, Boolean(resume));
+  serviceAssert(
+    run.scope &&
+      (run.scope.issue_number === null || isNumber(run.scope.issue_number)) &&
+      typeof run.scope.close_test === "boolean",
+    "run-scope",
+    "The saved inbox run has no valid Issue selection or action."
+  );
   issueNumber = run.scope.issue_number ?? undefined;
   closeTest = run.scope.close_test;
   const results = [];
@@ -67,6 +76,30 @@ export async function processInbox({
   let batchResult;
   let pendingNumber = null;
   try {
+    if (batching && !run.batch_fingerprint) {
+      serviceAssert(
+        run.scope.issue_number === null && run.scope.close_test === false,
+        "batch-scope",
+        "Only an unscoped sandbox run can continue an unfinished release."
+      );
+      const active = Object.values(state.batches ?? {}).filter(
+        (record) =>
+          record.policy?.version === "sandbox-batch-v2" &&
+          record.status === "finished" &&
+          record.selected.length &&
+          (!record.execution ||
+            ["prepared", "running"].includes(record.execution.status))
+      );
+      if (active.length > 1)
+        throw new Error("More than one unfinished sandbox release exists.");
+      if (active.length === 1) {
+        run.batch_fingerprint = active[0].fingerprint;
+        run.ticket_numbers = active[0].inputs.map(({ number }) => number);
+        state.lock.batch_fingerprint = run.batch_fingerprint;
+        state.lock.ticket_numbers = structuredClone(run.ticket_numbers);
+        await journal.save(state, run, "continue unfinished sandbox release");
+      }
+    }
     const scanned = await scanRunTickets({
       loadInbox,
       get,
@@ -83,6 +116,9 @@ export async function processInbox({
     });
     const preparedTickets = await prepareRunTickets({
       ...scanned,
+      activeBatch: run.batch_fingerprint
+        ? state.batches?.[run.batch_fingerprint]
+        : null,
       signal,
       state,
       results,
@@ -119,7 +155,8 @@ export async function processInbox({
             observe,
             github,
             plan
-          })
+          }),
+        release
       });
     }
     for (const item of preparedTickets) {

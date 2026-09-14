@@ -3,7 +3,7 @@ import { createRehearsalGitHub } from "./rehearsal-github.mjs";
 import { readServiceLogs } from "./service-github.mjs";
 import { sandboxProfile } from "./profiles.mjs";
 import { assertDestination } from "./input-stability.mjs";
-import { batchPolicy } from "./batch-plan.mjs";
+import { batchPolicy, trustedBatchPolicy } from "./batch-plan.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { serviceFiles } from "./service-contract.mjs";
 
@@ -21,8 +21,10 @@ export function createBatchGitHub({
   execute = executeGitHub,
   logs = readServiceLogs,
   gates = createRehearsalGitHub(sandboxProfile),
-  guard = async () => {}
+  guard = async () => {},
+  policy = batchPolicy
 } = {}) {
+  policy = trustedBatchPolicy(policy);
   serviceAssert(
     profile === sandboxProfile,
     "batch-profile",
@@ -136,14 +138,14 @@ export function createBatchGitHub({
         await call(
           role,
           "GET",
-          `/contents/.github/workflows/${batchPolicy.required_workflow}?ref=${base}`
+          `/contents/.github/workflows/${policy.required_workflow}?ref=${base}`
         )
       ).data;
       const active = (
         await call(
           role,
           "GET",
-          `/actions/workflows/${batchPolicy.required_workflow}`
+          `/actions/workflows/${policy.required_workflow}`
         )
       ).data;
       serviceAssert(
@@ -153,9 +155,8 @@ export function createBatchGitHub({
           repo.permissions?.push === true &&
           positive(actor.id) &&
           workflow.type === "file" &&
-          workflow.sha === batchPolicy.workflow_blob &&
-          active.path ===
-            `.github/workflows/${batchPolicy.required_workflow}` &&
+          workflow.sha === policy.workflow_blob &&
+          active.path === `.github/workflows/${policy.required_workflow}` &&
           active.state === "active" &&
           positive(active.id),
         "batch-runtime",
@@ -365,7 +366,7 @@ export function createBatchGitHub({
       serviceAssert(
         run.repository?.id === repo.id &&
           run.head_repository?.id === repo.id &&
-          run.path === `.github/workflows/${batchPolicy.required_workflow}` &&
+          run.path === `.github/workflows/${policy.required_workflow}` &&
           run.workflow_id === record.workflow_id &&
           run.head_branch === record.branch &&
           run.event === "pull_request" &&
@@ -397,7 +398,7 @@ export function createBatchGitHub({
           (step) => step.name === "Run node scripts/check.mjs"
         );
       serviceAssert(
-        job.name === batchPolicy.required_job &&
+        job.name === policy.required_job &&
           job.run_id === run.id &&
           job.head_sha === record.commit &&
           job.status === "completed" &&
@@ -447,7 +448,7 @@ export function createBatchGitHub({
       );
       const required = observed.checks.filter((check) => check.isRequired);
       serviceAssert(
-        required.some((check) => check.name === batchPolicy.required_job),
+        required.some((check) => check.name === policy.required_job),
         "batch-checks",
         "The expected PR check is no longer required."
       );

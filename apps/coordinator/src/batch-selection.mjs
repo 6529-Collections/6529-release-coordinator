@@ -6,6 +6,7 @@ import {
   ServiceError
 } from "./service-contract.mjs";
 import { batchPolicy } from "./batch-plan.mjs";
+import { isReleaseRequestTarget } from "./release-target.mjs";
 
 const members = (items) => items.map((item) => item.entry.issue_number);
 const key = (items) => members(items).join(",");
@@ -31,8 +32,14 @@ export async function selectBatch({
   );
   const inputs = ordered.map((item) => ({
     number: item.entry.issue_number,
+    target: item.entry.request?.target ?? item.target,
     input: item.input
   }));
+  serviceAssert(
+    inputs.every(({ target }) => isReleaseRequestTarget(target)),
+    "batch-unsupported",
+    "Every batch ticket must have a staging or production target."
+  );
   const fingerprint = serviceHash({ inputs, policy });
   const created = now();
   const state = previous
@@ -344,7 +351,7 @@ export function batchTicketResult(batch, number) {
     message: stale
       ? batch.stop.message
       : selected
-        ? "This exact group passed its combined checks; it remains waiting for future release execution."
+        ? "This exact group passed its combined checks and can continue through the saved sandbox release sequence."
         : singleton
           ? "This complete ticket failed against the saved base, with a passing unchanged baseline. A correction is required."
           : involved.length

@@ -17,6 +17,12 @@ The agent fills this template and removes any frontend or backend part that is
 not included in the release. The CLI adds `schema_version`, `request_id`, and
 `created_at`; the agent must not provide them.
 
+Current source creates schema `0.000002`. It can record ordinary frontend and
+backend service releases, plus the backend repository's separate operational
+monitoring package. A monitoring-only backend part uses empty `deploy_units`
+and `operational_deployments: ["monitoring"]`. This records the request; it does
+not give the Coordinator a monitoring deployment workflow.
+
 Create a request from standard input:
 
 ```sh
@@ -88,7 +94,8 @@ is tracked in the [Coordinator repository](https://github.com/6529-Collections/6
 
 ## Publishing
 
-Stable version `0.0.4` is available from public npm. New releases use the
+Stable version `0.0.4` is available from public npm. Source version `0.0.5`
+contains the new request shape but is not published by this local change. New releases use the
 protected publication workflow; product repositories pin a reviewed exact
 version rather than relying on a moving tag.
 

@@ -22,13 +22,11 @@ PRs run checks without publishing. The local reader change also makes that
 check run both workspace test suites. Package creation/publication is still
 scoped explicitly to the release-request workspace.
 
-The agreed [inbox-processing stage](./inbox-processing.md) changes central
-intake defaults and ticket handling. It does not require new public CLI input,
-a request-schema change, an npm publication, or consumer upgrades. The workflow
-runs its Issue-creation helper from the Coordinator checkout, so installed
-`0.0.4` clients can keep submitting the same payload. Changes to shared helper
-source may appear in a future package archive; they do not alter an already
-published version or require publishing merely to update central ticket behavior.
+Installed `0.0.4` clients can keep submitting schema `0.000001`; the Coordinator
+preserves that validator. Local source version `0.0.5` and schema `0.000002` add
+operational-monitoring recording. That new shape is not available to product
+repositories until `0.0.5` is reviewed, merged, published through the protected
+workflow, and pinned by each consumer that needs it.
 
 ## Publish a new version
 

@@ -72,6 +72,26 @@ test("new intake creates readable scope, received status, verified assignment, a
   );
 });
 
+test("new monitoring intake is labeled clearly and stays recording-only", async () => {
+  const f = fixture();
+  f.issues.length = 0;
+  f.request.schema_version = "0.000002";
+  f.request.release_parts[0].id = "monitoring";
+  f.request.release_parts[0].deploy_units = [];
+  f.request.release_parts[0].operational_deployments = ["monitoring"];
+
+  await saveOrganizedReleaseRequestIssue(intake(f));
+
+  assert.equal(f.issues[0].title, "Staging · monitoring PR #10");
+  assert.deepEqual(f.issues[0].labels, [
+    "component:backend",
+    "component:monitoring",
+    "release-request",
+    "status:received",
+    "target:staging"
+  ]);
+});
+
 test("processing legacy intake preserves receipt and unrelated labels; waiting stays readable and unchanged retry writes no tickets", async () => {
   const f = fixture(),
     body = f.issue.body;
@@ -644,6 +664,101 @@ test("two machines cannot both acquire the journal; a stale writer cannot pass i
   const resumed = createJournal(f.api);
   await resumed.acquire(actor, old.run_id);
   await assert.rejects(original.guard(old), /lock changed/);
+});
+
+test("journal confirms an exact save after a delayed ref read", async () => {
+  const f = fixture();
+  let stale = false,
+    prior;
+  const api = async (call) => {
+    if (
+      call.method === "PATCH" &&
+      call.path === "/git/refs/heads/codex/inbox-state"
+    ) {
+      prior = f.head;
+      const result = await f.api(call);
+      stale = true;
+      return result;
+    }
+    if (
+      stale &&
+      call.method === "GET" &&
+      call.path === "/git/ref/heads/codex/inbox-state"
+    ) {
+      stale = false;
+      return { status: 200, data: { object: { sha: prior } } };
+    }
+    return f.api(call);
+  };
+  const journal = createJournal(api, f.profile, {
+    pause: async () => {},
+    confirmationAttempts: 2
+  });
+  const { state, run } = await journal.acquire(await f.identity(), undefined, {
+    issue_number: 1,
+    close_test: false
+  });
+  await journal.save(state, run, "delayed confirmation");
+  await journal.guard(run);
+});
+
+test("journal reconciles a lost update response only when the exact save exists", async () => {
+  const f = fixture();
+  const journal = createJournal(f.api, f.profile, {
+    pause: async () => {},
+    confirmationAttempts: 1
+  });
+  const { state, run } = await journal.acquire(await f.identity(), undefined, {
+    issue_number: 1,
+    close_test: false
+  });
+  let lost = false;
+  f.after = async (call) => {
+    if (
+      !lost &&
+      call.method === "PATCH" &&
+      call.path === "/git/refs/heads/codex/inbox-state"
+    ) {
+      lost = true;
+      throw new Error("lost response");
+    }
+  };
+  await journal.save(state, run, "lost response confirmation");
+  assert.equal(lost, true);
+  await journal.guard(run);
+});
+
+test("journal rejects a lost-response readback with another lock token", async () => {
+  const f = fixture();
+  const journal = createJournal(f.api, f.profile, {
+    pause: async () => {},
+    confirmationAttempts: 1
+  });
+  const { state, run } = await journal.acquire(await f.identity(), undefined, {
+    issue_number: 1,
+    close_test: false
+  });
+  let changed = false;
+  f.after = async (call) => {
+    if (
+      !changed &&
+      call.method === "PATCH" &&
+      call.path === "/git/refs/heads/codex/inbox-state"
+    ) {
+      changed = true;
+      const commit = f.objects.get(f.head);
+      const tree = f.objects.get(commit.tree);
+      const blob = f.objects.get(tree.tree[0].sha);
+      const saved = JSON.parse(blob.content);
+      saved.lock.token = "another-writer";
+      blob.content = JSON.stringify(saved);
+      throw new Error("lost response");
+    }
+  };
+  await assert.rejects(
+    journal.save(state, run, "reject another lock"),
+    /lost response|unexpected state/u
+  );
 });
 
 test("an already closed legacy test is not reopened, reset, or invented as completed", async () => {

@@ -10,7 +10,9 @@ supported sandbox service/database checks, and updates the same ticket and
 journal. See progress for local implementation versus merged and live evidence.
 Unscoped sandbox runs select whole tickets together, finish cheap conflict
 filtering before expensive combined PR/service checks, and record deferred tickets.
-Release execution remains a design; passing checks never authorize it.
+They can also take one selected no-database-change batch through protected fake
+staging, matching E2E, protected fake production, and matching E2E. Real product
+release execution remains a design; passing sandbox checks never authorize it.
 
 It is intended to coordinate releases across:
 
@@ -74,16 +76,18 @@ from first principles.
   tests one ticket's services/database behavior and bounded no-database-change batches.
   Its service/database section owns the small programs, temporary MySQL baseline,
   declared-versus-observed database answer, ordered steps, retry/stop evidence,
-  and cleanup. Keep the shared Coordinator logic and explicit profile boundary;
-  sandbox actions never enable real deployment. Check progress for local
+  and cleanup. It also owns the protected fake staging/E2E/production release
+  sequence and its dated live acceptance. Keep the shared Coordinator logic and
+  explicit profile boundary; sandbox actions never enable real deployment. Check progress for local
   implementation, live coverage, and GitHub account limitations.
   Keep test manifests separate from verified inbox requests; do not widen the
   public schema or production repository allowlist to accommodate test fixtures.
   Documentation is not permission to create external resources. Keep the runtime
   bundle identical to its source, verify its fixed branch/commit, and preserve
-  service and batch attempts in the v5 journal before dispatch.
+  service, batch, and release attempts in the v6 journal before dispatch.
 - `docs/design.md` and the full process diagram contain the agreed execution
-  direction, still unimplemented. Reuse existing product Actions and their
+  direction for the real products. Its sandbox subset is implemented and live
+  tested; the product adapters and rollback are not. Reuse existing product Actions and their
   environment-specific builds; no configuration redesign or portable artifacts.
   Wait for successful matching staging E2E before production merges into `main`.
   Keep one release active through completion or recovery. Automatic rollback
@@ -92,7 +96,7 @@ from first principles.
   run diagnostics; logs never replace journal authority or prove a process stopped.
   Heartbeat and automatic process takeover remain deferred. Release rollback is
   future work, distinct from process restart. Keep state in the GitHub journal;
-  `docs/inbox-processing.md` owns verified archives and v5 migration; preserve
+  `docs/inbox-processing.md` owns verified archives and v6 migration; preserve
   unfinished work, archive checksums, original attempts and per-run budgets.
   Lifetime record caps are removed; keep sandbox migration evidence separate from
   real-profile migration and release execution.
@@ -101,8 +105,8 @@ from first principles.
   test the final exact combination, and never blame every member of a failed
   group. Batch ticket projections belong in `docs/inbox-processing.md`; planned
   acceptance cases belong in `docs/merge-rehearsal-testing.md`. These are sandbox
-  requirements for sandbox batching, not release authorization. The current
-  sandbox adapter supports self-contained tickets only; cross-ticket dependency
+  requirements for sandbox batching, not real release authorization. The current
+  sandbox adapter and release sequence support self-contained tickets only; cross-ticket dependency
   declarations and database-changing batches remain deferred. Keep cheap
   filtering before expensive checks, preserve owned trial cleanup and fixed budgets.
 - CLI, inbox reader, and readiness usage belong in their package/application

@@ -643,6 +643,23 @@ test("a combined frontend/backend request keeps backend prerequisites before fro
   );
 });
 
+test("checks a monitoring PR but does not fetch an application service catalog", async () => {
+  const f = fixture();
+  f.request.schema_version = "0.000002";
+  f.request.release_parts[0].id = "monitoring";
+  f.request.release_parts[0].deploy_units = [];
+  f.request.release_parts[0].operational_deployments = ["monitoring"];
+
+  const result = await inspectReadiness(f.entry, f);
+  const operational = getCheck(result, "operational_deployments");
+  assert.equal(operational.status, "unknown");
+  assert.match(operational.message, /cannot deploy it/);
+  assert.deepEqual(f.calls, [
+    ["pr", repo, 10],
+    ["pr", repo, 10]
+  ]);
+});
+
 test("a service selected under multiple code owners is ambiguous", () => {
   const f = fixture();
   const duplicate = structuredClone(f.request.release_parts[0]);

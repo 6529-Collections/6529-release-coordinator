@@ -21,7 +21,7 @@ export const sampleFiles = () => ({
         },
         {
           name: "dbMigrationsLoop",
-          allowed_environments: ["staging"],
+          allowed_environments: ["staging", "prod"],
           default_dependencies: []
         }
       ]

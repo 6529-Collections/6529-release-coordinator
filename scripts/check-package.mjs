@@ -12,7 +12,9 @@ const expectedFiles = [
   "package.json",
   "bin/6529-release-request.mjs",
   "release-request.example.json",
+  "release-request.monitoring.example.json",
   "release-request.schema.json",
+  "release-request.schema.v0.000001.json",
   "src/github-submission.mjs",
   "src/inbox-issue.mjs",
   "src/index.mjs"
@@ -152,10 +154,18 @@ export async function checkPackage() {
       import { validateReleaseRequest } from '${packageName}';
       const require = createRequire(import.meta.url);
       const schema = JSON.parse(readFileSync(require.resolve('${packageName}/schema'), 'utf8'));
+      const legacySchema = JSON.parse(readFileSync(require.resolve('${packageName}/schema/v0.000001'), 'utf8'));
       const example = JSON.parse(readFileSync(require.resolve('${packageName}/example'), 'utf8'));
+      const monitoring = JSON.parse(readFileSync(require.resolve('${packageName}/monitoring-example'), 'utf8'));
       assert.equal(schema.type, 'object');
-      const result = validateReleaseRequest(example);
-      assert.equal(result.ok, true, JSON.stringify(result));
+      assert.equal(legacySchema.properties.schema_version.const, '0.000001');
+      const legacy = structuredClone(example);
+      legacy.schema_version = '0.000001';
+      delete legacy.release_parts[0].operational_deployments;
+      for (const request of [example, monitoring, legacy]) {
+        const result = validateReleaseRequest(request);
+        assert.equal(result.ok, true, JSON.stringify(result));
+      }
     `
       ],
       consumer

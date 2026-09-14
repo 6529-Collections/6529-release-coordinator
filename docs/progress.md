@@ -1,7 +1,8 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-11**, against merged source `f68294c` and the live sandbox
-history acceptance below. This page separates implemented behavior, source delivery
+Last reviewed: **2026-09-14**, against merged source `5f49a60`, the local
+`codex/sandbox-release-sequence` implementation, and the live sandbox acceptance
+below. This page separates implemented behavior, source delivery
 and live proof. Earlier GitHub/package observations carry their original dates;
 they were not repeated during this cleanup.
 
@@ -9,24 +10,122 @@ they were not repeated during this cleanup.
 
 | Area | What is available | Evidence boundary |
 | --- | --- | --- |
-| Request submission | Public npm CLI `0.0.4`, shared intake and receipt verification | Earlier frontend/backend delivery tests passed; [publication guide](./npm-publishing.md) and [original evidence](./history/progress-through-2026-09-11.md#verified-intake-and-reader-checks). |
+| Request submission | Public npm CLI `0.0.4`, plus local `0.0.5` source with schema `0.000002`; old `0.000001` requests remain readable | Earlier frontend/backend delivery tests passed. The monitoring shape is local and not published or adopted; see [publication guide](./npm-publishing.md). |
+| Operational monitoring intake | Monitoring-only backend requests can be created, validated, displayed, labeled, and have their exact PR checked | Local automated tests pass. Deployment and target-health checks are deliberately unavailable, so these tickets stay waiting and cannot enter rehearsal/execution. |
 | Ticket workflow | One manual `inbox:run` command reads requests, checks exact PRs and updates the same tickets | Unified workflow and subsequent sandbox work are merged; [command guide](../apps/coordinator/README.md#run-the-ticket-workflow). |
 | Sandbox service/database checks | One-ticket checks run sample services and temporary MySQL in GitHub Actions | Local and live acceptance passed; see [source delivery](#sandbox-source-delivery-september-10). |
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
-| v5 history | Finished batch/service records archive in the same journal branch; active work and original attempts remain available | Merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66); [live sandbox migration and exact repeat passed](./testing/history-2026-09-11.md). The real inbox was not migrated. |
+| v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). The local v6 writer adds exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
 | PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | Node 20/22/24 CI, CodeQL and Snyk passed on final PR #66 head `2c801fc`; required merge rules remain active. All four configured opening reviews subsequently completed on [PR #70](https://github.com/6529-Collections/6529-release-coordinator/pull/70). Snyk's six-library workspace limitation remains below. |
+| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, ordered deploy checks, matching E2E, then protected test `main` for production requests | Implemented locally and proven live with all 14 operations passing; see [acceptance](./testing/release-sequence-2026-09-11.md). No real repository was used. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
-profile selection does not enable sandbox execution on real products. A passing
-candidate stays waiting and does not authorize a release.
+profile selection does not enable sandbox execution on real products. Sandbox
+completion is evidence only for the pinned test repositories.
 
 ## Next steps
 
-Build the release sequence in the test repositories before adding real adapters.
-[Later execution acceptance](./merge-rehearsal-testing.md#later-execution-acceptance)
-covers that future stage; it is not part of this cleanup.
+Review and merge the Coordinator source, then publish and adopt the exact CLI
+version if this new request shape is approved. After that, add narrow real
+adapters that call the existing frontend, backend-service, and operational-
+monitoring release workflows without redesigning their builds or environment settings. Automatic
+rollback, database-changing batches, linked tickets, heartbeat/takeover, and
+parallel releases remain deferred.
+
+## Sandbox release sequence acceptance, September 11
+
+The local branch installed a pinned sandbox release check workflow in both public
+test repositories and protected each `1a-staging` branch with required `Sandbox
+check`. That workflow only inspects the candidate. The authorized Coordinator run
+still writes its journal and ticket, integrates through temporary sandbox branches
+and PRs, and cleans those temporary resources. Production-target ticket
+[#15](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/15)
+then passed cheap filtering, exact combined PR checks, combined service checks,
+protected backend/frontend staging integration, ordered staging checks, matching
+staging E2E, protected backend/frontend test-`main` integration, ordered production
+checks, and matching production E2E. The ticket is closed as completed and the
+journal lock is clear.
+
+Two live interruptions improved the implementation rather than weakening proof:
+the first rejected a changed pinned check workflow before creating a trial PR;
+the second exposed a delayed GitHub journal confirmation after the exact commit
+had been saved. The latter now retries read-only confirmation and accepts only
+the exact expected commit/state and lock token. A resume-projection bug was also fixed so a
+completed release can finish its ticket without rerunning release operations.
+Focused regressions cover both recovery cases. A final code review also added a
+zero-write guard when sandbox staging moves after the release captures its start;
+that failure path passed offline and was not needed by the stable live run. Full
+links, commits and evidence are in the
+[dated acceptance record](./testing/release-sequence-2026-09-11.md).
+
+PR review hardening now uses one validated `production` to `staging, prod`
+mapping, prevents stale batches from closing tickets, asserts that only an
+unscoped run may adopt unfinished release work, and pins the workflow, contract,
+and runner files at every exact fake environment commit. Focused regressions pass;
+a read-only live identity check confirmed the three runtime blobs in both test
+repositories and environment branches. Cleanup now requires two consecutive
+missing-ref reads before an owned branch is recorded as removed, and an unchanged
+release role requires its explicit saved base tree.
+
+The September 14 review follow-up prevents an empty resumed batch from starting
+a release, requires every completed release step to retain its exact operation
+and report, rejects array-shaped saved versions, and turns a malformed saved run
+scope into a controlled error. The lost-plan-response regression now proves that
+the exact saved plan is reused. These changes do not alter the pinned sandbox
+workflow bundle, so the earlier live sequence remains the runtime acceptance.
+
+A second review pass makes failed integration cleanup resumable: the Coordinator
+saves `cleaning` before closing the owned PR, then a retry verifies that exact
+open or closed PR and completes branch cleanup. Terminal `needs-human` releases
+are not adopted by later unscoped runs. Test reports now use the actual frontend
+or backend runner identity, and the adapter test rejects mismatched frontend
+provenance.
+
+The final review guard also requires every step behind the saved release position
+to contain a passing result. A merely present failed result cannot be projected
+as completed release evidence. Workflow reports also require numeric GitHub run
+and attempt IDs; string-shaped lookalikes are rejected. The v6 migration test now
+covers both v4 and v5 saved runs, and ticket-summary regressions retain the exact
+selected group and reject leftover execution on an empty batch.
+
+The last recovery gap is also closed: an interrupted v1 batch reconciles and
+cleans only already-started exact work under the trusted v1 policy. It starts no
+new v1 trial; its evidence is preserved and its selection is retired as stale, so
+it cannot enter the v2 release sequence. The reason guide now documents
+target-deferred tickets, and the runner-path regression works from any current
+directory.
+
+The developer-only sandbox release provisioning helper now saves its exact
+branch and commit before pushing, reconciles only that branch and one matching
+open PR on retry, and stops on missing, changed, closed, ambiguous or unsaved
+resources. Its Git operations have a 60-second timeout. Its local checkpoint uses
+a unique, exclusively created temporary file before atomic replacement, so an
+interrupted or simultaneous write cannot corrupt the prior checkpoint. This is
+local setup hardening; the live sandbox was not reprovisioned.
+
+The final resume guard preserves tickets that already reached `closed` or
+`completed`. Reopening the same saved batch can still project results onto its
+active tickets, but it cannot replace a terminal ticket's saved decision. The
+focused release regression keeps both behaviors in one resumed-batch case. A
+separate stale-batch guard stops release execution before identity or integration
+work, even when malformed saved state still contains a selected candidate.
+Workflow polling now saves a newly discovered run identity even when the operation
+was already marked running. A merged integration also reconciles its owned branch
+cleanup before any missing branch could be recreated after a lost final save, and
+validates the saved merge commit identity before using it in a GitHub API path.
+Repeated projection of the same resumed batch replaces its prior reason instead
+of accumulating duplicate deferred or failed explanations.
+If a later observation makes a batch stale, its validated terminal release
+evidence remains readable while the stale guard still prevents any release resume.
+Workflow-run recovery reads up to ten stable 100-run pages for the exact saved
+operation, instead of becoming permanently stuck when the first page is full.
+
+The final local `npm run check` passed **482 tests** on Node 25.6.1, with the
+three explicitly optional Docker cases skipped. Lint, formatting, workflow
+policy, packed-CLI installation/behavior, and source-preservation checks also
+passed. Node 20/22/24 and external review results remain PR evidence, not local proof.
 
 ## PR #66 delivery and live history acceptance, September 11
 
@@ -293,6 +392,7 @@ snapshot is historical, not a fresh scan.
 | [20 corner cases](./testing/complex-corner-cases.md) | Per-case results, evidence layers, reproduced gaps and unsupported future behavior. |
 | [Run logging](./testing/run-logging-2026-09-11.md) | Live logs, source/review boundaries, cleanup and test-ticket retirement. |
 | [v5 history](./testing/history-2026-09-11.md) | Merged source, live sandbox migration, preserved archives, exact repeat and test cleanup. |
+| [Sandbox release sequence](./testing/release-sequence-2026-09-11.md) | Protected fake staging and production, 14 matching operations, interruption/resume, ticket closeout, cleanup, and the post-run stale-start guard. |
 
 Keep current status and next steps here. Update behavior in its owning guide;
 keep dated acceptance reports unchanged unless explicitly recording a new run.

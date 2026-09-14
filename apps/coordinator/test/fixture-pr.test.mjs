@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
+import { writeFileAtomically } from "../sandbox/atomic-file.mjs";
 import { publishFixturePr } from "../sandbox/fixture-pr.mjs";
 
 const entry = {
@@ -8,7 +12,8 @@ const entry = {
     full_name: "6529-Collections/release-coordinator-test-backend"
   },
   branch: "codex/services-case-example",
-  commit: "a".repeat(40)
+  commit: "a".repeat(40),
+  base: "b".repeat(40)
 };
 const pr = () => ({
   number: 42,
@@ -18,7 +23,11 @@ const pr = () => ({
     sha: entry.commit,
     repo: { id: entry.repository.id }
   },
-  base: { ref: "main", repo: { id: entry.repository.id } },
+  base: {
+    ref: "main",
+    sha: entry.base,
+    repo: { id: entry.repository.id }
+  },
   html_url: `https://github.com/${entry.repository.full_name}/pull/42`
 });
 
@@ -66,11 +75,52 @@ test("a failed fixture state save prevents push and PR creation", async () => {
   );
 });
 
+test("an interrupted atomic fixture checkpoint preserves the prior file", async (t) => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "fixture-checkpoint-")
+  );
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const destination = path.join(directory, "provision.json");
+  await writeFile(destination, "previous");
+  await assert.rejects(
+    writeFileAtomically(destination, "replacement", {
+      writeFile: async (temporary, contents, options) => {
+        assert.equal(options.flag, "wx");
+        await writeFile(temporary, contents, options);
+      },
+      rename: async () => {
+        throw new Error("interrupted before replace");
+      },
+      rm,
+      uuid: () => "interrupted"
+    }),
+    /interrupted before replace/u
+  );
+  assert.equal(await readFile(destination, "utf8"), "previous");
+  await writeFileAtomically(destination, "replacement");
+  assert.equal(await readFile(destination, "utf8"), "replacement");
+});
+
+test("simultaneous atomic fixture writes use separate temporary files", async (t) => {
+  const directory = await mkdtemp(
+    path.join(os.tmpdir(), "fixture-concurrent-checkpoint-")
+  );
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const destination = path.join(directory, "provision.json");
+  await Promise.all([
+    writeFileAtomically(destination, "first"),
+    writeFileAtomically(destination, "second")
+  ]);
+  assert.ok(["first", "second"].includes(await readFile(destination, "utf8")));
+  assert.deepEqual(await readdir(directory), ["provision.json"]);
+});
+
 test("fixture recovery rejects ambiguous, closed or changed PRs without replacement", async () => {
   for (const matches of [
     [pr(), pr()],
     [{ ...pr(), state: "closed" }],
-    [{ ...pr(), head: { ...pr().head, sha: "b".repeat(40) } }]
+    [{ ...pr(), head: { ...pr().head, sha: "c".repeat(40) } }],
+    [{ ...pr(), base: { ...pr().base, sha: "c".repeat(40) } }]
   ]) {
     await assert.rejects(
       publishFixturePr(entry, {
@@ -82,4 +132,16 @@ test("fixture recovery rejects ambiguous, closed or changed PRs without replacem
       /ambiguous|no longer matches/
     );
   }
+  await assert.rejects(
+    publishFixturePr(
+      { ...entry, number: 42, url: pr().html_url },
+      {
+        save: async () => {},
+        push: async () => {},
+        find: async () => [],
+        create: async () => assert.fail("must not create a replacement")
+      }
+    ),
+    /saved fixture PR is missing/u
+  );
 });

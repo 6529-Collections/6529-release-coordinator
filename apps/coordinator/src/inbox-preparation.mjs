@@ -144,7 +144,8 @@ export async function prepareRunTickets({
   api,
   journal,
   services,
-  batching
+  batching,
+  activeBatch
 }) {
   const preparedTickets = [];
   for (const number of numbers) {
@@ -194,7 +195,27 @@ export async function prepareRunTickets({
       throw new Error(
         "Test closure is limited to the authenticated operator's verified request."
       );
-    if (!recordedTerminal) {
+    const savedBatchInput = activeBatch?.inputs.find(
+      (value) => value.number === number
+    )?.input;
+    if (!recordedTerminal && activeBatch) {
+      observation = await loggedStep(
+        {
+          step: "ticket.readiness",
+          issue_number: number,
+          request_id: entry.request?.request_id,
+          message: "Re-read ticket identity while continuing its saved release."
+        },
+        () => observe(entry, { github, profile })
+      );
+      decision = decideTicket(entry, observation);
+      rehearsalResult = {
+        status: "passed",
+        message:
+          "Continuing the exact saved batch; its earlier Git and check evidence remains in the journal."
+      };
+      decision.rehearsal = rehearsalResult;
+    } else if (!recordedTerminal) {
       observation = await loggedStep(
         {
           step: "ticket.readiness",
@@ -346,7 +367,7 @@ export async function prepareRunTickets({
       coordinated,
       rehearsalResult,
       serviceResult,
-      input: run.plans?.[number]
+      input: savedBatchInput ?? run.plans?.[number]
     });
   }
   return preparedTickets;

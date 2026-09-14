@@ -48,7 +48,11 @@ export const reasons = [
   "batch-incompatible",
   "batch-limit",
   "batch-deferred",
-  "batch-unsupported"
+  "batch-unsupported",
+  "batch-target-deferred",
+  "release-completed",
+  "release-failed",
+  "release-unverified"
 ];
 export const batchStatuses = [
   "passed",
@@ -64,6 +68,7 @@ export const managedLabels = new Set([
   "target:production",
   "component:frontend",
   "component:backend",
+  "component:monitoring",
   ...statuses.map((s) => `status:${s}`),
   ...reasons.map((s) => `reason:${s}`),
   ...rehearsalStatuses.map((s) => `rehearsal:${s}`),
@@ -83,13 +88,25 @@ const prose = (text) =>
 export function ticketTitle(request) {
   return `${request.target === "staging" ? "Staging" : "Production"} · ${request.release_parts
     .map((part) => {
-      const component = [
+      const backend = [
         "6529seize-backend",
         "release-coordinator-test-backend"
-      ].includes(part.repository)
-        ? "backend"
-        : "frontend";
-      return `${component} ${part.pull_requests.map((pr) => `PR #${pr.number}`).join(", ")}${part.deploy_units ? ` · ${part.deploy_units.join(", ")}` : ""}`;
+      ].includes(part.repository);
+      const units = part.deploy_units ?? [];
+      const operational = part.operational_deployments ?? [];
+      const component =
+        backend && operational.includes("monitoring") && !units.length
+          ? "monitoring"
+          : backend
+            ? "backend"
+            : "frontend";
+      const details = [
+        ...units,
+        ...(component === "monitoring"
+          ? []
+          : operational.map((name) => `operational ${name}`))
+      ];
+      return `${component} ${part.pull_requests.map((pr) => `PR #${pr.number}`).join(", ")}${details.length ? ` · ${details.join(", ")}` : ""}`;
     })
     .join(" + ")}`.slice(0, 240);
 }
@@ -106,10 +123,12 @@ export function desiredLabels(issue, decision, request) {
     ? [
         `target:${request.target}`,
         ...new Set(
-          request.release_parts.map(
-            (part) =>
-              `component:${["6529seize-backend", "release-coordinator-test-backend"].includes(part.repository) ? "backend" : "frontend"}`
-          )
+          request.release_parts.flatMap((part) => [
+            `component:${["6529seize-backend", "release-coordinator-test-backend"].includes(part.repository) ? "backend" : "frontend"}`,
+            ...((part.operational_deployments ?? []).includes("monitoring")
+              ? ["component:monitoring"]
+              : [])
+          ])
         )
       ]
     : [];
@@ -316,6 +335,15 @@ export function statusComment({
           `  ${prose(conflict.role)} conflicts: ${prose(JSON.stringify(conflict.paths))}.`
         );
     }
+    if (batch.release) {
+      lines.push(
+        `Sandbox release: ${prose(batch.release.status)}. ${prose(batch.release.message)}`
+      );
+      for (const operation of batch.release.operations ?? [])
+        lines.push(
+          `- ${prose(operation.step)}: ${prose(operation.status)}${operation.url ? `; ${prose(operation.url)}` : ""}.`
+        );
+    }
   }
   if (request) {
     lines.push(
@@ -341,7 +369,9 @@ export function statusComment({
     "",
     `**Last meaningful decision:** ${at}; ${prose(actor.login)} (GitHub ID ${actor.id}).`,
     "",
-    "This ticket status does not authorize a merge or deployment."
+    decision.status === "completed"
+      ? "This records sandbox-only release evidence. It authorizes no real merge or deployment."
+      : "This ticket status does not authorize a real merge or deployment."
   );
   const body = lines.join("\n");
   if (body.length > 60_000)

@@ -1,9 +1,12 @@
 # Release request schema
 
-Version `0.000001` defines the first file produced by the developer-side tool.
+Version `0.000002` is the current file produced by the developer-side tool.
+The reader still validates saved `0.000001` requests with their original rules.
 
 - [JSON Schema](./packages/release-request/release-request.schema.json)
-- [Valid example](./packages/release-request/release-request.example.json)
+- [Application release example](./packages/release-request/release-request.example.json)
+- [Monitoring-only example](./packages/release-request/release-request.monitoring.example.json)
+- [Preserved `0.000001` schema](./packages/release-request/release-request.schema.v0.000001.json)
 
 ## Current boundary
 
@@ -47,9 +50,9 @@ for the distinction between local implementation and the live workflow revision.
 Ticket status, reason codes, next action/owner, decision history, and replacement
 or completion evidence belong to Coordinator state. They are not additions to
 the public request JSON. Preserve the original JSON, checksum, actor, and
-workflow receipt. Keep `0.000001` unchanged for this stage; mutable status belongs
-in a separate managed comment and history record. Reusing a request must not
-reset or reopen its existing ticket.
+workflow receipt. The original `0.000001` rules remain unchanged; mutable status
+belongs in a separate managed comment and history record. Reusing a request
+must not reset or reopen its existing ticket.
 
 The CLI generates `schema_version`, `request_id`, and `created_at`. The agent
 must not include those fields in its input template. A combined frontend/backend
@@ -99,7 +102,10 @@ These facts stay together inside each `release_part`. This avoids two separate
 lists that can disagree.
 
 The frontend is one deployed app, so its part has no `deploy_units`.
-The backend has many separately deployed units, so its part must list them.
+The backend has many separately deployed units, so an application release lists
+them. Operational monitoring lives in the backend repository but uses its own
+workflow, so it is recorded separately instead of pretending to be an
+application service.
 
 ## Fields
 
@@ -118,6 +124,17 @@ The backend has many separately deployed units, so its part must list them.
 | `depends_on` | Other release-part IDs that must finish first. | Describes cross-repository order, such as backend before frontend. |
 | `deploy_units` | Backend units selected for deployment. | The backend is not deployed as one app. |
 | `deploy_dependencies` | Extra `before` and `after` rules for this release. | Handles a dependency that is special to this release. |
+| `operational_deployments` | Separate backend operational packages; currently only `monitoring`. | Records work that is outside the application service catalog. |
+
+For a backend part, `deploy_units` and `deploy_dependencies` are always present.
+At least one application deploy unit or operational deployment must be selected.
+A request may contain both. Frontend parts cannot contain any of these backend
+deployment fields.
+
+The Coordinator can save, display, label, and inspect the PRs in a monitoring
+request. It reports the monitoring deployment check as unknown and keeps the
+ticket waiting because no monitoring deployment or target-health adapter exists
+yet. Such a request cannot enter the current rehearsal or execution path.
 
 ## What the database answer means
 
@@ -172,7 +189,8 @@ for the current local test policy. This does not authorize release execution.
 
 The JSON Schema checks required fields, allowed repository and target names,
 field types, and the exact 40-character commit shape. It also requires backend
-parts to contain deploy units and prevents frontend parts from containing them.
+parts to select an application unit or operational deployment and prevents
+frontend parts from containing backend deployment fields.
 
 Some rules compare several fields and need normal program code. The private
 readiness checker now confirms that:
@@ -189,6 +207,7 @@ for missing history, merge-proof limits, and result meanings.
 
 ## Changing the schema
 
-Keep version `0.000001` stable. Add optional fields without changing its
-meaning. Use a new `schema_version` when a required field, field meaning, or
-validation rule changes in a way that can reject an old valid file.
+Keep each published schema version stable. The reader selects validation rules
+from the request's `schema_version`; never reinterpret an old file using newer
+rules. Use a new version when a required field, field meaning, or validation
+rule changes.
