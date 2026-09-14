@@ -96,9 +96,9 @@ export function validateReleaseExecution(execution, batch) {
   for (const step of execution.plan.steps.slice(0, execution.step_index)) {
     const record = execution.operations[step.id];
     serviceAssert(
-      record?.state === "completed" && record.result,
+      record?.state === "completed" && record.result?.status === "passed",
       "release-state",
-      "Completed release position has no saved result."
+      "Completed release position has no saved passing result."
     );
   }
   serviceAssert(

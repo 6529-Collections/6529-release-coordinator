@@ -137,6 +137,10 @@ longer selected by later unscoped runs. Role-aware fixtures and an adapter
 rejection test also prove that frontend workflow evidence cannot claim backend
 runner provenance.
 
+The final saved-state regression changes a completed operation's result to
+`failed` while leaving it behind the saved step position. Validation rejects that
+history, so a merely present result can no longer stand in for passing evidence.
+
 ## Boundary and next step
 
 This proves ordering, protected test merges, exact-version workflow evidence,

@@ -332,7 +332,14 @@ test("completed release history requires every exact operation and report", asyn
   delete missingStep.operations[execution.plan.steps[0].id];
   assert.throws(
     () => validateReleaseExecution(missingStep, batch),
-    /Completed release position has no saved result/u
+    /Completed release position has no saved passing result/u
+  );
+
+  const failedStep = structuredClone(execution);
+  failedStep.operations[execution.plan.steps[0].id].result.status = "failed";
+  assert.throws(
+    () => validateReleaseExecution(failedStep, batch),
+    /Completed release position has no saved passing result/u
   );
 
   const checkedStep = execution.plan.steps.find(

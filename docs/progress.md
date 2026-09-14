@@ -79,6 +79,10 @@ are not adopted by later unscoped runs. Test reports now use the actual frontend
 or backend runner identity, and the adapter test rejects mismatched frontend
 provenance.
 
+The final review guard also requires every step behind the saved release position
+to contain a passing result. A merely present failed result cannot be projected
+as completed release evidence.
+
 The final local `npm run check` passed **465 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
