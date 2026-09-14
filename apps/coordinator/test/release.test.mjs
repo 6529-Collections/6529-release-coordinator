@@ -26,6 +26,7 @@ import {
   releaseEnvironmentsForTarget
 } from "../src/release-target.mjs";
 import { validateBatchHistory } from "../src/batch-state.mjs";
+import { validateReleaseExecution } from "../src/release-state.mjs";
 import { batchStatuses } from "../src/ticket-presentation.mjs";
 import { inboxRunExitCode } from "../src/inbox-run-cli.mjs";
 
@@ -290,6 +291,83 @@ test("a resumed completed release adds a complete batch ticket result", async ()
   ]);
   assert.equal(deferred.decision.status, "waiting");
   assert.equal(deferred.decision.batch.code, "batch-deferred");
+});
+
+test("a resumed empty batch stays a no-candidate result", async () => {
+  const batch = await selectedBatch();
+  batch.selected = [];
+  const result = await coordinateInboxBatch({
+    items: [],
+    state: { batches: { [batch.fingerprint]: batch } },
+    run: { batch_fingerprint: batch.fingerprint },
+    profile: sandboxProfile,
+    save: async () => {},
+    loadBatch: async () => batch,
+    release: async () => assert.fail("an empty batch must not start a release")
+  });
+  assert.equal(result.status, "no-candidate");
+  assert.deepEqual(result.selected, []);
+});
+
+test("completed release history requires every exact operation and report", async () => {
+  const batch = await selectedBatch();
+  const execution = await executeRelease({
+    batch,
+    client: client([]),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+
+  const arrayVersions = structuredClone(execution);
+  arrayVersions.versions = [];
+  assert.throws(
+    () => validateReleaseExecution(arrayVersions, batch),
+    /Invalid sandbox release execution state/u
+  );
+
+  const missingStep = structuredClone(execution);
+  delete missingStep.operations[execution.plan.steps[0].id];
+  assert.throws(
+    () => validateReleaseExecution(missingStep, batch),
+    /Completed release position has no saved result/u
+  );
+
+  const checkedStep = execution.plan.steps.find(
+    (step) => step.kind === "deploy"
+  );
+  const missingOperation = structuredClone(execution);
+  delete missingOperation.operations[checkedStep.id].operation;
+  assert.throws(
+    () => validateReleaseExecution(missingOperation, batch),
+    /lacks its exact operation or report/u
+  );
+
+  const missingReport = structuredClone(execution);
+  delete missingReport.operations[checkedStep.id].result.report;
+  assert.throws(
+    () => validateReleaseExecution(missingReport, batch),
+    /lacks its exact operation or report/u
+  );
+});
+
+test("a malformed resumed run scope fails with a controlled error", async () => {
+  await assert.rejects(
+    processInbox({
+      identity: async () => ({ id: "456", login: "tester" }),
+      resume: "11111111-1111-4111-8111-111111111111",
+      journal: {
+        acquire: async () => ({
+          state: {},
+          run: {
+            run_id: "11111111-1111-4111-8111-111111111111",
+            scope: undefined
+          }
+        })
+      }
+    }),
+    (error) => error.code === "run-scope"
+  );
 });
 
 test("a stale batch cannot project a completed release onto its ticket", async () => {

@@ -57,6 +57,13 @@ export async function processInbox({
     () => journal.acquire(actor, resume, scope)
   );
   bindRunLog(run.run_id, Boolean(resume));
+  serviceAssert(
+    run.scope &&
+      (run.scope.issue_number === null || isNumber(run.scope.issue_number)) &&
+      typeof run.scope.close_test === "boolean",
+    "run-scope",
+    "The saved inbox run has no valid Issue selection or action."
+  );
   issueNumber = run.scope.issue_number ?? undefined;
   closeTest = run.scope.close_test;
   const results = [];
@@ -71,7 +78,7 @@ export async function processInbox({
   try {
     if (batching && !run.batch_fingerprint) {
       serviceAssert(
-        run.scope?.issue_number === null && run.scope.close_test === false,
+        run.scope.issue_number === null && run.scope.close_test === false,
         "batch-scope",
         "Only an unscoped sandbox run can continue an unfinished release."
       );

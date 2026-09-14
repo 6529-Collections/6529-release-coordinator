@@ -22,6 +22,7 @@ export function validateReleaseExecution(execution, batch) {
       !Array.isArray(execution.operations) &&
       execution.versions &&
       typeof execution.versions === "object" &&
+      !Array.isArray(execution.versions) &&
       Number.isFinite(Date.parse(execution.started_at)) &&
       (execution.completed_at === null ||
         Number.isFinite(Date.parse(execution.completed_at))) &&
@@ -47,6 +48,7 @@ export function validateReleaseExecution(execution, batch) {
         !ids.has(record.id) &&
         record.release_id === execution.plan.release_id &&
         serviceHash(record.step) === serviceHash(execution.plan.steps[index]) &&
+        index <= execution.step_index &&
         [
           "prepared",
           "branch-prepared",
@@ -63,11 +65,11 @@ export function validateReleaseExecution(execution, batch) {
       "Invalid or repeated sandbox release step state."
     );
     ids.add(record.id);
-    if (index < execution.step_index)
+    if (record.state === "completed" && record.step.kind !== "integrate")
       serviceAssert(
-        record.state === "completed" && record.result,
+        record.operation && record.result?.report,
         "release-state",
-        "Completed release position has no saved result."
+        "Completed release check lacks its exact operation or report."
       );
     if (record.operation) {
       validateReleaseOperation(record.operation);
@@ -89,6 +91,14 @@ export function validateReleaseExecution(execution, batch) {
         "release-state",
         "Integration result lacks exact commit or branch cleanup proof."
       );
+  }
+  for (const step of execution.plan.steps.slice(0, execution.step_index)) {
+    const record = execution.operations[step.id];
+    serviceAssert(
+      record?.state === "completed" && record.result,
+      "release-state",
+      "Completed release position has no saved result."
+    );
   }
   serviceAssert(
     execution.status !== "completed" ||

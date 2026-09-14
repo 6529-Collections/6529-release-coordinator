@@ -119,6 +119,7 @@ export async function coordinateInboxBatch({
     active.status === "finished"
   ) {
     if (
+      active.selected.length &&
       release &&
       (!active.execution ||
         !["completed", "needs-human"].includes(active.execution.status))
@@ -148,7 +149,9 @@ export async function coordinateInboxBatch({
     }
     return {
       fingerprint: active.fingerprint,
-      status: active.execution?.status ?? "release-unverified",
+      status:
+        active.execution?.status ??
+        (active.selected.length ? "release-unverified" : "no-candidate"),
       selected: active.selected,
       release: active.execution ?? null,
       release_authorized: false

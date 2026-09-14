@@ -1,6 +1,6 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-11**, against merged source `5f49a60`, the local
+Last reviewed: **2026-09-14**, against merged source `5f49a60`, the local
 `codex/sandbox-release-sequence` implementation, and the live sandbox acceptance
 below. This page separates implemented behavior, source delivery
 and live proof. Earlier GitHub/package observations carry their original dates;
@@ -65,7 +65,14 @@ repositories and environment branches. Cleanup now requires two consecutive
 missing-ref reads before an owned branch is recorded as removed, and an unchanged
 release role requires its explicit saved base tree.
 
-The final local `npm run check` passed **460 tests** on Node 25.6.1, with the
+The September 14 review follow-up prevents an empty resumed batch from starting
+a release, requires every completed release step to retain its exact operation
+and report, rejects array-shaped saved versions, and turns a malformed saved run
+scope into a controlled error. The lost-plan-response regression now proves that
+the exact saved plan is reused. These changes do not alter the pinned sandbox
+workflow bundle, so the earlier live sequence remains the runtime acceptance.
+
+The final local `npm run check` passed **463 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
 passed. Node 20/22/24 and external review results remain PR evidence, not local proof.

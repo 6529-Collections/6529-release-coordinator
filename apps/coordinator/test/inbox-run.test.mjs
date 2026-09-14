@@ -612,6 +612,7 @@ test("profile, scope, report-file and old-command validation fails before reads 
 test("a lost generated-plan save response is confirmed before Git continues", async () => {
   const f = fixture();
   let failed = false;
+  let savedPlan;
   f.after = async (call) => {
     if (
       !failed &&
@@ -619,6 +620,7 @@ test("a lost generated-plan save response is confirmed before Git continues", as
       call.path.includes("/git/refs/") &&
       f.state().lock?.plans?.[1]
     ) {
+      savedPlan = structuredClone(f.state().lock.plans[1]);
       failed = true;
       throw Error("Lost plan-save response");
     }
@@ -632,7 +634,7 @@ test("a lost generated-plan save response is confirmed before Git continues", as
   });
   assert.equal(result.code, 0);
   assert.equal(failed, true);
-  assert.ok(usedPlan);
+  assert.deepEqual(usedPlan, savedPlan);
   assert.equal(f.comments.length, 1);
   assert.equal(f.state().lock, null);
 });

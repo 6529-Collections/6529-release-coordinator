@@ -121,6 +121,14 @@ cannot produce a successful command exit.
 Workflow recovery filters by the saved actor ID, so a renamed login cannot strand
 an already-dispatched operation.
 
+The September 14 review follow-up added fail-closed offline coverage for the
+remaining resume and history cases: an empty saved batch stays `no-candidate`,
+every completed workflow step needs its exact operation and report, saved version
+maps cannot be arrays, malformed saved scope gets a controlled error, and a lost
+plan-save response must reuse the exact saved plan. This did not change the pinned
+workflow, contract, or runner installed in the test repositories, so no new live
+release was needed.
+
 ## Boundary and next step
 
 This proves ordering, protected test merges, exact-version workflow evidence,
