@@ -550,6 +550,18 @@ test("merged integration resumes cleanup without recreating its branch", async (
   assert.equal(record.cleanup, "removed");
   assert.equal(branchReads, 3);
   assert.equal(branchCreates, 0);
+
+  pr.merge_commit_sha = null;
+  await assert.rejects(
+    client.integrate({
+      record,
+      candidate,
+      actor,
+      expectedBase: candidate.base,
+      save: async () => {}
+    }),
+    /GitHub did not expose the exact checked integration commit/u
+  );
 });
 
 test("real profile and unpinned release runtime are refused", () => {

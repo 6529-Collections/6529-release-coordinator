@@ -513,6 +513,11 @@ export function createReleaseGitHub({
         pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
         verifyPull(pr, record, candidate, { allowMerged: true });
       }
+      serviceAssert(
+        sha(pr.merge_commit_sha),
+        "release-checks",
+        "GitHub did not expose the exact checked integration commit."
+      );
       const merged = (
         await call(role, "GET", `/git/commits/${pr.merge_commit_sha}`)
       ).data;

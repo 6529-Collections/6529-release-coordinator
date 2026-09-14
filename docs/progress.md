@@ -107,7 +107,8 @@ separate stale-batch guard stops release execution before identity or integratio
 work, even when malformed saved state still contains a selected candidate.
 Workflow polling now saves a newly discovered run identity even when the operation
 was already marked running. A merged integration also reconciles its owned branch
-cleanup before any missing branch could be recreated after a lost final save.
+cleanup before any missing branch could be recreated after a lost final save, and
+validates the saved merge commit identity before using it in a GitHub API path.
 
 The final local `npm run check` passed **471 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
