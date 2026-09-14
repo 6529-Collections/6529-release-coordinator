@@ -34,9 +34,11 @@ parallel releases remain deferred.
 
 ## Sandbox release sequence acceptance, September 11
 
-The local branch installed a pinned, read-only sandbox release workflow in both
-public test repositories and protected each `1a-staging` branch with required
-`Sandbox check`. Production-target ticket
+The local branch installed a pinned sandbox release check workflow in both public
+test repositories and protected each `1a-staging` branch with required `Sandbox
+check`. That workflow only inspects the candidate. The authorized Coordinator run
+still writes its journal and ticket, integrates through temporary sandbox branches
+and PRs, and cleans those temporary resources. Production-target ticket
 [#15](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/15)
 then passed cheap filtering, exact combined PR checks, combined service checks,
 protected backend/frontend staging integration, ordered staging checks, matching
