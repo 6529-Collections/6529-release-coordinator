@@ -4,6 +4,7 @@ import { createBatchGitHub } from "./batch-github.mjs";
 import { createServiceGitHub } from "./service-github.mjs";
 import { runServiceAttempt } from "./inbox-services.mjs";
 import { servicePlanFromSources } from "./service-plan.mjs";
+import { batchPolicy, trustedBatchPolicy } from "./batch-plan.mjs";
 import {
   serviceHash,
   serviceAssert,
@@ -17,10 +18,12 @@ export async function verifySavedBatch(
   {
     profile = sandboxProfile,
     guard = async () => {},
-    client = createBatchGitHub({ profile, guard }),
+    policy = batchPolicy,
+    client = createBatchGitHub({ profile, guard, policy }),
     serviceClient = createServiceGitHub({ profile })
   } = {}
 ) {
+  trustedBatchPolicy(policy);
   serviceAssert(
     profile === sandboxProfile &&
       state?.prepared_hash === serviceHash(prepared) &&
@@ -109,7 +112,8 @@ export async function checkBatch(
     verify,
     signal,
     profile = sandboxProfile,
-    client = createBatchGitHub({ profile, guard }),
+    policy = batchPolicy,
+    client = createBatchGitHub({ profile, guard, policy }),
     serviceClient = createServiceGitHub({ profile }),
     executeServices = runServiceAttempt,
     wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
@@ -118,6 +122,7 @@ export async function checkBatch(
     pollMs = 5000
   }
 ) {
+  policy = trustedBatchPolicy(policy);
   serviceAssert(
     profile === sandboxProfile && prepared.status === "passed",
     "batch-profile",
@@ -154,6 +159,7 @@ export async function checkBatch(
       await verifySavedBatch(prepared, state, {
         profile,
         guard,
+        policy,
         client,
         serviceClient
       });
@@ -188,6 +194,7 @@ export async function checkBatch(
       await verifySavedBatch(prepared, state, {
         profile,
         guard,
+        policy,
         client,
         serviceClient
       });

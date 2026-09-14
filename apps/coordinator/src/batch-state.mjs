@@ -6,6 +6,7 @@ import {
 } from "./service-contract.mjs";
 import { validateReleaseExecution } from "./release-state.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
+import { trustedBatchPolicy } from "./batch-plan.mjs";
 
 const hash = (value) => /^[0-9a-f]{64}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -21,6 +22,7 @@ export function validateBatchHistory(batches, profile) {
     "Invalid batch history."
   );
   for (const [key, batch] of Object.entries(batches)) {
+    trustedBatchPolicy(batch?.policy);
     serviceAssert(
       hash(key) &&
         key === batch?.fingerprint &&

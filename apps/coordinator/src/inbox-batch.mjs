@@ -1,7 +1,12 @@
 import { sandboxProfile } from "./profiles.mjs";
 import { runEvent } from "./run-log.mjs";
 import { buildServicePlan } from "./service-plan.mjs";
-import { batchPolicy, prepareBatch } from "./batch-plan.mjs";
+import {
+  batchPolicy,
+  legacyBatchPolicy,
+  prepareBatch,
+  trustedBatchPolicy
+} from "./batch-plan.mjs";
 import { selectBatch, batchTicketResult } from "./batch-selection.mjs";
 import { checkBatch, verifySavedBatch } from "./batch-checks.mjs";
 import {
@@ -154,6 +159,80 @@ export async function coordinateInboxBatch({
         (active.selected.length ? "release-unverified" : "no-candidate"),
       selected: active.selected,
       release: active.execution ?? null,
+      release_authorized: false
+    };
+  }
+  if (active?.policy?.version === legacyBatchPolicy.version) {
+    const policy = trustedBatchPolicy(active.policy);
+    const batch = structuredClone(active);
+    const retirement =
+      "The interrupted v1 batch was reconciled and its evidence was preserved. Run a fresh command to create a v2 batch before release.";
+    state.batches ??= {};
+    for (const record of batch.attempts.filter(
+      (attempt) =>
+        attempt.phase === "checks" &&
+        attempt.progress &&
+        attempt.progress.cleanup !== "removed"
+    )) {
+      const prepared = batch.attempts.find(
+        (attempt) =>
+          attempt.phase === "git" &&
+          attempt.members.join(",") === record.members.join(",")
+      )?.result;
+      serviceAssert(
+        prepared?.status === "passed",
+        "batch-state",
+        "Interrupted v1 trial has no saved preparation."
+      );
+      record.result = await check(prepared, {
+        id: record.id,
+        previous: record.progress,
+        deadline: batch.deadline,
+        profile,
+        policy,
+        signal,
+        guard,
+        verify: async () => {
+          throw new ServiceError("batch-stale", retirement, "stale");
+        },
+        save: async (value) => {
+          record.progress = structuredClone(value);
+          state.batches[batch.fingerprint] = structuredClone(batch);
+          await save(`batch ${batch.fingerprint.slice(0, 12)} v1 cleanup`);
+        }
+      });
+    }
+    batch.selected = [];
+    batch.stop = {
+      status: "stale",
+      kind: "policy",
+      message: retirement
+    };
+    batch.status = "finished";
+    state.batches[active.fingerprint] = structuredClone(batch);
+    await save("retire recovered v1 batch");
+    for (const item of items.filter(
+      (value) =>
+        active.inputs.some((input) => input.number === value.number) &&
+        value.decision &&
+        !terminal(value.decision)
+    ))
+      item.decision = batchDecision(
+        item.decision,
+        batchTicketResult(batch, item.number)
+      );
+    return {
+      fingerprint: batch.fingerprint,
+      status: "no-candidate",
+      selected: [],
+      attempts: batch.attempts.map(({ id, phase, members, result }) => ({
+        id,
+        phase,
+        tickets: members,
+        status: result?.status ?? "pending"
+      })),
+      stop: batch.stop,
+      release: null,
       release_authorized: false
     };
   }
@@ -311,7 +390,11 @@ export async function coordinateInboxBatch({
       await save(`batch ${fingerprint.slice(0, 12)} ${value.status}`);
     }
   });
-  if (batch.selected.length && release)
+  if (
+    batch.policy.version === batchPolicy.version &&
+    batch.selected.length &&
+    release
+  )
     await release({
       batch,
       state,

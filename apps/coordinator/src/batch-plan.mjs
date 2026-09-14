@@ -10,8 +10,7 @@ import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { sandboxServiceRuntime } from "./service-runtime-config.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
 
-export const batchPolicy = Object.freeze({
-  version: "sandbox-batch-v2",
+const commonBatchPolicy = {
   max_tickets: 10,
   max_prs_per_repository: 10,
   max_git_attempts: 40,
@@ -21,9 +20,35 @@ export const batchPolicy = Object.freeze({
   dependencies: "self-contained-tickets-only",
   required_workflow: "sandbox-check.yml",
   required_job: "Sandbox check",
-  workflow_blob: "bb736a236bc1d14d2f8ea35ce40953686e91169f",
   runtime: sandboxServiceRuntime
+};
+
+export const legacyBatchPolicy = Object.freeze({
+  ...commonBatchPolicy,
+  version: "sandbox-batch-v1",
+  workflow_blob: "6fe8f54d4f3147854c3186c9b3992f983612b0b0"
 });
+
+export const batchPolicy = Object.freeze({
+  ...commonBatchPolicy,
+  version: "sandbox-batch-v2",
+  workflow_blob: "bb736a236bc1d14d2f8ea35ce40953686e91169f"
+});
+
+export function trustedBatchPolicy(policy) {
+  const expected =
+    policy?.version === legacyBatchPolicy.version
+      ? legacyBatchPolicy
+      : policy?.version === batchPolicy.version
+        ? batchPolicy
+        : null;
+  serviceAssert(
+    expected && serviceHash(policy) === serviceHash(expected),
+    "batch-policy",
+    "Saved batch policy is not a trusted Coordinator policy."
+  );
+  return expected;
+}
 
 export function batchMergePlan(items, profile = sandboxProfile) {
   serviceAssert(

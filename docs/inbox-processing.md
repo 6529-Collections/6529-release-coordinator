@@ -136,6 +136,7 @@ explanation. Reasons are not permissions.
 | `reason:rehearsal-blocked` | Resolve the recorded combined conflict or other stable rehearsal blocker. |
 | `reason:rehearsal-unverified` | Restore missing evidence or report storage, then rerun. |
 | `reason:rehearsal-stale` | Inspect changed inputs, refresh the plan where appropriate, then rerun. |
+| `reason:batch-target-deferred` | Keep the complete ticket queued for a later run because the current batch uses the other release target. |
 | `reason:release-completed` | The exact sandbox release plan reached its requested target and every matching check passed. Close the sandbox ticket as completed. |
 | `reason:release-failed` | A confirmed sandbox release step failed after execution began. Stop later steps and hand the saved partial state to a person. |
 | `reason:release-unverified` | The selected sandbox release is unfinished or its effect is uncertain. Keep the ticket waiting and reconcile the saved operation before retrying. |
@@ -246,7 +247,9 @@ must be submitted as one complete ticket.
 details without rewriting prior decisions or attempt identities. New managed labels are `batch:passed`, `batch:blocked`, `batch:waiting`,
 `batch:unknown` and `batch:stale`. Reasons are `batch-selected`,
 `batch-ticket-failed`, `batch-incompatible`, `batch-limit`, `batch-deferred` and
-`batch-unsupported`; the existing database-declaration-mismatch reason is reused.
+`batch-unsupported`. `batch-target-deferred` keeps a complete ticket queued when
+the current run is forming a batch for the other target. The existing
+database-declaration-mismatch reason is reused.
 A selected passing group continues through the sandbox release sequence. It stays
 waiting while that sequence is incomplete, becomes action-needed if a confirmed
 release step fails, and becomes `status:completed` only after every step required

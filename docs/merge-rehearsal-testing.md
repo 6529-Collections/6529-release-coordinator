@@ -729,6 +729,7 @@ injection and volume cases below remain offline proof; the real inbox was not mi
 | Competing writer during compaction | At most one non-force commit advances; the loser does not discard data or proceed with external actions. | Passed offline |
 | Subsequent ordinary journal writes | Preserve all archived files and index structure; validate full archive content on write/read, rather than recreating a state-only tree. | Passed offline + live sandbox |
 | Existing v4 migration and older writer | Preserve receipts, transitions, service/batch identities and budgets. Older writers reject the new marker before mutation. | Passed offline; migration also passed live sandbox |
+| Interrupted v1 batch under the v2 Coordinator | Reconcile and clean only already-started exact v1 work with its pinned policy; start no new v1 trial, preserve IDs/evidence, retire the selection as stale and require a fresh v2 command before release. | Passed offline |
 | Standalone service history and linked records | Archive only fully finished, unneeded records; preserve active references and prevent the existing 1,000-record cap becoming another lifetime stop. | Passed offline |
 
 Offline cases also cover immutable snapshots for later stale observations,

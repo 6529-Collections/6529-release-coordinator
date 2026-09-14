@@ -324,6 +324,13 @@ Completed evidence is saved before trial PR closure and branch removal. An
 interruption preserves owned identities until an explicit resume can finish.
 Normal Actions jobs remain isolated and time-limited by the existing workflow.
 
+An interrupted `sandbox-batch-v1` record is a recovery case, not current release
+evidence. Resume validates its original targetless identity and trusted v1 policy,
+then reconciles and cleans only already-started exact trials. It starts no new v1
+Git or CI work. The Coordinator preserves the record, clears any selected
+candidate and marks it stale. The next manual command starts a fresh v2 batch;
+v1 evidence can never enter the release sequence.
+
 [Ticket projections](./inbox-processing.md#proposed-batch-ticket-outcomes) own
 labels and submitter-facing reasons. The [acceptance matrix](./merge-rehearsal-testing.md#planned-batch-acceptance)
 records expected cases and the dated evidence distinguishes local tests from live

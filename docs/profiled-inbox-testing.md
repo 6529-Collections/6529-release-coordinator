@@ -137,8 +137,12 @@ Plans remain internal evidence: the journal stores the ticket/request binding,
 exact PR order and destinations; full reports record their resulting trees.
 The journal's `inbox-run-v6` marker prevents older writers from overwriting the
 run format or discarding archived history. See [history storage](./inbox-processing.md#history-storage)
-for active records, archive validation and migration evidence. A legacy interrupted v1 run retains its already recorded scope
-and plan on explicit resume.
+for active records, archive validation and migration evidence. On explicit
+resume, a legacy interrupted v1 batch uses its saved targetless identity and
+pinned v1 check policy only to reconcile and clean already-started exact work.
+It starts no new v1 Git or CI trial. Its evidence remains in history, but its
+selection becomes stale and cannot start a release. A later command must create
+and check a fresh v2 batch.
 
 Developer test manifests remain sandbox-only fixture inputs. They cannot enter
 the ticket workflow or either decision journal. The public request schema and
