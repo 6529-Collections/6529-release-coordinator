@@ -322,6 +322,25 @@ test("obvious outdated, merged, failing-check, draft, and unverified requests sk
   }
 });
 
+test("monitoring-only intake is checked but cannot enter rehearsal or execution", async () => {
+  const f = fixture();
+  f.request.schema_version = "0.000002";
+  f.request.release_parts[0].id = "monitoring";
+  f.request.release_parts[0].deploy_units = [];
+  f.request.release_parts[0].operational_deployments = ["monitoring"];
+  sync(f);
+
+  const { report } = await invoke(f, {
+    plan: async () => assert.fail("must not plan"),
+    rehearse: async () => assert.fail("must not rehearse")
+  });
+
+  assert.equal(report.requests[0].status, "waiting");
+  assert.equal(report.requests[0].rehearsal.status, "not-run");
+  assert.ok(report.requests[0].reasons.includes("coordinator-incomplete"));
+  assert.equal(report.release_authorized, false);
+});
+
 test("two individually mergeable PRs conflict together and the same ticket records the real Git finding", async (t) => {
   const f = fixture(sandboxProfile),
     git = await rehearsalFixture(t);

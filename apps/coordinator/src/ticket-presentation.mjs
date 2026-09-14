@@ -68,6 +68,7 @@ export const managedLabels = new Set([
   "target:production",
   "component:frontend",
   "component:backend",
+  "component:monitoring",
   ...statuses.map((s) => `status:${s}`),
   ...reasons.map((s) => `reason:${s}`),
   ...rehearsalStatuses.map((s) => `rehearsal:${s}`),
@@ -87,13 +88,25 @@ const prose = (text) =>
 export function ticketTitle(request) {
   return `${request.target === "staging" ? "Staging" : "Production"} · ${request.release_parts
     .map((part) => {
-      const component = [
+      const backend = [
         "6529seize-backend",
         "release-coordinator-test-backend"
-      ].includes(part.repository)
-        ? "backend"
-        : "frontend";
-      return `${component} ${part.pull_requests.map((pr) => `PR #${pr.number}`).join(", ")}${part.deploy_units ? ` · ${part.deploy_units.join(", ")}` : ""}`;
+      ].includes(part.repository);
+      const units = part.deploy_units ?? [];
+      const operational = part.operational_deployments ?? [];
+      const component =
+        backend && operational.includes("monitoring") && !units.length
+          ? "monitoring"
+          : backend
+            ? "backend"
+            : "frontend";
+      const details = [
+        ...units,
+        ...(component === "monitoring"
+          ? []
+          : operational.map((name) => `operational ${name}`))
+      ];
+      return `${component} ${part.pull_requests.map((pr) => `PR #${pr.number}`).join(", ")}${details.length ? ` · ${details.join(", ")}` : ""}`;
     })
     .join(" + ")}`.slice(0, 240);
 }
@@ -110,10 +123,12 @@ export function desiredLabels(issue, decision, request) {
     ? [
         `target:${request.target}`,
         ...new Set(
-          request.release_parts.map(
-            (part) =>
-              `component:${["6529seize-backend", "release-coordinator-test-backend"].includes(part.repository) ? "backend" : "frontend"}`
-          )
+          request.release_parts.flatMap((part) => [
+            `component:${["6529seize-backend", "release-coordinator-test-backend"].includes(part.repository) ? "backend" : "frontend"}`,
+            ...((part.operational_deployments ?? []).includes("monitoring")
+              ? ["component:monitoring"]
+              : [])
+          ])
         )
       ]
     : [];

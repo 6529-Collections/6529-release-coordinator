@@ -430,6 +430,10 @@ export function formatReport(report) {
             `    Unit order: ${part.deploy_dependencies.map((edge) => `${edge.before} -> ${edge.after}`).join(", ") || "none"}`
           );
         }
+        if (part.operational_deployments?.length)
+          lines.push(
+            `    Operational deployments: ${part.operational_deployments.join(", ")} (recording only; deployment is not implemented)`
+          );
       }
     }
     if (entry.workflow)

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "6529 Release Request v0.000002",
+  "title": "6529 Release Request v0.000001",
   "description": "The local release-request file created by the 6529 release-request CLI.",
   "type": "object",
   "additionalProperties": false,
@@ -15,7 +15,7 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "0.000002"
+      "const": "0.000001"
     },
     "request_id": {
       "type": "string",
@@ -90,10 +90,6 @@
         }
       }
     },
-    "operational_deployment": {
-      "description": "An operational package that has its own deployment workflow outside the backend service catalog.",
-      "enum": ["monitoring"]
-    },
     "release_part": {
       "type": "object",
       "additionalProperties": false,
@@ -124,6 +120,7 @@
         "deploy_units": {
           "description": "Backend services selected for this release. Frontend has no unit list because it deploys as one app.",
           "type": "array",
+          "minItems": 1,
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/deploy_unit"
@@ -135,15 +132,6 @@
           "uniqueItems": true,
           "items": {
             "$ref": "#/$defs/deploy_dependency"
-          }
-        },
-        "operational_deployments": {
-          "description": "Operational packages selected from the backend repository. Recording is supported; Coordinator deployment is not yet implemented.",
-          "type": "array",
-          "maxItems": 1,
-          "uniqueItems": true,
-          "items": {
-            "$ref": "#/$defs/operational_deployment"
           }
         }
       },
@@ -158,26 +146,7 @@
             "required": ["repository"]
           },
           "then": {
-            "required": ["deploy_units", "deploy_dependencies"],
-            "anyOf": [
-              {
-                "properties": {
-                  "deploy_units": {
-                    "type": "array",
-                    "minItems": 1
-                  }
-                }
-              },
-              {
-                "required": ["operational_deployments"],
-                "properties": {
-                  "operational_deployments": {
-                    "type": "array",
-                    "minItems": 1
-                  }
-                }
-              }
-            ]
+            "required": ["deploy_units", "deploy_dependencies"]
           },
           "else": {
             "not": {
@@ -187,9 +156,6 @@
                 },
                 {
                   "required": ["deploy_dependencies"]
-                },
-                {
-                  "required": ["operational_deployments"]
                 }
               ]
             }

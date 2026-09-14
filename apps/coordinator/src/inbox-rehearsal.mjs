@@ -22,6 +22,7 @@ const pullChecks = [
 // rehearsal. Different per-PR service catalogs can be resolved by the combined
 // catalog; missing PR identity, checks, or review evidence cannot be skipped.
 export function canRehearse(entry, observation, decision) {
+  const operational = check(observation.checks, "operational_deployments");
   return (
     entry.status === "valid" &&
     !terminal(decision) &&
@@ -30,6 +31,7 @@ export function canRehearse(entry, observation, decision) {
     ) &&
     check(observation.checks, "release_parts")?.status === "pass" &&
     check(observation.checks, "backend_services")?.status !== "blocked" &&
+    (!operational || operational.status === "pass") &&
     observation.pull_requests.length ===
       entry.request.release_parts.reduce(
         (sum, part) => sum + part.pull_requests.length,

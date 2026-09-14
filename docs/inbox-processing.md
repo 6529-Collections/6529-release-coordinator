@@ -28,9 +28,10 @@ visible. Closing a ticket never silently claims that a release happened.
 
 The scope is intake defaults, ticket inspection, local merge rehearsal, supported
 sandbox service/database checks, sandbox batch execution, status updates,
-decision history, and migration of existing tickets. Keep the installed CLI `0.0.4`
-input and request schema `0.000001` unchanged. No new npm release or frontend/
-backend installation is needed for this scope.
+decision history, and migration of existing tickets. Public consumers remain on
+CLI `0.0.4` and schema `0.000001`. Local `0.0.5` source introduces schema
+`0.000002` for recording operational monitoring; it needs a later npm release
+and consumer adoption before product repositories can submit that shape.
 
 The one-ticket rehearsal only merges in temporary local repositories. An unscoped
 sandbox run may merge its selected candidate into the protected branches of the

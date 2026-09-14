@@ -9,6 +9,10 @@ matching E2E, and protected test production.
 Sandbox and real profiles share the same intake and selection code. Real product
 release execution and rollback are not built yet.**
 
+Current local source also accepts operational-monitoring release requests. It
+records and labels the request and checks its exact PR, then keeps the ticket
+waiting because monitoring deployment and health verification are not built.
+
 The public CLI creates a request, validates it, saves local records, and submits
 it to a central GitHub workflow. The workflow saves one public Issue and returns
 its link. The local reader checks open request Issues against their workflow
@@ -81,7 +85,8 @@ preserves earlier history on explicit resume. See [run logs](./apps/coordinator/
 The developer [fixture harness](./apps/coordinator/README.md#merge-engine-and-fixture-tests)
 still tests the merge engine against sample PRs, including deliberate failures.
 Test manifests cannot enter the ticket workflow or either decision journal.
-The public npm package and request schema are unchanged.
+Public npm remains at `0.0.4`. Local package source `0.0.5` adds request schema
+`0.000002` while preserving validation of existing `0.000001` records.
 
 ## Sandbox services and database
 
@@ -172,9 +177,10 @@ It keeps one release active through completion or explicit recovery. See the
 [live release acceptance](./docs/testing/release-sequence-2026-09-11.md).
 
 The next implementation stage is to replace the sandbox adapters with narrow
-calls to the existing frontend/backend release Actions. Product workflows keep
-their separate environment-specific builds and settings. This repository still
-has no permission or adapter that merges or deploys the real products.
+calls to the existing frontend, backend-service, and operational-monitoring
+release Actions. Product workflows keep their separate environment-specific
+builds and settings. This repository still has no permission or adapter that
+merges or deploys the real products.
 
 Rollback uses new commits undoing the failed batch and ordinary deployments,
 only when no database change is confirmed and restoration is safe. Database

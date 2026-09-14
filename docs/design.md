@@ -31,8 +31,9 @@ execution ownership before merging and keep responsibility afterward. Its own
 merge must not trigger this intake closure rule. Inbox receipt acceptance and
 ticket processing are not execution ownership.
 
-That document owns the first-processing contract. It keeps the existing CLI input
-and read-only commands; `inbox:run` combines inspection, rehearsal, supported
+That document owns the first-processing contract. Schema `0.000002` preserves
+the existing application input and adds recording for operational monitoring;
+the read-only commands remain. `inbox:run` combines inspection, rehearsal, supported
 sandbox checks, and Issue updates. It does not authorize release execution.
 Keep the existing GitHub journal and manual operation. A separate database,
 heartbeat, dashboard and automatic takeover are not prerequisites for the next
@@ -565,12 +566,31 @@ and `CANCELLED`. A recovered release still records that the original release
 failed. Release states are different from today's inbox labels; do not teach
 intake to close a worker-owned request merely because that worker merged its PRs.
 
+## Operational monitoring
+
+**Recording is implemented; execution is deferred.** Operational monitoring is
+code under the backend repository, but it is not an application service in the
+backend service catalog. Schema `0.000002` therefore records it as
+`operational_deployments: ["monitoring"]` rather than inventing a service name.
+The Coordinator can verify the saved request and inspect its exact PR. It keeps
+the ticket waiting because it cannot dispatch the monitoring workflow or verify
+the installed target yet.
+
+A future real adapter should use the existing operational-monitoring workflow,
+pin its exact backend commit and environment, save the workflow run, and verify
+the deployed monitoring target. In a combined release, monitoring should pass
+first so the application changes that produce signals are observed during their
+own rollout. This extends the release sequence; it does not build a new
+monitoring platform or put monitoring into the application service catalog.
+
 ## Staging
 
 1. Save current staging refs and actually deployed frontend/service versions as
    recovery targets before the first shared change.
-2. Verify the actual merge composition with `1a-staging`, merge backend changes
-   normally, then dispatch `Deploy a service` with `environment=staging`.
+2. Verify the actual merge composition with `1a-staging`. When selected and the
+   adapter exists, deploy and verify operational monitoring first. Then merge
+   backend application changes normally and dispatch `Deploy a service` with
+   `environment=staging`.
 3. Wait for each selected backend service before dispatching the next in
    dependency order. When database-changing execution is later supported, use
    and verify the existing database service before its dependent services.
@@ -604,14 +624,17 @@ how the apps receive configuration.
    working deployed version; services may have different prior versions.
 3. Recheck the destination compositions, selected PRs and required gates. Changed
    bases or scope require fresh matching combined evidence before proceeding.
-4. Merge backend changes into `main` and dispatch `Deploy a service` with
-   `environment=prod`, one selected service at a time in dependency order.
+4. Merge backend changes into `main`. When selected and the adapter exists,
+   deploy and verify operational monitoring first. Then dispatch
+   `Deploy a service` with `environment=prod`, one selected application service
+   at a time in dependency order.
 5. After backend prerequisites pass, merge frontend changes into `main` and
    dispatch `Web Deploy - PROD`. Preserve existing release-note grouping.
 6. Confirm exact running versions and existing health checks, and wait for the
    configured required production-safe E2E results.
 7. Save the result before closing the successful release and freeing its lane.
-   A new gradual-rollout or monitoring platform is outside this step.
+   Building a new gradual-rollout or monitoring platform is outside this step;
+   calling the existing operational-monitoring workflow is the future adapter.
 
 ## Recovery path
 

@@ -28,7 +28,13 @@ const schemaPath = path.join(
   "..",
   "release-request.schema.json"
 );
+const legacySchemaPath = path.join(
+  packageDirectory,
+  "..",
+  "release-request.schema.v0.000001.json"
+);
 const schema = JSON.parse(await readFile(schemaPath, "utf8"));
+const legacySchema = JSON.parse(await readFile(legacySchemaPath, "utf8"));
 const RELEASE_REQUEST_SCHEMA_VERSION = schema.properties.schema_version.const;
 
 const ajv = new Ajv2020({
@@ -38,7 +44,15 @@ const ajv = new Ajv2020({
   strictRequired: false
 });
 addFormats(ajv);
-const validateRequestSchema = ajv.compile(schema);
+const requestValidators = new Map(
+  [legacySchema, schema].map((definition) => [
+    definition.properties.schema_version.const,
+    ajv.compile(definition)
+  ])
+);
+const validateLatestRequestSchema = requestValidators.get(
+  RELEASE_REQUEST_SCHEMA_VERSION
+);
 
 const inputTemplate = {
   requested_by: "",
@@ -57,7 +71,8 @@ const inputTemplate = {
       ],
       depends_on: [],
       deploy_units: [""],
-      deploy_dependencies: []
+      deploy_dependencies: [],
+      operational_deployments: []
     },
     {
       id: "frontend",
@@ -83,11 +98,14 @@ export function getReleaseRequestSchema() {
 }
 
 export function validateReleaseRequest(request) {
-  const ok = validateRequestSchema(request);
+  const validator =
+    requestValidators.get(request?.schema_version) ??
+    validateLatestRequestSchema;
+  const ok = validator(request);
 
   return {
     ok,
-    errors: ok ? [] : validationErrors(validateRequestSchema.errors)
+    errors: ok ? [] : validationErrors(validator.errors)
   };
 }
 

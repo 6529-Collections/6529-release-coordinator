@@ -72,6 +72,26 @@ test("new intake creates readable scope, received status, verified assignment, a
   );
 });
 
+test("new monitoring intake is labeled clearly and stays recording-only", async () => {
+  const f = fixture();
+  f.issues.length = 0;
+  f.request.schema_version = "0.000002";
+  f.request.release_parts[0].id = "monitoring";
+  f.request.release_parts[0].deploy_units = [];
+  f.request.release_parts[0].operational_deployments = ["monitoring"];
+
+  await saveOrganizedReleaseRequestIssue(intake(f));
+
+  assert.equal(f.issues[0].title, "Staging · monitoring PR #10");
+  assert.deepEqual(f.issues[0].labels, [
+    "component:backend",
+    "component:monitoring",
+    "release-request",
+    "status:received",
+    "target:staging"
+  ]);
+});
+
 test("processing legacy intake preserves receipt and unrelated labels; waiting stays readable and unchanged retry writes no tickets", async () => {
   const f = fixture(),
     body = f.issue.body;

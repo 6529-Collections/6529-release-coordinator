@@ -103,8 +103,13 @@ export function decideTicket(
   if (allMerged) return finish("closed", reasons);
   for (const item of observation.checks) {
     if (item.status === "pass") continue;
-    if (["release_parts", "backend_services"].includes(item.id)) {
+    if (
+      ["release_parts", "backend_services", "operational_deployments"].includes(
+        item.id
+      )
+    ) {
       const missing = item.evidence?.missing_prerequisites?.length;
+      const operational = item.id === "operational_deployments";
       add(
         item.status === "blocked"
           ? "invalid-dependencies"
@@ -112,9 +117,11 @@ export function decideTicket(
             ? "prerequisite-unverified"
             : "coordinator-incomplete",
         item.message,
-        item.status === "blocked"
-          ? "Submit a corrected request with valid scope and dependency order."
-          : "Obtain the missing catalog or prerequisite deployment evidence, then recheck.",
+        operational
+          ? "Use the existing operational monitoring workflow until the Coordinator deployment adapter is implemented."
+          : item.status === "blocked"
+            ? "Submit a corrected request with valid scope and dependency order."
+            : "Obtain the missing catalog or prerequisite deployment evidence, then recheck.",
         item.status === "blocked" ? "Submitter" : needsMaintainers,
         item.evidence
       );

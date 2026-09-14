@@ -10,7 +10,8 @@ they were not repeated during this cleanup.
 
 | Area | What is available | Evidence boundary |
 | --- | --- | --- |
-| Request submission | Public npm CLI `0.0.4`, shared intake and receipt verification | Earlier frontend/backend delivery tests passed; [publication guide](./npm-publishing.md) and [original evidence](./history/progress-through-2026-09-11.md#verified-intake-and-reader-checks). |
+| Request submission | Public npm CLI `0.0.4`, plus local `0.0.5` source with schema `0.000002`; old `0.000001` requests remain readable | Earlier frontend/backend delivery tests passed. The monitoring shape is local and not published or adopted; see [publication guide](./npm-publishing.md). |
+| Operational monitoring intake | Monitoring-only backend requests can be created, validated, displayed, labeled, and have their exact PR checked | Local automated tests pass. Deployment and target-health checks are deliberately unavailable, so these tickets stay waiting and cannot enter rehearsal/execution. |
 | Ticket workflow | One manual `inbox:run` command reads requests, checks exact PRs and updates the same tickets | Unified workflow and subsequent sandbox work are merged; [command guide](../apps/coordinator/README.md#run-the-ticket-workflow). |
 | Sandbox service/database checks | One-ticket checks run sample services and temporary MySQL in GitHub Actions | Local and live acceptance passed; see [source delivery](#sandbox-source-delivery-september-10). |
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
@@ -26,9 +27,10 @@ completion is evidence only for the pinned test repositories.
 
 ## Next steps
 
-Review and merge the Coordinator source for the proven sandbox sequence. After
-that, add narrow real adapters that call the existing frontend/backend release
-workflows without redesigning their builds or environment settings. Automatic
+Review and merge the Coordinator source, then publish and adopt the exact CLI
+version if this new request shape is approved. After that, add narrow real
+adapters that call the existing frontend, backend-service, and operational-
+monitoring release workflows without redesigning their builds or environment settings. Automatic
 rollback, database-changing batches, linked tickets, heartbeat/takeover, and
 parallel releases remain deferred.
 

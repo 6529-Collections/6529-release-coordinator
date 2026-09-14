@@ -59,7 +59,8 @@ Help is available with `npm run inbox:read -- --help` and makes no GitHub calls.
 
 The report includes the saved PR numbers, branches and full commits, release
 target, database-change answer, part dependencies, backend units and their
-order, and the verified GitHub actor when proof succeeds.
+order, operational monitoring selection, and the verified GitHub actor when
+proof succeeds.
 For JSON compatibility, `counts.pending` now counts all selected open requests;
 it does not require the legacy `pending` label.
 
@@ -151,6 +152,12 @@ it checks:
    same PR and target, without choosing one. Report completed, cancelled, and
    replaced as unknown because this reader has no verified release-outcome source. Issue closure, labels, PR merge state, and newer requests cannot
    substitute for that history.
+
+A recorded operational-monitoring selection gets its own unknown check. The PR
+checks above still run, but the Coordinator does not fetch the application
+service catalog for a monitoring-only request and cannot claim deployment or
+target health. The ticket stays waiting and cannot enter merge rehearsal or
+execution until a separate adapter is implemented.
 
 An omitted catalog prerequisite stays **unknown** until there is proof that its
 required state already runs in the requested environment. The checker does not
