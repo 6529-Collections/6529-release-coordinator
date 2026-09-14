@@ -414,22 +414,27 @@ export function createReleaseGitHub({
       }
       if (record.state === "cleaning")
         return cleanupFailedPull(role, record, candidate, save);
-      let current = await ref(role, record.branch, [200, 404]);
-      if (current.status === 404) {
-        await call(
-          role,
-          "POST",
-          "/git/refs",
-          { ref: `refs/heads/${record.branch}`, sha: candidate.commit },
-          [201, 422]
+      const resumedMerged = record.state === "merged";
+      if (resumedMerged)
+        await deleteOwnedBranch(role, record.branch, candidate.commit);
+      else {
+        let current = await ref(role, record.branch, [200, 404]);
+        if (current.status === 404) {
+          await call(
+            role,
+            "POST",
+            "/git/refs",
+            { ref: `refs/heads/${record.branch}`, sha: candidate.commit },
+            [201, 422]
+          );
+          current = await ref(role, record.branch);
+        }
+        serviceAssert(
+          current.data?.object?.sha === candidate.commit,
+          "release-ownership",
+          "Sandbox release branch does not name the exact selected candidate."
         );
-        current = await ref(role, record.branch);
       }
-      serviceAssert(
-        current.data?.object?.sha === candidate.commit,
-        "release-ownership",
-        "Sandbox release branch does not name the exact selected candidate."
-      );
       let pr;
       if (record.number)
         pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
@@ -522,7 +527,8 @@ export function createReleaseGitHub({
       );
       record.state = "merged";
       await save();
-      await deleteOwnedBranch(role, record.branch, candidate.commit);
+      if (!resumedMerged)
+        await deleteOwnedBranch(role, record.branch, candidate.commit);
       record.cleanup = "removed";
       await save();
       return {
@@ -575,12 +581,16 @@ export function createReleaseGitHub({
         run ??= await findRun(role, record, workflowId);
         if (run) {
           verifyRun(run, record, workflowId);
+          const identityChanged =
+            record.workflow_run_id !== run.id ||
+            record.workflow_id !== workflowId;
           record.workflow_run_id = run.id;
           record.workflow_id = workflowId;
+          const stateChanged = record.state !== "running";
           if (record.state !== "running") {
             record.state = "running";
-            await save();
           }
+          if (identityChanged || stateChanged) await save();
           if (run.status === "completed") break;
         }
         if (poll + 1 < polls) await wait(pollMs);

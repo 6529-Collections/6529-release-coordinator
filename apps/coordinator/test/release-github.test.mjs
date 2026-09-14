@@ -46,14 +46,16 @@ function runtimeFile(endpoint, changed = false) {
 const apiResponse = (status, data) =>
   `HTTP/2 ${status} Result\nContent-Type: application/json\n\n${data === undefined ? "" : JSON.stringify(data)}`;
 
-function fixture(role = "backend") {
-  const unit = role === "backend" ? "worker" : "frontend";
+function fixture(role = "backend", kind = "deploy") {
+  const e2e = kind === "e2e";
+  const unit = e2e ? null : role === "backend" ? "worker" : "frontend";
+  const runnerRole = e2e ? "backend" : role;
   const operation = makeReleaseOperation({
     release_id: "11111111-1111-4111-8111-111111111111",
     operation_id: "22222222-2222-4222-8222-222222222222",
-    operation: "deploy",
+    operation: kind,
     environment: "staging",
-    role,
+    role: e2e ? null : role,
     unit,
     backend_commit: "c".repeat(40),
     frontend_commit: "d".repeat(40)
@@ -62,10 +64,10 @@ function fixture(role = "backend") {
     id: operation.operation_id,
     release_id: operation.release_id,
     step: {
-      id: `staging:deploy:${role}:${unit}`,
-      kind: "deploy",
+      id: e2e ? "staging:e2e" : `staging:deploy:${role}:${unit}`,
+      kind,
       environment: "staging",
-      role,
+      role: e2e ? null : role,
       unit
     },
     state: "running",
@@ -77,11 +79,11 @@ function fixture(role = "backend") {
   const run = {
     id: 101,
     repository: {
-      id: sandboxProfile.repositories[role].id,
-      full_name: sandboxProfile.repositories[role].full_name
+      id: sandboxProfile.repositories[runnerRole].id,
+      full_name: sandboxProfile.repositories[runnerRole].full_name
     },
-    head_repository: { id: sandboxProfile.repositories[role].id },
-    head_sha: operation[`${role}_commit`],
+    head_repository: { id: sandboxProfile.repositories[runnerRole].id },
+    head_sha: operation[`${runnerRole}_commit`],
     head_branch: "1a-staging",
     event: "workflow_dispatch",
     run_attempt: 2,
@@ -110,7 +112,7 @@ function fixture(role = "backend") {
       frontend: operation.frontend_commit
     },
     runner: {
-      repository: sandboxProfile.repositories[role].full_name,
+      repository: sandboxProfile.repositories[runnerRole].full_name,
       run_id: run.id,
       attempt: run.run_attempt,
       commit: run.head_sha
@@ -132,6 +134,7 @@ function fixture(role = "backend") {
 test("release workflow result binds exact operation, commits, actor and rerun attempt", async () => {
   const f = fixture();
   let runSearch;
+  const saves = [];
   const client = createReleaseGitHub({
     profile: sandboxProfile,
     runtime,
@@ -153,11 +156,58 @@ test("release workflow result binds exact operation, commits, actor and rerun at
   const result = await client.run({
     record: f.record,
     actor: f.record.actor,
-    save: async () => {}
+    save: async () => saves.push(structuredClone(f.record))
   });
   assert.equal(result.status, "passed");
   assert.equal(result.report.runner.attempt, 2);
   assert.doesNotMatch(runSearch, /[?&]actor=/u);
+  assert.ok(
+    saves.some(
+      (record) =>
+        record.state === "running" &&
+        record.workflow_run_id === f.run.id &&
+        record.workflow_id === f.run.workflow_id
+    )
+  );
+});
+
+test("e2e workflow accepts only backend runner provenance", async () => {
+  const run = async (f) => {
+    const client = createReleaseGitHub({
+      profile: sandboxProfile,
+      runtime,
+      execute: async (args) => {
+        const endpoint = args[args.indexOf("--method") + 2];
+        const value = endpoint.includes("/contents/")
+          ? runtimeFile(endpoint)
+          : endpoint.includes("/runs?")
+            ? { total_count: 1, workflow_runs: [f.run] }
+            : { total_count: 1, jobs: [f.job] };
+        return apiResponse("200 OK", value);
+      },
+      logs: async () =>
+        `COORDINATOR_RELEASE_RESULT:${Buffer.from(JSON.stringify(f.report)).toString("base64url")}\n`
+    });
+    return client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => {}
+    });
+  };
+  const accepted = await run(fixture("backend", "e2e"));
+  assert.equal(
+    accepted.report.runner.repository,
+    sandboxProfile.repositories.backend.full_name
+  );
+
+  const rejected = fixture("backend", "e2e");
+  rejected.report.runner.repository =
+    sandboxProfile.repositories.frontend.full_name;
+  rejected.report.runner.commit = rejected.operation.frontend_commit;
+  await assert.rejects(
+    run(rejected),
+    /conclusion contradicts its exact report/u
+  );
 });
 
 test("release workflow rejects a report for another exact version", async () => {
@@ -411,6 +461,95 @@ test("owned branch cleanup requires two consecutive missing reads", async () => 
   assert.equal(record.cleanup, "removed");
   assert.equal(missingReads, 2);
   assert.equal(patchCalls, 1);
+});
+
+test("merged integration resumes cleanup without recreating its branch", async () => {
+  const candidate = {
+    role: "backend",
+    base: "e".repeat(40),
+    commit: "c".repeat(40),
+    tree: "d".repeat(40),
+    changed: true
+  };
+  const mergeCommit = "f".repeat(40);
+  const actor = { id: "456", login: "tester" };
+  const record = {
+    id: "22222222-2222-4222-8222-222222222222",
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: {
+      id: "staging:integrate:backend",
+      kind: "integrate",
+      environment: "staging",
+      role: "backend"
+    },
+    state: "merged",
+    actor,
+    target_branch: "1a-staging",
+    branch:
+      "codex/release-11111111-1111-4111-8111-111111111111-staging-backend",
+    body: `Sandbox release 11111111-1111-4111-8111-111111111111\n\nBatch: ${candidate.tree}`,
+    base: candidate.base,
+    number: 7,
+    url: "https://example.invalid/pr/7",
+    checked_tree: candidate.tree,
+    created_at: "2026-09-11T12:00:00.000Z"
+  };
+  const pr = {
+    number: 7,
+    head: {
+      repo: { id: sandboxProfile.repositories.backend.id },
+      ref: record.branch,
+      sha: candidate.commit
+    },
+    base: {
+      repo: { id: sandboxProfile.repositories.backend.id },
+      ref: record.target_branch
+    },
+    user: { id: 456 },
+    body: record.body,
+    state: "closed",
+    merged: true,
+    merge_commit_sha: mergeCommit
+  };
+  let branchReads = 0;
+  let branchCreates = 0;
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    wait: async () => {},
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint.endsWith(`/git/ref/heads/${record.branch}`)) {
+        branchReads++;
+        return apiResponse("404 Not Found", {});
+      }
+      if (method === "POST" && endpoint.endsWith("/git/refs")) {
+        branchCreates++;
+        return apiResponse("201 Created", {});
+      }
+      if (endpoint.endsWith("/pulls/7")) return apiResponse("200 OK", pr);
+      if (endpoint.endsWith(`/git/commits/${mergeCommit}`))
+        return apiResponse("200 OK", {
+          tree: { sha: candidate.tree },
+          parents: [{ sha: candidate.base }, { sha: candidate.commit }]
+        });
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", { object: { sha: mergeCommit } });
+      assert.fail(`${method} ${endpoint}`);
+    }
+  });
+  const result = await client.integrate({
+    record,
+    candidate,
+    actor,
+    expectedBase: candidate.base,
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(record.cleanup, "removed");
+  assert.equal(branchReads, 3);
+  assert.equal(branchCreates, 0);
 });
 
 test("real profile and unpinned release runtime are refused", () => {

@@ -105,8 +105,11 @@ active tickets, but it cannot replace a terminal ticket's saved decision. The
 focused release regression keeps both behaviors in one resumed-batch case. A
 separate stale-batch guard stops release execution before identity or integration
 work, even when malformed saved state still contains a selected candidate.
+Workflow polling now saves a newly discovered run identity even when the operation
+was already marked running. A merged integration also reconciles its owned branch
+cleanup before any missing branch could be recreated after a lost final save.
 
-The final local `npm run check` passed **469 tests** on Node 25.6.1, with the
+The final local `npm run check` passed **471 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
 passed. Node 20/22/24 and external review results remain PR evidence, not local proof.
