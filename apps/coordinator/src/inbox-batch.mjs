@@ -143,7 +143,8 @@ export async function coordinateInboxBatch({
     for (const item of items.filter(
       (value) =>
         active.inputs.some((input) => input.number === value.number) &&
-        value.decision
+        value.decision &&
+        !terminal(value.decision)
     )) {
       item.decision = batchDecision(
         item.decision,

@@ -237,7 +237,10 @@ test("a resumed completed release adds a complete batch ticket result", async ()
   const deferredInput = structuredClone(batch.inputs[0]);
   deferredInput.number = 2;
   deferredInput.input.inbox.issue_number = 2;
-  batch.inputs.push(deferredInput);
+  const terminalInput = structuredClone(batch.inputs[0]);
+  terminalInput.number = 3;
+  terminalInput.input.inbox.issue_number = 3;
+  batch.inputs.push(deferredInput, terminalInput);
   batch.fingerprint = serviceHash({
     inputs: batch.inputs,
     policy: batch.policy
@@ -269,9 +272,16 @@ test("a resumed completed release adds a complete batch ticket result", async ()
     number: 2,
     decision: structuredClone(item.decision)
   };
+  const terminalDecision = {
+    ...structuredClone(item.decision),
+    status: "completed",
+    next_action: "No further action is required.",
+    action_owner: "None"
+  };
+  const completed = { number: 3, decision: structuredClone(terminalDecision) };
   const state = { batches: { [batch.fingerprint]: batch } };
   await coordinateInboxBatch({
-    items: [item, deferred],
+    items: [item, deferred, completed],
     state,
     run: { batch_fingerprint: batch.fingerprint },
     profile: sandboxProfile,
@@ -297,6 +307,7 @@ test("a resumed completed release adds a complete batch ticket result", async ()
   ]);
   assert.equal(deferred.decision.status, "waiting");
   assert.equal(deferred.decision.batch.code, "batch-deferred");
+  assert.deepEqual(completed.decision, terminalDecision);
 });
 
 test("a resumed empty batch stays a no-candidate result", async () => {
