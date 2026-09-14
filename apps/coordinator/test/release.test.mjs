@@ -796,10 +796,9 @@ test("sandbox runner exercises the exact backend/frontend combination", async ()
   });
   assert.match(result.stdout, /COORDINATOR_RELEASE_RESULT:/u);
 
-  const failure = `${"a".repeat(499)}😀tail`;
   await writeFile(
     path.join(directory, "candidates/backend/src/worker.mjs"),
-    `export function run() { throw new Error(${JSON.stringify(failure)}); }\n`
+    'export function run() { throw new Error("a".repeat(499) + "😀tail"); }\n'
   );
   let failed;
   try {
@@ -820,6 +819,7 @@ test("sandbox runner exercises the exact backend/frontend combination", async ()
   }
   assert.equal(failed?.code, 1);
   const encoded = failed.stdout.match(/COORDINATOR_RELEASE_RESULT:(\S+)/u)?.[1];
+  assert.ok(encoded, "expected sandbox release result marker");
   const failedReport = JSON.parse(Buffer.from(encoded, "base64url"));
   assert.equal(failedReport.checks[0].message, "a".repeat(499));
 });
