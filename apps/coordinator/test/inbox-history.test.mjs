@@ -440,43 +440,44 @@ test("competing compaction cannot replace another writer's state or discard its 
   assert.deepEqual(h.f.state().batches[record.fingerprint], record);
 });
 
-test("v4 migration preserves full history and fences the old writer before writes", async () => {
-  const h = await completed(),
-    record = currentBatch(h.f);
-  const f = fixture(sandboxProfile),
-    old = writer(f, "inbox-run-v4");
-  const { state, run } = await old.acquire(await f.identity(), undefined, {
-    workflow: "inbox-run-v4",
-    issue_number: null,
-    close_test: false
+for (const legacyWorkflow of ["inbox-run-v4", "inbox-run-v5"])
+  test(`${legacyWorkflow} migration preserves full history and fences the old writer before writes`, async () => {
+    const h = await completed(),
+      record = currentBatch(h.f);
+    const f = fixture(sandboxProfile),
+      old = writer(f, legacyWorkflow);
+    const { state, run } = await old.acquire(await f.identity(), undefined, {
+      workflow: legacyWorkflow,
+      issue_number: null,
+      close_test: false
+    });
+    state.tickets = h.f.state().tickets;
+    state.batches = { [record.fingerprint]: record };
+    state.lock.batch_fingerprint = record.fingerprint;
+    state.lock.plans = Object.fromEntries(
+      record.inputs.map(({ number, input }) => [number, input])
+    );
+    state.lock.ticket_numbers = [1, 2];
+    await old.save(state, run, `fixture interrupted ${legacyWorkflow}`);
+    const current = writer(f);
+    const resumed = await current.acquire(await f.identity(), run.run_id, {
+      workflow: inboxWorkflow,
+      issue_number: null,
+      close_test: false
+    });
+    assert.deepEqual(resumed.state.tickets, state.tickets);
+    assert.equal(resumed.run.batch_fingerprint, record.fingerprint);
+    assert.deepEqual(resumed.run.plans, state.lock.plans);
+    assert.deepEqual(resumed.run.ticket_numbers, [1, 2]);
+    await current.release(resumed.state, resumed.run);
+    assert.deepEqual(currentBatch(f), record);
+    const count = f.calls.filter((c) => c.method !== "GET").length;
+    await assert.rejects(
+      writer(f, legacyWorkflow).acquire(await f.identity()),
+      /older processor/
+    );
+    assert.equal(f.calls.filter((c) => c.method !== "GET").length, count);
   });
-  state.tickets = h.f.state().tickets;
-  state.batches = { [record.fingerprint]: record };
-  state.lock.batch_fingerprint = record.fingerprint;
-  state.lock.plans = Object.fromEntries(
-    record.inputs.map(({ number, input }) => [number, input])
-  );
-  state.lock.ticket_numbers = [1, 2];
-  await old.save(state, run, "fixture interrupted v4");
-  const current = writer(f);
-  const resumed = await current.acquire(await f.identity(), run.run_id, {
-    workflow: inboxWorkflow,
-    issue_number: null,
-    close_test: false
-  });
-  assert.deepEqual(resumed.state.tickets, state.tickets);
-  assert.equal(resumed.run.batch_fingerprint, record.fingerprint);
-  assert.deepEqual(resumed.run.plans, state.lock.plans);
-  assert.deepEqual(resumed.run.ticket_numbers, [1, 2]);
-  await current.release(resumed.state, resumed.run);
-  assert.deepEqual(currentBatch(f), record);
-  const count = f.calls.filter((c) => c.method !== "GET").length;
-  await assert.rejects(
-    writer(f, "inbox-run-v4").acquire(await f.identity()),
-    /older processor/
-  );
-  assert.equal(f.calls.filter((c) => c.method !== "GET").length, count);
-});
 
 test("later stale observation gets a new immutable snapshot, preserving the original result", async () => {
   const h = await completed();

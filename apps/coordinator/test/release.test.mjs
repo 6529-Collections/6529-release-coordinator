@@ -280,6 +280,8 @@ test("a resumed completed release adds a complete batch ticket result", async ()
   assert.equal(item.decision.status, "completed");
   assert.equal(item.decision.batch.status, "passed");
   assert.equal(item.decision.batch.fingerprint, batch.fingerprint);
+  assert.deepEqual(item.decision.batch.selected, batch.selected);
+  assert.ok(item.decision.batch.evidence.length > 0);
   assert.match(item.decision.reasons.at(-1).message, /passed staging/u);
   assert.equal(item.decision.batch.release.status, "completed");
   assert.deepEqual(Object.keys(item.decision.batch).sort(), [
@@ -309,6 +311,11 @@ test("a resumed empty batch stays a no-candidate result", async () => {
   });
   assert.equal(result.status, "no-candidate");
   assert.deepEqual(result.selected, []);
+  batch.execution = { status: "needs-human" };
+  assert.throws(
+    () => validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile),
+    /Only a selected v2 batch can own release execution/u
+  );
 });
 
 test("completed release history requires every exact operation and report", async () => {

@@ -82,9 +82,11 @@ provenance.
 The final review guard also requires every step behind the saved release position
 to contain a passing result. A merely present failed result cannot be projected
 as completed release evidence. Workflow reports also require numeric GitHub run
-and attempt IDs; string-shaped lookalikes are rejected.
+and attempt IDs; string-shaped lookalikes are rejected. The v6 migration test now
+covers both v4 and v5 saved runs, and ticket-summary regressions retain the exact
+selected group and reject leftover execution on an empty batch.
 
-The final local `npm run check` passed **465 tests** on Node 25.6.1, with the
+The final local `npm run check` passed **466 tests** on Node 25.6.1, with the
 three explicitly optional Docker cases skipped. Lint, formatting, workflow
 policy, packed-CLI installation/behavior, and source-preservation checks also
 passed. Node 20/22/24 and external review results remain PR evidence, not local proof.

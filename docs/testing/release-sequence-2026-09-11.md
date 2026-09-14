@@ -142,6 +142,10 @@ The final saved-state regression changes a completed operation's result to
 history, so a merely present result can no longer stand in for passing evidence.
 Report validation now also rejects string-shaped GitHub run or attempt IDs; the
 sandbox runner emits and the adapter verifies one exact numeric shape.
+The journal migration regression now runs the same preservation and older-writer
+fence against both v4 and v5 saved runs. Ticket projection also asserts the real
+selected group and evidence remain populated, while an empty group cannot retain
+release execution.
 
 ## Boundary and next step
 
