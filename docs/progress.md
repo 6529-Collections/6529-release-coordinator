@@ -73,6 +73,10 @@ active integration checkpoint to retain the exact prepared input and, once
 created, its unique integration commit. It keeps old terminal history readable
 but stops unfinished legacy work for a person. Required checks with no workflow
 run identity also remain separate and blocking instead of being collapsed.
+Focused review regressions cover incomplete run identities, tied retries,
+partial integration proof, mismatched fixture bases and the intentional
+100,000-byte sandbox file boundary. That size boundary does not apply to future
+product builds.
 The generated runtime changes passed
 protected backend PRs [#47](https://github.com/6529-Collections/release-coordinator-test-backend/pull/47)
 and [#49](https://github.com/6529-Collections/release-coordinator-test-backend/pull/49),

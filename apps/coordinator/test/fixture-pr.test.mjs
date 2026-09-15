@@ -89,6 +89,15 @@ test("fixture publication can target the protected sandbox staging branch", asyn
     create: async () => assert.fail("existing PR should be reused")
   });
   assert.equal(result.base_branch, "1a-staging");
+  await assert.rejects(
+    publishFixturePr(staging, {
+      save: async () => {},
+      push: async () => {},
+      find: async () => [pr()],
+      create: async () => assert.fail("existing PR should be checked")
+    }),
+    /no longer matches its saved branch and commit/u
+  );
 });
 
 test("an interrupted atomic fixture checkpoint preserves the prior file", async (t) => {

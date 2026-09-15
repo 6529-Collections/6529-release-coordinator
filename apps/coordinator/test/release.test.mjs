@@ -668,6 +668,25 @@ test("completed release history requires every exact operation and report", asyn
     () => validateReleaseExecution(unfinishedLegacy, batch),
     /predates unique integration commits/u
   );
+  for (const fields of [
+    {
+      integration_commit:
+        execution.operations[firstIntegration.id].integration_commit
+    },
+    {
+      integration_version:
+        execution.operations[firstIntegration.id].integration_version,
+      integration_input:
+        execution.operations[firstIntegration.id].integration_input
+    }
+  ]) {
+    const partialLegacy = structuredClone(unfinishedLegacy);
+    Object.assign(partialLegacy.operations[firstIntegration.id], fields);
+    assert.throws(
+      () => validateReleaseExecution(partialLegacy, batch),
+      /predates unique integration commits/u
+    );
+  }
 });
 
 test("integration commit recovery state stays bound to the exact candidate", async () => {

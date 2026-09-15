@@ -468,6 +468,10 @@ Its ordinary PR check installs from the lockfile, runs its existing meaningful
 checks, builds a `dist` package and uploads that package as a GitHub Actions
 artifact. Release operations rebuild the exact recorded environment commits and
 bind the build manifest and uploaded artifact digest to the saved operation.
+Each fixed sandbox output file is limited to 100,000 bytes, while its source
+input is limited to 12,000 bytes. These bounds fit the deliberately tiny test
+programs and limit untrusted artifact reads. They are not limits for future real
+frontend or backend builds, which will stay owned by the product workflows.
 
 Runtime updates reach test `main` first. A later protected PR merges that main
 history into `1a-staging`. Independent lookalike commits on both branches are

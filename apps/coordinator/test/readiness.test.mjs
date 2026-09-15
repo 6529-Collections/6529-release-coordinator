@@ -237,10 +237,11 @@ test("the newest retry decides one required check without trusting ambiguous his
 });
 
 test("required check selection needs an exact commit", () => {
-  assert.throws(
-    () => effectiveRequiredChecks([], undefined),
-    /need one exact commit/u
-  );
+  for (const value of [undefined, null, "short"])
+    assert.throws(
+      () => effectiveRequiredChecks([], value),
+      /need one exact commit/u
+    );
 });
 
 test("same-named checks from separate workflows never hide one another", () => {
@@ -334,6 +335,29 @@ test("same-named checks from separate workflows never hide one another", () => {
   );
   assert.equal(missingWorkflowRequired.status, "blocked");
   assert.equal(missingWorkflowRequired.evidence.required.length, 2);
+
+  for (const [field, value] of [
+    ["runNumber", 0],
+    ["runAttempt", null]
+  ]) {
+    const invalidPass = run(50, "SUCCESS");
+    invalidPass.id = `invalid-${field}-pass`;
+    invalidPass.checkSuite.workflowRun[field] = value;
+    const invalidFail = run(50, "FAILURE");
+    invalidFail.id = `invalid-${field}-fail`;
+    invalidFail.checkSuite.workflowRun[field] = value;
+    f.pr.checks = [invalidPass, invalidFail];
+    const invalidResult = inspectPull(
+      f.pr,
+      f.request.release_parts[0].pull_requests[0],
+      repo
+    );
+    const invalidRequired = invalidResult.find(
+      (item) => item.id === "required_checks"
+    );
+    assert.equal(invalidRequired.status, "blocked");
+    assert.equal(invalidRequired.evidence.required.length, 2);
+  }
 });
 
 for (const [label, mutate, id, status] of [

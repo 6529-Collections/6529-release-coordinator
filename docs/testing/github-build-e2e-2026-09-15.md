@@ -45,7 +45,9 @@ app, workflow, run and attempt, and stops incomplete legacy integration records
 for manual recovery. Active integration checkpoints now retain their exact
 prepared commit input and unique integration commit before advancing. A missing
 workflow-run identity cannot collapse same-named check attempts; both remain
-visible and block the release.
+visible and block the release. The 100,000-byte per-file build-manifest limit is
+also tested at its exact boundary; it constrains only these small sandbox
+programs, not future product-owned builds.
 
 The two generated runtime files changed by those fixes reached sandbox `main`
 through protected backend PRs

@@ -12,7 +12,11 @@ import {
   closeServers,
   runSandboxReleaseOperation
 } from "../sandbox/release-run.mjs";
-import { makeReleaseOperation } from "../src/release-contract.mjs";
+import {
+  makeReleaseBuild,
+  makeReleaseOperation,
+  releaseBuildFiles
+} from "../src/release-contract.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 
 async function candidate(root, role, commit) {
@@ -63,6 +67,35 @@ const successfulOutcomes = {
 };
 
 test("locked sandbox builds produce exact role manifests", async () => {
+  const manifestFiles = releaseBuildFiles.backend.map((file) => ({
+    path: file,
+    sha256: "a".repeat(64),
+    bytes: 1
+  }));
+  assert.equal(
+    makeReleaseBuild({
+      role: "backend",
+      source_commit: "b".repeat(40),
+      files: manifestFiles.map((file, index) => ({
+        ...file,
+        bytes: index === 0 ? 100_000 : file.bytes
+      }))
+    }).files[0].bytes,
+    100_000
+  );
+  assert.throws(
+    () =>
+      makeReleaseBuild({
+        role: "backend",
+        source_commit: "b".repeat(40),
+        files: manifestFiles.map((file, index) => ({
+          ...file,
+          bytes: index === 0 ? 100_001 : file.bytes
+        }))
+      }),
+    /Invalid sandbox application build/u
+  );
+
   const root = await mkdtemp(path.join(os.tmpdir(), "sandbox-build-"));
   try {
     for (const [role, commit] of [
