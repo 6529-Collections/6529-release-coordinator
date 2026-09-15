@@ -148,6 +148,30 @@ test("a failed npm build produces a failed release result before E2E", async () 
   ]);
 });
 
+test("a required build that did not run is reported as skipped", async () => {
+  const report = await runSandboxReleaseOperation(operation(), {
+    runner,
+    outcomes: {
+      backend: { build: "skipped" },
+      frontend: {}
+    },
+    now: () => "2026-09-15T12:00:00.000Z"
+  });
+  assert.equal(report.status, "failed");
+  assert.deepEqual(report.checks, [
+    {
+      name: "build:backend",
+      status: "failed",
+      message: "backend npm build was skipped."
+    },
+    {
+      name: "build:frontend",
+      status: "failed",
+      message: "frontend npm build was skipped."
+    }
+  ]);
+});
+
 test("backend cleanup still runs when frontend cleanup fails", async () => {
   let backendClosed = false;
   await assert.rejects(

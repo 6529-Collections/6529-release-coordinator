@@ -20,7 +20,7 @@ if (
   );
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const output = `${root}/.release-coordinator/release-build-v3`;
+const output = `${root}/.release-coordinator/release-build-v5`;
 await mkdir(output, { recursive: true });
 const provisionFile = `${output}/provision.json`;
 const exec = promisify(execFile);
@@ -255,7 +255,7 @@ if (
   throw new Error("Saved release provisioning state is invalid.");
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
-const branchName = () => "codex/sandbox-build-runtime-v4-main";
+const setupBranch = "codex/sandbox-build-runtime-v5-main";
 const keyFor = (role, base) => `${role}:${base}`;
 const branchRef = (repository, branch) =>
   api(
@@ -290,7 +290,7 @@ for (const role of ["backend", "frontend"]) {
   // conflict even though their trees look similar.
   for (const baseBranch of ["main"]) {
     const key = keyFor(role, baseBranch);
-    const branch = branchName(baseBranch);
+    const branch = setupBranch;
     const base = await api(
       `repos/${identity.full_name}/git/ref/heads/${baseBranch}`
     );
