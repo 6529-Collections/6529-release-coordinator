@@ -110,9 +110,26 @@ function client(calls, { failE2e = false } = {}) {
     }),
     integrate: async ({ record, candidate }) => {
       calls.push(record.step.id);
+      const signature = {
+        name: "Coordinator sandbox",
+        email: "rehearsal@example.invalid",
+        date: record.created_at
+      };
+      record.integration_version = 1;
+      record.integration_input = {
+        message: `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
+        tree: candidate.tree,
+        parents: [candidate.commit],
+        author: signature,
+        committer: signature
+      };
+      record.integration_commit = serviceHash(record.integration_input).slice(
+        0,
+        40
+      );
       return {
         status: "passed",
-        commit: candidate.commit,
+        commit: record.integration_commit,
         tree: candidate.tree,
         url: "https://example.invalid/integration"
       };
@@ -632,6 +649,24 @@ test("completed release history requires every exact operation and report", asyn
   assert.throws(
     () => validateReleaseExecution(missingReport, batch),
     /lacks its exact operation or report/u
+  );
+
+  const firstIntegration = execution.plan.steps.find(
+    (step) => step.kind === "integrate"
+  );
+  const unfinishedLegacy = structuredClone(execution);
+  unfinishedLegacy.status = "running";
+  unfinishedLegacy.step_index = 1;
+  unfinishedLegacy.completed_at = null;
+  unfinishedLegacy.operations = {
+    [firstIntegration.id]: unfinishedLegacy.operations[firstIntegration.id]
+  };
+  delete unfinishedLegacy.operations[firstIntegration.id].integration_version;
+  delete unfinishedLegacy.operations[firstIntegration.id].integration_input;
+  delete unfinishedLegacy.operations[firstIntegration.id].integration_commit;
+  assert.throws(
+    () => validateReleaseExecution(unfinishedLegacy, batch),
+    /predates unique integration commits/u
   );
 });
 

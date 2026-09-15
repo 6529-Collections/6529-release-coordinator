@@ -42,7 +42,10 @@ The Coordinator now reads each built file's metadata and contents through one
 stable file handle, names a non-file output, distinguishes an explicitly skipped
 build from a missing outcome, matches required-check retries by exact commit,
 app, workflow, run and attempt, and stops incomplete legacy integration records
-for manual recovery.
+for manual recovery. Active integration checkpoints now retain their exact
+prepared commit input and unique integration commit before advancing. A missing
+workflow-run identity cannot collapse same-named check attempts; both remain
+visible and block the release.
 
 The two generated runtime files changed by those fixes reached sandbox `main`
 through protected backend PRs

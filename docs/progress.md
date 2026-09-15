@@ -68,7 +68,12 @@ artifact digests and boundary proof are in the
 
 Source review then tightened required-check retry identity, stopped incomplete
 legacy release records for manual recovery, made build-file reads stable, and
-made missing build evidence explicit. The generated runtime changes passed
+made missing build evidence explicit. A final recovery guard requires every
+active integration checkpoint to retain the exact prepared input and, once
+created, its unique integration commit. It keeps old terminal history readable
+but stops unfinished legacy work for a person. Required checks with no workflow
+run identity also remain separate and blocking instead of being collapsed.
+The generated runtime changes passed
 protected backend PRs [#47](https://github.com/6529-Collections/release-coordinator-test-backend/pull/47)
 and [#49](https://github.com/6529-Collections/release-coordinator-test-backend/pull/49),
 frontend PRs [#44](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/44)

@@ -408,6 +408,7 @@ test("integration uses a unique checked commit with the exact candidate tree", a
   let merged = false;
   let pr = null;
   const commitBodies = [];
+  const saved = [];
   const codeRabbitSummary =
     "\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\nA generated summary.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->";
   let summaryAdded = false;
@@ -529,7 +530,7 @@ test("integration uses a unique checked commit with the exact candidate tree", a
     candidate,
     actor,
     expectedBase: candidate.base,
-    save: async () => {}
+    save: async () => saved.push(structuredClone(record))
   });
   assert.equal(result.status, "passed");
   assert.equal(record.integration_commit, integrationCommit);
@@ -537,6 +538,34 @@ test("integration uses a unique checked commit with the exact candidate tree", a
   assert.equal(commitBodies[0].tree, candidate.tree);
   assert.deepEqual(commitBodies[0].parents, [candidate.commit]);
   assert.notEqual(record.integration_commit, candidate.commit);
+  assert.deepEqual(
+    saved.slice(0, 3).map((value) => ({
+      state: value.state,
+      hasBase: Object.hasOwn(value, "base"),
+      hasInput: Object.hasOwn(value, "integration_input"),
+      hasCommit: Object.hasOwn(value, "integration_commit")
+    })),
+    [
+      {
+        state: "prepared",
+        hasBase: true,
+        hasInput: false,
+        hasCommit: false
+      },
+      {
+        state: "commit-prepared",
+        hasBase: true,
+        hasInput: true,
+        hasCommit: false
+      },
+      {
+        state: "branch-prepared",
+        hasBase: true,
+        hasInput: true,
+        hasCommit: true
+      }
+    ]
+  );
 });
 
 test("changed release runner stops before workflow lookup or dispatch", async () => {

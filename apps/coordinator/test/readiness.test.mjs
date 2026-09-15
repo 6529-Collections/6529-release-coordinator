@@ -316,6 +316,24 @@ test("same-named checks from separate workflows never hide one another", () => {
   );
   assert.equal(absentCommitRequired.status, "blocked");
   assert.equal(absentCommitRequired.evidence.required.length, 2);
+
+  const missingWorkflowPass = run(50, "SUCCESS");
+  missingWorkflowPass.id = "missing-workflow-pass";
+  delete missingWorkflowPass.checkSuite.workflowRun;
+  const missingWorkflowFail = run(50, "FAILURE");
+  missingWorkflowFail.id = "missing-workflow-fail";
+  delete missingWorkflowFail.checkSuite.workflowRun;
+  f.pr.checks = [missingWorkflowPass, missingWorkflowFail];
+  const missingWorkflowResult = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  const missingWorkflowRequired = missingWorkflowResult.find(
+    (item) => item.id === "required_checks"
+  );
+  assert.equal(missingWorkflowRequired.status, "blocked");
+  assert.equal(missingWorkflowRequired.evidence.required.length, 2);
 });
 
 for (const [label, mutate, id, status] of [

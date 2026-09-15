@@ -70,6 +70,32 @@ export function validateReleaseExecution(execution, batch) {
     const hasIntegrationCommit = Object.hasOwn(record, "integration_commit");
     const hasIntegrationInput = Object.hasOwn(record, "integration_input");
     const hasIntegrationVersion = Object.hasOwn(record, "integration_version");
+    const needsPreparedIntegrationInput =
+      execution.status === "running" &&
+      record.step.kind === "integrate" &&
+      record.state === "commit-prepared";
+    if (
+      needsPreparedIntegrationInput &&
+      !(hasIntegrationInput && hasIntegrationVersion && !hasIntegrationCommit)
+    )
+      serviceAssert(
+        false,
+        "release-recovery",
+        "This unfinished release predates unique integration commits and needs manual recovery."
+      );
+    const needsCreatedIntegrationCommit =
+      execution.status === "running" &&
+      record.step.kind === "integrate" &&
+      !["prepared", "commit-prepared"].includes(record.state);
+    if (
+      needsCreatedIntegrationCommit &&
+      !(hasIntegrationCommit && hasIntegrationInput && hasIntegrationVersion)
+    )
+      serviceAssert(
+        false,
+        "release-recovery",
+        "This unfinished release predates unique integration commits and needs manual recovery."
+      );
     if (hasIntegrationCommit || hasIntegrationInput || hasIntegrationVersion) {
       const candidate = execution.plan.candidates[record.step.role];
       const signature = {

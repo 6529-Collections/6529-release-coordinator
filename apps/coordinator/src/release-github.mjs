@@ -441,7 +441,6 @@ export function createReleaseGitHub({
           "release-stale",
           `Sandbox ${record.step.environment} changed after this release captured its starting version.`
         );
-        record.state = "branch-prepared";
         await save();
       } else if (!["cleaning", "merging", "merged"].includes(record.state)) {
         serviceAssert(
