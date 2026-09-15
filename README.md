@@ -188,7 +188,8 @@ original source-level sequence. The
 proves the GitHub-only build, artifact, built-output E2E, recovery and cleanup
 path from the current working branch.
 
-The next delivery step is to review and merge the current Coordinator branch.
+The Coordinator source is under review in
+[PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149).
 Continue using the test repositories for any follow-up sandbox work. Replacing
 the sandbox adapters with narrow calls to existing product Actions remains a
 later, separately authorized stage. This repository still has no permission or

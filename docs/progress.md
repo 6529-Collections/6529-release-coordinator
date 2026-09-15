@@ -18,7 +18,7 @@ observations carry their original dates unless a newer check is stated.
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). PR #72 merged the v6 writer with exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
 | PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #72 and its merge commit passed Node 20/22/24, package, CodeQL and Snyk checks. All five exact-head 6529bot lanes completed without required changes; CodeRabbit passed and no review thread remained. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
-| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, locked builds and artifacts, matching built-output E2E, then protected test `main` for production requests | The original source-level sequence merged in PR #72. The current working branch passed all 14 build-backed operations live; see [September 15 acceptance](./testing/github-build-e2e-2026-09-15.md). Coordinator source delivery is still local; the generated runtime is merged in the test repositories. No real repository is used. |
+| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, locked builds and artifacts, matching built-output E2E, then protected test `main` for production requests | The original source-level sequence merged in PR #72. [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149) passed all 14 build-backed operations live before source review; see [September 15 acceptance](./testing/github-build-e2e-2026-09-15.md). The generated runtime is merged in the test repositories. No real repository is used. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -36,7 +36,8 @@ frontend or backend repositories.
 
 Package publication and product adoption are complete. The GitHub-only sandbox
 build/E2E stage is implemented and passed live from the current working branch.
-The immediate step is source review and delivery for this Coordinator branch.
+[PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149)
+is the active source review and delivery step.
 Continue in the three test repositories for follow-up sandbox work; do not
 connect the Coordinator to real product execution yet. Real adapters,
 database-changing batches, linked tickets, heartbeat/takeover, rollback and
