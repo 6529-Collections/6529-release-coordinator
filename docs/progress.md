@@ -61,7 +61,7 @@ different release PRs; and CodeRabbit's generated PR-body block was treated as
 an ownership change. Release PRs now have their own commit IDs, the new
 integration checkpoint is validated for recovery, and all fixes have focused
 regressions. The latest local `npm run check` passed all repository gates:
-501 tests ran, 498 passed and 3 were intentionally skipped; lint, formatting,
+503 tests ran, 500 passed and 3 were intentionally skipped; lint, formatting,
 workflow policy and packed-package checks also passed. Full links, commit IDs,
 artifact digests and boundary proof are in the
 [dated acceptance record](./testing/github-build-e2e-2026-09-15.md).

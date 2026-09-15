@@ -997,7 +997,24 @@ test("sandbox runner exercises the exact backend/frontend combination", async ()
       FRONTEND_ARTIFACT_DIGEST: "b".repeat(64)
     }
   });
-  assert.match(result.stdout, /COORDINATOR_RELEASE_RESULT:/u);
+  const successEncoded = result.stdout.match(
+    /COORDINATOR_RELEASE_RESULT:(\S+)/u
+  )?.[1];
+  assert.ok(successEncoded, "expected passing sandbox release result marker");
+  const successReport = JSON.parse(
+    Buffer.from(successEncoded, "base64url").toString()
+  );
+  assert.equal(successReport.status, "passed");
+  for (const role of ["backend", "frontend"]) {
+    assert.equal(
+      successReport.builds[role].manifest.source_commit,
+      operation[`${role}_commit`]
+    );
+    assert.equal(
+      successReport.builds[role].artifact.name,
+      `sandbox-build-${operation.operation_id}-${role}`
+    );
+  }
 
   await writeFile(
     path.join(directory, "candidates/backend/dist/worker.mjs"),

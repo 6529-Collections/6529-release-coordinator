@@ -167,7 +167,7 @@ Final protected branch readback showed matching environment trees:
 ## Local source verification
 
 The latest `npm run check` passed after the live acceptance and review fixes.
-It ran 501 tests: 498 passed, 3 were intentionally skipped and none failed.
+It ran 503 tests: 500 passed, 3 were intentionally skipped and none failed.
 Non-fixing lint, formatting, workflow-policy checks and the isolated packed-CLI
 check also passed. `git diff --check` found no whitespace errors.
 

@@ -5,7 +5,8 @@ import { batchPolicy } from "../src/batch-plan.mjs";
 export function fixture({
   guard = async () => {},
   after = async () => {},
-  role = "backend"
+  role = "backend",
+  policy = batchPolicy
 } = {}) {
   const repo = sandboxProfile.repositories[role];
   const record = {
@@ -88,9 +89,9 @@ export function fixture({
       data = {
         type: "file",
         sha:
-          typeof batchPolicy.workflow_blob === "string"
-            ? batchPolicy.workflow_blob
-            : batchPolicy.workflow_blob[record.role]
+          typeof policy.workflow_blob === "string"
+            ? policy.workflow_blob
+            : policy.workflow_blob[record.role]
       };
     else if (path === "/actions/workflows/sandbox-check.yml")
       data = {
@@ -161,6 +162,7 @@ export function fixture({
     guard,
     execute,
     gates: { pullRequest: async () => structuredClone(gate) },
+    policy,
     logs: async () =>
       `2026-09-10T12:00:00.000Z [command]/usr/bin/git log -1 --format=%H\n2026-09-10T12:00:00.000Z ${merge.sha}\n2026-09-10T12:00:01.000Z ##[group]Run npm test\n` +
       '2026-09-10 {"status":"blocked","steps":[{"unit":"api","status":"blocked"}],"errors":[{"code":"service-failed"}],"cleanup":{"status":"removed"}}\n'

@@ -27,4 +27,11 @@ test("the exact earlier v3 policy remains readable after build checks changed", 
     trustedBatchPolicy(structuredClone(previousBatchPolicy)),
     previousBatchPolicy
   );
+
+  const changed = structuredClone(previousBatchPolicy);
+  changed.max_check_attempts += 1;
+  assert.throws(
+    () => trustedBatchPolicy(changed),
+    /not a trusted Coordinator policy/u
+  );
 });

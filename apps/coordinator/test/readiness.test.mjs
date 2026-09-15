@@ -19,6 +19,7 @@ import {
   inspectPull,
   inspectReadiness
 } from "../src/readiness.mjs";
+import { effectiveRequiredChecks } from "../src/github-checks.mjs";
 import { runReadinessCli } from "../src/readiness-cli.mjs";
 
 const head = "a".repeat(40);
@@ -200,6 +201,19 @@ test("the newest retry decides one required check without trusting ambiguous his
   assert.equal(required.status, "pass");
   assert.equal(required.evidence.required.length, 1);
 
+  const duplicate = {
+    ...f.required,
+    id: "duplicate-failure",
+    conclusion: "FAILURE",
+    checkSuite: attempt(11, 2)
+  };
+  f.pr.checks = [passed, duplicate];
+  result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
+  required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "blocked");
+  assert.equal(required.evidence.required.length, 2);
+
+  f.pr.checks = [passed, cancelled];
   delete passed.checkSuite.workflowRun.runAttempt;
   result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
   required = result.find((item) => item.id === "required_checks");
@@ -220,6 +234,13 @@ test("the newest retry decides one required check without trusting ambiguous his
       conclusion: null
     }
   ]);
+});
+
+test("required check selection needs an exact commit", () => {
+  assert.throws(
+    () => effectiveRequiredChecks([], undefined),
+    /need one exact commit/u
+  );
 });
 
 test("same-named checks from separate workflows never hide one another", () => {
@@ -263,20 +284,13 @@ test("same-named checks from separate workflows never hide one another", () => {
   assert.equal(missingAppRequired.status, "blocked");
   assert.equal(missingAppRequired.evidence.required.length, 2);
 
-  const missingCommit = run(50, "SUCCESS").checkSuite;
-  missingCommit.commit = { oid: null };
-  f.pr.checks = [
-    {
-      ...run(50, "SUCCESS"),
-      id: "missing-commit-pass",
-      checkSuite: missingCommit
-    },
-    {
-      ...run(50, "FAILURE"),
-      id: "missing-commit-fail",
-      checkSuite: missingCommit
-    }
-  ];
+  const missingCommitPass = run(50, "SUCCESS");
+  missingCommitPass.id = "missing-commit-pass";
+  missingCommitPass.checkSuite.commit = { oid: null };
+  const missingCommitFail = run(50, "FAILURE");
+  missingCommitFail.id = "missing-commit-fail";
+  missingCommitFail.checkSuite.commit = { oid: null };
+  f.pr.checks = [missingCommitPass, missingCommitFail];
   const missingCommitResult = inspectPull(
     f.pr,
     f.request.release_parts[0].pull_requests[0],
@@ -287,6 +301,21 @@ test("same-named checks from separate workflows never hide one another", () => {
   );
   assert.equal(missingCommitRequired.status, "blocked");
   assert.equal(missingCommitRequired.evidence.required.length, 2);
+
+  const absentCommit = run(50, "FAILURE");
+  absentCommit.id = "absent-commit-fail";
+  delete absentCommit.checkSuite.commit;
+  f.pr.checks = [run(50, "SUCCESS"), absentCommit];
+  const absentCommitResult = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  const absentCommitRequired = absentCommitResult.find(
+    (item) => item.id === "required_checks"
+  );
+  assert.equal(absentCommitRequired.status, "blocked");
+  assert.equal(absentCommitRequired.evidence.required.length, 2);
 });
 
 for (const [label, mutate, id, status] of [

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createBatchGitHub } from "../src/batch-github.mjs";
 import { realProfile } from "../src/profiles.mjs";
+import { previousBatchPolicy } from "../src/batch-plan.mjs";
 
 import { fixture } from "./batch-github-fixture.mjs";
 
@@ -35,6 +36,16 @@ test("temporary PR writer saves exact identity, verifies checks, and only remove
 test("each sandbox repository uses its own trusted build workflow", async () => {
   for (const role of ["backend", "frontend"]) {
     const f = fixture({ role });
+    assert.equal(
+      (await f.client.identity(role, f.record.base)).workflow_id,
+      101
+    );
+  }
+});
+
+test("the historical scalar workflow pin resolves for both roles", async () => {
+  for (const role of ["backend", "frontend"]) {
+    const f = fixture({ role, policy: previousBatchPolicy });
     assert.equal(
       (await f.client.identity(role, f.record.base)).workflow_id,
       101

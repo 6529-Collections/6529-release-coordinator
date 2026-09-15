@@ -868,13 +868,14 @@ test("legacy in-flight integration states need manual recovery before any write"
     }
   });
   for (const state of ["branch-prepared", "checking"]) {
-    record.state = state;
+    const interrupted = structuredClone(record);
+    interrupted.state = state;
     calls.length = 0;
     await assert.rejects(
       client.integrate({
-        record,
+        record: interrupted,
         candidate,
-        actor: record.actor,
+        actor: interrupted.actor,
         expectedBase: candidate.base,
         save: async () => {}
       }),
