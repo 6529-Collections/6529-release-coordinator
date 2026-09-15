@@ -589,7 +589,7 @@ test("owned branch cleanup requires two consecutive missing reads", async () => 
       environment: "staging",
       role: "backend"
     },
-    state: "checking",
+    state: "cleaning",
     actor,
     target_branch: "1a-staging",
     branch:
@@ -701,7 +701,24 @@ test("merged integration resumes cleanup without recreating its branch", async (
     changed: true
   };
   const mergeCommit = "f".repeat(40);
+  const integrationCommit = "9".repeat(40);
   const actor = { id: "456", login: "tester" };
+  const createdAt = "2026-09-11T12:00:00.000Z";
+  const integrationInput = {
+    message: `Sandbox staging candidate for 11111111-1111-4111-8111-111111111111\n\nExact selected candidate ${candidate.commit}`,
+    tree: candidate.tree,
+    parents: [candidate.commit],
+    author: {
+      name: "Coordinator sandbox",
+      email: "rehearsal@example.invalid",
+      date: createdAt
+    },
+    committer: {
+      name: "Coordinator sandbox",
+      email: "rehearsal@example.invalid",
+      date: createdAt
+    }
+  };
   const record = {
     id: "22222222-2222-4222-8222-222222222222",
     release_id: "11111111-1111-4111-8111-111111111111",
@@ -721,14 +738,17 @@ test("merged integration resumes cleanup without recreating its branch", async (
     number: 7,
     url: "https://example.invalid/pr/7",
     checked_tree: candidate.tree,
-    created_at: "2026-09-11T12:00:00.000Z"
+    created_at: createdAt,
+    integration_version: 1,
+    integration_input: integrationInput,
+    integration_commit: integrationCommit
   };
   const pr = {
     number: 7,
     head: {
       repo: { id: sandboxProfile.repositories.backend.id },
       ref: record.branch,
-      sha: candidate.commit
+      sha: integrationCommit
     },
     base: {
       repo: { id: sandboxProfile.repositories.backend.id },
@@ -749,6 +769,18 @@ test("merged integration resumes cleanup without recreating its branch", async (
     execute: async (args) => {
       const method = args[args.indexOf("--method") + 1];
       const endpoint = args[args.indexOf("--method") + 2];
+      if (method === "POST" && endpoint.endsWith("/git/commits"))
+        return apiResponse("201 Created", {
+          sha: integrationCommit,
+          tree: { sha: candidate.tree },
+          parents: [{ sha: candidate.commit }]
+        });
+      if (endpoint.endsWith(`/git/commits/${integrationCommit}`))
+        return apiResponse("200 OK", {
+          sha: integrationCommit,
+          tree: { sha: candidate.tree },
+          parents: [{ sha: candidate.commit }]
+        });
       if (endpoint.endsWith(`/git/ref/heads/${record.branch}`)) {
         branchReads++;
         return apiResponse("404 Not Found", {});
@@ -761,7 +793,7 @@ test("merged integration resumes cleanup without recreating its branch", async (
       if (endpoint.endsWith(`/git/commits/${mergeCommit}`))
         return apiResponse("200 OK", {
           tree: { sha: candidate.tree },
-          parents: [{ sha: candidate.base }, { sha: candidate.commit }]
+          parents: [{ sha: candidate.base }, { sha: integrationCommit }]
         });
       if (endpoint.endsWith("/git/ref/heads/1a-staging"))
         return apiResponse("200 OK", { object: { sha: mergeCommit } });
@@ -790,6 +822,64 @@ test("merged integration resumes cleanup without recreating its branch", async (
       save: async () => {}
     }),
     /GitHub did not expose the exact checked integration commit/u
+  );
+});
+
+test("legacy in-flight integration needs manual recovery before any write", async () => {
+  const candidate = {
+    role: "backend",
+    base: "e".repeat(40),
+    commit: "c".repeat(40),
+    tree: "d".repeat(40),
+    changed: true
+  };
+  const record = {
+    id: "22222222-2222-4222-8222-222222222222",
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: {
+      id: "staging:integrate:backend",
+      kind: "integrate",
+      environment: "staging",
+      role: "backend"
+    },
+    state: "checking",
+    actor: { id: "456", login: "tester" },
+    target_branch: "1a-staging",
+    branch:
+      "codex/release-11111111-1111-4111-8111-111111111111-staging-backend",
+    body: `Sandbox release 11111111-1111-4111-8111-111111111111\n\nBatch: ${candidate.tree}`,
+    base: candidate.base,
+    number: 7,
+    url: "https://example.invalid/pr/7",
+    created_at: "2026-09-11T12:00:00.000Z"
+  };
+  const calls = [];
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    wait: async () => {},
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      calls.push({ method, endpoint });
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", { object: { sha: candidate.base } });
+      assert.fail(`${method} ${endpoint}`);
+    }
+  });
+  await assert.rejects(
+    client.integrate({
+      record,
+      candidate,
+      actor: record.actor,
+      expectedBase: candidate.base,
+      save: async () => {}
+    }),
+    /predates unique integration commits/u
+  );
+  assert.equal(
+    calls.every(({ method }) => method === "GET"),
+    true
   );
 });
 

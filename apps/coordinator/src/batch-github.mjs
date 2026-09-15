@@ -456,7 +456,7 @@ export function createBatchGitHub({
         "Temporary PR changed during result verification.",
         "stale"
       );
-      const required = effectiveRequiredChecks(observed.checks);
+      const required = effectiveRequiredChecks(observed.checks, record.commit);
       serviceAssert(
         required.some((check) => check.name === policy.required_job),
         "batch-checks",

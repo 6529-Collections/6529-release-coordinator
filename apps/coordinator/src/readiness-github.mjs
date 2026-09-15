@@ -24,7 +24,14 @@ const pullQuery = `query ReadinessPull($repository: String!, $number: Int!, $cur
             __typename
             ... on CheckRun {
               id name status conclusion startedAt completedAt
-              checkSuite { app { databaseId } }
+              checkSuite {
+                commit { oid }
+                app { databaseId }
+                workflowRun {
+                  runNumber runAttempt
+                  workflow { databaseId }
+                }
+              }
               isRequired(pullRequestNumber: $number)
             }
             ... on StatusContext { id context state createdAt isRequired(pullRequestNumber: $number) }

@@ -474,8 +474,11 @@ history into `1a-staging`. Independent lookalike commits on both branches are
 invalid setup because they can make a later release integration conflict. Each
 trial, staging integration and production integration also gets a distinct
 commit ID, so GitHub checks from one stage cannot be reused by another stage.
-For repeated attempts on one commit, the uniquely newest dated required check
-is authoritative; unclear duplicate histories stop the run.
+For repeated attempts on one commit, workflow and run-attempt numbers select the
+newest result without hiding a same-named check from another workflow; incomplete
+or ambiguous identities stop the run. An unfinished integration created before
+unique integration commits cannot resume through the weaker path and needs
+manual recovery. Completed historical evidence remains readable.
 
 Matching E2E must use the built backend and frontend outputs. On one temporary
 GitHub-hosted runner it starts both built applications on local ports, sends a

@@ -159,17 +159,26 @@ test("passing observed checks never imply release permission or invented lifecyc
 
 test("the newest retry decides one required check without trusting ambiguous history", () => {
   const f = fixture();
+  const attempt = (runNumber, runAttempt = 1, workflow = 50) => ({
+    commit: { oid: head },
+    app: { databaseId: 15368 },
+    workflowRun: {
+      runNumber,
+      runAttempt,
+      workflow: { databaseId: workflow }
+    }
+  });
   const cancelled = {
     ...f.required,
     id: "old-cancelled",
     status: "COMPLETED",
     conclusion: "CANCELLED",
-    startedAt: "2026-09-15T10:00:00.000Z"
+    checkSuite: attempt(10)
   };
   const passed = {
     ...f.required,
     id: "new-pass",
-    startedAt: "2026-09-15T10:05:00.000Z"
+    checkSuite: attempt(11)
   };
   f.pr.checks = [passed, cancelled];
   let result = inspectPull(
@@ -184,9 +193,58 @@ test("the newest retry decides one required check without trusting ambiguous his
     ["SUCCESS"]
   );
 
-  delete passed.startedAt;
+  cancelled.checkSuite = attempt(11, 1);
+  passed.checkSuite = attempt(11, 2);
   result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
   required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "pass");
+  assert.equal(required.evidence.required.length, 1);
+
+  delete passed.checkSuite.workflowRun.runAttempt;
+  result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
+  required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "blocked");
+  assert.equal(required.evidence.required.length, 2);
+
+  passed.checkSuite = attempt(12);
+  passed.status = "IN_PROGRESS";
+  passed.conclusion = null;
+  result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
+  required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "blocked");
+  assert.deepEqual(required.evidence.required, [
+    {
+      name: "Build",
+      status: "blocked",
+      state: "IN_PROGRESS",
+      conclusion: null
+    }
+  ]);
+});
+
+test("same-named checks from separate workflows never hide one another", () => {
+  const f = fixture();
+  const run = (workflow, conclusion) => ({
+    ...f.required,
+    id: `workflow-${workflow}`,
+    conclusion,
+    checkSuite: {
+      commit: { oid: head },
+      app: { databaseId: 15368 },
+      workflowRun: {
+        runNumber: 10,
+        runAttempt: 1,
+        workflow: { databaseId: workflow }
+      }
+    }
+  });
+  f.pr.checks = [run(50, "SUCCESS"), run(51, "FAILURE")];
+  const result = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  const required = result.find((item) => item.id === "required_checks");
   assert.equal(required.status, "blocked");
   assert.equal(required.evidence.required.length, 2);
 });

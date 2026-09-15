@@ -211,7 +211,10 @@ export function createReleaseGitHub({
         "release-ownership",
         "Sandbox integration PR changed while checks ran."
       );
-      const required = effectiveRequiredChecks(observed.checks);
+      const required = effectiveRequiredChecks(
+        observed.checks,
+        record.integration_commit ?? candidate.commit
+      );
       serviceAssert(
         required.some((check) => check.name === "Sandbox check"),
         "release-checks",
@@ -451,73 +454,76 @@ export function createReleaseGitHub({
       const legacyIntegration =
         !record.integration_version &&
         ["creating-pr", "checking", "merging", "merged"].includes(record.state);
-      if (!legacyIntegration) {
-        const signature = {
-          name: "Coordinator sandbox",
-          email: "rehearsal@example.invalid",
-          date: record.created_at
-        };
-        const commitInput = {
-          message: `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
-          tree: candidate.tree,
-          parents: [candidate.commit],
-          author: signature,
-          committer: signature
-        };
-        if (!record.integration_version) {
-          record.integration_version = 1;
-          record.integration_input = commitInput;
-          record.state = "commit-prepared";
-          await save();
-        }
-        serviceAssert(
-          record.integration_version === 1 &&
-            JSON.stringify(record.integration_input) ===
-              JSON.stringify(commitInput),
-          "release-state",
-          "Sandbox integration commit input changed."
-        );
-        const created = (
-          await call(
-            role,
-            "POST",
-            "/git/commits",
-            record.integration_input,
-            [201]
-          )
-        ).data;
-        serviceAssert(
-          sha(created?.sha) &&
-            created.tree?.sha === candidate.tree &&
-            created.parents?.length === 1 &&
-            created.parents[0].sha === candidate.commit,
-          "release-ownership",
-          "GitHub did not create the exact sandbox integration commit."
-        );
-        if (record.integration_commit)
-          serviceAssert(
-            record.integration_commit === created.sha,
-            "release-ownership",
-            "Sandbox integration commit changed across retries."
-          );
-        else {
-          record.integration_commit = created.sha;
-          record.state = "branch-prepared";
-          await save();
-        }
-        const observedCommit = (
-          await call(role, "GET", `/git/commits/${record.integration_commit}`)
-        ).data;
-        serviceAssert(
-          observedCommit?.sha === record.integration_commit &&
-            observedCommit.tree?.sha === candidate.tree &&
-            observedCommit.parents?.length === 1 &&
-            observedCommit.parents[0].sha === candidate.commit,
-          "release-ownership",
-          "Sandbox integration commit no longer contains the exact candidate tree."
-        );
+      serviceAssert(
+        !legacyIntegration,
+        "release-recovery",
+        "This unfinished release predates unique integration commits and needs manual recovery."
+      );
+      const signature = {
+        name: "Coordinator sandbox",
+        email: "rehearsal@example.invalid",
+        date: record.created_at
+      };
+      const commitInput = {
+        message: `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
+        tree: candidate.tree,
+        parents: [candidate.commit],
+        author: signature,
+        committer: signature
+      };
+      if (!record.integration_version) {
+        record.integration_version = 1;
+        record.integration_input = commitInput;
+        record.state = "commit-prepared";
+        await save();
       }
-      const integrationCommit = record.integration_commit ?? candidate.commit;
+      serviceAssert(
+        record.integration_version === 1 &&
+          JSON.stringify(record.integration_input) ===
+            JSON.stringify(commitInput),
+        "release-state",
+        "Sandbox integration commit input changed."
+      );
+      const created = (
+        await call(
+          role,
+          "POST",
+          "/git/commits",
+          record.integration_input,
+          [201]
+        )
+      ).data;
+      serviceAssert(
+        sha(created?.sha) &&
+          created.tree?.sha === candidate.tree &&
+          created.parents?.length === 1 &&
+          created.parents[0].sha === candidate.commit,
+        "release-ownership",
+        "GitHub did not create the exact sandbox integration commit."
+      );
+      if (record.integration_commit)
+        serviceAssert(
+          record.integration_commit === created.sha,
+          "release-ownership",
+          "Sandbox integration commit changed across retries."
+        );
+      else {
+        record.integration_commit = created.sha;
+        record.state = "branch-prepared";
+        await save();
+      }
+      const observedCommit = (
+        await call(role, "GET", `/git/commits/${record.integration_commit}`)
+      ).data;
+      serviceAssert(
+        observedCommit?.sha === record.integration_commit &&
+          observedCommit.tree?.sha === candidate.tree &&
+          observedCommit.parents?.length === 1 &&
+          observedCommit.parents[0].sha === candidate.commit,
+        "release-ownership",
+        "Sandbox integration commit no longer contains the exact candidate tree."
+      );
+      const integrationCommit = record.integration_commit;
       const resumedMerged = record.state === "merged";
       if (resumedMerged)
         await deleteOwnedBranch(role, record.branch, integrationCommit);

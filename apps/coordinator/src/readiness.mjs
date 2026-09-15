@@ -184,12 +184,14 @@ export function inspectPull(
     )
   );
 
-  const required = effectiveRequiredChecks(pr.checks).map((item) => ({
-    name: item.name ?? item.context,
-    status: requiredCheckStatus(item),
-    state: item.state ?? item.status,
-    conclusion: item.conclusion ?? null
-  }));
+  const required = effectiveRequiredChecks(pr.checks, pr.headRefOid).map(
+    (item) => ({
+      name: item.name ?? item.context,
+      status: requiredCheckStatus(item),
+      state: item.state ?? item.status,
+      conclusion: item.conclusion ?? null
+    })
+  );
   const requiredStatus = required.some((item) => item.status === "blocked")
     ? "blocked"
     : required.some((item) => item.status === "unknown") || !gatePass

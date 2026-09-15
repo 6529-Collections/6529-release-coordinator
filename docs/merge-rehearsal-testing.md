@@ -788,8 +788,11 @@ production run. A staging build or E2E failure must leave test `main` unchanged.
 Each trial and environment integration uses its own commit ID, even when the
 candidate files are identical, so a check from an earlier PR cannot satisfy a
 later release gate. If GitHub reports several attempts for one required check,
-only the uniquely newest dated attempt counts; ambiguous histories remain
-blocked.
+workflow identity plus run and attempt numbers select the newest matching
+attempt. Same-named checks from separate workflows remain separate, and missing
+or ambiguous identity remains blocked. An unfinished release from before unique
+integration commits stops for manual recovery instead of resuming with reusable
+checks.
 The focused local cases and the complete live sequence passed September 15.
 Live URLs, commits, artifact digests, recovery findings and final ticket/journal
 readback are in the
