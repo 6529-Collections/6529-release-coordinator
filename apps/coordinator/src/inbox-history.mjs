@@ -1,3 +1,4 @@
+import { isReleaseBatchPolicy } from "./batch-plan.mjs";
 import {
   serviceHash,
   validateServicePlan,
@@ -145,7 +146,7 @@ function historyComplete(kind, record) {
     return record.state === "completed" && cleanedService(record);
   return (
     record.status === "finished" &&
-    (record.policy?.version !== "sandbox-batch-v2" ||
+    (!isReleaseBatchPolicy(record.policy) ||
       !record.selected.length ||
       record.execution?.status === "completed") &&
     record.attempts.every(

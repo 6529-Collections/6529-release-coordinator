@@ -225,9 +225,8 @@ export async function checkBatch(
         );
       }
       if (!record) {
-        // Selection applies the deadline before starting a candidate round.
         // A recorded round must finish both repositories and cleanup on resume,
-        // even if the deadline passes after its first PR was created.
+        // even if the selection count budget was reached after it started.
         const identity = await client.identity(spec.role, spec.base);
         record = {
           role: spec.role,

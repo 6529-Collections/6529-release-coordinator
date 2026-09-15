@@ -206,7 +206,7 @@ test("durable batch history requires the exact selected group and completed clea
     save: async () => {},
     check: async (prepared, options) => {
       const h = checkHarness(prepared);
-      return h.run({ ...options, deadline: Date.now() + 60_000 });
+      return h.run(options);
     }
   });
   assert.equal(
@@ -289,7 +289,7 @@ test("saved checks are reverified and changed remote evidence cannot be reused",
   );
 });
 
-test("an interrupted candidate finishes its second repository after the search deadline", async (t) => {
+test("an interrupted candidate finishes its second repository on resume", async (t) => {
   const f = await batchFixture(t),
     prepared = await f.prepare([await f.ticket()]);
   const h = checkHarness(prepared);
@@ -301,7 +301,7 @@ test("an interrupted candidate finishes its second repository after the search d
   await assert.rejects(h.run(), /first PR was saved/);
   assert.equal(h.state().prs.length, 1);
   h.client.open = open;
-  const result = await h.run({ previous: h.state(), deadline: Date.now() - 1 });
+  const result = await h.run({ previous: h.state() });
   assert.equal(result.status, "passed");
   assert.equal(h.state().cleanup, "removed");
   assert.equal(h.state().prs.length, 2);

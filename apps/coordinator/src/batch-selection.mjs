@@ -50,7 +50,9 @@ export async function selectBatch({
         inputs,
         policy,
         created_at: new Date(created).toISOString(),
-        deadline: created + policy.max_elapsed_ms,
+        ...(Number.isFinite(policy.max_elapsed_ms)
+          ? { deadline: created + policy.max_elapsed_ms }
+          : {}),
         attempts: [],
         selected: [],
         status: "searching"
@@ -80,20 +82,20 @@ export async function selectBatch({
   const counts = (phase) =>
     state.attempts.filter((attempt) => attempt.phase === phase).length;
   const limit = (phase) =>
-    now() >= state.deadline ||
     counts(phase) >=
-      (phase === "git" ? policy.max_git_attempts : policy.max_check_attempts);
+    (phase === "git" ? policy.max_git_attempts : policy.max_check_attempts);
   const limited = () => ({
     status: "unknown",
     kind: "limit",
-    message: "The saved attempt or elapsed-time limit was reached."
+    message: "The saved attempt limit was reached."
   });
   async function attempt(group, phase, prepared) {
     const matching = state.attempts.find(
       (value) => value.phase === phase && value.members.join(",") === key(group)
     );
     if (matching?.result) return matching.result;
-    // An in-flight check must reconcile/clean up even after its search deadline.
+    // An in-flight check must reconcile and clean up after its saved count
+    // budget is reached.
     if (!matching && limit(phase)) return limited();
     await current();
     const record = matching ?? {
@@ -131,8 +133,8 @@ export async function selectBatch({
                 save: saveProgress,
                 guard,
                 verify: current,
-                signal,
-                deadline: state.deadline
+                policy,
+                signal
               }),
         (result) => ({
           outcome: logOutcome(result.status),
@@ -185,7 +187,7 @@ export async function selectBatch({
             message:
               "Re-read saved candidate proof without creating new trials or CI."
           },
-          () => revalidate(prepared, record.progress, { guard })
+          () => revalidate(prepared, record.progress, { guard, policy })
         );
       }
       await current();
@@ -269,9 +271,9 @@ export async function selectBatch({
       record.result = await check(prepared, {
         id: record.id,
         previous: record.progress,
-        deadline: state.deadline,
         signal,
         guard,
+        policy,
         verify: async () => {
           throw error;
         },

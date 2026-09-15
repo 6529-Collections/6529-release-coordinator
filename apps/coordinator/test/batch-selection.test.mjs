@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { batchTicketResult } from "../src/batch-selection.mjs";
-import { batchPolicy } from "../src/batch-plan.mjs";
+import { batchPolicy, elapsedBatchPolicy } from "../src/batch-plan.mjs";
 import { ServiceError } from "../src/service-contract.mjs";
 
 import { harness, items } from "./selection-harness.mjs";
@@ -134,29 +134,47 @@ test("an interrupted check resumes its same attempt and saved progress", async (
   assert.deepEqual(result.selected, [1, 2, 3, 4]);
 });
 
-test("elapsed search limit starts no new expensive work and survives resume", async () => {
+test("elapsed time does not stop a new expensive round", async () => {
   const h = harness();
   let clock = 1_000;
   const result = await h.run({
     now: () => clock,
     prepare: async (group) => {
-      clock += batchPolicy.max_elapsed_ms + 1;
+      clock += 365 * 24 * 60 * 60_000;
       return {
         status: "passed",
         numbers: group.map((item) => item.entry.issue_number)
       };
-    },
-    check: async () => assert.fail("expired selection must not start CI")
+    }
   });
-  assert.deepEqual(result.selected, []);
-  assert.equal(result.stop.kind, "limit");
+  assert.deepEqual(result.selected, [1, 2, 3, 4]);
   assert.equal(
     result.attempts.filter((attempt) => attempt.phase === "checks").length,
-    0
+    1
   );
+  assert.equal("deadline" in result, false);
   const next = await h.run({ previous: result, now: () => clock });
-  assert.equal(next.deadline, result.deadline);
-  assert.deepEqual(next.selected, []);
+  assert.deepEqual(next.selected, result.selected);
+});
+
+test("a saved v2 batch can start its next round after its old deadline", async () => {
+  const h = harness({ policy: elapsedBatchPolicy });
+  let clock = 1_000;
+  const completed = await h.run({ now: () => clock });
+  const previous = structuredClone(completed);
+  previous.attempts = previous.attempts.filter(
+    (attempt) => attempt.phase === "git"
+  );
+  previous.selected = [];
+  previous.status = "searching";
+  clock = previous.deadline + 1;
+  const resumed = await h.run({ previous, now: () => clock });
+  assert.deepEqual(resumed.selected, [1, 2, 3, 4]);
+  assert.equal(
+    resumed.attempts.filter((attempt) => attempt.phase === "checks").length,
+    1
+  );
+  assert.equal(resumed.deadline, previous.deadline);
 });
 
 test("a new base invalidates a saved pass even after successful cleanup", async () => {

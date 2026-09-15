@@ -1,3 +1,4 @@
+import { isReleaseBatchPolicy } from "./batch-plan.mjs";
 import { bindRunLog, loggedStep, runEvent } from "./run-log.mjs";
 import { realProfile } from "./profiles.mjs";
 import { readInbox, inspectIssue } from "./inbox-reader.mjs";
@@ -10,6 +11,7 @@ import {
 } from "./inbox-preparation.mjs";
 import { presentRunTicket } from "./inbox-ticket-writer.mjs";
 import { serviceAssert } from "./service-contract.mjs";
+
 const isNumber = (value) => Number.isSafeInteger(value) && value > 0;
 
 export async function processInbox({
@@ -84,7 +86,7 @@ export async function processInbox({
       );
       const active = Object.values(state.batches ?? {}).filter(
         (record) =>
-          record.policy?.version === "sandbox-batch-v2" &&
+          isReleaseBatchPolicy(record.policy) &&
           record.status === "finished" &&
           record.selected.length &&
           (!record.execution ||

@@ -4,6 +4,7 @@ import { buildServicePlan } from "./service-plan.mjs";
 import {
   batchPolicy,
   legacyBatchPolicy,
+  isReleaseBatchPolicy,
   prepareBatch,
   trustedBatchPolicy
 } from "./batch-plan.mjs";
@@ -122,10 +123,7 @@ export async function coordinateInboxBatch({
   const active = run.batch_fingerprint
     ? await loadBatch(run.batch_fingerprint)
     : null;
-  if (
-    active?.policy?.version === "sandbox-batch-v2" &&
-    active.status === "finished"
-  ) {
+  if (isReleaseBatchPolicy(active?.policy) && active.status === "finished") {
     if (
       active.selected.length &&
       active.stop?.status !== "stale" &&
@@ -171,7 +169,7 @@ export async function coordinateInboxBatch({
     const policy = trustedBatchPolicy(active.policy);
     const batch = structuredClone(active);
     const retirement =
-      "The interrupted v1 batch was reconciled and its evidence was preserved. Run a fresh command to create a v2 batch before release.";
+      "The interrupted v1 batch was reconciled and its evidence was preserved. Run a fresh command to create a current batch before release.";
     state.batches ??= {};
     for (const record of batch.attempts.filter(
       (attempt) =>
@@ -192,7 +190,6 @@ export async function coordinateInboxBatch({
       record.result = await check(prepared, {
         id: record.id,
         previous: record.progress,
-        deadline: batch.deadline,
         profile,
         policy,
         signal,
@@ -368,12 +365,15 @@ export async function coordinateInboxBatch({
     "batch-state",
     "Interrupted batch has no saved selection to reconcile."
   );
+  const inputsChanged = original
+    ? serviceHash(original.inputs) !== serviceHash(inputs)
+    : changed;
   run.batch_fingerprint = fingerprint;
   state.lock.batch_fingerprint = fingerprint;
   await save("save batch selection identity");
   state.batches ??= {};
   const batch = await select({
-    items: changed
+    items: inputsChanged
       ? original.inputs.map((value) => ({
           entry: {
             issue_number: value.number,
@@ -383,9 +383,10 @@ export async function coordinateInboxBatch({
         }))
       : suitable,
     previous: original,
+    policy: original?.policy ?? batchPolicy,
     signal,
     guard,
-    verify: changed ? async () => false : () => verify(inputs),
+    verify: inputsChanged ? async () => false : () => verify(inputs),
     prepare: (group) => prepare(group, { profile, signal }),
     check: (prepared, options) => check(prepared, { ...options, profile }),
     revalidate: (prepared, progress, options) =>
@@ -395,11 +396,7 @@ export async function coordinateInboxBatch({
       await save(`batch ${fingerprint.slice(0, 12)} ${value.status}`);
     }
   });
-  if (
-    batch.policy.version === batchPolicy.version &&
-    batch.selected.length &&
-    release
-  )
+  if (isReleaseBatchPolicy(batch.policy) && batch.selected.length && release)
     await release({
       batch,
       state,

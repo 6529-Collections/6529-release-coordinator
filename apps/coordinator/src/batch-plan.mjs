@@ -10,7 +10,7 @@ import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { sandboxServiceRuntime } from "./service-runtime-config.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
 
-const commonBatchPolicy = {
+const elapsedBatchPolicyBase = {
   max_tickets: 10,
   max_prs_per_repository: 10,
   max_git_attempts: 40,
@@ -23,27 +23,63 @@ const commonBatchPolicy = {
   runtime: sandboxServiceRuntime
 };
 
+const commonBatchPolicy = {
+  max_tickets: 10,
+  max_prs_per_repository: 10,
+  max_git_attempts: 40,
+  max_check_attempts: 12,
+  priority: "github-issue-number-ascending",
+  dependencies: "self-contained-tickets-only",
+  required_workflow: "sandbox-check.yml",
+  required_job: "Sandbox check",
+  runtime: sandboxServiceRuntime
+};
+
 export const legacyBatchPolicy = Object.freeze({
-  ...commonBatchPolicy,
+  ...elapsedBatchPolicyBase,
   version: "sandbox-batch-v1",
+  workflow_blob: "6fe8f54d4f3147854c3186c9b3992f983612b0b0"
+});
+
+export const elapsedBatchPolicy = Object.freeze({
+  ...elapsedBatchPolicyBase,
+  version: "sandbox-batch-v2",
+  workflow_blob: "bb736a236bc1d14d2f8ea35ce40953686e91169f"
+});
+
+// A short-lived v2 policy was saved before the sandbox check workflow changed.
+// Keep that exact historical shape readable so it cannot block every later run.
+export const earlierElapsedBatchPolicy = Object.freeze({
+  ...elapsedBatchPolicyBase,
+  version: "sandbox-batch-v2",
   workflow_blob: "6fe8f54d4f3147854c3186c9b3992f983612b0b0"
 });
 
 export const batchPolicy = Object.freeze({
   ...commonBatchPolicy,
-  version: "sandbox-batch-v2",
+  version: "sandbox-batch-v3",
   workflow_blob: "bb736a236bc1d14d2f8ea35ce40953686e91169f"
 });
 
+export function isReleaseBatchPolicy(policy) {
+  return [elapsedBatchPolicy.version, batchPolicy.version].includes(
+    policy?.version
+  );
+}
+
 export function trustedBatchPolicy(policy) {
-  const expected =
-    policy?.version === legacyBatchPolicy.version
-      ? legacyBatchPolicy
-      : policy?.version === batchPolicy.version
-        ? batchPolicy
-        : null;
+  const expected = [
+    legacyBatchPolicy,
+    earlierElapsedBatchPolicy,
+    elapsedBatchPolicy,
+    batchPolicy
+  ].find(
+    (candidate) =>
+      candidate.version === policy?.version &&
+      serviceHash(candidate) === serviceHash(policy)
+  );
   serviceAssert(
-    expected && serviceHash(policy) === serviceHash(expected),
+    expected,
     "batch-policy",
     "Saved batch policy is not a trusted Coordinator policy."
   );

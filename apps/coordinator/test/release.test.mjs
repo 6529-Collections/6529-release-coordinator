@@ -19,7 +19,7 @@ import {
 } from "../src/release-contract.mjs";
 import { makeReleasePlan } from "../src/release-plan.mjs";
 import { serviceHash } from "../src/service-contract.mjs";
-import { legacyBatchPolicy } from "../src/batch-plan.mjs";
+import { elapsedBatchPolicy, legacyBatchPolicy } from "../src/batch-plan.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
 import { harness } from "./inbox-batch-harness.mjs";
@@ -327,7 +327,7 @@ test("a resumed empty batch stays a no-candidate result", async () => {
   batch.execution = { status: "needs-human" };
   assert.throws(
     () => validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile),
-    /Only a selected v2 batch can own release execution/u
+    /Only a selected release-capable batch can own release execution/u
   );
 });
 
@@ -345,6 +345,7 @@ for (const { cleanup, name } of [
     const batch = await selectedBatch();
     batch.inputs = batch.inputs.map(({ number, input }) => ({ number, input }));
     batch.policy = structuredClone(legacyBatchPolicy);
+    batch.deadline = Date.parse(batch.created_at) + batch.policy.max_elapsed_ms;
     batch.fingerprint = serviceHash({
       inputs: batch.inputs,
       policy: batch.policy
@@ -419,7 +420,10 @@ for (const { cleanup, name } of [
     assert.equal(saved.status, "finished");
     assert.deepEqual(saved.selected, []);
     assert.equal(saved.stop.status, "stale");
-    assert.match(saved.stop.message, /fresh command to create a v2 batch/u);
+    assert.match(
+      saved.stop.message,
+      /fresh command to create a current batch/u
+    );
     assert.equal(item.decision.batch.code, "batch-deferred");
     assert.equal(cleanupCalls, 1);
     assert.equal(
@@ -446,6 +450,61 @@ for (const { cleanup, name } of [
       /not a trusted Coordinator policy/u
     );
   });
+
+test("an unfinished v2 batch resumes after its retired deadline", async () => {
+  const h = harness(1);
+  await processInbox(h.options);
+  const reference = Object.values(h.f.state().history.batches)[0];
+  const batch = structuredClone(h.f.file(reference.path).record);
+  delete batch.execution;
+  batch.policy = structuredClone(elapsedBatchPolicy);
+  batch.fingerprint = serviceHash({
+    inputs: batch.inputs,
+    policy: batch.policy
+  });
+  batch.deadline = Date.parse(batch.created_at) + batch.policy.max_elapsed_ms;
+  batch.attempts = batch.attempts.filter((attempt) => attempt.phase === "git");
+  batch.status = "searching";
+  batch.selected = [];
+  delete batch.execution;
+  const input = batch.inputs[0];
+  const sample = h.samples[0];
+  const item = {
+    number: input.number,
+    entry: structuredClone(sample.entry),
+    input: input.input,
+    coordinated: { report: sample.report() },
+    decision: {
+      status: "waiting",
+      reasons: [],
+      next_action: "Continue.",
+      action_owner: "Coordinator",
+      submitter_action: "None currently required."
+    }
+  };
+  let checks = 0;
+  const state = { lock: {}, batches: { [batch.fingerprint]: batch } };
+  const result = await coordinateInboxBatch({
+    items: [item],
+    state,
+    run: { batch_fingerprint: batch.fingerprint },
+    profile: sandboxProfile,
+    guard: async () => {},
+    save: async () => {},
+    verify: async () => true,
+    loadBatch: async () => batch,
+    prepare: async () => assert.fail("saved Git evidence must be reused"),
+    check: async (_prepared, options) => {
+      checks++;
+      assert.equal(options.policy.version, "sandbox-batch-v2");
+      return { status: "passed" };
+    },
+    revalidate: async () => {}
+  });
+  assert.equal(checks, 1);
+  assert.deepEqual(result.selected, [input.number]);
+  assert.equal(result.status, "passed-candidate");
+});
 
 test("completed release history requires every exact operation and report", async () => {
   const batch = await selectedBatch();

@@ -29,9 +29,18 @@ visible. Closing a ticket never silently claims that a release happened.
 The scope is intake defaults, ticket inspection, local merge rehearsal, supported
 sandbox service/database checks, sandbox batch execution, status updates,
 decision history, and migration of existing tickets. Public consumers remain on
-CLI `0.0.4` and schema `0.000001`. Local `0.0.5` source introduces schema
-`0.000002` for recording operational monitoring; it needs a later npm release
-and consumer adoption before product repositories can submit that shape.
+CLI `0.0.5` and schema `0.000002`, including recording for operational
+monitoring. Frontend and backend pin that exact public version. Existing
+`0.000001` requests from older clients remain valid. Recording the monitoring
+work does not deploy it; that real adapter is still future work.
+
+One ticket contains one submitted release request. That request can name
+frontend PRs, backend PRs, or both. A scoped `inbox:run --issue NUMBER` handles
+only that ticket. An unscoped sandbox run can select several separate,
+self-contained tickets and test their exact PR changes together as one batch.
+It never splits a ticket or merges the submitters' source PRs during selection.
+Cross-ticket dependency declarations and database-changing batches are still
+unsupported.
 
 The one-ticket rehearsal only merges in temporary local repositories. An unscoped
 sandbox run may merge its selected candidate into the protected branches of the
@@ -444,7 +453,7 @@ in the sandbox September 11.** The writer keeps complete unfinished work in
 standalone service details to the same independent `codex/inbox-state` branch.
 The former 100-batch and 1,000-service lifetime caps are removed. Per-search
 limits still apply: 10 tickets, 10 PRs per repository, 40 Git attempts, 12 check
-rounds and 45 minutes. Closing a ticket does not erase its evidence.
+rounds, and no elapsed-time cutoff. Closing a ticket does not erase its evidence.
 
 - `inbox-state.json` retains ticket decisions and their transition chains, the
   current lock and plans, complete active attempts, and a compact `history`
@@ -461,8 +470,10 @@ rounds and 45 minutes. Closing a ticket does not erase its evidence.
   ticket still explains outcomes.
 - Exact repeats load only the required record, check its profile, identity,
   checksum and structure, then use the normal remote evidence revalidation.
-  Old attempt IDs, deadlines and budgets remain intact. Missing or altered
-  archives stop reuse; they never mean “start a fresh attempt.”
+  Old attempt IDs and budgets remain intact. Historical v1/v2 deadlines remain
+  in their archived evidence, but they are no longer enforced; new v3 records
+  have no deadline. Missing or altered archives stop reuse; they never mean
+  “start a fresh attempt.”
 
 Archiving is part of releasing a successfully presented manual run, not a new
 command or a background worker. All referenced tickets must have their latest

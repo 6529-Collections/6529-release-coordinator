@@ -130,7 +130,7 @@ test("more than 100 completed batches archive without resetting search budgets o
     record.fingerprint
   );
   assert.deepEqual(loaded.policy, record.policy);
-  assert.equal(loaded.deadline, record.deadline);
+  assert.equal("deadline" in loaded, false);
   assert.deepEqual(loaded.attempts, record.attempts);
   await later.release(next.state, next.run);
 });
@@ -192,7 +192,7 @@ for (const failure of ["missing", "changed", "profile", "summary"]) {
           Buffer.from(result.data.content, "base64").toString()
         );
         if (failure === "profile") archive.repository = "other/inbox";
-        else archive.record.deadline++;
+        else archive.record.status = "invented";
         result.data.content = Buffer.from(JSON.stringify(archive)).toString(
           "base64"
         );

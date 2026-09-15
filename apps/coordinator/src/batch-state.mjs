@@ -6,7 +6,7 @@ import {
 } from "./service-contract.mjs";
 import { validateReleaseExecution } from "./release-state.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
-import { trustedBatchPolicy } from "./batch-plan.mjs";
+import { isReleaseBatchPolicy, trustedBatchPolicy } from "./batch-plan.mjs";
 
 const hash = (value) => /^[0-9a-f]{64}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -22,7 +22,11 @@ export function validateBatchHistory(batches, profile) {
     "Invalid batch history."
   );
   for (const [key, batch] of Object.entries(batches)) {
-    trustedBatchPolicy(batch?.policy);
+    const policy = trustedBatchPolicy(batch?.policy);
+    const created = Date.parse(batch?.created_at);
+    const validLegacyDeadline = Number.isFinite(policy.max_elapsed_ms)
+      ? batch.deadline === created + policy.max_elapsed_ms
+      : batch.deadline === undefined;
     serviceAssert(
       hash(key) &&
         key === batch?.fingerprint &&
@@ -30,13 +34,12 @@ export function validateBatchHistory(batches, profile) {
         Array.isArray(batch.inputs) &&
         batch.inputs.length > 0 &&
         batch.inputs.length <= 10 &&
-        ["sandbox-batch-v1", "sandbox-batch-v2"].includes(
+        ["sandbox-batch-v1", "sandbox-batch-v2", "sandbox-batch-v3"].includes(
           batch.policy?.version
         ) &&
         key === serviceHash({ inputs: batch.inputs, policy: batch.policy }) &&
-        Number.isFinite(Date.parse(batch.created_at)) &&
-        batch.deadline ===
-          Date.parse(batch.created_at) + batch.policy.max_elapsed_ms &&
+        Number.isFinite(created) &&
+        validLegacyDeadline &&
         ["searching", "finished"].includes(batch.status) &&
         Array.isArray(batch.attempts) &&
         batch.attempts.length <=
@@ -200,12 +203,12 @@ export function validateBatchHistory(batches, profile) {
     );
     if (batch.execution) {
       serviceAssert(
-        batch.policy.version === "sandbox-batch-v2" &&
+        isReleaseBatchPolicy(batch.policy) &&
           batch.selected.length &&
           (batch.stop?.status !== "stale" ||
             ["completed", "needs-human"].includes(batch.execution.status)),
         "release-state",
-        "Only a selected v2 batch can own release execution; stale batches can retain only terminal evidence."
+        "Only a selected release-capable batch can own release execution; stale batches can retain only terminal evidence."
       );
       validateReleaseExecution(batch.execution, batch);
     }

@@ -42,6 +42,15 @@ with them.
 Design decisions for the new Coordinator are made in this standalone project
 from first principles.
 
+## Adding limits
+
+Do not add a new Coordinator policy limit for time, retries, attempts, queue
+size, history, batch size, or similar behavior merely as a precaution. Discuss
+the concrete problem and tradeoff with the user first, and add the limit only
+after the user explicitly agrees. Necessary platform timeouts and limits imposed
+by an external service may be represented accurately; document their source.
+Existing limits stay unchanged until they are separately discussed.
+
 ## Documentation map
 
 - `README.md` is the entry point and documentation index.
@@ -108,7 +117,7 @@ from first principles.
   requirements for sandbox batching, not real release authorization. The current
   sandbox adapter and release sequence support self-contained tickets only; cross-ticket dependency
   declarations and database-changing batches remain deferred. Keep cheap
-  filtering before expensive checks, preserve owned trial cleanup and fixed budgets.
+  filtering before expensive checks, preserve owned trial cleanup and agreed count budgets.
 - CLI, inbox reader, and readiness usage belong in their package/application
   READMEs. The JSON Schema owns the request shape; `release-request-schema.md`
   explains it. Ticket lifecycle fields belong to Coordinator state, not the

@@ -70,9 +70,9 @@ JSON uses the unchanged public schema and its two real repository names.
 Sandbox JSON cannot validate as a public release request; test records and
 workflow receipts cannot be promoted by changing the environment setting.
 
-The installed public npm CLI `0.0.4` retains its existing real-only behavior.
-This stage does not publish or require a new npm version. The new profile-aware
-submission command belongs to the private Coordinator workspace.
+The installed public npm CLI `0.0.5` retains the real-only behavior of the
+public submission path. The profile-aware submission command belongs to the
+private Coordinator workspace and is not part of the published package.
 
 `request:submit` and `inbox:run` require an explicit profile. The read-only
 `inbox:read` and `readiness:check` retain their real default and honor an explicit
@@ -142,7 +142,7 @@ resume, a legacy interrupted v1 batch uses its saved targetless identity and
 pinned v1 check policy only to reconcile and clean already-started exact work.
 It starts no new v1 Git or CI trial. Its evidence remains in history, but its
 selection becomes stale and cannot start a release. A later command must create
-and check a fresh v2 batch.
+and check a fresh v3 batch.
 
 Developer test manifests remain sandbox-only fixture inputs. They cannot enter
 the ticket workflow or either decision journal. The public request schema and

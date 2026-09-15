@@ -85,8 +85,10 @@ preserves earlier history on explicit resume. See [run logs](./apps/coordinator/
 The developer [fixture harness](./apps/coordinator/README.md#merge-engine-and-fixture-tests)
 still tests the merge engine against sample PRs, including deliberate failures.
 Test manifests cannot enter the ticket workflow or either decision journal.
-Public npm remains at `0.0.4`. Local package source `0.0.5` adds request schema
-`0.000002` while preserving validation of existing `0.000001` records.
+Public npm version `0.0.5` adds request schema `0.000002` while preserving
+validation of existing `0.000001` records. Frontend and backend pin that exact
+public version; [progress](./docs/progress.md) records the publication and
+consumer merge evidence.
 
 ## Sandbox services and database
 
@@ -212,7 +214,7 @@ and an exact repeat passed from merged source; see
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
 | See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
 | Review agreed release rules and remaining integration work | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |
-| Publish and adopt the next exact package version | [Publishing guide](./docs/npm-publishing.md) |
+| Publish or adopt an exact package version | [Publishing guide](./docs/npm-publishing.md) |
 | Read completed migration/review evidence | [Migration history](./docs/history/npm-migration.md) |
 
 The design and process diagram reflect the September 11 decisions and mark the

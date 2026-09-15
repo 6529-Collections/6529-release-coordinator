@@ -59,7 +59,6 @@ export function checkHarness(
   };
   const options = {
     id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
-    deadline: Date.now() + 60_000,
     save: async (state) => {
       saved = structuredClone(state);
     },
