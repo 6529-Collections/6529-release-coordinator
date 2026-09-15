@@ -16,8 +16,10 @@ import {
 import {
   checkReadiness,
   formatReadiness,
+  inspectPull,
   inspectReadiness
 } from "../src/readiness.mjs";
+import { effectiveRequiredChecks } from "../src/github-checks.mjs";
 import { runReadinessCli } from "../src/readiness-cli.mjs";
 
 const head = "a".repeat(40);
@@ -154,6 +156,209 @@ test("passing observed checks never imply release permission or invented lifecyc
     getCheck(result, "release_merge_plan").message,
     /combined PR merge/
   );
+});
+
+test("the newest retry decides one required check without trusting ambiguous history", () => {
+  const f = fixture();
+  const attempt = (runNumber, runAttempt = 1, workflow = 50) => ({
+    commit: { oid: head },
+    app: { databaseId: 15368 },
+    workflowRun: {
+      runNumber,
+      runAttempt,
+      workflow: { databaseId: workflow }
+    }
+  });
+  const cancelled = {
+    ...f.required,
+    id: "old-cancelled",
+    status: "COMPLETED",
+    conclusion: "CANCELLED",
+    checkSuite: attempt(10)
+  };
+  const passed = {
+    ...f.required,
+    id: "new-pass",
+    checkSuite: attempt(11)
+  };
+  f.pr.checks = [passed, cancelled];
+  let result = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  let required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "pass");
+  assert.deepEqual(
+    required.evidence.required.map((item) => item.conclusion),
+    ["SUCCESS"]
+  );
+
+  cancelled.checkSuite = attempt(11, 1);
+  passed.checkSuite = attempt(11, 2);
+  result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
+  required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "pass");
+  assert.equal(required.evidence.required.length, 1);
+
+  const duplicate = {
+    ...f.required,
+    id: "duplicate-failure",
+    conclusion: "FAILURE",
+    startedAt: "2026-09-11T12:01:00.000Z",
+    checkSuite: attempt(11, 2)
+  };
+  f.pr.checks = [passed, duplicate];
+  result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
+  required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "blocked");
+  assert.equal(required.evidence.required.length, 2);
+
+  f.pr.checks = [passed, cancelled];
+  delete passed.checkSuite.workflowRun.runAttempt;
+  result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
+  required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "blocked");
+  assert.equal(required.evidence.required.length, 2);
+
+  passed.checkSuite = attempt(12);
+  passed.status = "IN_PROGRESS";
+  passed.conclusion = null;
+  result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
+  required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "blocked");
+  assert.deepEqual(required.evidence.required, [
+    {
+      name: "Build",
+      status: "blocked",
+      state: "IN_PROGRESS",
+      conclusion: null
+    }
+  ]);
+});
+
+test("required check selection needs an exact commit", () => {
+  for (const value of [undefined, null, "short"])
+    assert.throws(
+      () => effectiveRequiredChecks([], value),
+      /need one exact commit/u
+    );
+});
+
+test("same-named checks from separate workflows never hide one another", () => {
+  const f = fixture();
+  const run = (workflow, conclusion) => ({
+    ...f.required,
+    id: `workflow-${workflow}`,
+    conclusion,
+    checkSuite: {
+      commit: { oid: head },
+      app: { databaseId: 15368 },
+      workflowRun: {
+        runNumber: 10,
+        runAttempt: 1,
+        workflow: { databaseId: workflow }
+      }
+    }
+  });
+  f.pr.checks = [run(50, "SUCCESS"), run(51, "FAILURE")];
+  const result = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  const required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "blocked");
+  assert.equal(required.evidence.required.length, 2);
+
+  f.pr.checks = [
+    { ...run(50, "SUCCESS"), id: "missing-app-pass", checkSuite: null },
+    { ...run(50, "FAILURE"), id: "missing-app-fail", checkSuite: null }
+  ];
+  const missingAppResult = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  const missingAppRequired = missingAppResult.find(
+    (item) => item.id === "required_checks"
+  );
+  assert.equal(missingAppRequired.status, "blocked");
+  assert.equal(missingAppRequired.evidence.required.length, 2);
+
+  const missingCommitPass = run(50, "SUCCESS");
+  missingCommitPass.id = "same-missing-commit";
+  missingCommitPass.checkSuite.commit = { oid: null };
+  const missingCommitFail = run(50, "FAILURE");
+  missingCommitFail.id = "same-missing-commit";
+  missingCommitFail.checkSuite.commit = { oid: null };
+  f.pr.checks = [missingCommitPass, missingCommitFail];
+  const missingCommitResult = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  const missingCommitRequired = missingCommitResult.find(
+    (item) => item.id === "required_checks"
+  );
+  assert.equal(missingCommitRequired.status, "blocked");
+  assert.equal(missingCommitRequired.evidence.required.length, 2);
+
+  const absentCommit = run(50, "FAILURE");
+  absentCommit.id = "absent-commit-fail";
+  delete absentCommit.checkSuite.commit;
+  f.pr.checks = [run(50, "SUCCESS"), absentCommit];
+  const absentCommitResult = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  const absentCommitRequired = absentCommitResult.find(
+    (item) => item.id === "required_checks"
+  );
+  assert.equal(absentCommitRequired.status, "blocked");
+  assert.equal(absentCommitRequired.evidence.required.length, 2);
+
+  const missingWorkflowPass = run(50, "SUCCESS");
+  missingWorkflowPass.id = "missing-workflow-pass";
+  delete missingWorkflowPass.checkSuite.workflowRun;
+  const missingWorkflowFail = run(50, "FAILURE");
+  missingWorkflowFail.id = "missing-workflow-fail";
+  delete missingWorkflowFail.checkSuite.workflowRun;
+  f.pr.checks = [missingWorkflowPass, missingWorkflowFail];
+  const missingWorkflowResult = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  const missingWorkflowRequired = missingWorkflowResult.find(
+    (item) => item.id === "required_checks"
+  );
+  assert.equal(missingWorkflowRequired.status, "blocked");
+  assert.equal(missingWorkflowRequired.evidence.required.length, 2);
+
+  for (const [field, value] of [
+    ["runNumber", 0],
+    ["runAttempt", null]
+  ]) {
+    const invalidPass = run(50, "SUCCESS");
+    invalidPass.id = `invalid-${field}-pass`;
+    invalidPass.checkSuite.workflowRun[field] = value;
+    const invalidFail = run(50, "FAILURE");
+    invalidFail.id = `invalid-${field}-fail`;
+    invalidFail.checkSuite.workflowRun[field] = value;
+    f.pr.checks = [invalidPass, invalidFail];
+    const invalidResult = inspectPull(
+      f.pr,
+      f.request.release_parts[0].pull_requests[0],
+      repo
+    );
+    const invalidRequired = invalidResult.find(
+      (item) => item.id === "required_checks"
+    );
+    assert.equal(invalidRequired.status, "blocked");
+    assert.equal(invalidRequired.evidence.required.length, 2);
+  }
 });
 
 for (const [label, mutate, id, status] of [

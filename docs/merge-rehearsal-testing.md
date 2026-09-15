@@ -1,7 +1,7 @@
 # Sandbox rehearsal and testing
 
 **Original merge-rehearsal scope prepared September 9, 2026; current scope updated
-September 11.** The original bounded stage after inbox organization is complete.
+September 15.** The original bounded stage after inbox organization is complete.
 [Progress](./progress.md) records what has actually run;
 [the app guide](../apps/coordinator/README.md) lists commands that exist. The
 engine merged in PR #26; the public sandbox follow-up completed live required-check
@@ -65,16 +65,24 @@ It does not overwrite an unrelated existing repository.
 | `release-coordinator-test-frontend` | A small frontend consumer with an output assertion, earlier merge fixtures, and a generated copy of the shared test runtime. |
 | `release-coordinator-test-backend` | Database schema/data definitions, worker and API programs, and `src/config/deploy-services.json` declaring `dbMigrationsLoop -> worker -> api`; also the pinned service-check workflow and generated runtime. |
 
+The GitHub-only build stage adds a private npm package and lockfile to each test
+repository. `npm run build` must create role-specific `dist` output and a
+manifest bound to the exact source commit. Ordinary PR checks and release
+operations upload that output as short-lived GitHub Actions artifacts. No
+artifact is published to npm or copied to a product repository.
+
 Each repository starts with a recorded baseline on `main`. Add a test-only
 `rehearsal-target` branch to prove that the selected destination matters.
 Create new named branches and PRs per case; do not reuse an old PR by changing
 its meaning. Record the actual baseline commits and PR numbers after setup.
 
 The original merge-only fixtures used a minimal `Sandbox check`. The current
-sample PR checks run meaningful program assertions with temporary MySQL using
-the same generated runtime as the ticket checks. Keep `Sandbox check` with read-only
-contents permission, no deployment or publication jobs, no product secrets,
-and no dependency installation. Pin any Actions used to reviewed commits.
+sample PR checks use a reviewed lockfile, install with `npm ci --ignore-scripts`,
+run meaningful program assertions, build a `dist` package and upload it with a
+pinned artifact action. The separate ticket service check continues to own
+temporary MySQL behavior. Keep `Sandbox check` with read-only contents
+permission, no deployment or publication jobs, and no product secrets. Pin any
+Actions used to reviewed commits.
 Require the check on the tested destination branches, disable force pushes,
 and verify the rules are actually enforced. Private repository rules and
 Actions availability must be checked during setup; if unavailable, record the
@@ -754,6 +762,46 @@ production, and matching E2E. The Coordinator recorded all 14 exact operations,
 closed the ticket only after the final result, removed its owned branches, and
 released its journal lock. See the
 [dated evidence](./testing/release-sequence-2026-09-11.md).
+
+### GitHub-only build and E2E extension
+
+This extension is implemented first in Coordinator source, then installed by a
+normal PR to `main` in each test repository. After those PRs merge, current
+`main` is merged into `1a-staging` through another normal protected PR. Do not
+publish matching runtime files as unrelated commits on both branches: their
+trees may look equal while their histories diverge, which makes later release
+PRs conflict. It uses no outside host. A GitHub Actions runner performs
+`npm ci --ignore-scripts`, the
+repository test, and `npm run build`; successful output is uploaded with the
+pinned artifact action. The release report records and validates each build
+manifest and uploaded artifact digest.
+
+For E2E, the workflow builds both exact environment commits, starts the built
+backend and frontend on local runner ports, and requests the rendered result
+through their HTTP boundary. E2E passes only for the exact commit pair in the
+saved operation. The processes and runner are temporary. The existing isolated
+MySQL service check remains separate and still owns database behavior.
+
+Acceptance requires a focused local success/tamper/failure test set, protected
+test-repository PR checks for the generated runtime, and one live staging then
+production run. A staging build or E2E failure must leave test `main` unchanged.
+Each trial and environment integration uses its own commit ID, even when the
+candidate files are identical, so a check from an earlier PR cannot satisfy a
+later release gate. If GitHub reports several attempts for one required check,
+workflow identity plus run and attempt numbers select the newest matching
+attempt. Same-named checks from separate workflows remain separate, and missing
+or ambiguous identity remains blocked. An unfinished release from before unique
+integration commits stops for manual recovery instead of resuming with reusable
+checks.
+The focused local cases and the complete live sequence passed September 15.
+Live URLs, commits, artifact digests, recovery findings and final ticket/journal
+readback are in the
+[dated acceptance record](./testing/github-build-e2e-2026-09-15.md).
+Later review fixes were republished through protected test-repository PRs and
+merged from each current `main` into `1a-staging`. Fresh repository checks passed,
+and readback confirmed that both roles and environment branches contain the
+exact newly pinned runtime files. This narrow runtime refresh did not rerun the
+complete release sequence; the dated record separates those two proof layers.
 
 The same rules below remain the acceptance contract for future sandbox changes
 and the real-product adapters. A sandbox pass is not permission or proof of a

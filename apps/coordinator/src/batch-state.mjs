@@ -34,9 +34,12 @@ export function validateBatchHistory(batches, profile) {
         Array.isArray(batch.inputs) &&
         batch.inputs.length > 0 &&
         batch.inputs.length <= 10 &&
-        ["sandbox-batch-v1", "sandbox-batch-v2", "sandbox-batch-v3"].includes(
-          batch.policy?.version
-        ) &&
+        [
+          "sandbox-batch-v1",
+          "sandbox-batch-v2",
+          "sandbox-batch-v3",
+          "sandbox-batch-v4"
+        ].includes(batch.policy?.version) &&
         key === serviceHash({ inputs: batch.inputs, policy: batch.policy }) &&
         Number.isFinite(created) &&
         validLegacyDeadline &&

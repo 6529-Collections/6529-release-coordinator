@@ -22,8 +22,19 @@ const pullQuery = `query ReadinessPull($repository: String!, $number: Int!, $cur
           pageInfo { hasNextPage endCursor }
           nodes {
             __typename
-            ... on CheckRun { id name status conclusion isRequired(pullRequestNumber: $number) }
-            ... on StatusContext { id context state isRequired(pullRequestNumber: $number) }
+            ... on CheckRun {
+              id name status conclusion startedAt completedAt
+              checkSuite {
+                commit { oid }
+                app { databaseId }
+                workflowRun {
+                  runNumber runAttempt
+                  workflow { databaseId }
+                }
+              }
+              isRequired(pullRequestNumber: $number)
+            }
+            ... on StatusContext { id context state createdAt isRequired(pullRequestNumber: $number) }
           }
         } }
       } } }
