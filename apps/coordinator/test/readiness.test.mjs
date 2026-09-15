@@ -205,6 +205,7 @@ test("the newest retry decides one required check without trusting ambiguous his
     ...f.required,
     id: "duplicate-failure",
     conclusion: "FAILURE",
+    startedAt: "2026-09-11T12:01:00.000Z",
     checkSuite: attempt(11, 2)
   };
   f.pr.checks = [passed, duplicate];
@@ -286,10 +287,10 @@ test("same-named checks from separate workflows never hide one another", () => {
   assert.equal(missingAppRequired.evidence.required.length, 2);
 
   const missingCommitPass = run(50, "SUCCESS");
-  missingCommitPass.id = "missing-commit-pass";
+  missingCommitPass.id = "same-missing-commit";
   missingCommitPass.checkSuite.commit = { oid: null };
   const missingCommitFail = run(50, "FAILURE");
-  missingCommitFail.id = "missing-commit-fail";
+  missingCommitFail.id = "same-missing-commit";
   missingCommitFail.checkSuite.commit = { oid: null };
   f.pr.checks = [missingCommitPass, missingCommitFail];
   const missingCommitResult = inspectPull(

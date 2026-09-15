@@ -49,7 +49,7 @@ export function effectiveRequiredChecks(checks, expectedCommit) {
       attempt?.identity ??
       (check.__typename === "StatusContext" && check.context
         ? `status:${check.context}`
-        : `unique:${check.id ?? index}`);
+        : `unique:${index}`);
     groups.set(key, [...(groups.get(key) ?? []), { check, attempt }]);
   }
   return [...groups.values()].flatMap((group) => {

@@ -664,10 +664,25 @@ test("completed release history requires every exact operation and report", asyn
   delete unfinishedLegacy.operations[firstIntegration.id].integration_version;
   delete unfinishedLegacy.operations[firstIntegration.id].integration_input;
   delete unfinishedLegacy.operations[firstIntegration.id].integration_commit;
-  assert.throws(
-    () => validateReleaseExecution(unfinishedLegacy, batch),
-    /predates unique integration commits/u
-  );
+  for (const state of [
+    "commit-prepared",
+    "branch-prepared",
+    "creating-pr",
+    "checking",
+    "cleaning",
+    "merging",
+    "merged",
+    "dispatching",
+    "running",
+    "completed"
+  ]) {
+    unfinishedLegacy.operations[firstIntegration.id].state = state;
+    assert.throws(
+      () => validateReleaseExecution(unfinishedLegacy, batch),
+      /predates unique integration commits/u
+    );
+  }
+  unfinishedLegacy.operations[firstIntegration.id].state = "completed";
   for (const fields of [
     {
       integration_commit:
@@ -1005,6 +1020,33 @@ test("release operation/report are exact and reject changed versions", () => {
         operation
       ),
     /does not match/
+  );
+
+  const deployOperation = makeReleaseOperation({
+    release_id: operation.release_id,
+    operation_id: "33333333-3333-4333-8333-333333333333",
+    operation: "deploy",
+    environment: "staging",
+    role: "backend",
+    unit: "worker",
+    backend_commit: operation.backend_commit,
+    frontend_commit: operation.frontend_commit
+  });
+  const deploy = report({ operation: deployOperation });
+  assert.throws(
+    () =>
+      verifyReleaseReport(
+        {
+          ...deploy,
+          builds: { ...deploy.builds, frontend: exact.builds.frontend }
+        },
+        deployOperation
+      ),
+    /does not match/u
+  );
+  assert.throws(
+    () => verifyReleaseReport({ ...deploy, builds: {} }, deployOperation),
+    /does not match/u
   );
 });
 

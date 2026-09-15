@@ -72,29 +72,19 @@ test("locked sandbox builds produce exact role manifests", async () => {
     sha256: "a".repeat(64),
     bytes: 1
   }));
-  assert.equal(
+  const manifest = (bytes) =>
     makeReleaseBuild({
       role: "backend",
       source_commit: "b".repeat(40),
       files: manifestFiles.map((file, index) => ({
         ...file,
-        bytes: index === 0 ? 100_000 : file.bytes
+        bytes: index === 0 ? bytes : file.bytes
       }))
-    }).files[0].bytes,
-    100_000
-  );
-  assert.throws(
-    () =>
-      makeReleaseBuild({
-        role: "backend",
-        source_commit: "b".repeat(40),
-        files: manifestFiles.map((file, index) => ({
-          ...file,
-          bytes: index === 0 ? 100_001 : file.bytes
-        }))
-      }),
-    /Invalid sandbox application build/u
-  );
+    });
+  for (const bytes of [1, 99_999, 100_000])
+    assert.equal(manifest(bytes).files[0].bytes, bytes);
+  for (const bytes of [0, 100_001, Number.NaN, "1"])
+    assert.throws(() => manifest(bytes), /Invalid sandbox application build/u);
 
   const root = await mkdtemp(path.join(os.tmpdir(), "sandbox-build-"));
   try {
