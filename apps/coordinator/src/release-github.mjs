@@ -413,6 +413,7 @@ export function createReleaseGitHub({
         "Invalid sandbox integration input."
       );
       const targetBranch = target(runtime, record.step.environment);
+      const startingState = record.state;
       if (!candidate.changed) {
         const current = await ref(role, targetBranch);
         serviceAssert(
@@ -453,7 +454,13 @@ export function createReleaseGitHub({
         return cleanupFailedPull(role, record, candidate, save);
       const legacyIntegration =
         !record.integration_version &&
-        ["creating-pr", "checking", "merging", "merged"].includes(record.state);
+        [
+          "branch-prepared",
+          "creating-pr",
+          "checking",
+          "merging",
+          "merged"
+        ].includes(startingState);
       serviceAssert(
         !legacyIntegration,
         "release-recovery",

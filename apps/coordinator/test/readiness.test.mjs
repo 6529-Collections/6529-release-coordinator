@@ -247,6 +247,21 @@ test("same-named checks from separate workflows never hide one another", () => {
   const required = result.find((item) => item.id === "required_checks");
   assert.equal(required.status, "blocked");
   assert.equal(required.evidence.required.length, 2);
+
+  f.pr.checks = [
+    { ...run(50, "SUCCESS"), id: "missing-app-pass", checkSuite: null },
+    { ...run(50, "FAILURE"), id: "missing-app-fail", checkSuite: null }
+  ];
+  const missingAppResult = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  const missingAppRequired = missingAppResult.find(
+    (item) => item.id === "required_checks"
+  );
+  assert.equal(missingAppRequired.status, "blocked");
+  assert.equal(missingAppRequired.evidence.required.length, 2);
 });
 
 for (const [label, mutate, id, status] of [

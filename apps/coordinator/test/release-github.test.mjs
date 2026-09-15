@@ -825,7 +825,7 @@ test("merged integration resumes cleanup without recreating its branch", async (
   );
 });
 
-test("legacy in-flight integration needs manual recovery before any write", async () => {
+test("legacy in-flight integration states need manual recovery before any write", async () => {
   const candidate = {
     role: "backend",
     base: "e".repeat(40),
@@ -867,20 +867,24 @@ test("legacy in-flight integration needs manual recovery before any write", asyn
       assert.fail(`${method} ${endpoint}`);
     }
   });
-  await assert.rejects(
-    client.integrate({
-      record,
-      candidate,
-      actor: record.actor,
-      expectedBase: candidate.base,
-      save: async () => {}
-    }),
-    /predates unique integration commits/u
-  );
-  assert.equal(
-    calls.every(({ method }) => method === "GET"),
-    true
-  );
+  for (const state of ["branch-prepared", "checking"]) {
+    record.state = state;
+    calls.length = 0;
+    await assert.rejects(
+      client.integrate({
+        record,
+        candidate,
+        actor: record.actor,
+        expectedBase: candidate.base,
+        save: async () => {}
+      }),
+      /predates unique integration commits/u
+    );
+    assert.equal(
+      calls.every(({ method }) => method === "GET"),
+      true
+    );
+  }
 });
 
 test("real profile and unpinned release runtime are refused", () => {
