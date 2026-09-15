@@ -46,7 +46,7 @@ opening temporary PRs for normal CI, then check combined services on GitHub Acti
 The selected batch goes backend -> frontend -> matching E2E in sandbox staging.
 A production-target batch repeats that sequence on sandbox main only after staging passes.
 Limits: 10 tickets, 10 PRs/repository, 40 combined Git attempts, 12 candidate check rounds,
-45 minutes to start new work. In-flight attempts must still reconcile and clean up.
+with no elapsed-time cutoff. In-flight attempts must still reconcile and clean up.
 Only confirmed code failures trigger bounded splitting; uncertainty keeps tickets waiting.
 Real mode only rehearses Git. --issue still supports one-ticket database-change tests.
 No product merge, deployment, or real release authorization.

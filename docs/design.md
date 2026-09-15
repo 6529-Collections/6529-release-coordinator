@@ -253,7 +253,7 @@ flowchart TD
 
 ### Saved order, scope and limits
 
-The code-owned `sandbox-batch-v2` policy uses ascending GitHub Issue number as a
+The code-owned `sandbox-batch-v3` policy uses ascending GitHub Issue number as a
 stable intake order. The requester cannot choose priority through `created_at`.
 Each ticket is indivisible: all its parts, PRs and selected services stay together.
 The current intake contract describes dependencies within a ticket. Cross-ticket
@@ -262,12 +262,17 @@ work in one complete ticket. Overlapping PR requests remain held by the initial
 policy, without choosing a version by age.
 
 A selection contains at most **10 tickets and 10 PRs per repository**. Its saved
-search permits **40 combined Git attempts and 12 candidate check rounds**, with
-**45 minutes to start new rounds**. Each round can run one normal PR workflow per
-changed repository, one combined service workflow, and an unchanged-baseline
-workflow only when diagnosing a code failure. Existing attempts still reconcile
-and clean up after the search deadline; a deadline does not erase ownership.
-Ticket/PR overflow stays waiting instead of breaking up a ticket.
+search permits **40 combined Git attempts and 12 candidate check rounds**. It has
+no elapsed-time cutoff: a slow but active run may keep starting rounds until it
+reaches a count budget, finishes, is interrupted, or stops on invalid evidence.
+Each round can run one normal PR workflow per changed repository, one combined
+service workflow, and an unchanged-baseline workflow only when diagnosing a code
+failure. Existing attempts still reconcile and clean up after a count budget is
+reached. Ticket/PR overflow stays waiting instead of breaking up a ticket.
+
+Historical v1 and v2 records retain their saved deadline as evidence. The
+Coordinator can read and recover those records, but it no longer enforces that
+retired deadline. New v3 records do not contain one.
 
 All candidates in one search use the same saved main commits and PR versions.
 Each candidate rebuilds the full service graph. Its identity includes exact
@@ -329,7 +334,7 @@ An interrupted `sandbox-batch-v1` record is a recovery case, not current release
 evidence. Resume validates its original targetless identity and trusted v1 policy,
 then reconciles and cleans only already-started exact trials. It starts no new v1
 Git or CI work. The Coordinator preserves the record, clears any selected
-candidate and marks it stale. The next manual command starts a fresh v2 batch;
+candidate and marks it stale. The next manual command starts a fresh v3 batch;
 v1 evidence can never enter the release sequence.
 
 [Ticket projections](./inbox-processing.md#proposed-batch-ticket-outcomes) own

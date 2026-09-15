@@ -22,11 +22,12 @@ PRs run checks without publishing. The local reader change also makes that
 check run both workspace test suites. Package creation/publication is still
 scoped explicitly to the release-request workspace.
 
-Installed `0.0.4` clients can keep submitting schema `0.000001`; the Coordinator
-preserves that validator. Local source version `0.0.5` and schema `0.000002` add
-operational-monitoring recording. That new shape is not available to product
-repositories until `0.0.5` is reviewed, merged, published through the protected
-workflow, and pinned by each consumer that needs it.
+Public version `0.0.5` and schema `0.000002` add operational-monitoring
+recording. It was published through the protected workflow and is pinned in
+frontend and backend `main`. Older `0.0.4` clients can keep submitting schema
+`0.000001`; the Coordinator preserves that validator. See
+[progress](./progress.md#cli-005-publication-and-consumer-adoption-september-15)
+for the exact publication, provenance, consumer PR, merge and check evidence.
 
 ## Publish a new version
 

@@ -693,7 +693,7 @@ passing groups must never be used as a substitute for testing their union.
 | BA-06: One ticket contains multiple frontend/backend PRs | Splitting never drops a part, PR, or selected service from a ticket. Rebuild each candidate's complete service plan. |
 | BA-07: Requests must ship together | Inseparable work stays inside one complete ticket. The first implementation does not accept cross-ticket dependency declarations; a trusted representation and group acceptance remain deferred. |
 | BA-08: Changed candidate inputs | Changed base, PR commit, membership, order, scope, or required workflow configuration cannot inherit a pass from different inputs. Source-head movement never silently replaces the accepted version. |
-| BA-09: Search reaches a limit | Stop at the configured attempt/time limits. Preserve a verified candidate if present; otherwise none proceeds. Untested/excluded tickets stay visible with incomplete-investigation reasons. |
+| BA-09: Search reaches a limit | Stop at the configured attempt-count limits. Preserve a verified candidate if present; otherwise none proceeds. Untested/excluded tickets stay visible with incomplete-investigation reasons. Elapsed time alone does not stop a round. |
 | BA-10: Infrastructure or evidence failure | Runner outage, pending/missing result, baseline failure, and unavailable proof do not become individual code blame or automatic group splitting. Bounded retries and maintainer ownership are recorded. |
 | BA-11: Repeat or resume | Preserve priority, attempts, saved inputs, budget and comment identities. Unchanged observations do not duplicate decisions/comments; inconsistent or unknown state stops safely. |
 | BA-12: Temporary PR/check lifecycle | Verify owned branches/PRs, expected check identities and combined commits, missing/skipped required-check rejection, clean completion and interruption cleanup. Temporary PRs never merge; source PRs/branches remain unchanged. |
@@ -729,7 +729,7 @@ injection and volume cases below remain offline proof; the real inbox was not mi
 | Competing writer during compaction | At most one non-force commit advances; the loser does not discard data or proceed with external actions. | Passed offline |
 | Subsequent ordinary journal writes | Preserve all archived files and index structure; validate full archive content on write/read, rather than recreating a state-only tree. | Passed offline + live sandbox |
 | Existing v4 migration and older writer | Preserve receipts, transitions, service/batch identities and budgets. Older writers reject the new marker before mutation. | Passed offline; migration also passed live sandbox |
-| Interrupted v1 batch under the v2 Coordinator | Reconcile and clean only already-started exact v1 work with its pinned policy; start no new v1 trial, preserve IDs/evidence, retire the selection as stale and require a fresh v2 command before release. | Passed offline |
+| Interrupted v1 batch under the current Coordinator | Reconcile and clean only already-started exact v1 work with its pinned policy; start no new v1 trial, preserve IDs/evidence, retire the selection as stale and require a fresh v3 command before release. | Passed offline |
 | Standalone service history and linked records | Archive only fully finished, unneeded records; preserve active references and prevent the existing 1,000-record cap becoming another lifetime stop. | Passed offline |
 
 Offline cases also cover immutable snapshots for later stale observations,

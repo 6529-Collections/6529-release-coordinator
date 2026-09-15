@@ -1,19 +1,19 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-14**, against merged source `ebb0edb` and the live
-sandbox acceptance below. This page separates implemented behavior, source
-delivery and live proof. Earlier GitHub/package observations carry their original
-dates; they were not repeated during this cleanup.
+Last reviewed: **2026-09-15**, against merged source `502c429`, the live package
+and consumer evidence below, and the earlier sandbox acceptance. This page
+separates implemented behavior, source delivery and live proof. Earlier
+observations carry their original dates unless a newer check is stated.
 
 ## Current state
 
 | Area | What is available | Evidence boundary |
 | --- | --- | --- |
-| Request submission | Public npm CLI `0.0.4`, plus merged `0.0.5` source with schema `0.000002`; old `0.000001` requests remain readable | Earlier frontend/backend delivery tests passed. The monitoring shape is merged but not published or adopted; see [publication guide](./npm-publishing.md). |
+| Request submission | Public npm CLI `0.0.5` with schema `0.000002`; old `0.000001` requests remain readable | Published from protected Coordinator `main` with provenance, then pinned and merged in frontend and backend; see [September 15 evidence](#cli-005-publication-and-consumer-adoption-september-15). |
 | Operational monitoring intake | Monitoring-only backend requests can be created, validated, displayed, labeled, and have their exact PR checked | Merged in [PR #72](https://github.com/6529-Collections/6529-release-coordinator/pull/72) with automated coverage. Deployment and target-health checks are deliberately unavailable, so these tickets stay waiting and cannot enter rehearsal/execution. |
 | Ticket workflow | One manual `inbox:run` command reads requests, checks exact PRs and updates the same tickets | Unified workflow and subsequent sandbox work are merged; [command guide](../apps/coordinator/README.md#run-the-ticket-workflow). |
 | Sandbox service/database checks | One-ticket checks run sample services and temporary MySQL in GitHub Actions | Local and live acceptance passed; see [source delivery](#sandbox-source-delivery-september-10). |
-| Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). |
+| Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). The current working branch removes the old 45-minute cutoff through policy v3 while retaining attempt-count budgets and v1/v2 history compatibility; this part is not yet merged or live-tested. |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). PR #72 merged the v6 writer with exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
 | PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #72 and its merge commit passed Node 20/22/24, package, CodeQL and Snyk checks. All five exact-head 6529bot lanes completed without required changes; CodeRabbit passed and no review thread remained. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
@@ -24,14 +24,43 @@ The manual command runs once and exits. Real mode inspects and rehearses Git;
 profile selection does not enable sandbox execution on real products. Sandbox
 completion is evidence only for the pinned test repositories.
 
+A ticket is one request and stays whole, even when it contains both frontend and
+backend PRs. A scoped run handles one ticket. An unscoped sandbox run can combine
+several independent tickets into one tested batch after removing tickets with
+cheap, clear blockers. That multi-ticket batching is implemented only against
+the test repositories. The Coordinator does not yet merge a batch into the real
+frontend or backend repositories.
+
 ## Next steps
 
-Publish and adopt the exact CLI version if the new request shape is approved.
-After that, add narrow real adapters that call the existing frontend,
-backend-service, and operational-monitoring release workflows without redesigning
-their builds or environment settings. Automatic rollback, database-changing
-batches, linked tickets, heartbeat/takeover, and parallel releases remain
-deferred.
+Package publication and product adoption are complete. Next, add narrow real
+adapters that call the existing frontend, backend-service, and
+operational-monitoring release workflows without redesigning their builds or
+environment settings. Start with real staging composition, deployment-result
+matching, and the required staging E2E gate; production execution and rollback
+remain later steps. Database-changing batches, linked tickets,
+heartbeat/takeover, and parallel releases also remain deferred.
+
+## CLI 0.0.5 publication and consumer adoption, September 15
+
+Protected workflow run
+[`34848251003`](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/34848251003)
+published `@6529-collections/release-request@0.0.5` from Coordinator `main`
+commit `502c429f617c0c31ea2aadb03f392a96d5be8a98`. Independent registry
+readback matched the workflow's SHA-1, SHA-256 and SHA-512 values, the expected
+11-file archive, and SLSA provenance for that repository, workflow and commit.
+
+Frontend [PR #4023](https://github.com/6529-Collections/6529seize-frontend/pull/4023)
+merged at `d3a438d0dff68b4583c71bb1431cf9ee7e5b4a6c`. Backend
+[PR #2064](https://github.com/6529-Collections/6529seize-backend/pull/2064)
+merged at `b397c745499891de98605d5fe87a0a7aa86129e3`. Both current
+`main` manifests were read back with the exact `0.0.5` pin. Their refreshed PR
+checks and reviews passed; the frontend's additional post-merge full Jest and
+coverage run
+[`34937545223`](https://github.com/6529-Collections/6529seize-frontend/actions/runs/34937545223)
+also passed on its merge commit. These merges enable product repositories to
+create the new request shape. They do not enable Coordinator execution against
+real staging or production and do not prove a product deployment.
 
 ## PR #72 delivery, September 14
 

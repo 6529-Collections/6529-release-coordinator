@@ -94,10 +94,11 @@ is tracked in the [Coordinator repository](https://github.com/6529-Collections/6
 
 ## Publishing
 
-Stable version `0.0.4` is available from public npm. Source version `0.0.5`
-contains the new request shape but is not published by this local change. New releases use the
-protected publication workflow; product repositories pin a reviewed exact
-version rather than relying on a moving tag.
+Stable version `0.0.5` is available from public npm. It creates request schema
+`0.000002`, including operational-monitoring recording, and still validates
+existing `0.000001` requests. New releases use the protected publication
+workflow; product repositories pin a reviewed exact version rather than relying
+on a moving tag.
 
 The package manifest points to the public npm registry and allows public access.
 The published archive contains only the CLI, source files, schema, example,
@@ -106,15 +107,17 @@ README, license, and npm package metadata. It has no install-time scripts.
 Install the public stable package by its exact version:
 
 ```sh
-npm install --save-dev --save-exact @6529-collections/release-request@0.0.4
+npm install --save-dev --save-exact @6529-collections/release-request@0.0.5
 ```
 
 This npm command is for a standalone consumer. In the 6529 product repositories,
 use their `6529` wrapper and package policy instead of calling npm directly.
 Keep the version exact so a product repository always installs the reviewed
 archive. Version `0.0.4` was published from protected `main` by Trusted
-Publishing and its public npm provenance points to the exact GitHub workflow and
-source commit.
+Publishing. Version `0.0.5` was also published from protected `main`; its public
+npm provenance points to the exact GitHub workflow and source commit. The
+Coordinator repository's progress page records the current publication and
+consumer adoption evidence.
 
 The central GitHub workflow checks every pull request. It can also publish an
 exact version from protected `main`. npm accepts that publish only from the

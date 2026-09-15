@@ -393,8 +393,8 @@ cross-ticket dependency declarations are not supported yet.
 The account also needs contents/PR write access to both sample repositories.
 Only owned `codex/batch-trial-<UUID>` PRs/branches are created and cleaned up; source
 PRs and main are not changed. Limits are 10 tickets, 10 PRs per repository,
-40 combined Git attempts, 12 candidate check rounds and 45 minutes to start new
-rounds. Pending or interrupted attempts retain the inbox lock and their owned
+40 combined Git attempts and 12 candidate check rounds. There is no elapsed-time
+cutoff. Pending or interrupted attempts retain the inbox lock and their owned
 identities for explicit `--resume`; stop the previous process first. Completed
 identical candidates reuse their evidence after fresh input checks and re-reading
 the actual GitHub CI/service results. This starts no new CI; missing or changed

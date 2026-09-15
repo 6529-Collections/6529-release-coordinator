@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isReleaseBatchPolicy } from "./batch-plan.mjs";
 import {
   makeReleaseOperation,
   releaseBackendUnits,
@@ -74,11 +75,11 @@ export function selectedPreparation(batch) {
 
 export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
   serviceAssert(
-    batch.policy?.version === "sandbox-batch-v2" &&
+    isReleaseBatchPolicy(batch.policy) &&
       batch.status === "finished" &&
       batch.selected.length > 0,
     "release-input",
-    "Only a selected v2 sandbox batch can enter release execution."
+    "Only a selected release-capable sandbox batch can enter release execution."
   );
   const targets = [
     ...new Set(

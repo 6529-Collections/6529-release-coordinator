@@ -730,7 +730,7 @@ test(
   }
 );
 
-test("CT-18: expiry resumes the same partial trial and preserves prior proof", async (t) => {
+test("CT-18: count exhaustion resumes the same partial trial and preserves prior proof", async (t) => {
   const f = await batchFixture(t),
     a = await f.ticket(),
     b = await f.ticket();
@@ -746,7 +746,7 @@ test("CT-18: expiry resumes the same partial trial and preserves prior proof", a
   checks.client.open = async (record, patch, save) => {
     if (record.role === "frontend" && !interrupted) {
       interrupted = true;
-      clock += batchPolicy.max_elapsed_ms + 1;
+      clock += 365 * 24 * 60 * 60_000;
       throw Error("stopped before frontend PR");
     }
     // Reconcile an existing remote PR without recreating it.
@@ -768,7 +768,7 @@ test("CT-18: expiry resumes the same partial trial and preserves prior proof", a
           baseline: { status: "passed" }
         };
       if (prepared.numbers?.[0] === 1) return { status: "passed" };
-      return checks.run(options);
+      return checks.run({ ...options, policy: batchPolicy });
     }
   };
   await assert.rejects(h.run(options), /stopped before frontend/);
@@ -781,7 +781,7 @@ test("CT-18: expiry resumes the same partial trial and preserves prior proof", a
   assert.equal(pending.progress.prs[1].number, undefined);
   assert.equal(previous.attempts.filter((a) => a.phase === "checks").length, 3);
   const result = await h.run({ ...options, previous });
-  assert.equal(result.deadline, previous.deadline);
+  assert.equal("deadline" in result, false);
   assert.deepEqual(result.selected, [1]);
   assert.equal(result.attempts.filter((a) => a.phase === "checks").length, 3);
   assert.equal(
@@ -792,7 +792,7 @@ test("CT-18: expiry resumes the same partial trial and preserves prior proof", a
   assert.equal(checks.events.filter((e) => e === "open:frontend").length, 1);
   assert.equal(batchTicketResult(result, 2).status, "waiting");
   t.diagnostic(
-    "Three-round budget and original deadline survived resume; partial backend/frontend trial finished and cleaned, prior A pass retained, no fourth round."
+    "Three-round budget survived resume after a year of simulated time; partial backend/frontend trial finished and cleaned, prior A pass retained, no fourth round."
   );
 });
 
