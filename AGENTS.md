@@ -11,8 +11,9 @@ journal. See progress for local implementation versus merged and live evidence.
 Unscoped sandbox runs select whole tickets together, finish cheap conflict
 filtering before expensive combined PR/service checks, and record deferred tickets.
 They can also take one selected no-database-change batch through protected fake
-staging, matching E2E, protected fake production, and matching E2E. Real product
-release execution remains a design; passing sandbox checks never authorize it.
+staging, locked npm builds and artifacts, matching built-output E2E, protected
+fake production, and another matching E2E. Real product release execution
+remains a design; passing sandbox checks never authorize it.
 
 It is intended to coordinate releases across:
 
@@ -94,6 +95,10 @@ Existing limits stay unchanged until they are separately discussed.
   Documentation is not permission to create external resources. Keep the runtime
   bundle identical to its source, verify its fixed branch/commit, and preserve
   service, batch, and release attempts in the v6 journal before dispatch.
+  Publish generated runtime changes to test `main` first, then merge that history
+  into protected `1a-staging`; never create unrelated lookalike runtime commits
+  on both branches. Keep trial and environment integration commits distinct so
+  checks cannot be reused across stages.
 - `docs/design.md` and the full process diagram contain the agreed execution
   direction for the real products. Its sandbox subset is implemented and live
   tested; the product adapters and rollback are not. Reuse existing product Actions and their

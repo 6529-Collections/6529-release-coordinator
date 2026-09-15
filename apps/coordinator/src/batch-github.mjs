@@ -6,6 +6,7 @@ import { assertDestination } from "./input-stability.mjs";
 import { batchPolicy, trustedBatchPolicy } from "./batch-plan.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { serviceFiles } from "./service-contract.mjs";
+import { effectiveRequiredChecks } from "./github-checks.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const branchName = (value) =>
@@ -25,6 +26,14 @@ export function createBatchGitHub({
   policy = batchPolicy
 } = {}) {
   policy = trustedBatchPolicy(policy);
+  const requiredStep =
+    policy.version === "sandbox-batch-v4"
+      ? "Run application checks"
+      : "Run node scripts/check.mjs";
+  const requiredLogGroup =
+    policy.version === "sandbox-batch-v4"
+      ? "##[group]Run npm test"
+      : "##[group]Run node scripts/check.mjs";
   serviceAssert(
     profile === sandboxProfile,
     "batch-profile",
@@ -148,6 +157,10 @@ export function createBatchGitHub({
           `/actions/workflows/${policy.required_workflow}`
         )
       ).data;
+      const workflowBlob =
+        typeof policy.workflow_blob === "string"
+          ? policy.workflow_blob
+          : policy.workflow_blob?.[role];
       serviceAssert(
         repo.id === profile.repositories[role].id &&
           repo.full_name === profile.repositories[role].full_name &&
@@ -155,7 +168,8 @@ export function createBatchGitHub({
           repo.permissions?.push === true &&
           positive(actor.id) &&
           workflow.type === "file" &&
-          workflow.sha === policy.workflow_blob &&
+          sha(workflowBlob) &&
+          workflow.sha === workflowBlob &&
           active.path === `.github/workflows/${policy.required_workflow}` &&
           active.state === "active" &&
           positive(active.id),
@@ -394,9 +408,7 @@ export function createBatchGitHub({
         "Required job set is incomplete."
       );
       const job = jobs.jobs[0],
-        executeStep = job.steps?.find(
-          (step) => step.name === "Run node scripts/check.mjs"
-        );
+        executeStep = job.steps?.find((step) => step.name === requiredStep);
       serviceAssert(
         job.name === policy.required_job &&
           job.run_id === run.id &&
@@ -412,9 +424,7 @@ export function createBatchGitHub({
       );
       // Checkout's own output precedes candidate execution. Actions head_sha
       // identifies the PR head, not the synthetic merge actually checked out.
-      const beforeExecution = output.split(
-        "##[group]Run node scripts/check.mjs"
-      );
+      const beforeExecution = output.split(requiredLogGroup);
       const checkedOut = [
         ...beforeExecution[0].matchAll(
           /\[command\]\/usr\/bin\/git log -1 --format=%H\r?\n\S+ ([0-9a-f]{40})\r?\n/gu
@@ -446,7 +456,7 @@ export function createBatchGitHub({
         "Temporary PR changed during result verification.",
         "stale"
       );
-      const required = observed.checks.filter((check) => check.isRequired);
+      const required = effectiveRequiredChecks(observed.checks);
       serviceAssert(
         required.some((check) => check.name === policy.required_job),
         "batch-checks",

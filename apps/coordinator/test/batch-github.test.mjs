@@ -32,6 +32,16 @@ test("temporary PR writer saves exact identity, verifies checks, and only remove
   );
 });
 
+test("each sandbox repository uses its own trusted build workflow", async () => {
+  for (const role of ["backend", "frontend"]) {
+    const f = fixture({ role });
+    assert.equal(
+      (await f.client.identity(role, f.record.base)).workflow_id,
+      101
+    );
+  }
+});
+
 test("lost PR creation response is recovered by its saved branch without a second POST", async () => {
   const f = fixture();
   f.lose();

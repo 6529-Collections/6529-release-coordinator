@@ -16,6 +16,7 @@ import {
 import {
   checkReadiness,
   formatReadiness,
+  inspectPull,
   inspectReadiness
 } from "../src/readiness.mjs";
 import { runReadinessCli } from "../src/readiness-cli.mjs";
@@ -154,6 +155,40 @@ test("passing observed checks never imply release permission or invented lifecyc
     getCheck(result, "release_merge_plan").message,
     /combined PR merge/
   );
+});
+
+test("the newest retry decides one required check without trusting ambiguous history", () => {
+  const f = fixture();
+  const cancelled = {
+    ...f.required,
+    id: "old-cancelled",
+    status: "COMPLETED",
+    conclusion: "CANCELLED",
+    startedAt: "2026-09-15T10:00:00.000Z"
+  };
+  const passed = {
+    ...f.required,
+    id: "new-pass",
+    startedAt: "2026-09-15T10:05:00.000Z"
+  };
+  f.pr.checks = [passed, cancelled];
+  let result = inspectPull(
+    f.pr,
+    f.request.release_parts[0].pull_requests[0],
+    repo
+  );
+  let required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "pass");
+  assert.deepEqual(
+    required.evidence.required.map((item) => item.conclusion),
+    ["SUCCESS"]
+  );
+
+  delete passed.startedAt;
+  result = inspectPull(f.pr, f.request.release_parts[0].pull_requests[0], repo);
+  required = result.find((item) => item.id === "required_checks");
+  assert.equal(required.status, "blocked");
+  assert.equal(required.evidence.required.length, 2);
 });
 
 for (const [label, mutate, id, status] of [

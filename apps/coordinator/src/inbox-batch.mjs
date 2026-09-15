@@ -250,8 +250,26 @@ export async function coordinateInboxBatch({
   for (const item of [...items].sort((a, b) => a.number - b.number)) {
     if (item.recordedTerminal || !item.decision || terminal(item.decision))
       continue;
+    const savedActiveInput = active?.inputs.find(
+      (value) => value.number === item.number
+    );
     let result;
-    if (item.coordinated?.report?.status !== "pass") {
+    if (savedActiveInput) {
+      serviceAssert(
+        item.input && Array.isArray(item.input.repositories),
+        "batch-state",
+        "Saved active batch input is unavailable."
+      );
+      const counts = Object.fromEntries(
+        item.input.repositories.map((repo) => [
+          repo.role,
+          repo.pull_requests.length
+        ])
+      );
+      selectedTarget ??= savedActiveInput.target;
+      suitable.push(item);
+      for (const role of Object.keys(counts)) totals[role] += counts[role];
+    } else if (item.coordinated?.report?.status !== "pass") {
       result = {
         status: "waiting",
         code: "batch-deferred",

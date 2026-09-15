@@ -10,9 +10,36 @@ import { executeServiceSteps } from "../src/service-contract.mjs";
 import { servicePlanFromSources } from "../src/service-plan.mjs";
 import { executeRelease } from "../src/release-execution.mjs";
 import {
+  makeReleaseBuild,
+  releaseBuildFiles,
   releaseProtocol,
   verifyReleaseReport
 } from "../src/release-contract.mjs";
+
+const releaseBuilds = (operation) => {
+  const roles =
+    operation.operation === "e2e" ? ["backend", "frontend"] : [operation.role];
+  return Object.fromEntries(
+    roles.map((role) => [
+      role,
+      {
+        manifest: makeReleaseBuild({
+          role,
+          source_commit: operation[`${role}_commit`],
+          files: releaseBuildFiles[role].map((path) => ({
+            path,
+            sha256: "a".repeat(64),
+            bytes: 1
+          }))
+        }),
+        artifact: {
+          name: `sandbox-build-${operation.operation_id}-${role}`,
+          digest: "b".repeat(64)
+        }
+      }
+    ])
+  );
+};
 
 export function harness(count = 2) {
   const f = fixture(sandboxProfile),
@@ -112,6 +139,7 @@ export function harness(count = 2) {
             unit: record.operation.unit,
             status: "passed",
             checks: [{ name: "fixture", status: "passed" }],
+            builds: releaseBuilds(record.operation),
             versions: {
               backend: record.operation.backend_commit,
               frontend: record.operation.frontend_commit

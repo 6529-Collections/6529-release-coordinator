@@ -52,6 +52,7 @@ export function validateReleaseExecution(execution, batch) {
         [
           "prepared",
           "branch-prepared",
+          "commit-prepared",
           "creating-pr",
           "checking",
           "cleaning",
@@ -66,6 +67,34 @@ export function validateReleaseExecution(execution, batch) {
       "Invalid or repeated sandbox release step state."
     );
     ids.add(record.id);
+    const hasIntegrationCommit = Object.hasOwn(record, "integration_commit");
+    const hasIntegrationInput = Object.hasOwn(record, "integration_input");
+    const hasIntegrationVersion = Object.hasOwn(record, "integration_version");
+    if (hasIntegrationCommit || hasIntegrationInput || hasIntegrationVersion) {
+      const candidate = execution.plan.candidates[record.step.role];
+      const signature = {
+        name: "Coordinator sandbox",
+        email: "rehearsal@example.invalid",
+        date: record.created_at
+      };
+      serviceAssert(
+        record.step.kind === "integrate" &&
+          record.integration_version === 1 &&
+          serviceHash(record.integration_input) ===
+            serviceHash({
+              message: `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
+              tree: candidate.tree,
+              parents: [candidate.commit],
+              author: signature,
+              committer: signature
+            }) &&
+          (record.state === "commit-prepared"
+            ? !hasIntegrationCommit
+            : /^[0-9a-f]{40}$/u.test(record.integration_commit ?? "")),
+        "release-state",
+        "Invalid sandbox integration commit state."
+      );
+    }
     if (record.state === "completed" && record.step.kind !== "integrate")
       serviceAssert(
         record.operation && record.result?.report,

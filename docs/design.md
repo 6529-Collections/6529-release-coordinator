@@ -459,6 +459,50 @@ Do not copy those implementations into the Coordinator or restore the old
 Release Bus. The current request schema needs no change for these decisions.
 Cross-ticket links and database-changing batches remain deferred.
 
+### GitHub-only sandbox builds
+
+This sandbox layer keeps the existing real GitHub PRs and protected
+`1a-staging`/`main` merges, but replaces direct source-module release checks with
+actual npm build output. Each test repository is a small locked npm project.
+Its ordinary PR check installs from the lockfile, runs its existing meaningful
+checks, builds a `dist` package and uploads that package as a GitHub Actions
+artifact. Release operations rebuild the exact recorded environment commits and
+bind the build manifest and uploaded artifact digest to the saved operation.
+
+Runtime updates reach test `main` first. A later protected PR merges that main
+history into `1a-staging`. Independent lookalike commits on both branches are
+invalid setup because they can make a later release integration conflict. Each
+trial, staging integration and production integration also gets a distinct
+commit ID, so GitHub checks from one stage cannot be reused by another stage.
+For repeated attempts on one commit, the uniquely newest dated required check
+is authoritative; unclear duplicate histories stop the run.
+
+Matching E2E must use the built backend and frontend outputs. On one temporary
+GitHub-hosted runner it starts both built applications on local ports, sends a
+request through frontend, API and worker, and requires the expected response.
+The runner and its processes disappear after the job. Temporary MySQL remains
+owned by the earlier isolated service/database check; no shared or permanent
+database is introduced here.
+
+GitHub Actions supplies the temporary computer, logs and artifact storage.
+GitHub branch rules continue supplying merge gates. A GitHub Environment may
+gate or record a job, but it is not an application host. This stage therefore
+needs no cloud account, permanent URL, product secret or outside service. It
+proves builds, exact source/artifact binding, cross-part behavior and release
+ordering. It does not prove AWS deployment, a persistent staging site, product
+configuration, production health or real-product workflow integration.
+
+The finish line is one production-target sandbox ticket that builds both roles
+on staging, passes E2E against those built outputs, then repeats the build and
+E2E sequence after protected test `main` merges. A failed build or staging E2E
+must stop before test production. Every accepted workflow result must still
+match the saved repository, environment, operation, run attempt and exact
+backend/frontend commits.
+
+This finish line passed in the public sandbox on September 15; see the
+[build and E2E acceptance](./testing/github-build-e2e-2026-09-15.md). The
+Coordinator changes remain working-branch source until their separate delivery.
+
 ## Architecture
 
 ```mermaid
@@ -469,9 +513,10 @@ flowchart LR
     IP --> J[(Profile-specific GitHub journal)]
     IP -->|sandbox only| SW[One selected fake release]
     SW --> SSTG[Protected fake staging]
-    SSTG --> SE2E[Matching fake E2E]
+    SSTG --> SE2E[Build exact commits and test built outputs]
     SE2E -->|production target| SPROD[Protected fake production]
-    SPROD --> J
+    SPROD --> PE2E[Build exact commits and test built outputs]
+    PE2E --> J
     IP -. future real adapter .-> W[One real release]
     W --> GH[Normal protected product merges]
     W --> BE[Existing backend Actions]

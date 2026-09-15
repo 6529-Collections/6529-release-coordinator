@@ -75,6 +75,22 @@ test("a failed fixture state save prevents push and PR creation", async () => {
   );
 });
 
+test("fixture publication can target the protected sandbox staging branch", async () => {
+  const staging = { ...entry, base_branch: "1a-staging" };
+  const result = await publishFixturePr(staging, {
+    save: async () => {},
+    push: async () => {},
+    find: async () => [
+      {
+        ...pr(),
+        base: { ...pr().base, ref: "1a-staging" }
+      }
+    ],
+    create: async () => assert.fail("existing PR should be reused")
+  });
+  assert.equal(result.base_branch, "1a-staging");
+});
+
 test("an interrupted atomic fixture checkpoint preserves the prior file", async (t) => {
   const directory = await mkdtemp(
     path.join(os.tmpdir(), "fixture-checkpoint-")

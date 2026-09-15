@@ -13,8 +13,12 @@ const query = `query RehearsalPull($owner: String!, $name: String!, $number: Int
     commits(last: 1) { nodes { commit { oid statusCheckRollup { contexts(first: 100, after: $cursor) {
       pageInfo { hasNextPage endCursor }
       nodes { __typename
-        ... on CheckRun { id name status conclusion isRequired(pullRequestNumber: $number) }
-        ... on StatusContext { id context state isRequired(pullRequestNumber: $number) }
+        ... on CheckRun {
+          id name status conclusion startedAt completedAt
+          checkSuite { app { databaseId } }
+          isRequired(pullRequestNumber: $number)
+        }
+        ... on StatusContext { id context state createdAt isRequired(pullRequestNumber: $number) }
       }
     } } } } }
   } }

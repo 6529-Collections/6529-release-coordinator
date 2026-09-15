@@ -20,7 +20,7 @@ export async function publishFixturePr(entry, { save, push, find, create }) {
     pr.head?.ref !== entry.branch ||
     pr.head.sha !== entry.commit ||
     pr.head.repo?.id !== entry.repository.id ||
-    pr.base?.ref !== "main" ||
+    pr.base?.ref !== (entry.base_branch ?? "main") ||
     (entry.base && pr.base.sha !== entry.base) ||
     pr.base.repo?.id !== entry.repository.id ||
     (entry.url && pr.html_url !== entry.url) ||

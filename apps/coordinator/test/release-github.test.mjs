@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createReleaseGitHub } from "../src/release-github.mjs";
 import {
+  makeReleaseBuild,
   makeReleaseOperation,
+  releaseBuildFiles,
   releaseProtocol
 } from "../src/release-contract.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
@@ -17,14 +19,16 @@ const runtime = {
       files: {
         ".github/workflows/sandbox-release.yml": "a".repeat(40),
         "coordinator/src/release-contract.mjs": "b".repeat(40),
-        "coordinator/sandbox/release-run.mjs": "c".repeat(40)
+        "coordinator/sandbox/release-run.mjs": "c".repeat(40),
+        "coordinator/sandbox/application-build.mjs": "1".repeat(40)
       }
     },
     frontend: {
       files: {
         ".github/workflows/sandbox-release.yml": "d".repeat(40),
         "coordinator/src/release-contract.mjs": "e".repeat(40),
-        "coordinator/sandbox/release-run.mjs": "f".repeat(40)
+        "coordinator/sandbox/release-run.mjs": "f".repeat(40),
+        "coordinator/sandbox/application-build.mjs": "2".repeat(40)
       }
     }
   }
@@ -107,6 +111,26 @@ function fixture(role = "backend", kind = "deploy") {
     unit: operation.unit,
     status: "passed",
     checks: [{ name: "worker", status: "passed" }],
+    builds: Object.fromEntries(
+      (e2e ? ["backend", "frontend"] : [role]).map((buildRole) => [
+        buildRole,
+        {
+          manifest: makeReleaseBuild({
+            role: buildRole,
+            source_commit: operation[`${buildRole}_commit`],
+            files: releaseBuildFiles[buildRole].map((path) => ({
+              path,
+              sha256: "a".repeat(64),
+              bytes: 1
+            }))
+          }),
+          artifact: {
+            name: `sandbox-build-${operation.operation_id}-${buildRole}`,
+            digest: "b".repeat(64)
+          }
+        }
+      ])
+    ),
     versions: {
       backend: operation.backend_commit,
       frontend: operation.frontend_commit
@@ -354,6 +378,165 @@ test("staging movement stops before an integration branch or PR is created", asy
     /staging changed after this release captured/u
   );
   assert.deepEqual(writes, []);
+});
+
+test("integration uses a unique checked commit with the exact candidate tree", async () => {
+  const candidate = {
+    role: "backend",
+    base: "e".repeat(40),
+    commit: "c".repeat(40),
+    tree: "d".repeat(40),
+    changed: true
+  };
+  const integrationCommit = "9".repeat(40);
+  const testMerge = "8".repeat(40);
+  const mergedCommit = "7".repeat(40);
+  const actor = { id: "456", login: "tester" };
+  const record = {
+    id: "22222222-2222-4222-8222-222222222222",
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: {
+      id: "staging:integrate:backend",
+      kind: "integrate",
+      environment: "staging",
+      role: "backend"
+    },
+    state: "prepared",
+    created_at: "2026-09-11T12:00:00.000Z"
+  };
+  let branch = null;
+  let merged = false;
+  let pr = null;
+  const commitBodies = [];
+  const codeRabbitSummary =
+    "\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\nA generated summary.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->";
+  let summaryAdded = false;
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    wait: async () => {},
+    gates: {
+      pullRequest: async () => {
+        if (!summaryAdded) {
+          pr = { ...pr, body: `${pr.body}${codeRabbitSummary}` };
+          summaryAdded = true;
+        }
+        return {
+          headRefOid: integrationCommit,
+          headRefName: record.branch,
+          baseRefOid: candidate.base,
+          baseRefName: "1a-staging",
+          state: "OPEN",
+          mergeable: "MERGEABLE",
+          checks: [
+            {
+              __typename: "CheckRun",
+              id: "new-check",
+              isRequired: true,
+              name: "Sandbox check",
+              status: "COMPLETED",
+              conclusion: "SUCCESS",
+              startedAt: "2026-09-11T12:01:00.000Z"
+            }
+          ]
+        };
+      }
+    },
+    execute: async (args, body) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", {
+          object: { sha: merged ? mergedCommit : candidate.base }
+        });
+      if (method === "POST" && endpoint.endsWith("/git/commits")) {
+        commitBodies.push(body);
+        return apiResponse("201 Created", {
+          sha: integrationCommit,
+          tree: { sha: candidate.tree },
+          parents: [{ sha: candidate.commit }]
+        });
+      }
+      if (endpoint.endsWith(`/git/commits/${integrationCommit}`))
+        return apiResponse("200 OK", {
+          sha: integrationCommit,
+          tree: { sha: candidate.tree },
+          parents: [{ sha: candidate.commit }]
+        });
+      if (endpoint.endsWith(`/git/ref/heads/${record.branch}`))
+        return branch
+          ? apiResponse("200 OK", { object: { sha: branch } })
+          : apiResponse("404 Not Found", {});
+      if (method === "POST" && endpoint.endsWith("/git/refs")) {
+        branch = body.sha;
+        return apiResponse("201 Created", {
+          object: { sha: branch }
+        });
+      }
+      if (method === "GET" && endpoint.includes("/pulls?state=all"))
+        return apiResponse("200 OK", []);
+      if (method === "POST" && endpoint.endsWith("/pulls")) {
+        assert.equal(body.head, record.branch);
+        pr = {
+          number: 7,
+          html_url: "https://example.invalid/pr/7",
+          head: {
+            repo: { id: sandboxProfile.repositories.backend.id },
+            ref: record.branch,
+            sha: integrationCommit
+          },
+          base: {
+            repo: { id: sandboxProfile.repositories.backend.id },
+            ref: "1a-staging"
+          },
+          user: { id: 456 },
+          body: record.body,
+          state: "open",
+          merged: false,
+          merge_commit_sha: testMerge
+        };
+        return apiResponse("201 Created", pr);
+      }
+      if (method === "GET" && endpoint.endsWith("/pulls/7"))
+        return apiResponse("200 OK", pr);
+      if (endpoint.endsWith(`/git/commits/${testMerge}`))
+        return apiResponse("200 OK", { tree: { sha: candidate.tree } });
+      if (method === "PUT" && endpoint.endsWith("/pulls/7/merge")) {
+        assert.equal(body.sha, integrationCommit);
+        merged = true;
+        pr = {
+          ...pr,
+          state: "closed",
+          merged: true,
+          merge_commit_sha: mergedCommit
+        };
+        return apiResponse("200 OK", { merged: true, sha: mergedCommit });
+      }
+      if (endpoint.endsWith(`/git/commits/${mergedCommit}`))
+        return apiResponse("200 OK", {
+          tree: { sha: candidate.tree },
+          parents: [{ sha: candidate.base }, { sha: integrationCommit }]
+        });
+      if (method === "DELETE" && endpoint.includes("/git/refs/heads/")) {
+        branch = null;
+        return apiResponse("204 No Content");
+      }
+      assert.fail(`${method} ${endpoint}`);
+    }
+  });
+  const result = await client.integrate({
+    record,
+    candidate,
+    actor,
+    expectedBase: candidate.base,
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(record.integration_commit, integrationCommit);
+  assert.equal(commitBodies.length, 1);
+  assert.equal(commitBodies[0].tree, candidate.tree);
+  assert.deepEqual(commitBodies[0].parents, [candidate.commit]);
+  assert.notEqual(record.integration_commit, candidate.commit);
 });
 
 test("changed release runner stops before workflow lookup or dispatch", async () => {

@@ -20,10 +20,11 @@ if (
   );
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const output = `${root}/.release-coordinator/release-development`;
+const output = `${root}/.release-coordinator/release-build-v3`;
 await mkdir(output, { recursive: true });
 const provisionFile = `${output}/provision.json`;
 const exec = promisify(execFile);
+
 async function api(endpoint, method = "GET", body, allowed = [200, 201, 204]) {
   const args = [
     "api",
@@ -43,13 +44,26 @@ async function api(endpoint, method = "GET", body, allowed = [200, 201, 204]) {
   const match = raw.match(
     /^HTTP\/\S+ (\d{3})[^\n]*\r?\n[\s\S]*?\r?\n\r?\n([\s\S]*)$/u
   );
-  if (!match || !allowed.includes(Number(match[1])))
-    throw new Error(`Fixture API ${method} ${endpoint} failed.`);
+  if (!match)
+    throw new Error(`Fixture API ${method} ${endpoint} was unreadable.`);
+  if (!allowed.includes(Number(match[1]))) {
+    let detail = "";
+    try {
+      const message = JSON.parse(match[2])?.message;
+      if (typeof message === "string")
+        detail = `: ${message.replace(/[\p{Cc}\p{Cf}]/gu, " ").slice(0, 200)}`;
+    } catch {
+      // The HTTP status remains enough to resume safely after an empty response.
+    }
+    throw new Error(
+      `Fixture API ${method} ${endpoint} returned HTTP ${match[1]}${detail}.`
+    );
+  }
   if (Number(match[1]) === 404) return null;
   return match[2].trim() ? JSON.parse(match[2]) : null;
 }
 
-const checkWorkflow = `name: Sandbox checks
+const checkWorkflow = (role) => `name: Sandbox checks
 on:
   pull_request:
     branches: [main, 1a-staging, rehearsal-target]
@@ -67,8 +81,21 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 22
-      - name: Run node scripts/check.mjs
-        run: node scripts/check.mjs
+      - name: Install locked package
+        run: npm ci --ignore-scripts
+      - name: Run application checks
+        run: npm test
+      - name: Build application artifact
+        env:
+          SANDBOX_SOURCE_COMMIT: \${{ github.sha }}
+        run: npm run build
+      - name: Upload application artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sandbox-pr-\${{ github.event.pull_request.number }}-\${{ github.run_attempt }}-${role}
+          path: dist
+          if-no-files-found: error
+          retention-days: 7
 `;
 
 const releaseWorkflow = `name: Sandbox release
@@ -115,19 +142,97 @@ jobs:
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: 22
+      - id: backend-build
+        name: Build exact backend package
+        if: fromJSON(inputs.operation_json).operation == 'e2e' || fromJSON(inputs.operation_json).role == 'backend'
+        continue-on-error: true
+        working-directory: candidates/backend
+        env:
+          SANDBOX_SOURCE_COMMIT: \${{ fromJSON(inputs.operation_json).backend_commit }}
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - id: backend-artifact
+        name: Upload exact backend package
+        if: steps.backend-build.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sandbox-build-\${{ inputs.operation_id }}-backend
+          path: candidates/backend/dist
+          if-no-files-found: error
+          retention-days: 7
+      - id: frontend-build
+        name: Build exact frontend package
+        if: fromJSON(inputs.operation_json).operation == 'e2e' || fromJSON(inputs.operation_json).role == 'frontend'
+        continue-on-error: true
+        working-directory: candidates/frontend
+        env:
+          SANDBOX_SOURCE_COMMIT: \${{ fromJSON(inputs.operation_json).frontend_commit }}
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - id: frontend-artifact
+        name: Upload exact frontend package
+        if: steps.frontend-build.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sandbox-build-\${{ inputs.operation_id }}-frontend
+          path: candidates/frontend/dist
+          if-no-files-found: error
+          retention-days: 7
       - name: Run sandbox release operation
         env:
           OPERATION_ID: \${{ inputs.operation_id }}
           OPERATION_JSON: \${{ inputs.operation_json }}
+          BACKEND_BUILD_OUTCOME: \${{ steps.backend-build.outcome }}
+          BACKEND_ARTIFACT_OUTCOME: \${{ steps.backend-artifact.outcome }}
+          BACKEND_ARTIFACT_DIGEST: \${{ steps.backend-artifact.outputs.artifact-digest }}
+          FRONTEND_BUILD_OUTCOME: \${{ steps.frontend-build.outcome }}
+          FRONTEND_ARTIFACT_OUTCOME: \${{ steps.frontend-artifact.outcome }}
+          FRONTEND_ARTIFACT_DIGEST: \${{ steps.frontend-artifact.outputs.artifact-digest }}
         run: node coordinator/sandbox/release-run.mjs
 `;
 
 const bundle = {};
-for (const name of ["src/release-contract.mjs", "sandbox/release-run.mjs"])
+for (const name of [
+  "src/release-contract.mjs",
+  "sandbox/application-build.mjs",
+  "sandbox/release-run.mjs"
+])
   bundle[`coordinator/${name}`] = await readFile(
     `${root}/apps/coordinator/${name}`,
     "utf8"
   );
+
+const packageFiles = (role) => {
+  const name = `release-coordinator-sandbox-${role}`;
+  const value = {
+    name,
+    version: "1.0.0",
+    private: true,
+    type: "module",
+    scripts: {
+      test: "node scripts/check.mjs",
+      build: `node coordinator/sandbox/application-build.mjs ${role}`
+    }
+  };
+  return {
+    "package.json": `${JSON.stringify(value, null, 2)}\n`,
+    "package-lock.json": `${JSON.stringify(
+      {
+        name,
+        version: "1.0.0",
+        lockfileVersion: 3,
+        requires: true,
+        packages: { "": { name, version: "1.0.0" } }
+      },
+      null,
+      2
+    )}\n`
+  };
+};
 
 let record;
 try {
@@ -137,67 +242,21 @@ try {
     throw new Error("Saved release provisioning state is unreadable.", {
       cause: error
     });
-  record = { created_at: new Date().toISOString(), repositories: {} };
+  record = { created_at: new Date().toISOString(), targets: {} };
 }
 if (
   !record ||
   typeof record !== "object" ||
   Array.isArray(record) ||
-  !record.repositories ||
-  typeof record.repositories !== "object" ||
-  Array.isArray(record.repositories)
+  !record.targets ||
+  typeof record.targets !== "object" ||
+  Array.isArray(record.targets)
 )
   throw new Error("Saved release provisioning state is invalid.");
 
-const runtimeBranch = "codex/sandbox-release-runtime-v1";
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
-const savedEntry = (role, repository) => {
-  const saved = record.repositories[role];
-  if (!saved) return null;
-  const entry = {
-    repository: {
-      id: saved.repository?.id ?? saved.id,
-      full_name: saved.repository?.full_name ?? saved.full_name
-    },
-    base: saved.base,
-    branch: saved.branch ?? runtimeBranch,
-    commit: saved.commit ?? saved.head,
-    directory: saved.directory,
-    ...(saved.number || saved.pr
-      ? { number: saved.number ?? saved.pr, url: saved.url }
-      : {})
-  };
-  if (
-    entry.repository.id !== repository.id ||
-    entry.repository.full_name !== repository.full_name ||
-    entry.branch !== runtimeBranch ||
-    !sha(entry.base) ||
-    !sha(entry.commit)
-  )
-    throw new Error(
-      `Saved ${role} release provisioning identity is invalid; inspect ${provisionFile}.`
-    );
-  return entry;
-};
-async function saveEntry(role, entry) {
-  record.repositories[role] = {
-    ...entry.repository,
-    base: entry.base,
-    branch: entry.branch,
-    commit: entry.commit,
-    head: entry.commit,
-    directory: entry.directory,
-    ...(entry.number ? { number: entry.number, pr: entry.number } : {}),
-    ...(entry.url ? { url: entry.url } : {})
-  };
-  await writeFileAtomically(provisionFile, JSON.stringify(record, null, 2));
-}
-const pullRequests = (repository, branch) => {
-  const owner = repository.full_name.split("/")[0];
-  return api(
-    `repos/${repository.full_name}/pulls?state=all&base=main&head=${encodeURIComponent(`${owner}:${branch}`)}&per_page=100`
-  );
-};
+const branchName = () => "codex/sandbox-build-runtime-v4-main";
+const keyFor = (role, base) => `${role}:${base}`;
 const branchRef = (repository, branch) =>
   api(
     `repos/${repository.full_name}/git/ref/heads/${branch}`,
@@ -205,124 +264,165 @@ const branchRef = (repository, branch) =>
     undefined,
     [200, 404]
   );
+const pullRequests = (repository, branch, base) => {
+  const owner = repository.full_name.split("/")[0];
+  return api(
+    `repos/${repository.full_name}/pulls?state=all&base=${base}&head=${encodeURIComponent(`${owner}:${branch}`)}&per_page=100`
+  );
+};
+async function saveEntry(key, entry) {
+  record.targets[key] = entry;
+  await writeFileAtomically(provisionFile, JSON.stringify(record, null, 2));
+}
 
 for (const role of ["backend", "frontend"]) {
   const identity = sandboxProfile.repositories[role];
-  const repo = await api(`repos/${identity.full_name}`);
+  const repository = await api(`repos/${identity.full_name}`);
   if (
-    repo.id !== identity.id ||
-    repo.private !== false ||
-    repo.permissions?.push !== true
+    repository.id !== identity.id ||
+    repository.private !== false ||
+    repository.permissions?.push !== true
   )
     throw new Error("Sample repository identity/access changed.");
-  const base = await api(`repos/${identity.full_name}/git/ref/heads/main`);
-  const saved = savedEntry(role, identity);
-  if (saved) {
-    if (base.object.sha !== saved.base)
-      throw new Error(
-        `Saved ${role} setup uses an older main commit; inspect ${provisionFile} before retrying.`
-      );
-    const completed = await publishFixturePr(saved, {
-      save: (entry) => saveEntry(role, entry),
-      push: async (entry) => {
-        const remote = await branchRef(entry.repository, entry.branch);
-        if (remote?.object?.sha !== entry.commit)
-          throw new Error(
-            `Saved ${role} setup branch is missing or changed; inspect ${provisionFile}.`
-          );
-      },
-      find: (entry) => pullRequests(entry.repository, entry.branch),
-      create: (entry) =>
-        api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-          title: "Add sandbox release sequence runtime",
-          head: entry.branch,
-          base: "main",
-          body: "Add the generated sandbox-only deployment/E2E runner and make Sandbox check cover staging integration PRs. No product repository, secret, environment, or deployment is used."
-        })
-    });
-    console.log(`${role}: ${completed.url}`);
-    continue;
-  }
-  const existingRef = await branchRef(identity, runtimeBranch);
-  const existingPulls = await pullRequests(identity, runtimeBranch);
-  if (!Array.isArray(existingPulls))
-    throw new Error(`The ${role} setup PR list is unreadable.`);
-  if (existingRef || existingPulls.length)
-    throw new Error(
-      `Unsaved ${role} setup resources already exist; inspect them before retrying and do not create replacements.`
+  // Publish the runtime to main only. After those PRs merge, main must be
+  // merged into 1a-staging through a normal protected PR. Publishing matching
+  // files as unrelated commits on both branches makes later release PRs
+  // conflict even though their trees look similar.
+  for (const baseBranch of ["main"]) {
+    const key = keyFor(role, baseBranch);
+    const branch = branchName(baseBranch);
+    const base = await api(
+      `repos/${identity.full_name}/git/ref/heads/${baseBranch}`
     );
-  const directory = await mkdtemp(path.join(output, `${role}-`));
-  const git = async (args) =>
-    (
-      await exec(
-        "git",
-        [
-          "-c",
-          "core.hooksPath=/dev/null",
-          "-c",
-          "commit.gpgSign=false",
-          "-c",
-          "user.name=Coordinator sandbox",
-          "-c",
-          "user.email=rehearsal@example.invalid",
-          ...args
-        ],
-        {
-          cwd: directory,
-          maxBuffer: 4 * 1024 * 1024,
-          timeout: 60_000
-        }
+    const saved = record.targets[key];
+    if (saved) {
+      if (
+        saved.repository?.id !== identity.id ||
+        saved.repository?.full_name !== identity.full_name ||
+        saved.base_branch !== baseBranch ||
+        saved.branch !== branch ||
+        !sha(saved.base) ||
+        !sha(saved.commit) ||
+        base.object.sha !== saved.base
       )
-    ).stdout.trim();
-  await git([
-    "clone",
-    "--single-branch",
-    "--branch",
-    "main",
-    `git@github.com:${identity.full_name}.git`,
-    "."
-  ]);
-  if ((await git(["rev-parse", "HEAD"])) !== base.object.sha)
-    throw new Error("Sample main moved before release fixture setup.");
-  await git(["checkout", "-b", runtimeBranch]);
-  const files = {
-    ...bundle,
-    ".github/workflows/sandbox-check.yml": checkWorkflow,
-    ".github/workflows/sandbox-release.yml": releaseWorkflow,
-    ...(role === "backend"
-      ? {
-          "src/config/deploy-services.json":
-            sampleFiles().backend["src/config/deploy-services.json"]
-        }
-      : {})
-  };
-  for (const [file, contents] of Object.entries(files)) {
-    await mkdir(path.dirname(path.join(directory, file)), { recursive: true });
-    await writeFile(path.join(directory, file), contents);
-  }
-  await git(["add", "--", ...Object.keys(files)]);
-  await git(["commit", "-m", "Add sandbox release sequence runtime"]);
-  const head = await git(["rev-parse", "HEAD"]);
-  const completed = await publishFixturePr(
-    {
-      repository: identity,
-      base: base.object.sha,
-      branch: runtimeBranch,
-      commit: head,
-      directory
-    },
-    {
-      save: (entry) => saveEntry(role, entry),
-      push: (entry) => git(["push", "origin", entry.branch]),
-      find: (entry) => pullRequests(entry.repository, entry.branch),
-      create: (entry) =>
-        api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-          title: "Add sandbox release sequence runtime",
-          head: entry.branch,
-          base: "main",
-          body: "Add the generated sandbox-only deployment/E2E runner and make Sandbox check cover staging integration PRs. No product repository, secret, environment, or deployment is used."
-        })
+        throw new Error(
+          `Saved ${key} provisioning identity is invalid; inspect ${provisionFile}.`
+        );
+      const completed = await publishFixturePr(saved, {
+        save: (entry) => saveEntry(key, entry),
+        push: async (entry) => {
+          const remote = await branchRef(entry.repository, entry.branch);
+          if (remote?.object?.sha !== entry.commit)
+            throw new Error(
+              `Saved ${key} setup branch is missing or changed; inspect ${provisionFile}.`
+            );
+        },
+        find: (entry) =>
+          pullRequests(entry.repository, entry.branch, entry.base_branch),
+        create: (entry) =>
+          api(`repos/${entry.repository.full_name}/pulls`, "POST", {
+            title: "Build sandbox application artifacts in GitHub Actions",
+            head: entry.branch,
+            base: entry.base_branch,
+            body: "Add locked npm builds, short-lived Actions artifacts, and E2E against built test output. This uses only the public sandbox repositories and GitHub-hosted runners; no product or outside environment is accessed."
+          })
+      });
+      console.log(`${key}: ${completed.url}`);
+      continue;
     }
-  );
-  console.log(`${role}: ${completed.url}`);
+    const existingRef = await branchRef(identity, branch);
+    const existingPulls = await pullRequests(identity, branch, baseBranch);
+    if (!Array.isArray(existingPulls))
+      throw new Error(`The ${key} setup PR list is unreadable.`);
+    if (existingRef || existingPulls.length)
+      throw new Error(
+        `Unsaved ${key} setup resources already exist; inspect them before retrying.`
+      );
+    const directory = await mkdtemp(
+      path.join(output, `${role}-${baseBranch}-`)
+    );
+    const git = async (args) =>
+      (
+        await exec(
+          "git",
+          [
+            "-c",
+            "core.hooksPath=/dev/null",
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "user.name=Coordinator sandbox",
+            "-c",
+            "user.email=rehearsal@example.invalid",
+            ...args
+          ],
+          {
+            cwd: directory,
+            maxBuffer: 4 * 1024 * 1024,
+            timeout: 60_000
+          }
+        )
+      ).stdout.trim();
+    await git([
+      "clone",
+      "--single-branch",
+      "--branch",
+      baseBranch,
+      `git@github.com:${identity.full_name}.git`,
+      "."
+    ]);
+    if ((await git(["rev-parse", "HEAD"])) !== base.object.sha)
+      throw new Error("Sample branch moved before release fixture setup.");
+    await git(["checkout", "-b", branch]);
+    const files = {
+      ...bundle,
+      ...packageFiles(role),
+      ".github/workflows/sandbox-check.yml": checkWorkflow(role),
+      ".github/workflows/sandbox-release.yml": releaseWorkflow,
+      "README.md": `# Coordinator sample ${role}\n\nSmall executable programs, locked npm builds, short-lived GitHub Actions artifacts and temporary test services for the sandbox only. No product credentials, environments or deployments are used.\n\nThe coordinator directory is generated from the standalone Coordinator; edit the source project and republish the bundle instead of maintaining a second implementation.\n`,
+      ...(role === "backend"
+        ? {
+            "src/config/deploy-services.json":
+              sampleFiles().backend["src/config/deploy-services.json"]
+          }
+        : {})
+    };
+    for (const [file, contents] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(directory, file)), {
+        recursive: true
+      });
+      await writeFile(path.join(directory, file), contents);
+    }
+    await git(["add", "--", ...Object.keys(files)]);
+    await git(["commit", "-m", "Build sandbox application artifacts"]);
+    const commit = await git(["rev-parse", "HEAD"]);
+    const completed = await publishFixturePr(
+      {
+        repository: identity,
+        base: base.object.sha,
+        base_branch: baseBranch,
+        branch,
+        commit,
+        directory
+      },
+      {
+        save: (entry) => saveEntry(key, entry),
+        push: (entry) => git(["push", "origin", entry.branch]),
+        find: (entry) =>
+          pullRequests(entry.repository, entry.branch, entry.base_branch),
+        create: (entry) =>
+          api(`repos/${entry.repository.full_name}/pulls`, "POST", {
+            title: "Build sandbox application artifacts in GitHub Actions",
+            head: entry.branch,
+            base: entry.base_branch,
+            body: "Add locked npm builds, short-lived Actions artifacts, and E2E against built test output. This uses only the public sandbox repositories and GitHub-hosted runners; no product or outside environment is accessed."
+          })
+      }
+    );
+    console.log(`${key}: ${completed.url}`);
+  }
 }
+
+console.log(
+  "After both main PRs merge, merge each repository's current main into protected 1a-staging before running a sandbox release."
+);

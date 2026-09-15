@@ -11,6 +11,7 @@ import {
   inspectServiceGraph
 } from "./readiness-dependencies.mjs";
 import { catalogPath } from "./readiness-github.mjs";
+import { effectiveRequiredChecks } from "./github-checks.mjs";
 
 const sha = /^[0-9a-f]{40}$/u;
 const mergeStates = [
@@ -183,14 +184,12 @@ export function inspectPull(
     )
   );
 
-  const required = pr.checks
-    .filter((item) => item.isRequired === true)
-    .map((item) => ({
-      name: item.name ?? item.context,
-      status: requiredCheckStatus(item),
-      state: item.state ?? item.status,
-      conclusion: item.conclusion ?? null
-    }));
+  const required = effectiveRequiredChecks(pr.checks).map((item) => ({
+    name: item.name ?? item.context,
+    status: requiredCheckStatus(item),
+    state: item.state ?? item.status,
+    conclusion: item.conclusion ?? null
+  }));
   const requiredStatus = required.some((item) => item.status === "blocked")
     ? "blocked"
     : required.some((item) => item.status === "unknown") || !gatePass

@@ -9,6 +9,7 @@ import {
   verifyReleaseReport
 } from "./release-contract.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
+import { effectiveRequiredChecks } from "./github-checks.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -19,6 +20,7 @@ const positive = (value) => Number.isSafeInteger(value) && value > 0;
 const runtimePaths = Object.freeze([
   ".github/workflows/sandbox-release.yml",
   "coordinator/src/release-contract.mjs",
+  "coordinator/sandbox/application-build.mjs",
   "coordinator/sandbox/release-run.mjs"
 ]);
 const branch = (record) =>
@@ -157,16 +159,24 @@ export function createReleaseGitHub({
     { allowClosed = false, allowMerged = false } = {}
   ) {
     const repo = profile.repositories[record.step.role];
+    const codeRabbitStart =
+      "\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\n";
+    const codeRabbitEnd =
+      "\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->";
+    const bodyMatches =
+      pr?.body === record.body ||
+      (pr?.body?.startsWith(`${record.body}${codeRabbitStart}`) &&
+        pr.body.endsWith(codeRabbitEnd));
     serviceAssert(
       positive(pr?.number) &&
         (!record.number || pr.number === record.number) &&
         pr.head?.repo?.id === repo.id &&
         pr.base?.repo?.id === repo.id &&
         pr.head.ref === record.branch &&
-        pr.head.sha === candidate.commit &&
+        pr.head.sha === (record.integration_commit ?? candidate.commit) &&
         pr.base.ref === record.target_branch &&
         String(pr.user?.id) === record.actor.id &&
-        pr.body === record.body &&
+        bodyMatches &&
         (allowMerged
           ? pr.merged === true
           : ["open", ...(allowClosed ? ["closed"] : [])].includes(pr.state) &&
@@ -192,7 +202,8 @@ export function createReleaseGitHub({
     for (let poll = 0; poll < polls; poll++) {
       const observed = await gates.pullRequest(role, record.number);
       serviceAssert(
-        observed.headRefOid === candidate.commit &&
+        observed.headRefOid ===
+          (record.integration_commit ?? candidate.commit) &&
           observed.headRefName === record.branch &&
           observed.baseRefOid === record.base &&
           observed.baseRefName === record.target_branch &&
@@ -200,7 +211,7 @@ export function createReleaseGitHub({
         "release-ownership",
         "Sandbox integration PR changed while checks ran."
       );
-      const required = observed.checks.filter((check) => check.isRequired);
+      const required = effectiveRequiredChecks(observed.checks);
       serviceAssert(
         required.some((check) => check.name === "Sandbox check"),
         "release-checks",
@@ -249,7 +260,11 @@ export function createReleaseGitHub({
       "release-cleanup",
       "The failed sandbox integration PR is not closed."
     );
-    await deleteOwnedBranch(role, record.branch, candidate.commit);
+    await deleteOwnedBranch(
+      role,
+      record.branch,
+      record.integration_commit ?? candidate.commit
+    );
     record.cleanup = "removed";
     await save();
     return {
@@ -433,9 +448,79 @@ export function createReleaseGitHub({
       }
       if (record.state === "cleaning")
         return cleanupFailedPull(role, record, candidate, save);
+      const legacyIntegration =
+        !record.integration_version &&
+        ["creating-pr", "checking", "merging", "merged"].includes(record.state);
+      if (!legacyIntegration) {
+        const signature = {
+          name: "Coordinator sandbox",
+          email: "rehearsal@example.invalid",
+          date: record.created_at
+        };
+        const commitInput = {
+          message: `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
+          tree: candidate.tree,
+          parents: [candidate.commit],
+          author: signature,
+          committer: signature
+        };
+        if (!record.integration_version) {
+          record.integration_version = 1;
+          record.integration_input = commitInput;
+          record.state = "commit-prepared";
+          await save();
+        }
+        serviceAssert(
+          record.integration_version === 1 &&
+            JSON.stringify(record.integration_input) ===
+              JSON.stringify(commitInput),
+          "release-state",
+          "Sandbox integration commit input changed."
+        );
+        const created = (
+          await call(
+            role,
+            "POST",
+            "/git/commits",
+            record.integration_input,
+            [201]
+          )
+        ).data;
+        serviceAssert(
+          sha(created?.sha) &&
+            created.tree?.sha === candidate.tree &&
+            created.parents?.length === 1 &&
+            created.parents[0].sha === candidate.commit,
+          "release-ownership",
+          "GitHub did not create the exact sandbox integration commit."
+        );
+        if (record.integration_commit)
+          serviceAssert(
+            record.integration_commit === created.sha,
+            "release-ownership",
+            "Sandbox integration commit changed across retries."
+          );
+        else {
+          record.integration_commit = created.sha;
+          record.state = "branch-prepared";
+          await save();
+        }
+        const observedCommit = (
+          await call(role, "GET", `/git/commits/${record.integration_commit}`)
+        ).data;
+        serviceAssert(
+          observedCommit?.sha === record.integration_commit &&
+            observedCommit.tree?.sha === candidate.tree &&
+            observedCommit.parents?.length === 1 &&
+            observedCommit.parents[0].sha === candidate.commit,
+          "release-ownership",
+          "Sandbox integration commit no longer contains the exact candidate tree."
+        );
+      }
+      const integrationCommit = record.integration_commit ?? candidate.commit;
       const resumedMerged = record.state === "merged";
       if (resumedMerged)
-        await deleteOwnedBranch(role, record.branch, candidate.commit);
+        await deleteOwnedBranch(role, record.branch, integrationCommit);
       else {
         let current = await ref(role, record.branch, [200, 404]);
         if (current.status === 404) {
@@ -443,15 +528,15 @@ export function createReleaseGitHub({
             role,
             "POST",
             "/git/refs",
-            { ref: `refs/heads/${record.branch}`, sha: candidate.commit },
+            { ref: `refs/heads/${record.branch}`, sha: integrationCommit },
             [201, 422]
           );
           current = await ref(role, record.branch);
         }
         serviceAssert(
-          current.data?.object?.sha === candidate.commit,
+          current.data?.object?.sha === integrationCommit,
           "release-ownership",
-          "Sandbox release branch does not name the exact selected candidate."
+          "Sandbox release branch does not name the exact integration commit."
         );
       }
       let pr;
@@ -524,7 +609,7 @@ export function createReleaseGitHub({
           {
             commit_title: `Sandbox ${record.step.environment} release ${record.release_id}`,
             commit_message: `Exact selected candidate ${candidate.commit}`,
-            sha: candidate.commit,
+            sha: integrationCommit,
             merge_method: "merge"
           },
           [200, 405, 409]
@@ -545,14 +630,14 @@ export function createReleaseGitHub({
         destination.data?.object?.sha === pr.merge_commit_sha &&
           merged.tree?.sha === record.checked_tree &&
           merged.parents?.some((parent) => parent.sha === record.base) &&
-          merged.parents?.some((parent) => parent.sha === candidate.commit),
+          merged.parents?.some((parent) => parent.sha === integrationCommit),
         "release-merge",
         "The sandbox environment does not contain the exact checked merge."
       );
       record.state = "merged";
       await save();
       if (!resumedMerged)
-        await deleteOwnedBranch(role, record.branch, candidate.commit);
+        await deleteOwnedBranch(role, record.branch, integrationCommit);
       record.cleanup = "removed";
       await save();
       return {
