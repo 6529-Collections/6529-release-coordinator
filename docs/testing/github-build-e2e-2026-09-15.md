@@ -35,6 +35,46 @@ build, and the pinned artifact upload action. The release workflow rebuilt exact
 environment commits, verified their manifests, recorded artifact digests, and
 ran E2E against the built backend and frontend over local runner HTTP ports.
 
+### Review follow-up
+
+Source review after the complete run found narrow safety and diagnostic gaps.
+The Coordinator now reads each built file's metadata and contents through one
+stable file handle, names a non-file output, distinguishes an explicitly skipped
+build from a missing outcome, matches required-check retries by exact commit,
+app, workflow, run and attempt, and stops incomplete legacy integration records
+for manual recovery.
+
+The two generated runtime files changed by those fixes reached sandbox `main`
+through protected backend PRs
+[#47](https://github.com/6529-Collections/release-coordinator-test-backend/pull/47)
+and [#49](https://github.com/6529-Collections/release-coordinator-test-backend/pull/49),
+and frontend PRs
+[#44](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/44)
+and [#46](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/46).
+Protected sync PRs
+[#50](https://github.com/6529-Collections/release-coordinator-test-backend/pull/50)
+and [#47](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/47)
+then merged each current `main` into `1a-staging`. Their required sandbox checks
+passed in runs
+[`34983218265`](https://github.com/6529-Collections/release-coordinator-test-backend/actions/runs/34983218265)
+and
+[`34983225645`](https://github.com/6529-Collections/release-coordinator-test-frontend/actions/runs/34983225645).
+
+Final readback showed these same blobs on both roles' `main` and `1a-staging`:
+
+- `.github/workflows/sandbox-release.yml`:
+  `14461c4318b22524dfc41032f8af3cd18f1e1bdc`
+- `coordinator/src/release-contract.mjs`:
+  `395eb44286c3e9853b5cd8a87e0f17e352cbba7b`
+- `coordinator/sandbox/application-build.mjs`:
+  `c9e84fb479e5cd160aafe143f2f3d2cecf08fb1b`
+- `coordinator/sandbox/release-run.mjs`:
+  `7bf071a06b96b75cee27091b3a0318b0688d115c`
+
+This proves that the checked and reviewed runtime is installed consistently. It
+does not claim that the full 14-operation release sequence was repeated after
+these narrow fixes; the complete run below remains that end-to-end evidence.
+
 ## Request and batch
 
 [Inbox ticket #21](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/21)
@@ -127,7 +167,7 @@ Final protected branch readback showed matching environment trees:
 ## Local source verification
 
 The latest `npm run check` passed after the live acceptance and review fixes.
-It ran 500 tests: 497 passed, 3 were intentionally skipped and none failed.
+It ran 501 tests: 498 passed, 3 were intentionally skipped and none failed.
 Non-fixing lint, formatting, workflow-policy checks and the isolated packed-CLI
 check also passed. `git diff --check` found no whitespace errors.
 

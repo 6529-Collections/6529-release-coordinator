@@ -72,9 +72,12 @@ export async function runSandboxReleaseOperation(
       );
     else
       await check(`build:${role}`, () => {
-        throw new Error(
-          `${role} npm build ${buildOutcome === "skipped" || !buildOutcome ? "was skipped" : "failed"}.`
-        );
+        const outcome = !buildOutcome
+          ? "has no reported outcome"
+          : buildOutcome === "skipped"
+            ? "was skipped"
+            : "failed";
+        throw new Error(`${role} npm build ${outcome}.`);
       });
     if (!manifest) continue;
     const artifact = await check(`artifact:${role}`, () => {

@@ -18,7 +18,7 @@ observations carry their original dates unless a newer check is stated.
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). PR #72 merged the v6 writer with exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
 | PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #72 and its merge commit passed Node 20/22/24, package, CodeQL and Snyk checks. All five exact-head 6529bot lanes completed without required changes; CodeRabbit passed and no review thread remained. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
-| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, locked builds and artifacts, matching built-output E2E, then protected test `main` for production requests | The original source-level sequence merged in PR #72. [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149) passed all 14 build-backed operations live before source review; see [September 15 acceptance](./testing/github-build-e2e-2026-09-15.md). The generated runtime is merged in the test repositories. No real repository is used. |
+| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, locked builds and artifacts, matching built-output E2E, then protected test `main` for production requests | The original source-level sequence merged in PR #72. [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149) passed all 14 build-backed operations live before source review; see [September 15 acceptance](./testing/github-build-e2e-2026-09-15.md). Review fixes were then republished through protected PRs, checked and read back byte for byte on both sandbox environment branches. No real repository is used. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -61,10 +61,24 @@ different release PRs; and CodeRabbit's generated PR-body block was treated as
 an ownership change. Release PRs now have their own commit IDs, the new
 integration checkpoint is validated for recovery, and all fixes have focused
 regressions. The latest local `npm run check` passed all repository gates:
-500 tests ran, 497 passed and 3 were intentionally skipped; lint, formatting,
+501 tests ran, 498 passed and 3 were intentionally skipped; lint, formatting,
 workflow policy and packed-package checks also passed. Full links, commit IDs,
 artifact digests and boundary proof are in the
 [dated acceptance record](./testing/github-build-e2e-2026-09-15.md).
+
+Source review then tightened required-check retry identity, stopped incomplete
+legacy release records for manual recovery, made build-file reads stable, and
+made missing build evidence explicit. The generated runtime changes passed
+protected backend PRs [#47](https://github.com/6529-Collections/release-coordinator-test-backend/pull/47)
+and [#49](https://github.com/6529-Collections/release-coordinator-test-backend/pull/49),
+frontend PRs [#44](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/44)
+and [#46](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/46),
+then protected main-to-staging PRs
+[#50](https://github.com/6529-Collections/release-coordinator-test-backend/pull/50)
+and [#47](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/47).
+Final readback found the same four pinned runtime blobs on `main` and
+`1a-staging` in both repositories. This refresh proves reviewed runtime delivery;
+the earlier 14-operation run remains the end-to-end acceptance.
 
 ## CLI 0.0.5 publication and consumer adoption, September 15
 

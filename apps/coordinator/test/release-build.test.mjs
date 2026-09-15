@@ -96,6 +96,22 @@ test("a changed build output cannot keep its saved manifest", async () => {
   }
 });
 
+test("a non-file build output names the invalid output", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "sandbox-build-"));
+  try {
+    const built = await candidate(root, "backend", "b".repeat(40));
+    const output = path.join(built.directory, "dist", "worker.mjs");
+    await rm(output);
+    await mkdir(output);
+    await assert.rejects(
+      verifyApplicationBuild(built.directory, "backend", "b".repeat(40)),
+      /not a file: worker\.mjs/u
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("E2E runs through the built backend and frontend HTTP boundary", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "sandbox-build-"));
   try {
@@ -148,7 +164,7 @@ test("a failed npm build produces a failed release result before E2E", async () 
   ]);
 });
 
-test("a required build that did not run is reported as skipped", async () => {
+test("required skipped and missing builds have distinct reports", async () => {
   const report = await runSandboxReleaseOperation(operation(), {
     runner,
     outcomes: {
@@ -167,7 +183,7 @@ test("a required build that did not run is reported as skipped", async () => {
     {
       name: "build:frontend",
       status: "failed",
-      message: "frontend npm build was skipped."
+      message: "frontend npm build has no reported outcome."
     }
   ]);
 });

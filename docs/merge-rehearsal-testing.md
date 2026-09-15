@@ -797,6 +797,11 @@ The focused local cases and the complete live sequence passed September 15.
 Live URLs, commits, artifact digests, recovery findings and final ticket/journal
 readback are in the
 [dated acceptance record](./testing/github-build-e2e-2026-09-15.md).
+Later review fixes were republished through protected test-repository PRs and
+merged from each current `main` into `1a-staging`. Fresh repository checks passed,
+and readback confirmed that both roles and environment branches contain the
+exact newly pinned runtime files. This narrow runtime refresh did not rerun the
+complete release sequence; the dated record separates those two proof layers.
 
 The same rules below remain the acceptance contract for future sandbox changes
 and the real-product adapters. A sandbox pass is not permission or proof of a
