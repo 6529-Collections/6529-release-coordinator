@@ -47,6 +47,14 @@ export const elapsedBatchPolicy = Object.freeze({
   workflow_blob: "bb736a236bc1d14d2f8ea35ce40953686e91169f"
 });
 
+// A short-lived v2 policy was saved before the sandbox check workflow changed.
+// Keep that exact historical shape readable so it cannot block every later run.
+export const earlierElapsedBatchPolicy = Object.freeze({
+  ...elapsedBatchPolicyBase,
+  version: "sandbox-batch-v2",
+  workflow_blob: "6fe8f54d4f3147854c3186c9b3992f983612b0b0"
+});
+
 export const batchPolicy = Object.freeze({
   ...commonBatchPolicy,
   version: "sandbox-batch-v3",
@@ -60,16 +68,18 @@ export function isReleaseBatchPolicy(policy) {
 }
 
 export function trustedBatchPolicy(policy) {
-  const expected =
-    policy?.version === legacyBatchPolicy.version
-      ? legacyBatchPolicy
-      : policy?.version === elapsedBatchPolicy.version
-        ? elapsedBatchPolicy
-        : policy?.version === batchPolicy.version
-          ? batchPolicy
-          : null;
+  const expected = [
+    legacyBatchPolicy,
+    earlierElapsedBatchPolicy,
+    elapsedBatchPolicy,
+    batchPolicy
+  ].find(
+    (candidate) =>
+      candidate.version === policy?.version &&
+      serviceHash(candidate) === serviceHash(policy)
+  );
   serviceAssert(
-    expected && serviceHash(policy) === serviceHash(expected),
+    expected,
     "batch-policy",
     "Saved batch policy is not a trusted Coordinator policy."
   );

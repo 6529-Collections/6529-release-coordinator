@@ -1,7 +1,8 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-15**, against merged source `502c429`, the live package
-and consumer evidence below, and the earlier sandbox acceptance. This page
+Last reviewed: **2026-09-15**, against merged source `502c429`, the current
+working branch based on `05efec3`, the live package and consumer evidence below,
+and the latest sandbox acceptance. This page
 separates implemented behavior, source delivery and live proof. Earlier
 observations carry their original dates unless a newer check is stated.
 
@@ -13,7 +14,7 @@ observations carry their original dates unless a newer check is stated.
 | Operational monitoring intake | Monitoring-only backend requests can be created, validated, displayed, labeled, and have their exact PR checked | Merged in [PR #72](https://github.com/6529-Collections/6529-release-coordinator/pull/72) with automated coverage. Deployment and target-health checks are deliberately unavailable, so these tickets stay waiting and cannot enter rehearsal/execution. |
 | Ticket workflow | One manual `inbox:run` command reads requests, checks exact PRs and updates the same tickets | Unified workflow and subsequent sandbox work are merged; [command guide](../apps/coordinator/README.md#run-the-ticket-workflow). |
 | Sandbox service/database checks | One-ticket checks run sample services and temporary MySQL in GitHub Actions | Local and live acceptance passed; see [source delivery](#sandbox-source-delivery-september-10). |
-| Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [dated live evidence](./testing/batch-2026-09-10.md). The current working branch removes the old 45-minute cutoff through policy v3 while retaining attempt-count budgets and v1/v2 history compatibility; this part is not yet merged or live-tested. |
+| Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [September 10 evidence](./testing/batch-2026-09-10.md). A fresh [September 15 v3 run](./testing/batch-v3-2026-09-15.md) proved A+B failing while A and B pass alone, selected A, completed fake staging and matching E2E, and waited through long GitHub queues without an elapsed-time cutoff. The exact earlier v2 policy found in the live journal is now readable; this working-branch fix is not merged. |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). PR #72 merged the v6 writer with exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
 | PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #72 and its merge commit passed Node 20/22/24, package, CodeQL and Snyk checks. All five exact-head 6529bot lanes completed without required changes; CodeRabbit passed and no review thread remained. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
@@ -33,13 +34,13 @@ frontend or backend repositories.
 
 ## Next steps
 
-Package publication and product adoption are complete. Next, add narrow real
-adapters that call the existing frontend, backend-service, and
-operational-monitoring release workflows without redesigning their builds or
-environment settings. Start with real staging composition, deployment-result
-matching, and the required staging E2E gate; production execution and rollback
-remain later steps. Database-changing batches, linked tickets,
-heartbeat/takeover, and parallel releases also remain deferred.
+Package publication and product adoption are complete. Continue in the three
+test repositories for now. The next small step is another mixed sandbox run with
+different cheap blockers, such as a Git conflict or failed source check beside
+compatible tickets, proving those tickets are excluded before combined CI while
+the useful group continues. Do not connect the Coordinator to real product
+execution yet. Real adapters, database-changing batches, linked tickets,
+heartbeat/takeover, rollback and parallel releases remain later work.
 
 ## CLI 0.0.5 publication and consumer adoption, September 15
 

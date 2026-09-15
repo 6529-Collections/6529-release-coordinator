@@ -642,8 +642,9 @@ existing non-database batch matrix.
 ## Batch acceptance
 
 **Batch acceptance requirements, implemented in the sandbox stage September 10,
-2026.** See [progress](./progress.md) and the [dated batch acceptance record](./testing/batch-2026-09-10.md) for
-which cases have offline versus live proof. This section follows the
+2026.** See [progress](./progress.md), the [original dated batch acceptance](./testing/batch-2026-09-10.md),
+and the [policy v3 live run](./testing/batch-v3-2026-09-15.md) for which cases
+have offline versus live proof. This section follows the
 [batch-selection design](./design.md#proposed-batch-testing-and-selection) and
 [ticket outcomes](./inbox-processing.md#proposed-batch-ticket-outcomes).
 It does not change the completed MR matrix or its dated evidence above.
@@ -730,6 +731,7 @@ injection and volume cases below remain offline proof; the real inbox was not mi
 | Subsequent ordinary journal writes | Preserve all archived files and index structure; validate full archive content on write/read, rather than recreating a state-only tree. | Passed offline + live sandbox |
 | Existing v4 migration and older writer | Preserve receipts, transitions, service/batch identities and budgets. Older writers reject the new marker before mutation. | Passed offline; migration also passed live sandbox |
 | Interrupted v1 batch under the current Coordinator | Reconcile and clean only already-started exact v1 work with its pinned policy; start no new v1 trial, preserve IDs/evidence, retire the selection as stale and require a fresh v3 command before release. | Passed offline |
+| Exact earlier v2 policy saved before the required-workflow update | Accept only the code-owned historical policy shape, ignore its retired elapsed deadline, and continue without widening trust to modified policy fields. | Passed offline + live sandbox |
 | Standalone service history and linked records | Archive only fully finished, unneeded records; preserve active references and prevent the existing 1,000-record cap becoming another lifetime stop. | Passed offline |
 
 Offline cases also cover immutable snapshots for later stale observations,
