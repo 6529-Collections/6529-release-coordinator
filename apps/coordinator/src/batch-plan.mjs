@@ -61,7 +61,7 @@ export const previousBatchPolicy = Object.freeze({
   workflow_blob: "bb736a236bc1d14d2f8ea35ce40953686e91169f"
 });
 
-export const batchPolicy = Object.freeze({
+export const priorBatchPolicy = Object.freeze({
   ...commonBatchPolicy,
   version: "sandbox-batch-v4",
   workflow_blob: Object.freeze({
@@ -70,10 +70,17 @@ export const batchPolicy = Object.freeze({
   })
 });
 
+export const batchPolicy = Object.freeze({
+  ...commonBatchPolicy,
+  version: "sandbox-batch-v5",
+  workflow_blob: priorBatchPolicy.workflow_blob
+});
+
 export function isReleaseBatchPolicy(policy) {
   return [
     elapsedBatchPolicy.version,
     previousBatchPolicy.version,
+    priorBatchPolicy.version,
     batchPolicy.version
   ].includes(policy?.version);
 }
@@ -84,6 +91,7 @@ export function trustedBatchPolicy(policy) {
     earlierElapsedBatchPolicy,
     elapsedBatchPolicy,
     previousBatchPolicy,
+    priorBatchPolicy,
     batchPolicy
   ].find(
     (candidate) =>
@@ -98,28 +106,39 @@ export function trustedBatchPolicy(policy) {
   return expected;
 }
 
-export function batchMergePlan(items, profile = sandboxProfile) {
+export function batchMergePlan(
+  items,
+  profile = sandboxProfile,
+  policy = batchPolicy
+) {
+  trustedBatchPolicy(policy);
   serviceAssert(
     profile === sandboxProfile &&
       items.length > 0 &&
-      items.length <= batchPolicy.max_tickets,
+      items.length <= policy.max_tickets,
     "batch-scope",
     "Batch trials require whole sandbox tickets within the configured limit."
   );
   const targets = [...new Set(items.map((item) => item.entry.request.target))];
+  const databases = items.map((item) => item.entry.request.database_change);
   serviceAssert(
     targets.length === 1 && isReleaseRequestTarget(targets[0]),
     "batch-unsupported",
     "Every ticket in one batch must have the same staging or production target."
   );
+  serviceAssert(
+    databases.every((value) => ["no", "yes"].includes(value)) &&
+      (!databases.includes("yes") || items.length === 1),
+    "batch-unsupported",
+    "A database-changing sandbox release must contain exactly one whole ticket."
+  );
   const bindings = [],
     repos = new Map();
   for (const item of items) {
     serviceAssert(
-      item.entry.request.target === targets[0] &&
-        item.entry.request.database_change === "no",
+      item.entry.request.target === targets[0],
       "batch-unsupported",
-      "This batch stage requires one shared target and no database changes."
+      "This batch stage requires one shared target."
     );
     const plan = inboxMergePlan(item.input, item.entry, profile);
     bindings.push(inboxBinding(item.entry, profile));
@@ -179,15 +198,15 @@ export function batchMergePlan(items, profile = sandboxProfile) {
     repository_id: profile.inbox.id,
     tickets: bindings
   };
-  plan.input_hash = serviceHash({ plan, policy: batchPolicy });
+  plan.input_hash = serviceHash({ plan, policy });
   return plan;
 }
 
 export async function prepareBatch(
   items,
-  { profile = sandboxProfile, signal, ...options } = {}
+  { profile = sandboxProfile, signal, policy = batchPolicy, ...options } = {}
 ) {
-  const plan = batchMergePlan(items, profile);
+  const plan = batchMergePlan(items, profile, policy);
   const report = await runMergePlan(plan, {
     ...options,
     profile,
@@ -243,10 +262,13 @@ export async function prepareBatch(
     };
   for (const repo of report.repositories) delete repo.service_source.patch;
   const servicePlan = servicePlanFromSources({
-    request: { ...plan.dependency_request, database_change: "no" },
+    request: {
+      ...plan.dependency_request,
+      database_change: items[0].entry.request.database_change
+    },
     binding: plan.batch,
     report,
-    runtime: batchPolicy.runtime
+    runtime: policy.runtime
   });
   return {
     status: "passed",

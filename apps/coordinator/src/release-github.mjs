@@ -10,6 +10,7 @@ import {
 } from "./release-contract.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { effectiveRequiredChecks } from "./github-checks.mjs";
+import { integrationCommitInput } from "./release-plan.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -24,7 +25,7 @@ const runtimePaths = Object.freeze([
   "coordinator/sandbox/release-run.mjs"
 ]);
 const branch = (record) =>
-  `codex/release-${record.release_id}-${record.step.environment}-${record.step.role}`;
+  `codex/release-${record.release_id}-${record.step.environment}-${record.step.role}${record.step.recovery ? "-restore" : ""}`;
 const target = (runtime, environment) => runtime.branches[environment];
 
 export function createReleaseGitHub({
@@ -431,7 +432,9 @@ export function createReleaseGitHub({
       record.actor ??= actor;
       record.target_branch ??= targetBranch;
       record.branch ??= branch(record);
-      record.body ??= `Sandbox release ${record.release_id}\n\nBatch: ${candidate.tree}`;
+      record.body ??= record.step.recovery
+        ? `Sandbox restoration for failed release ${record.release_id}\n\nRestore staging tree ${candidate.tree}`
+        : `Sandbox release ${record.release_id}\n\nBatch: ${candidate.tree}`;
       if (!record.base) {
         record.base = (await ref(role, targetBranch)).data.object.sha;
         serviceAssert(
@@ -465,18 +468,7 @@ export function createReleaseGitHub({
         "release-recovery",
         "This unfinished release predates unique integration commits and needs manual recovery."
       );
-      const signature = {
-        name: "Coordinator sandbox",
-        email: "rehearsal@example.invalid",
-        date: record.created_at
-      };
-      const commitInput = {
-        message: `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
-        tree: candidate.tree,
-        parents: [candidate.commit],
-        author: signature,
-        committer: signature
-      };
+      const commitInput = integrationCommitInput(record, candidate);
       if (!record.integration_version) {
         record.integration_version = 1;
         record.integration_input = commitInput;
@@ -572,7 +564,9 @@ export function createReleaseGitHub({
               "POST",
               "/pulls",
               {
-                title: `Sandbox ${record.step.environment} release ${record.release_id}`,
+                title: record.step.recovery
+                  ? `Restore sandbox staging after ${record.release_id}`
+                  : `Sandbox ${record.step.environment} release ${record.release_id}`,
                 head: record.branch,
                 base: targetBranch,
                 body: record.body
@@ -619,8 +613,12 @@ export function createReleaseGitHub({
           "PUT",
           `/pulls/${record.number}/merge`,
           {
-            commit_title: `Sandbox ${record.step.environment} release ${record.release_id}`,
-            commit_message: `Exact selected candidate ${candidate.commit}`,
+            commit_title: record.step.recovery
+              ? `Restore sandbox staging after ${record.release_id}`
+              : `Sandbox ${record.step.environment} release ${record.release_id}`,
+            commit_message: record.step.recovery
+              ? `Restore staging tree ${candidate.tree}`
+              : `Exact selected candidate ${candidate.commit}`,
             sha: integrationCommit,
             merge_method: "merge"
           },
@@ -659,6 +657,98 @@ export function createReleaseGitHub({
         tree: merged.tree.sha,
         url: record.url
       };
+    },
+    async restore({ record, restoreTo, expectedBase, actor, save }) {
+      serviceAssert(
+        record.step.recovery === true &&
+          record.step.kind === "integrate" &&
+          record.step.environment === "staging" &&
+          sha(restoreTo) &&
+          sha(expectedBase),
+        "release-recovery",
+        "Invalid sandbox staging restoration target."
+      );
+      const role = record.step.role;
+      serviceAssert(
+        (!record.branch || record.branch === branch(record)) &&
+          (!record.target_branch ||
+            record.target_branch === target(runtime, "staging")),
+        "release-ownership",
+        "Staging restoration branch or destination changed."
+      );
+      await verifyRuntime(role, restoreTo);
+      const old = (await call(role, "GET", `/git/commits/${restoreTo}`)).data;
+      serviceAssert(
+        old?.sha === restoreTo && sha(old.tree?.sha),
+        "release-recovery",
+        "The saved staging source cannot be verified."
+      );
+      serviceAssert(
+        (!record.restore_to || record.restore_to === restoreTo) &&
+          (!record.restore_tree || record.restore_tree === old.tree.sha),
+        "release-recovery",
+        "The saved staging restoration target changed."
+      );
+      if (!record.restore_to || !record.restore_tree) {
+        record.restore_to = restoreTo;
+        record.restore_tree = old.tree.sha;
+        await save();
+      }
+      const result = await this.integrate({
+        record,
+        candidate: {
+          role,
+          base: expectedBase,
+          commit: expectedBase,
+          tree: record.restore_tree,
+          changed: true
+        },
+        actor,
+        expectedBase,
+        save
+      });
+      serviceAssert(
+        result.status !== "passed" || result.tree === record.restore_tree,
+        "release-recovery",
+        "Restored staging does not match its saved source tree."
+      );
+      return result;
+    },
+    async verifyRestoredStaging({ versions, trees, prodVersions }) {
+      const observed = { staging: {}, prod: {}, trees: {} };
+      for (const role of ["backend", "frontend"]) {
+        serviceAssert(
+          sha(versions?.[role]) &&
+            sha(prodVersions?.[role]) &&
+            (!trees?.[role] || sha(trees[role])),
+          "release-recovery",
+          "Restoration verification lacks exact source versions."
+        );
+        observed.staging[role] = (
+          await ref(role, target(runtime, "staging"))
+        ).data.object.sha;
+        observed.prod[role] = (
+          await ref(role, target(runtime, "prod"))
+        ).data.object.sha;
+        serviceAssert(
+          observed.staging[role] === versions[role] &&
+            observed.prod[role] === prodVersions[role],
+          "release-recovery-moved",
+          "Sandbox staging or test main moved before restoration was confirmed."
+        );
+        const commit = (
+          await call(role, "GET", `/git/commits/${versions[role]}`)
+        ).data;
+        serviceAssert(
+          commit?.sha === versions[role] &&
+            sha(commit.tree?.sha) &&
+            (!trees?.[role] || commit.tree.sha === trees[role]),
+          "release-recovery-moved",
+          "Restored staging tree differs from the saved source."
+        );
+        observed.trees[role] = commit.tree.sha;
+      }
+      return observed;
     },
     async run({ record, actor, save }) {
       const operation = validateReleaseOperation(record.operation);

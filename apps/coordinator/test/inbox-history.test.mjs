@@ -93,7 +93,10 @@ test("more than 100 completed batches archive without resetting search budgets o
     const batch = await selectBatch({
       items: [
         {
-          entry: { issue_number: 1, request: { target: "staging" } },
+          entry: {
+            issue_number: 1,
+            request: { target: "staging", database_change: "no" }
+          },
           input
         }
       ],

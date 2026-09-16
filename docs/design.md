@@ -4,7 +4,8 @@
 inspects readiness, organizes tickets, rehearses merges, and runs supported
 sandbox checks. An unscoped sandbox run now moves one selected
 no-database-change batch through protected test staging and, after matching E2E,
-protected test production. It has no real product adapter or authorization. See
+protected test production. The current local branch also supports one verified
+database-changing sandbox ticket alone. It has no real product adapter or authorization. See
 [progress](./progress.md) for that boundary.
 The [agreed execution direction](#agreed-execution-direction-september-11)
 and [process diagram](../release-coordinator-process.html) describe the same
@@ -341,7 +342,9 @@ v1 evidence can never enter the release sequence.
 labels and submitter-facing reasons. The [acceptance matrix](./merge-rehearsal-testing.md#planned-batch-acceptance)
 records expected cases and the dated evidence distinguishes local tests from live
 GitHub proof. Database-changing batches, cross-ticket dependency declarations,
-real application execution and deployment remain future work.
+real application execution and deployment remain future work. The current local
+branch supports one database-changing sandbox ticket alone; combining two such
+tickets remains deferred.
 
 ### Deferred: links between separate tickets
 
@@ -457,7 +460,7 @@ Product repositories continue owning:
 
 Do not copy those implementations into the Coordinator or restore the old
 Release Bus. The current request schema needs no change for these decisions.
-Cross-ticket links and database-changing batches remain deferred.
+Cross-ticket links and database-changing multi-ticket batches remain deferred.
 
 ### GitHub-only sandbox builds
 
@@ -695,6 +698,15 @@ how the apps receive configuration.
 
 ## Recovery path
 
+The sandbox implementation currently covers only restoring test staging after a
+confirmed failed step in a selected no-database-change batch. It makes new
+commits from the exact current staging heads with the saved pre-release staging
+trees, uses protected PRs and required checks, then reruns the ordered sandbox
+builds and matching E2E. The controlled [September 16 sandbox run](./testing/staging-restoration-2026-09-16.md)
+passed this path. A final ref/tree readback guard was added afterward and is
+covered offline; production recovery and real-product adapters below remain
+design work.
+
 Recovery starts only after shared refs or an environment changed and the release
 later failed. Before any mutation, failure simply holds/fails the candidate and
 cleans its owned trials. Never split a deployed batch to recover it.
@@ -736,8 +748,14 @@ rules, including entities/schema and data-change code. Absence of a familiar
 migration filename does not prove `no`. Unknown coverage/identity holds execution;
 a false `no` requires a corrected request, without rewriting its original receipt.
 
-Single-ticket sandbox database tests exist. Real database inspection/execution
-and database-changing batches remain deferred. When real execution is built,
+Single-ticket sandbox database tests exist. The current local branch can send
+one verified database-changing ticket through the fake staging/E2E/production
+sequence after its temporary MySQL check passes. It never restores staging
+automatically after that release fails. The fake environment does not have a
+persistent database: its built-output checks use the same identified sample
+change, while temporary MySQL owns the actual database-effect test. Real database
+inspection/execution and database-changing multi-ticket batches remain deferred.
+When real execution is built,
 reuse the backend's selected database service (which may require deploying and
 invoking `dbMigrationsLoop`), verify its effects before dependents and never repeat
 a one-off change merely because a response was lost. Database-changing releases

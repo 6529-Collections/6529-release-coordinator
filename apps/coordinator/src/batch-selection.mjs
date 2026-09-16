@@ -33,12 +33,26 @@ export async function selectBatch({
   const inputs = ordered.map((item) => ({
     number: item.entry.issue_number,
     target: item.entry.request?.target ?? item.target,
+    ...(policy.version === "sandbox-batch-v5"
+      ? {
+          database_change:
+            item.entry.request?.database_change ?? item.database_change
+        }
+      : {}),
     input: item.input
   }));
   serviceAssert(
-    inputs.every(({ target }) => isReleaseRequestTarget(target)),
+    inputs.every(
+      ({ target, database_change: database }) =>
+        isReleaseRequestTarget(target) &&
+        (policy.version !== "sandbox-batch-v5" ||
+          ["no", "yes"].includes(database))
+    ) &&
+      (policy.version !== "sandbox-batch-v5" ||
+        !inputs.some((item) => item.database_change === "yes") ||
+        inputs.length === 1),
     "batch-unsupported",
-    "Every batch ticket must have a staging or production target."
+    "Every batch ticket needs a supported target, and a database change must be alone."
   );
   const fingerprint = serviceHash({ inputs, policy });
   const created = now();

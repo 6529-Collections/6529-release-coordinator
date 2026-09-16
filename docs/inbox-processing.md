@@ -6,7 +6,8 @@ sequence implemented and tested by September 11, 2026.** See
 run one explicit command to inspect its ticket, rehearse suitable exact PRs,
 run supported sandbox service checks, and record the result on that same ticket.
 An unscoped sandbox run can continue one selected no-database-change batch through
-protected fake staging and production. Real product execution remains separate.
+protected fake staging and production. The current branch also selects one
+verified database-changing ticket alone. Real product execution remains separate.
 
 This document owns the ticket states, labels, reasons, and first-processing
 rules. [Progress](./progress.md) owns dated implementation and live evidence.
@@ -39,8 +40,8 @@ frontend PRs, backend PRs, or both. A scoped `inbox:run --issue NUMBER` handles
 only that ticket. An unscoped sandbox run can select several separate,
 self-contained tickets and test their exact PR changes together as one batch.
 It never splits a ticket or merges the submitters' source PRs during selection.
-Cross-ticket dependency declarations and database-changing batches are still
-unsupported.
+Cross-ticket dependency declarations and database-changing multi-ticket batches
+are still unsupported.
 
 The one-ticket rehearsal only merges in temporary local repositories. An unscoped
 sandbox run may merge its selected candidate into the protected branches of the
@@ -249,7 +250,9 @@ The [batch-selection policy](./design.md#proposed-batch-testing-and-selection)
 finishes cheap intake, scope, database and Git filtering before new combined
 PR/service checks. `--issue` retains one-ticket handling. Batching supports
 self-contained staging or production requests with verified no-database-change
-scope. A batch contains only one target.
+scope. One verified database-changing ticket can use the same sandbox release
+sequence alone. Older suitable tickets take priority; other tickets wait while
+that ticket is selected. A batch contains only one target.
 Cross-ticket dependency declarations remain future work; inseparable changes
 must be submitted as one complete ticket.
 
@@ -266,6 +269,10 @@ release step fails, and becomes `status:completed` only after every step require
 by its target passes and owned branches are removed. Excluded tickets retain the
 same comment, reasons, action owner, exact group/attempt and check links. Unknown
 results never blame a submitter.
+For a database-changing ticket, a failed release step leaves the ticket open
+with `reason:release-failed` and Coordinator-maintainer ownership. Automatic
+staging restoration is not attempted; a person inspects the recorded step and
+test staging before another release.
 Reusing a saved group requires fresh input checks and a fresh read of its actual
 GitHub CI/service evidence. Missing or changed proof stops reuse; a cached journal
 result alone is insufficient. This verification starts no new CI. Its scope is the frozen eligible pool after

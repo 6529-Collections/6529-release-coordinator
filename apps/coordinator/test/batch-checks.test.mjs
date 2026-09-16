@@ -13,6 +13,7 @@ import { serviceHash, ServiceError } from "../src/service-contract.mjs";
 import { selectBatch } from "../src/batch-selection.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import { validateBatchHistory } from "../src/batch-state.mjs";
+import { databaseCandidate, sampleFiles } from "../sandbox/fixtures.mjs";
 
 import { checkHarness } from "./checks-harness.mjs";
 
@@ -43,6 +44,33 @@ test("real Git combines whole cross-repository tickets and captures exact suppor
       await f.git.git(f.git.repositories[role].cwd, ["rev-parse", "main"]),
       f.git.repositories[role].base
     );
+});
+
+test("real Git prepares one exact database-changing ticket with its required service order", async (t) => {
+  const f = await batchFixture(t);
+  const candidate = databaseCandidate().backend;
+  const baseline = sampleFiles().backend;
+  const changed = Object.fromEntries(
+    Object.entries(candidate).filter(
+      ([name, contents]) => contents !== baseline[name]
+    )
+  );
+  const ticket = await f.ticket(
+    { backend: changed },
+    { databaseChange: "yes" }
+  );
+  const prepared = await f.prepare([ticket]);
+  assert.equal(prepared.status, "passed");
+  assert.deepEqual(prepared.service_plan.database, {
+    declared: "yes",
+    observed: "yes",
+    change_id: prepared.service_plan.database.change_id,
+    changed_paths: ["src/entities/item.json", "src/data/change.json"]
+  });
+  assert.deepEqual(
+    prepared.service_plan.steps.map((step) => step.unit),
+    ["dbMigrationsLoop", "worker", "api", "frontend"]
+  );
 });
 
 test("real Git catches conflicts between different tickets without running programs", async (t) => {
@@ -215,6 +243,7 @@ test("durable batch history requires the exact selected group and completed clea
       inputs: items.map((item) => ({
         number: item.number,
         target: item.entry.request.target,
+        database_change: item.entry.request.database_change,
         input: item.input
       })),
       policy: batchPolicy

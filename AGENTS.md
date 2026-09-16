@@ -14,6 +14,9 @@ They can also take one selected no-database-change batch through protected fake
 staging, locked npm builds and artifacts, matching built-output E2E, protected
 fake production, and another matching E2E. Real product release execution
 remains a design; passing sandbox checks never authorize it.
+The current local branch also selects one verified database-changing ticket
+alone for the sandbox release path. A failed release step then stops for a
+person without automatic staging restoration. Check progress for live proof.
 
 It is intended to coordinate releases across:
 
@@ -83,11 +86,13 @@ Existing limits stay unchanged until they are separately discussed.
   evidence. Check progress for offline versus actual live acceptance.
 - `docs/merge-rehearsal-testing.md` owns the sandbox rehearsal scope,
   its test repositories, test matrices, and finish lines. The current sandbox stage
-  tests one ticket's services/database behavior and bounded no-database-change batches.
+  tests one ticket's services/database behavior, bounded no-database-change
+  batches, and one database-changing ticket alone in the current local branch.
   Its service/database section owns the small programs, temporary MySQL baseline,
   declared-versus-observed database answer, ordered steps, retry/stop evidence,
   and cleanup. It also owns the protected fake staging/E2E/production release
-  sequence and its dated live acceptance. Keep the shared Coordinator logic and
+  sequence, its dated live acceptance, and the sandbox staging restoration
+  acceptance. Keep the shared Coordinator logic and
   explicit profile boundary; sandbox actions never enable real deployment. Check progress for local
   implementation, live coverage, and GitHub account limitations.
   Keep test manifests separate from verified inbox requests; do not widen the
@@ -100,8 +105,9 @@ Existing limits stay unchanged until they are separately discussed.
   on both branches. Keep trial and environment integration commits distinct so
   checks cannot be reused across stages.
 - `docs/design.md` and the full process diagram contain the agreed execution
-  direction for the real products. Its sandbox subset is implemented and live
-  tested; the product adapters and rollback are not. Reuse existing product Actions and their
+  direction for the real products. Its sandbox release and staging restoration
+  subsets are live tested. Product
+  adapters and production rollback are not built. Reuse existing product Actions and their
   environment-specific builds; no configuration redesign or portable artifacts.
   Wait for successful matching staging E2E before production merges into `main`.
   Keep one release active through completion or recovery. Automatic rollback
@@ -121,7 +127,7 @@ Existing limits stay unchanged until they are separately discussed.
   acceptance cases belong in `docs/merge-rehearsal-testing.md`. These are sandbox
   requirements for sandbox batching, not real release authorization. The current
   sandbox adapter and release sequence support self-contained tickets only; cross-ticket dependency
-  declarations and database-changing batches remain deferred. Keep cheap
+  declarations and database-changing multi-ticket batches remain deferred. Keep cheap
   filtering before expensive checks, preserve owned trial cleanup and agreed count budgets.
 - CLI, inbox reader, and readiness usage belong in their package/application
   READMEs. The JSON Schema owns the request shape; `release-request-schema.md`
