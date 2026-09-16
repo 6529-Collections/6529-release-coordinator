@@ -3,11 +3,13 @@
 // replace these identities.
 const files = Object.freeze({
   ".github/workflows/sandbox-release.yml":
-    "da76eeee97f41430595b49e288e9909bb6596e31",
+    "14461c4318b22524dfc41032f8af3cd18f1e1bdc",
   "coordinator/src/release-contract.mjs":
-    "b919af7d89bbdf3357730cd1d3b90e784c5b1397",
+    "395eb44286c3e9853b5cd8a87e0f17e352cbba7b",
+  "coordinator/sandbox/application-build.mjs":
+    "c9e84fb479e5cd160aafe143f2f3d2cecf08fb1b",
   "coordinator/sandbox/release-run.mjs":
-    "32c783a499c842a37b1fec28f222b475b52ef477"
+    "7bf071a06b96b75cee27091b3a0318b0688d115c"
 });
 
 export const sandboxReleaseRuntime = Object.freeze({

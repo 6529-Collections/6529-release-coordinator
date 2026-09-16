@@ -10,9 +10,37 @@ import { executeServiceSteps } from "../src/service-contract.mjs";
 import { servicePlanFromSources } from "../src/service-plan.mjs";
 import { executeRelease } from "../src/release-execution.mjs";
 import {
+  makeReleaseBuild,
+  releaseBuildFiles,
   releaseProtocol,
   verifyReleaseReport
 } from "../src/release-contract.mjs";
+import { serviceHash } from "../src/service-contract.mjs";
+
+const releaseBuilds = (operation) => {
+  const roles =
+    operation.operation === "e2e" ? ["backend", "frontend"] : [operation.role];
+  return Object.fromEntries(
+    roles.map((role) => [
+      role,
+      {
+        manifest: makeReleaseBuild({
+          role,
+          source_commit: operation[`${role}_commit`],
+          files: releaseBuildFiles[role].map((path) => ({
+            path,
+            sha256: "a".repeat(64),
+            bytes: 1
+          }))
+        }),
+        artifact: {
+          name: `sandbox-build-${operation.operation_id}-${role}`,
+          digest: "b".repeat(64)
+        }
+      }
+    ])
+  );
+};
 
 export function harness(count = 2) {
   const f = fixture(sandboxProfile),
@@ -87,13 +115,31 @@ export function harness(count = 2) {
             }
           }
         }),
-        integrate: async ({ candidate }) => ({
-          status: "passed",
-          kind: "merge",
-          commit: candidate.commit,
-          tree: candidate.tree,
-          url: "https://example.invalid/integration"
-        }),
+        integrate: async ({ record, candidate }) => {
+          const signature = {
+            name: "Coordinator sandbox",
+            email: "rehearsal@example.invalid",
+            date: record.created_at
+          };
+          record.integration_version = 1;
+          record.integration_input = {
+            message: `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
+            tree: candidate.tree,
+            parents: [candidate.commit],
+            author: signature,
+            committer: signature
+          };
+          record.integration_commit = serviceHash(
+            record.integration_input
+          ).slice(0, 40);
+          return {
+            status: "passed",
+            kind: "merge",
+            commit: record.integration_commit,
+            tree: candidate.tree,
+            url: "https://example.invalid/integration"
+          };
+        },
         run: async ({ record }) => {
           const runId = releaseRun++;
           const runnerRole =
@@ -112,6 +158,7 @@ export function harness(count = 2) {
             unit: record.operation.unit,
             status: "passed",
             checks: [{ name: "fixture", status: "passed" }],
+            builds: releaseBuilds(record.operation),
             versions: {
               backend: record.operation.backend_commit,
               frontend: record.operation.frontend_commit

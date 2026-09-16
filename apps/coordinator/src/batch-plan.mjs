@@ -55,16 +55,27 @@ export const earlierElapsedBatchPolicy = Object.freeze({
   workflow_blob: "6fe8f54d4f3147854c3186c9b3992f983612b0b0"
 });
 
-export const batchPolicy = Object.freeze({
+export const previousBatchPolicy = Object.freeze({
   ...commonBatchPolicy,
   version: "sandbox-batch-v3",
   workflow_blob: "bb736a236bc1d14d2f8ea35ce40953686e91169f"
 });
 
+export const batchPolicy = Object.freeze({
+  ...commonBatchPolicy,
+  version: "sandbox-batch-v4",
+  workflow_blob: Object.freeze({
+    backend: "83f5fed03dc366bcf3643eb8ca74a0b15f820da4",
+    frontend: "96d6e6c352013a32b96d386829cf50a1ecb91a11"
+  })
+});
+
 export function isReleaseBatchPolicy(policy) {
-  return [elapsedBatchPolicy.version, batchPolicy.version].includes(
-    policy?.version
-  );
+  return [
+    elapsedBatchPolicy.version,
+    previousBatchPolicy.version,
+    batchPolicy.version
+  ].includes(policy?.version);
 }
 
 export function trustedBatchPolicy(policy) {
@@ -72,6 +83,7 @@ export function trustedBatchPolicy(policy) {
     legacyBatchPolicy,
     earlierElapsedBatchPolicy,
     elapsedBatchPolicy,
+    previousBatchPolicy,
     batchPolicy
   ].find(
     (candidate) =>

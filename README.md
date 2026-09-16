@@ -5,7 +5,8 @@ backend. **Request intake is live. One local command now checks a ticket,
 rehearses its suitable PRs, runs supported sandbox service/database checks,
 and updates that same ticket with the result. An unscoped sandbox run can now
 move one selected no-database-change batch through protected test staging,
-matching E2E, and protected test production.
+locked npm builds, matching E2E against the built backend and frontend, and
+protected test production.
 Sandbox and real profiles share the same intake and selection code. Real product
 release execution and rollback are not built yet.**
 
@@ -46,8 +47,12 @@ Without `--issue`, a selected sandbox batch continues in dependency order throug
 protected test staging. A production-target request continues to protected test
 `main` only after matching staging E2E passes. Every integration PR, workflow
 operation, exact commit pair and result is saved before the ticket is completed.
-The Coordinator checks the pinned workflow, contract, and runner files at the
-exact fake environment commit before dispatch.
+Each fake environment builds from its exact commit, uploads a short-lived GitHub
+Actions artifact, and runs E2E through the built backend and frontend HTTP
+servers. The Coordinator checks the pinned workflow, contract, build helper and
+runner files at the exact fake environment commit before dispatch. Trial,
+staging and production PRs use separate commit IDs, so one PR's checks cannot be
+reused as another stage's evidence.
 
 A passing one-ticket rehearsal adds `rehearsal:passed`. A selected unscoped
 sandbox batch completes only after its required test release sequence passes.
@@ -173,16 +178,22 @@ See [readiness checks](./apps/coordinator/README.md#readiness-checks) for detail
 ## Agreed next direction
 
 The sandbox worker now proves the sequence: find a passing batch, integrate it
-through protected test staging, run ordered checks, wait for matching E2E, and
-only then repeat the protected sequence on test `main` for a production request.
-It keeps one release active through completion or explicit recovery. See the
-[live release acceptance](./docs/testing/release-sequence-2026-09-11.md).
+through protected test staging, produce locked builds and artifacts, run ordered
+checks, wait for matching built-output E2E, and only then repeat the protected
+sequence on test `main` for a production request. It keeps one release active
+through completion or explicit recovery. See the
+[live release acceptance](./docs/testing/release-sequence-2026-09-11.md) for the
+original source-level sequence. The
+[September 15 build acceptance](./docs/testing/github-build-e2e-2026-09-15.md)
+proves the GitHub-only build, artifact, built-output E2E, recovery and cleanup
+path from the current working branch.
 
-The next implementation stage is to replace the sandbox adapters with narrow
-calls to the existing frontend, backend-service, and operational-monitoring
-release Actions. Product workflows keep their separate environment-specific
-builds and settings. This repository still has no permission or adapter that
-merges or deploys the real products.
+The Coordinator source is under review in
+[PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149).
+Continue using the test repositories for any follow-up sandbox work. Replacing
+the sandbox adapters with narrow calls to existing product Actions remains a
+later, separately authorized stage. This repository still has no permission or
+adapter that merges or deploys the real products.
 
 Rollback uses new commits undoing the failed batch and ordinary deployments,
 only when no database change is confirmed and restoration is safe. Database
@@ -208,7 +219,7 @@ and an exact repeat passed from merged source; see
 | Understand the ticket workflow, labels, reasons, and migration | [Inbox processing guide](./docs/inbox-processing.md) |
 | Select sandbox or real, submit a request, and run its ticket workflow | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
 | Understand the sandbox merge, service, batch, and release test matrix | [Sandbox testing guide](./docs/merge-rehearsal-testing.md) |
-| Review the live fake staging/E2E/production run | [Sandbox release acceptance](./docs/testing/release-sequence-2026-09-11.md) |
+| Review the live fake staging/E2E/production runs | [Initial sequence acceptance](./docs/testing/release-sequence-2026-09-11.md), [build and E2E acceptance](./docs/testing/github-build-e2e-2026-09-15.md) |
 | Understand the implemented one-ticket service/database checks and evidence | [Service and database acceptance](./docs/merge-rehearsal-testing.md#service-and-database-acceptance) |
 | Review sandbox batching, limits, and excluded-ticket handling | [Batch design](./docs/design.md#proposed-batch-testing-and-selection) |
 | Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |

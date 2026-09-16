@@ -27,9 +27,58 @@ export const releaseHash = (value) =>
     .digest("hex");
 
 export const releaseProtocol = 1;
+export const releaseBuildProtocol = 1;
 export const releaseEnvironments = ["staging", "prod"];
 export const releaseOperations = ["deploy", "e2e"];
 export const releaseBackendUnits = ["dbMigrationsLoop", "worker", "api"];
+export const releaseBuildFiles = Object.freeze({
+  backend: Object.freeze([
+    "api.mjs",
+    "change.json",
+    "item.json",
+    "server.mjs",
+    "worker.mjs"
+  ]),
+  frontend: Object.freeze(["index.html", "render.mjs", "server.mjs"])
+});
+
+export function makeReleaseBuild(value) {
+  const contents = {
+    protocol: releaseBuildProtocol,
+    role: value.role,
+    source_commit: value.source_commit,
+    files: value.files
+  };
+  const build = { ...contents, fingerprint: releaseHash(contents) };
+  validateReleaseBuild(build);
+  return build;
+}
+
+export function validateReleaseBuild(value) {
+  const { fingerprint, ...contents } = value ?? {};
+  const names = releaseBuildFiles[value?.role];
+  if (
+    !object(value) ||
+    value.protocol !== releaseBuildProtocol ||
+    !names ||
+    !sha(value.source_commit) ||
+    !Array.isArray(value.files) ||
+    value.files.length !== names.length ||
+    value.files.some(
+      (file, index) =>
+        !object(file) ||
+        file.path !== names[index] ||
+        !hash(file.sha256) ||
+        !Number.isSafeInteger(file.bytes) ||
+        file.bytes < 1 ||
+        file.bytes > 100_000
+    ) ||
+    !hash(fingerprint) ||
+    releaseHash(contents) !== fingerprint
+  )
+    throw new Error("Invalid sandbox application build.");
+  return value;
+}
 
 export function makeReleaseOperation(value) {
   const contents = {
@@ -81,6 +130,27 @@ export function validateReleaseOperation(value) {
 
 export function verifyReleaseReport(report, operation) {
   validateReleaseOperation(operation);
+  const requiredBuildRoles =
+    operation.operation === "e2e" ? ["backend", "frontend"] : [operation.role];
+  const buildEntries = object(report?.builds)
+    ? Object.entries(report.builds)
+    : [];
+  const buildsValid = buildEntries.every(([role, build]) => {
+    try {
+      return (
+        requiredBuildRoles.includes(role) &&
+        object(build) &&
+        validateReleaseBuild(build.manifest)?.source_commit ===
+          operation[`${role}_commit`] &&
+        object(build.artifact) &&
+        build.artifact.name ===
+          `sandbox-build-${operation.operation_id}-${role}` &&
+        /^(?:sha256:)?[0-9a-f]{64}$/u.test(build.artifact.digest ?? "")
+      );
+    } catch {
+      return false;
+    }
+  });
   if (
     !object(report) ||
     report.protocol !== releaseProtocol ||
@@ -101,6 +171,11 @@ export function verifyReleaseReport(report, operation) {
         typeof check.name !== "string" ||
         !["passed", "failed"].includes(check.status)
     ) ||
+    !object(report.builds) ||
+    !buildsValid ||
+    (report.status === "passed" &&
+      (buildEntries.length !== requiredBuildRoles.length ||
+        requiredBuildRoles.some((role) => !report.builds[role]))) ||
     !object(report.versions) ||
     report.versions.backend !== operation.backend_commit ||
     report.versions.frontend !== operation.frontend_commit ||

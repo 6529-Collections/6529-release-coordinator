@@ -13,7 +13,9 @@ import {
   releaseTicketResult
 } from "../src/release-execution.mjs";
 import {
+  makeReleaseBuild,
   makeReleaseOperation,
+  releaseBuildFiles,
   releaseProtocol,
   verifyReleaseReport
 } from "../src/release-contract.mjs";
@@ -22,6 +24,7 @@ import { serviceHash } from "../src/service-contract.mjs";
 import { elapsedBatchPolicy, legacyBatchPolicy } from "../src/batch-plan.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
+import { buildApplication } from "../sandbox/application-build.mjs";
 import { harness } from "./inbox-batch-harness.mjs";
 import {
   isReleaseRequestTarget,
@@ -33,6 +36,31 @@ import { batchStatuses } from "../src/ticket-presentation.mjs";
 import { inboxRunExitCode } from "../src/inbox-run-cli.mjs";
 
 const runFile = promisify(execFile);
+
+function builds(operation) {
+  const roles =
+    operation.operation === "e2e" ? ["backend", "frontend"] : [operation.role];
+  return Object.fromEntries(
+    roles.map((role) => [
+      role,
+      {
+        manifest: makeReleaseBuild({
+          role,
+          source_commit: operation[`${role}_commit`],
+          files: releaseBuildFiles[role].map((file) => ({
+            path: file,
+            sha256: "a".repeat(64),
+            bytes: 1
+          }))
+        }),
+        artifact: {
+          name: `sandbox-build-${operation.operation_id}-${role}`,
+          digest: "b".repeat(64)
+        }
+      }
+    ])
+  );
+}
 
 function report(record, status = "passed", runId = 100) {
   const runnerRole =
@@ -49,6 +77,7 @@ function report(record, status = "passed", runId = 100) {
     unit: record.operation.unit,
     status,
     checks: [{ name: "fixture", status }],
+    builds: status === "passed" ? builds(record.operation) : {},
     versions: {
       backend: record.operation.backend_commit,
       frontend: record.operation.frontend_commit
@@ -81,9 +110,26 @@ function client(calls, { failE2e = false } = {}) {
     }),
     integrate: async ({ record, candidate }) => {
       calls.push(record.step.id);
+      const signature = {
+        name: "Coordinator sandbox",
+        email: "rehearsal@example.invalid",
+        date: record.created_at
+      };
+      record.integration_version = 1;
+      record.integration_input = {
+        message: `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
+        tree: candidate.tree,
+        parents: [candidate.commit],
+        author: signature,
+        committer: signature
+      };
+      record.integration_commit = serviceHash(record.integration_input).slice(
+        0,
+        40
+      );
       return {
         status: "passed",
-        commit: candidate.commit,
+        commit: record.integration_commit,
         tree: candidate.tree,
         url: "https://example.invalid/integration"
       };
@@ -315,7 +361,7 @@ test("a resumed empty batch stays a no-candidate result", async () => {
   batch.selected = [];
   const result = await coordinateInboxBatch({
     items: [],
-    state: { batches: { [batch.fingerprint]: batch } },
+    state: { batches: { [batch.fingerprint]: batch }, lock: {} },
     run: { batch_fingerprint: batch.fingerprint },
     profile: sandboxProfile,
     save: async () => {},
@@ -329,6 +375,57 @@ test("a resumed empty batch stays a no-candidate result", async () => {
     () => validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile),
     /Only a selected release-capable batch can own release execution/u
   );
+});
+
+test("an unfinished current batch keeps its saved ticket eligible on resume", async () => {
+  const batch = await selectedBatch();
+  batch.status = "searching";
+  batch.selected = [];
+  const saved = batch.inputs[0];
+  const item = {
+    number: saved.number,
+    entry: {
+      issue_number: saved.number,
+      request: { target: saved.target, database_change: "no" }
+    },
+    recordedTerminal: false,
+    decision: {
+      status: "waiting",
+      reasons: [],
+      next_action: "Continue the saved run.",
+      action_owner: "Coordinator",
+      submitter_action: "None currently required."
+    },
+    input: saved.input
+  };
+  let selected = false;
+  const result = await coordinateInboxBatch({
+    items: [item],
+    state: { batches: { [batch.fingerprint]: batch }, lock: {} },
+    run: { batch_fingerprint: batch.fingerprint },
+    profile: sandboxProfile,
+    save: async () => {},
+    verify: async () => true,
+    loadBatch: async () => batch,
+    select: async ({ items, previous, verify }) => {
+      selected = true;
+      assert.equal(items.length, 1);
+      assert.equal(items[0].number, saved.number);
+      assert.equal(await verify(), true);
+      return {
+        ...previous,
+        status: "finished",
+        selected: [],
+        stop: {
+          status: "unknown",
+          kind: "evidence",
+          message: "Controlled test stop."
+        }
+      };
+    }
+  });
+  assert.equal(selected, true);
+  assert.equal(result.stop.message, "Controlled test stop.");
 });
 
 for (const { cleanup, name } of [
@@ -553,6 +650,111 @@ test("completed release history requires every exact operation and report", asyn
     () => validateReleaseExecution(missingReport, batch),
     /lacks its exact operation or report/u
   );
+
+  const firstIntegration = execution.plan.steps.find(
+    (step) => step.kind === "integrate"
+  );
+  const unfinishedLegacy = structuredClone(execution);
+  unfinishedLegacy.status = "running";
+  unfinishedLegacy.step_index = 1;
+  unfinishedLegacy.completed_at = null;
+  unfinishedLegacy.operations = {
+    [firstIntegration.id]: unfinishedLegacy.operations[firstIntegration.id]
+  };
+  delete unfinishedLegacy.operations[firstIntegration.id].integration_version;
+  delete unfinishedLegacy.operations[firstIntegration.id].integration_input;
+  delete unfinishedLegacy.operations[firstIntegration.id].integration_commit;
+  for (const state of [
+    "commit-prepared",
+    "branch-prepared",
+    "creating-pr",
+    "checking",
+    "cleaning",
+    "merging",
+    "merged",
+    "dispatching",
+    "running",
+    "completed"
+  ]) {
+    unfinishedLegacy.operations[firstIntegration.id].state = state;
+    assert.throws(
+      () => validateReleaseExecution(unfinishedLegacy, batch),
+      /predates unique integration commits/u
+    );
+  }
+  unfinishedLegacy.operations[firstIntegration.id].state = "completed";
+  for (const fields of [
+    {
+      integration_commit:
+        execution.operations[firstIntegration.id].integration_commit
+    },
+    {
+      integration_version:
+        execution.operations[firstIntegration.id].integration_version,
+      integration_input:
+        execution.operations[firstIntegration.id].integration_input
+    }
+  ]) {
+    const partialLegacy = structuredClone(unfinishedLegacy);
+    Object.assign(partialLegacy.operations[firstIntegration.id], fields);
+    assert.throws(
+      () => validateReleaseExecution(partialLegacy, batch),
+      /predates unique integration commits/u
+    );
+  }
+});
+
+test("integration commit recovery state stays bound to the exact candidate", async () => {
+  const batch = await selectedBatch();
+  const completed = await executeRelease({
+    batch,
+    client: client([]),
+    guard: async () => {},
+    save: async () => {}
+  });
+  const step = completed.plan.steps.find((value) => value.kind === "integrate");
+  const old = completed.operations[step.id];
+  const candidate = completed.plan.candidates[step.role];
+  const signature = {
+    name: "Coordinator sandbox",
+    email: "rehearsal@example.invalid",
+    date: old.created_at
+  };
+  const record = {
+    id: old.id,
+    release_id: old.release_id,
+    step,
+    state: "commit-prepared",
+    created_at: old.created_at,
+    result: null,
+    integration_version: 1,
+    integration_input: {
+      message: `Sandbox ${step.environment} candidate for ${old.release_id}\n\nExact selected candidate ${candidate.commit}`,
+      tree: candidate.tree,
+      parents: [candidate.commit],
+      author: signature,
+      committer: signature
+    }
+  };
+  const execution = {
+    ...structuredClone(completed),
+    status: "running",
+    step_index: 0,
+    completed_at: null,
+    operations: { [step.id]: record }
+  };
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+
+  const changed = structuredClone(execution);
+  changed.operations[step.id].integration_input.tree = "0".repeat(40);
+  assert.throws(
+    () => validateReleaseExecution(changed, batch),
+    /Invalid sandbox integration commit state/u
+  );
+
+  record.state = "branch-prepared";
+  record.integration_commit = "9".repeat(40);
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
 });
 
 test("a malformed resumed run scope fails with a controlled error", async () => {
@@ -819,6 +1021,33 @@ test("release operation/report are exact and reject changed versions", () => {
       ),
     /does not match/
   );
+
+  const deployOperation = makeReleaseOperation({
+    release_id: operation.release_id,
+    operation_id: "33333333-3333-4333-8333-333333333333",
+    operation: "deploy",
+    environment: "staging",
+    role: "backend",
+    unit: "worker",
+    backend_commit: operation.backend_commit,
+    frontend_commit: operation.frontend_commit
+  });
+  const deploy = report({ operation: deployOperation });
+  assert.throws(
+    () =>
+      verifyReleaseReport(
+        {
+          ...deploy,
+          builds: { ...deploy.builds, frontend: exact.builds.frontend }
+        },
+        deployOperation
+      ),
+    /does not match/u
+  );
+  assert.throws(
+    () => verifyReleaseReport({ ...deploy, builds: {} }, deployOperation),
+    /does not match/u
+  );
 });
 
 test("sandbox runner exercises the exact backend/frontend combination", async () => {
@@ -838,6 +1067,11 @@ test("sandbox runner exercises the exact backend/frontend combination", async ()
     backend_commit: "a".repeat(40),
     frontend_commit: "b".repeat(40)
   });
+  for (const role of ["backend", "frontend"])
+    await buildApplication(role, {
+      root: path.join(directory, "candidates", role),
+      sourceCommit: operation[`${role}_commit`]
+    });
   const script = fileURLToPath(
     new URL("../sandbox/release-run.mjs", import.meta.url)
   );
@@ -850,13 +1084,36 @@ test("sandbox runner exercises the exact backend/frontend combination", async ()
       GITHUB_REPOSITORY: sandboxProfile.repositories.backend.full_name,
       GITHUB_RUN_ID: "123",
       GITHUB_RUN_ATTEMPT: "1",
-      GITHUB_SHA: operation.backend_commit
+      GITHUB_SHA: operation.backend_commit,
+      BACKEND_BUILD_OUTCOME: "success",
+      BACKEND_ARTIFACT_OUTCOME: "success",
+      BACKEND_ARTIFACT_DIGEST: "a".repeat(64),
+      FRONTEND_BUILD_OUTCOME: "success",
+      FRONTEND_ARTIFACT_OUTCOME: "success",
+      FRONTEND_ARTIFACT_DIGEST: "b".repeat(64)
     }
   });
-  assert.match(result.stdout, /COORDINATOR_RELEASE_RESULT:/u);
+  const successEncoded = result.stdout.match(
+    /COORDINATOR_RELEASE_RESULT:(\S+)/u
+  )?.[1];
+  assert.ok(successEncoded, "expected passing sandbox release result marker");
+  const successReport = JSON.parse(
+    Buffer.from(successEncoded, "base64url").toString()
+  );
+  assert.equal(successReport.status, "passed");
+  for (const role of ["backend", "frontend"]) {
+    assert.equal(
+      successReport.builds[role].manifest.source_commit,
+      operation[`${role}_commit`]
+    );
+    assert.equal(
+      successReport.builds[role].artifact.name,
+      `sandbox-build-${operation.operation_id}-${role}`
+    );
+  }
 
   await writeFile(
-    path.join(directory, "candidates/backend/src/worker.mjs"),
+    path.join(directory, "candidates/backend/dist/worker.mjs"),
     'export function run() { throw new Error("a".repeat(499) + "😀tail"); }\n'
   );
   let failed;
@@ -870,7 +1127,13 @@ test("sandbox runner exercises the exact backend/frontend combination", async ()
         GITHUB_REPOSITORY: sandboxProfile.repositories.backend.full_name,
         GITHUB_RUN_ID: "124",
         GITHUB_RUN_ATTEMPT: "1",
-        GITHUB_SHA: operation.backend_commit
+        GITHUB_SHA: operation.backend_commit,
+        BACKEND_BUILD_OUTCOME: "success",
+        BACKEND_ARTIFACT_OUTCOME: "success",
+        BACKEND_ARTIFACT_DIGEST: "a".repeat(64),
+        FRONTEND_BUILD_OUTCOME: "success",
+        FRONTEND_ARTIFACT_OUTCOME: "success",
+        FRONTEND_ARTIFACT_DIGEST: "b".repeat(64)
       }
     });
   } catch (error) {
@@ -880,5 +1143,8 @@ test("sandbox runner exercises the exact backend/frontend combination", async ()
   const encoded = failed.stdout.match(/COORDINATOR_RELEASE_RESULT:(\S+)/u)?.[1];
   assert.ok(encoded, "expected sandbox release result marker");
   const failedReport = JSON.parse(Buffer.from(encoded, "base64url"));
-  assert.equal(failedReport.checks[0].message, "a".repeat(499));
+  assert.equal(
+    failedReport.checks[0].message,
+    "Sandbox build output differs from its manifest."
+  );
 });

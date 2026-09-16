@@ -1,8 +1,8 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-15**, against merged source `502c429`, the current
-working branch based on `05efec3`, the live package and consumer evidence below,
-and the latest sandbox acceptance. This page
+Last reviewed: **2026-09-15**, against merged source `fe5279a`, the current
+`codex/github-build-e2e-sandbox` working branch, the live package and consumer
+evidence below, and the latest sandbox acceptance. This page
 separates implemented behavior, source delivery and live proof. Earlier
 observations carry their original dates unless a newer check is stated.
 
@@ -18,7 +18,7 @@ observations carry their original dates unless a newer check is stated.
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). PR #72 merged the v6 writer with exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
 | PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #72 and its merge commit passed Node 20/22/24, package, CodeQL and Snyk checks. All five exact-head 6529bot lanes completed without required changes; CodeRabbit passed and no review thread remained. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
-| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, ordered deploy checks, matching E2E, then protected test `main` for production requests | Merged in PR #72 and proven live with all 14 operations passing; see [acceptance](./testing/release-sequence-2026-09-11.md). No real repository was used. |
+| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, locked builds and artifacts, matching built-output E2E, then protected test `main` for production requests | The original source-level sequence merged in PR #72. [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149) passed all 14 build-backed operations live before source review; see [September 15 acceptance](./testing/github-build-e2e-2026-09-15.md). Review fixes were then republished through protected PRs, checked and read back byte for byte on both sandbox environment branches. No real repository is used. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -34,13 +34,60 @@ frontend or backend repositories.
 
 ## Next steps
 
-Package publication and product adoption are complete. Continue in the three
-test repositories for now. The next small step is another mixed sandbox run with
-different cheap blockers, such as a Git conflict or failed source check beside
-compatible tickets, proving those tickets are excluded before combined CI while
-the useful group continues. Do not connect the Coordinator to real product
-execution yet. Real adapters, database-changing batches, linked tickets,
-heartbeat/takeover, rollback and parallel releases remain later work.
+Package publication and product adoption are complete. The GitHub-only sandbox
+build/E2E stage is implemented and passed live from the current working branch.
+[PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149)
+is the active source review and delivery step.
+Continue in the three test repositories for follow-up sandbox work; do not
+connect the Coordinator to real product execution yet. Real adapters,
+database-changing batches, linked tickets, heartbeat/takeover, rollback and
+parallel releases remain later work.
+
+## GitHub-only build and E2E acceptance, September 15
+
+Production-target sandbox ticket
+[#21](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/21)
+passed cheap filtering, exact combined PR checks, the temporary database/service
+run, protected staging integration, locked builds and artifact uploads, matching
+built-output staging E2E, protected test-`main` integration, another complete
+build sequence and matching production E2E. All 14 release operations passed;
+the ticket is completed, owned branches are absent, the batch is archived and
+the journal lock is clear.
+
+Acceptance exposed and fixed four narrow gaps before completion: independent
+runtime commits had made staging and main histories diverge; old cancelled check
+attempts could mask a successful retry; one commit could reuse checks across
+different release PRs; and CodeRabbit's generated PR-body block was treated as
+an ownership change. Release PRs now have their own commit IDs, the new
+integration checkpoint is validated for recovery, and all fixes have focused
+regressions. The latest local `npm run check` passed all repository gates:
+503 tests ran, 500 passed and 3 were intentionally skipped; lint, formatting,
+workflow policy and packed-package checks also passed. Full links, commit IDs,
+artifact digests and boundary proof are in the
+[dated acceptance record](./testing/github-build-e2e-2026-09-15.md).
+
+Source review then tightened required-check retry identity, stopped incomplete
+legacy release records for manual recovery, made build-file reads stable, and
+made missing build evidence explicit. A final recovery guard requires every
+active integration checkpoint to retain the exact prepared input and, once
+created, its unique integration commit. It keeps old terminal history readable
+but stops unfinished legacy work for a person. Required checks with no workflow
+run identity also remain separate and blocking instead of being collapsed.
+Focused review regressions cover incomplete run identities, tied retries,
+partial integration proof, mismatched fixture bases and the intentional
+100,000-byte sandbox file boundary. That size boundary does not apply to future
+product builds.
+The generated runtime changes passed
+protected backend PRs [#47](https://github.com/6529-Collections/release-coordinator-test-backend/pull/47)
+and [#49](https://github.com/6529-Collections/release-coordinator-test-backend/pull/49),
+frontend PRs [#44](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/44)
+and [#46](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/46),
+then protected main-to-staging PRs
+[#50](https://github.com/6529-Collections/release-coordinator-test-backend/pull/50)
+and [#47](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/47).
+Final readback found the same four pinned runtime blobs on `main` and
+`1a-staging` in both repositories. This refresh proves reviewed runtime delivery;
+the earlier 14-operation run remains the end-to-end acceptance.
 
 ## CLI 0.0.5 publication and consumer adoption, September 15
 

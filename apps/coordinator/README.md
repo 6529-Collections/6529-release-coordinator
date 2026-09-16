@@ -3,8 +3,10 @@
 This private workspace runs manually on your machine and exits. `inbox:run`
 checks requests, rehearses suitable exact PRs, runs supported sandbox service
 checks in GitHub Actions, and updates tickets with reasons and evidence. An
-unscoped sandbox run can also take one selected batch through the protected fake
-release sequence. Select `sandbox` or `real` explicitly.
+unscoped sandbox run can also take one selected batch through protected fake
+staging and production, locked npm builds, short-lived GitHub artifacts, and
+E2E against the built backend/frontend HTTP boundary. Select `sandbox` or `real`
+explicitly.
 Start with [Run the ticket workflow](#run-the-ticket-workflow) below.
 No persistent Coordinator server or timer is started. Real product release
 adapters are not configured.

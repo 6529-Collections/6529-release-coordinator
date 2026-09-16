@@ -4,11 +4,13 @@ import { batchPolicy } from "../src/batch-plan.mjs";
 
 export function fixture({
   guard = async () => {},
-  after = async () => {}
+  after = async () => {},
+  role = "backend",
+  policy = batchPolicy
 } = {}) {
-  const repo = sandboxProfile.repositories.backend;
+  const repo = sandboxProfile.repositories[role];
   const record = {
-    role: "backend",
+    role,
     branch: "codex/batch-trial-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     base: "a".repeat(40),
     tree: "b".repeat(40),
@@ -47,7 +49,7 @@ export function fixture({
     steps: [
       { name: "Set up job", status: "completed", conclusion: "success" },
       {
-        name: "Run node scripts/check.mjs",
+        name: "Run application checks",
         status: "completed",
         conclusion: "success"
       }
@@ -84,7 +86,13 @@ export function fixture({
       data = { ...repo, permissions: { push: true } };
     else if (path === "user") data = { id: 456, login: "tester" };
     else if (path.startsWith("/contents/"))
-      data = { type: "file", sha: batchPolicy.workflow_blob };
+      data = {
+        type: "file",
+        sha:
+          typeof policy.workflow_blob === "string"
+            ? policy.workflow_blob
+            : policy.workflow_blob[record.role]
+      };
     else if (path === "/actions/workflows/sandbox-check.yml")
       data = {
         id: 101,
@@ -154,8 +162,9 @@ export function fixture({
     guard,
     execute,
     gates: { pullRequest: async () => structuredClone(gate) },
+    policy,
     logs: async () =>
-      `2026-09-10T12:00:00.000Z [command]/usr/bin/git log -1 --format=%H\n2026-09-10T12:00:00.000Z ${merge.sha}\n2026-09-10T12:00:01.000Z ##[group]Run node scripts/check.mjs\n` +
+      `2026-09-10T12:00:00.000Z [command]/usr/bin/git log -1 --format=%H\n2026-09-10T12:00:00.000Z ${merge.sha}\n2026-09-10T12:00:01.000Z ##[group]Run npm test\n` +
       '2026-09-10 {"status":"blocked","steps":[{"unit":"api","status":"blocked"}],"errors":[{"code":"service-failed"}],"cleanup":{"status":"removed"}}\n'
   });
   const patch = [
