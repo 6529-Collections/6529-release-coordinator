@@ -95,9 +95,9 @@ lock was `null`.
 
 Ticket #26 is closed with `status:completed` and
 `reason:release-completed`. Its applied journal transition names the same run
-ID. The command itself exited `2` because earlier failed sandbox tickets #22,
-#23 and #24 still need human attention. That exit code does not undo #26's
-completed release; it accurately reports unresolved work elsewhere in the
-inbox. The fake database is temporary, so this proves the declared change on
-sample data and the complete protected test-repository release path, not a
-real database deployment or real product release.
+ID. The command itself exited `2` because earlier failed sandbox tickets
+numbered 22, 23, and 24 still need human attention. That exit code does not
+undo ticket #26's completed release; it accurately reports unresolved work
+elsewhere in the inbox. The fake database is temporary, so this proves the
+declared change on sample data and the complete protected test-repository
+release path, not a real database deployment or real product release.

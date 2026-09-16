@@ -64,7 +64,8 @@ test("real Git prepares one exact database-changing ticket with its required ser
   assert.deepEqual(prepared.service_plan.database, {
     declared: "yes",
     observed: "yes",
-    change_id: prepared.service_plan.database.change_id,
+    change_id:
+      "f3a88e7dce2c6d473fc79ce557b3326078d306d96583be69b540d6bdc8504862",
     changed_paths: ["src/entities/item.json", "src/data/change.json"]
   });
   assert.deepEqual(
