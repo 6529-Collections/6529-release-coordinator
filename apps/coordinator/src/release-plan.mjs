@@ -94,6 +94,26 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
     "A release batch must have one shared target."
   );
   const { prepared, commits } = selectedPreparation(batch);
+  const database = prepared.service_plan.database;
+  serviceAssert(
+    ["no", "yes"].includes(database?.declared) &&
+      database.declared === database.observed &&
+      batch.inputs
+        .filter((input) => batch.selected.includes(input.number))
+        .every(
+          (input) => (input.database_change ?? "no") === database.declared
+        ) &&
+      (database.declared !== "yes" ||
+        (batch.policy.version === "sandbox-batch-v5" &&
+          batch.selected.length === 1 &&
+          batch.inputs.length === 1 &&
+          prepared.service_plan.steps.some(
+            (step) =>
+              step.role === "backend" && step.unit === "dbMigrationsLoop"
+          ))),
+    "release-input",
+    "A database-changing sandbox release needs one verified ticket and its database service."
+  );
   const releaseId = nextUuid();
   serviceAssert(uuid(releaseId), "release-input", "Invalid release identity.");
   const steps = [];
@@ -160,6 +180,105 @@ export function validateReleasePlan(plan, batch) {
     "Saved release plan differs from the exact selected batch."
   );
   return plan;
+}
+
+export function makeStagingRecoveryPlan(execution, batch) {
+  const failed = execution.plan.steps[execution.step_index];
+  const database = selectedPreparation(batch).prepared.service_plan.database;
+  if (
+    failed?.environment !== "staging" ||
+    execution.operations[failed.id]?.result?.status !== "failed" ||
+    database?.declared !== "no" ||
+    database?.observed !== "no"
+  )
+    return null;
+  const startingVersions = execution.versions.staging;
+  const changed = ["backend", "frontend"].filter(
+    (role) =>
+      execution.operations[`staging:integrate:${role}`]?.result?.kind ===
+      "merge"
+  );
+  if (!changed.length) return null;
+  serviceAssert(
+    changed.every((role) => {
+      const record = execution.operations[`staging:integrate:${role}`];
+      return (
+        record.state === "completed" &&
+        record.cleanup === "removed" &&
+        record.result?.status === "passed" &&
+        record.result.commit === startingVersions?.[role] &&
+        sha(record.base)
+      );
+    }),
+    "release-recovery",
+    "The saved staging merges cannot identify exact restoration bases."
+  );
+  const baseline = Object.fromEntries(
+    ["backend", "frontend"].map((role) => [
+      role,
+      changed.includes(role)
+        ? execution.operations[`staging:integrate:${role}`].base
+        : startingVersions?.[role]
+    ])
+  );
+  serviceAssert(
+    ["backend", "frontend"].every(
+      (role) => sha(baseline[role]) && sha(startingVersions?.[role])
+    ),
+    "release-recovery",
+    "The failed staging release lacks exact starting and changed versions."
+  );
+  const steps = [
+    ...changed.map((role) => ({
+      id: `restore:staging:integrate:${role}`,
+      kind: "integrate",
+      environment: "staging",
+      role,
+      recovery: true
+    })),
+    ...execution.plan.steps
+      .filter(
+        (step) =>
+          step.environment === "staging" &&
+          ["deploy", "e2e"].includes(step.kind)
+      )
+      .map((step) => ({ ...step, id: `restore:${step.id}` }))
+  ];
+  const contents = {
+    version: 1,
+    failed_step: failed.id,
+    baseline,
+    starting_versions: { ...startingVersions },
+    steps
+  };
+  return { ...contents, fingerprint: releaseHash(contents) };
+}
+
+export function validateStagingRecoveryPlan(plan, execution, batch) {
+  const expected = makeStagingRecoveryPlan(execution, batch);
+  serviceAssert(
+    expected && releaseHash(plan) === releaseHash(expected),
+    "release-state",
+    "Saved staging restoration differs from the failed release."
+  );
+  return plan;
+}
+
+export function integrationCommitInput(record, candidate) {
+  const signature = {
+    name: "Coordinator sandbox",
+    email: "rehearsal@example.invalid",
+    date: record.created_at
+  };
+  return {
+    message: record.step.recovery
+      ? `Sandbox staging restoration for ${record.release_id}\n\nRestore ${record.restore_to} after ${candidate.commit}`
+      : `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
+    tree: candidate.tree,
+    parents: [candidate.commit],
+    author: signature,
+    committer: signature
+  };
 }
 
 export function operationForStep(plan, step, versions, operationId) {

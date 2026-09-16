@@ -7,7 +7,7 @@ import {
   buildApplication,
   verifyApplicationBuild
 } from "../sandbox/application-build.mjs";
-import { sampleFiles } from "../sandbox/fixtures.mjs";
+import { databaseCandidate, sampleFiles } from "../sandbox/fixtures.mjs";
 import {
   closeServers,
   runSandboxReleaseOperation
@@ -19,10 +19,10 @@ import {
 } from "../src/release-contract.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 
-async function candidate(root, role, commit) {
+async function candidate(root, role, commit, files = sampleFiles()) {
   const directory = path.join(root, "candidates", role);
   await mkdir(directory, { recursive: true });
-  for (const [name, value] of Object.entries(sampleFiles()[role])) {
+  for (const [name, value] of Object.entries(files[role])) {
     await mkdir(path.dirname(path.join(directory, name)), { recursive: true });
     await writeFile(path.join(directory, name), value);
   }
@@ -35,14 +35,14 @@ async function candidate(root, role, commit) {
   };
 }
 
-const operation = (kind = "e2e") =>
+const operation = (kind = "e2e", role = "backend", unit = "worker") =>
   makeReleaseOperation({
     release_id: "11111111-1111-4111-8111-111111111111",
     operation_id: "22222222-2222-4222-8222-222222222222",
     operation: kind,
     environment: "staging",
-    role: kind === "e2e" ? null : "backend",
-    unit: kind === "e2e" ? null : "worker",
+    role: kind === "e2e" ? null : role,
+    unit: kind === "e2e" ? null : unit,
     backend_commit: "b".repeat(40),
     frontend_commit: "f".repeat(40)
   });
@@ -165,6 +165,95 @@ test("E2E runs through the built backend and frontend HTTP boundary", async () =
       ).version,
       1
     );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("database-changing candidate reaches the built-output E2E with its changed value", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "sandbox-build-"));
+  try {
+    await candidate(root, "backend", "b".repeat(40), databaseCandidate());
+    await candidate(root, "frontend", "f".repeat(40));
+    const report = await runSandboxReleaseOperation(operation(), {
+      root,
+      runner,
+      outcomes: successfulOutcomes,
+      now: () => "2026-09-16T12:00:00.000Z"
+    });
+    assert.equal(report.status, "passed");
+    assert.equal(report.checks.at(-1).name, "matching-built-version-e2e");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("database-changing API smoke uses the built worker output", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "sandbox-build-"));
+  try {
+    await candidate(root, "backend", "b".repeat(40), databaseCandidate());
+    const report = await runSandboxReleaseOperation(
+      operation("deploy", "backend", "api"),
+      { root, runner, outcomes: successfulOutcomes }
+    );
+    assert.equal(report.status, "passed");
+    assert.deepEqual(
+      report.checks.map(({ name, status }) => [name, status]),
+      [
+        ["build:backend", "passed"],
+        ["artifact:backend", "passed"],
+        ["backend:api", "passed"]
+      ]
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a frontend-only deployment check does not need a backend build", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "sandbox-build-"));
+  try {
+    await candidate(root, "frontend", "f".repeat(40));
+    const report = await runSandboxReleaseOperation(
+      operation("deploy", "frontend", "frontend"),
+      {
+        root,
+        runner: {
+          ...runner,
+          repository: sandboxProfile.repositories.frontend.full_name,
+          commit: "f".repeat(40)
+        },
+        outcomes: successfulOutcomes
+      }
+    );
+    assert.equal(report.status, "passed");
+    assert.deepEqual(
+      report.checks.map((check) => check.name),
+      ["build:frontend", "artifact:frontend", "frontend:frontend"]
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("built database values outside the supported fixture are rejected", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "sandbox-build-"));
+  try {
+    const files = databaseCandidate();
+    files.backend["src/data/change.json"] = JSON.stringify({
+      id: "too-large",
+      increment: 999,
+      fail_after_schema: false
+    });
+    await candidate(root, "backend", "b".repeat(40), files);
+    await candidate(root, "frontend", "f".repeat(40));
+    const report = await runSandboxReleaseOperation(operation(), {
+      root,
+      runner,
+      outcomes: successfulOutcomes
+    });
+    assert.equal(report.status, "failed");
+    assert.match(report.checks.at(-1).message, /verified sample row/u);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import test from "node:test";
 import { processInbox } from "../src/inbox-processor.mjs";
+import { prepareRunTickets } from "../src/inbox-preparation.mjs";
+import { receiptHash } from "../src/inbox-journal.mjs";
 import { coordinateInboxBatch } from "../src/inbox-batch.mjs";
 import {
   executeRelease,
@@ -19,7 +21,10 @@ import {
   releaseProtocol,
   verifyReleaseReport
 } from "../src/release-contract.mjs";
-import { makeReleasePlan } from "../src/release-plan.mjs";
+import {
+  integrationCommitInput,
+  makeReleasePlan
+} from "../src/release-plan.mjs";
 import { serviceHash } from "../src/service-contract.mjs";
 import { elapsedBatchPolicy, legacyBatchPolicy } from "../src/batch-plan.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
@@ -94,7 +99,10 @@ function report(record, status = "passed", runId = 100) {
   return value;
 }
 
-function client(calls, { failE2e = false } = {}) {
+function client(
+  calls,
+  { failE2e = false, failStep, failRestore = false, movedRestore = false } = {}
+) {
   let runId = 100;
   return {
     identity: async () => ({
@@ -108,36 +116,74 @@ function client(calls, { failE2e = false } = {}) {
         prod: { backend: "b".repeat(40), frontend: "b".repeat(40) }
       }
     }),
-    integrate: async ({ record, candidate }) => {
+    integrate: async ({ record, candidate, expectedBase }) => {
       calls.push(record.step.id);
-      const signature = {
-        name: "Coordinator sandbox",
-        email: "rehearsal@example.invalid",
-        date: record.created_at
-      };
+      record.base = expectedBase;
       record.integration_version = 1;
-      record.integration_input = {
-        message: `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
-        tree: candidate.tree,
-        parents: [candidate.commit],
-        author: signature,
-        committer: signature
-      };
+      record.integration_input = integrationCommitInput(record, candidate);
       record.integration_commit = serviceHash(record.integration_input).slice(
         0,
         40
       );
+      record.cleanup = "removed";
       return {
         status: "passed",
+        kind: "merge",
         commit: record.integration_commit,
         tree: candidate.tree,
         url: "https://example.invalid/integration"
       };
     },
+    restore: async ({ record, restoreTo, expectedBase }) => {
+      calls.push(record.step.id);
+      record.restore_to = restoreTo;
+      record.restore_tree = "a".repeat(40);
+      record.base = expectedBase;
+      record.integration_version = 1;
+      record.integration_input = integrationCommitInput(record, {
+        commit: expectedBase,
+        tree: record.restore_tree
+      });
+      record.integration_commit = serviceHash(record.integration_input).slice(
+        0,
+        40
+      );
+      return failRestore
+        ? {
+            status: "failed",
+            kind: "checks",
+            url: "https://example.invalid/restore"
+          }
+        : {
+            status: "passed",
+            kind: "merge",
+            commit: record.integration_commit,
+            tree: record.restore_tree,
+            url: "https://example.invalid/restore"
+          };
+    },
+    verifyRestoredStaging: async ({ versions, trees, prodVersions }) => {
+      calls.push("verify:restored-staging");
+      if (movedRestore)
+        throw new Error(
+          "Sandbox staging moved before restoration was confirmed."
+        );
+      return {
+        staging: { ...versions },
+        prod: { ...prodVersions },
+        trees: {
+          backend: trees.backend ?? "b".repeat(40),
+          frontend: trees.frontend ?? "b".repeat(40)
+        }
+      };
+    },
     run: async ({ record }) => {
       calls.push(record.step.id);
       const status =
-        failE2e && record.step.id === "staging:e2e" ? "failed" : "passed";
+        (failE2e && record.step.id === "staging:e2e") ||
+        record.step.id === failStep
+          ? "failed"
+          : "passed";
       const value = report(record, status, runId++);
       return {
         status,
@@ -151,14 +197,62 @@ function client(calls, { failE2e = false } = {}) {
   };
 }
 
-async function selectedBatch() {
-  const h = harness(1);
+async function selectedBatch({ database = false } = {}) {
+  const h = harness(1, { databaseTickets: database ? [1] : [] });
   await processInbox(h.options);
   const reference = Object.values(h.f.state().history.batches)[0];
   const batch = structuredClone(h.f.file(reference.path).record);
   delete batch.execution;
   return batch;
 }
+
+test("database-changing ticket reaches the release sequence alone", async () => {
+  const batch = await selectedBatch({ database: true });
+  const calls = [];
+  const execution = await executeRelease({
+    batch,
+    client: client(calls),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.status, "completed");
+  assert.deepEqual(batch.selected, [1]);
+  assert.ok(
+    calls.indexOf("staging:deploy:backend:dbMigrationsLoop") <
+      calls.indexOf("staging:deploy:backend:worker")
+  );
+  assert.equal(execution.recovery, undefined);
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+});
+
+test("a failed database-changing release stops for a person without staging restoration", async () => {
+  const batch = await selectedBatch({ database: true });
+  for (const input of batch.inputs) input.target = "production";
+  batch.fingerprint = serviceHash({
+    inputs: batch.inputs,
+    policy: batch.policy
+  });
+  const calls = [];
+  const execution = await executeRelease({
+    batch,
+    client: client(calls, { failE2e: true }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.status, "needs-human");
+  assert.equal(execution.recovery, undefined);
+  assert.equal(
+    calls.some((step) => step.startsWith("restore:")),
+    false
+  );
+  assert.equal(
+    calls.some((step) => step.startsWith("prod:")),
+    false
+  );
+  assert.match(execution.message, /changes the database/u);
+  assert.match(execution.message, /without automatic restoration/u);
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+});
 
 test("one release runs backend integration/services, frontend, then matching E2E", async () => {
   const batch = await selectedBatch();
@@ -183,7 +277,7 @@ test("one release runs backend integration/services, frontend, then matching E2E
   assert.ok(saves.length > calls.length);
 });
 
-test("failed staging E2E stops a production request before prod", async () => {
+test("failed staging E2E restores staging and stops before prod", async () => {
   const batch = await selectedBatch();
   for (const input of batch.inputs) input.target = "production";
   batch.fingerprint = serviceHash({
@@ -198,10 +292,23 @@ test("failed staging E2E stops a production request before prod", async () => {
     save: async () => {}
   });
   assert.equal(execution.status, "needs-human");
-  assert.equal(calls.at(-1), "staging:e2e");
+  assert.equal(execution.recovery.status, "completed");
+  assert.equal(calls.at(-1), "verify:restored-staging");
+  assert.deepEqual(
+    calls.filter((value) => value.startsWith("restore:staging:integrate:")),
+    ["restore:staging:integrate:backend", "restore:staging:integrate:frontend"]
+  );
   assert.equal(
     calls.some((value) => value.startsWith("prod:")),
     false
+  );
+  assert.match(execution.message, /staging was restored/u);
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+  const unverified = structuredClone(execution);
+  delete unverified.recovery.verification;
+  assert.throws(
+    () => validateReleaseExecution(unverified, batch),
+    /Restoration position or final versions are inconsistent/u
   );
 });
 
@@ -235,7 +342,106 @@ test("a lost save response cannot bypass failed staging E2E on resume", async ()
     save: async () => {}
   });
   assert.equal(execution.status, "needs-human");
-  assert.equal(calls.at(-1), "staging:e2e");
+  assert.equal(execution.recovery.status, "completed");
+  assert.equal(calls.at(-1), "verify:restored-staging");
+  assert.equal(
+    calls.some((value) => value.startsWith("prod:")),
+    false
+  );
+});
+
+test("interrupted staging restoration resumes without replaying release steps", async () => {
+  const batch = await selectedBatch();
+  for (const input of batch.inputs) input.target = "production";
+  batch.fingerprint = serviceHash({
+    inputs: batch.inputs,
+    policy: batch.policy
+  });
+  const calls = [];
+  let interrupted = false;
+  await assert.rejects(
+    executeRelease({
+      batch,
+      client: client(calls, { failE2e: true }),
+      guard: async () => {},
+      save: async (message) => {
+        if (
+          !interrupted &&
+          message === "restore step restore:staging:integrate:frontend prepared"
+        ) {
+          interrupted = true;
+          throw new Error("restore save interrupted");
+        }
+      }
+    }),
+    /restore save interrupted/u
+  );
+  assert.equal(batch.execution.status, "recovering");
+  const originalCalls = calls.filter((value) => value.startsWith("staging:"));
+  const execution = await executeRelease({
+    batch,
+    client: client(calls, { failE2e: true }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.recovery.status, "completed");
+  assert.deepEqual(
+    calls.filter((value) => value.startsWith("staging:")),
+    originalCalls
+  );
+  assert.equal(
+    calls.filter((value) => value === "restore:staging:integrate:backend")
+      .length,
+    1
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+});
+
+test("failed restoration stops without production and keeps the original failure", async () => {
+  const batch = await selectedBatch();
+  for (const input of batch.inputs) input.target = "production";
+  batch.fingerprint = serviceHash({
+    inputs: batch.inputs,
+    policy: batch.policy
+  });
+  const calls = [];
+  const execution = await executeRelease({
+    batch,
+    client: client(calls, { failE2e: true, failRestore: true }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.status, "needs-human");
+  assert.equal(execution.recovery.status, "needs-human");
+  assert.equal(calls.at(-1), "restore:staging:integrate:backend");
+  assert.equal(execution.operations["staging:e2e"].result.status, "failed");
+  assert.equal(
+    calls.some((value) => value.startsWith("prod:")),
+    false
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+});
+
+test("a moved staging ref cannot be recorded as restored", async () => {
+  const batch = await selectedBatch();
+  for (const input of batch.inputs) input.target = "production";
+  batch.fingerprint = serviceHash({
+    inputs: batch.inputs,
+    policy: batch.policy
+  });
+  const calls = [];
+  await assert.rejects(
+    executeRelease({
+      batch,
+      client: client(calls, { failE2e: true, movedRestore: true }),
+      guard: async () => {},
+      save: async () => {}
+    }),
+    /staging moved/u
+  );
+  assert.equal(batch.execution.status, "recovering");
+  assert.equal(batch.execution.recovery.status, "running");
+  assert.equal(calls.at(-1), "verify:restored-staging");
   assert.equal(
     calls.some((value) => value.startsWith("prod:")),
     false
@@ -555,6 +761,7 @@ test("an unfinished v2 batch resumes after its retired deadline", async () => {
   const batch = structuredClone(h.f.file(reference.path).record);
   delete batch.execution;
   batch.policy = structuredClone(elapsedBatchPolicy);
+  for (const input of batch.inputs) delete input.database_change;
   batch.fingerprint = serviceHash({
     inputs: batch.inputs,
     policy: batch.policy
@@ -959,6 +1166,145 @@ test("a needs-human release projects one stable failure reason", async () => {
     item.decision.reasons.map(({ code }) => code),
     ["release-failed"]
   );
+});
+
+test("a later unscoped run leaves an applied failed ticket open without selecting it again", async () => {
+  const issue = {
+    id: 23,
+    number: 23,
+    body: "Immutable sandbox receipt",
+    state: "open",
+    labels: []
+  };
+  const ticket = {
+    receipt_hash: receiptHash(issue),
+    applied: "decision-1",
+    transitions: [
+      {
+        id: "decision-1",
+        decision: {
+          status: "action-needed",
+          reasons: [{ code: "release-failed" }],
+          batch: { release: { status: "needs-human" } }
+        }
+      }
+    ]
+  };
+  const results = [];
+  const prepared = await prepareRunTickets({
+    numbers: [23],
+    entries: new Map([[23, { issue_number: 23 }]]),
+    issues: new Map([[23, issue]]),
+    state: { tickets: { 23: ticket } },
+    results,
+    batching: true,
+    activeBatch: null,
+    closeTest: false,
+    observe: async () => assert.fail("failed release must not rerun"),
+    rehearsal: async () => assert.fail("failed release must not rehearse")
+  });
+  assert.deepEqual(prepared, []);
+  assert.equal(results[0].status, "action-needed");
+  assert.equal(ticket.transitions.length, 1);
+});
+
+test("a later run restores a failed ticket decision overwritten during resume", async () => {
+  const issue = {
+    id: 23,
+    number: 23,
+    body: "Immutable sandbox receipt",
+    state: "open",
+    labels: []
+  };
+  const failure = {
+    status: "action-needed",
+    reasons: [{ code: "release-failed", message: "Staging E2E failed." }],
+    batch: { release: { status: "needs-human" } },
+    rehearsal: { status: "passed" }
+  };
+  const ticket = {
+    receipt_hash: receiptHash(issue),
+    applied: "decision-2",
+    transitions: [
+      { id: "decision-1", decision: failure, observation: {} },
+      { id: "decision-2", decision: { status: "waiting" } }
+    ]
+  };
+  const items = await prepareRunTickets({
+    numbers: [23],
+    entries: new Map([[23, { issue_number: 23 }]]),
+    issues: new Map([[23, issue]]),
+    state: { tickets: { 23: ticket } },
+    results: [],
+    batching: true,
+    activeBatch: { inputs: [{ number: 24 }] },
+    closeTest: false,
+    observe: async () => assert.fail("old failure must not rerun"),
+    rehearsal: async () => assert.fail("old failure must not rehearse")
+  });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].preservedDecision, true);
+  assert.deepEqual(items[0].decision, failure);
+  const result = await coordinateInboxBatch({
+    items,
+    state: { batches: {} },
+    run: {},
+    profile: sandboxProfile,
+    save: async () => {}
+  });
+  assert.equal(result.status, "no-candidate");
+});
+
+test("a closed test ticket keeps its applied closure after an old failure is seen", async () => {
+  const issue = {
+    id: 20,
+    number: 20,
+    body: "Immutable sandbox receipt",
+    state: "closed",
+    labels: []
+  };
+  const closure = {
+    status: "closed",
+    reasons: [{ code: "test" }],
+    rehearsal: { status: "passed" }
+  };
+  const ticket = {
+    receipt_hash: receiptHash(issue),
+    applied: "closed-1",
+    transitions: [
+      {
+        id: "failed-1",
+        decision: {
+          status: "action-needed",
+          reasons: [{ code: "release-failed" }],
+          batch: { release: { status: "needs-human" } }
+        }
+      },
+      { id: "closed-1", decision: closure, observation: {} },
+      {
+        id: "pending-1",
+        decision: {
+          status: "action-needed",
+          reasons: [{ code: "release-failed" }],
+          batch: { release: { status: "needs-human" } }
+        }
+      }
+    ]
+  };
+  const prepared = await prepareRunTickets({
+    numbers: [20],
+    entries: new Map([[20, { issue_number: 20 }]]),
+    issues: new Map([[20, issue]]),
+    state: { tickets: { 20: ticket } },
+    results: [],
+    batching: true,
+    activeBatch: null,
+    closeTest: false,
+    observe: async () => assert.fail("closed ticket must not rerun")
+  });
+  assert.equal(prepared.length, 1);
+  assert.equal(prepared[0].preservedDecision, true);
+  assert.deepEqual(prepared[0].decision, closure);
 });
 
 test("an unfinished release cannot produce a successful command exit", () => {

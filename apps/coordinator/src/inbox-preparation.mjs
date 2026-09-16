@@ -173,6 +173,69 @@ export async function prepareRunTickets({
       throw new Error(
         `Issue #${number}'s receipt differs from recorded history.`
       );
+    const appliedTransition = ticket?.transitions.find(
+      (transition) => transition.id === ticket.applied
+    );
+    if (
+      batching &&
+      issue.state === "closed" &&
+      appliedTransition &&
+      terminal(appliedTransition.decision) &&
+      latest(ticket).id !== appliedTransition.id
+    ) {
+      preparedTickets.push({
+        number,
+        issue,
+        entry,
+        ticket,
+        recordedTerminal: false,
+        preservedDecision: true,
+        observation: appliedTransition.observation,
+        decision: structuredClone(appliedTransition.decision),
+        rehearsalResult: appliedTransition.decision.rehearsal,
+        serviceResult: null,
+        input: undefined
+      });
+      continue;
+    }
+    const heldFailedRelease =
+      batching &&
+      !activeBatch?.inputs.some((input) => input.number === number) &&
+      (!appliedTransition || !terminal(appliedTransition.decision)) &&
+      ticket?.transitions.findLast(
+        ({ decision: saved }) =>
+          saved.batch?.release?.status === "needs-human" &&
+          saved.reasons?.some((reason) => reason.code === "release-failed")
+      );
+    if (heldFailedRelease) {
+      if (
+        ticket.applied === latest(ticket).id &&
+        latest(ticket).id === heldFailedRelease.id
+      ) {
+        results.push({
+          issue_number: number,
+          applied: false,
+          status: "action-needed",
+          message:
+            "This ticket already has a failed release. Its recorded reason remains open for a person; submit changed code as a new request."
+        });
+        continue;
+      }
+      preparedTickets.push({
+        number,
+        issue,
+        entry,
+        ticket,
+        recordedTerminal: false,
+        preservedDecision: true,
+        observation: heldFailedRelease.observation,
+        decision: structuredClone(heldFailedRelease.decision),
+        rehearsalResult: heldFailedRelease.decision.rehearsal,
+        serviceResult: null,
+        input: undefined
+      });
+      continue;
+    }
     const recordedTerminal =
       ticket &&
       terminal(latest(ticket).decision) &&

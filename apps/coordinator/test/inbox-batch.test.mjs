@@ -4,6 +4,7 @@ import { processInbox } from "../src/inbox-processor.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { createJournal, inboxWorkflow } from "../src/inbox-journal.mjs";
 import { harness } from "./inbox-batch-harness.mjs";
+import { batchMergePlan } from "../src/batch-plan.mjs";
 
 test("one unscoped sandbox command finishes all cheap work, tests one group and updates the same tickets", async () => {
   const h = harness();
@@ -68,6 +69,50 @@ test("unsupported database batching stays visible without starting expensive wor
       issue.labels.includes("reason:batch-unsupported")
     )
   );
+});
+
+test("the oldest database-changing sandbox ticket releases alone and leaves other tickets queued", async () => {
+  const h = harness(2, { databaseTickets: [1] });
+  const result = await processInbox(h.options);
+  assert.deepEqual(result.batch.selected, [1]);
+  assert.equal(h.dispatches(), 1);
+  assert.equal(h.f.issues[0].state, "closed");
+  assert.ok(h.f.issues[0].labels.includes("reason:release-completed"));
+  assert.equal(h.f.issues[1].state, "open");
+  assert.ok(h.f.issues[1].labels.includes("reason:batch-deferred"));
+  const record = Object.values(h.f.state().history.batches)[0];
+  const saved = h.f.file(record.path).record;
+  assert.deepEqual(
+    saved.inputs.map((input) => input.database_change),
+    ["yes"]
+  );
+  assert.equal(
+    saved.attempts.find((attempt) => attempt.phase === "git").result
+      .service_plan.database.observed,
+    "yes"
+  );
+  assert.throws(
+    () =>
+      batchMergePlan(
+        h.samples.map((sample, index) => ({
+          entry: sample.entry,
+          input: {
+            profile: "sandbox",
+            inbox: { issue_number: index + 1 },
+            repositories: []
+          }
+        }))
+      ),
+    /database-changing sandbox release must contain exactly one/u
+  );
+});
+
+test("a database-changing ticket waits while the older no-change ticket releases", async () => {
+  const h = harness(2, { databaseTickets: [2] });
+  const result = await processInbox(h.options);
+  assert.deepEqual(result.batch.selected, [1]);
+  assert.equal(h.f.issues[1].state, "open");
+  assert.ok(h.f.issues[1].labels.includes("reason:batch-deferred"));
 });
 
 test("an explicit issue keeps the single-ticket path and cannot silently expand into a batch", async () => {

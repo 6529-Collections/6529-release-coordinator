@@ -7,6 +7,8 @@ and updates that same ticket with the result. An unscoped sandbox run can now
 move one selected no-database-change batch through protected test staging,
 locked npm builds, matching E2E against the built backend and frontend, and
 protected test production.
+The current working branch also lets one verified database-changing sandbox
+ticket take that path alone; see progress for local versus live proof.
 Sandbox and real profiles share the same intake and selection code. Real product
 release execution and rollback are not built yet.**
 
@@ -125,8 +127,9 @@ and Git checks first, then runs normal PR checks on a compatible group's combine
 code using temporary PRs. Combined service checks follow. `--issue NUMBER` keeps
 the one-ticket service/database path. There is no extra full run per ticket by
 default. Confirmed test failures can divide the group within fixed limits; the
-final selected combination must itself pass. The release stage supports complete
-staging or production tickets without database changes. Staging requests stop
+final selected combination must itself pass. The current branch also selects
+one database-changing ticket alone, after its exact temporary MySQL check passes.
+Staging requests stop
 after matching staging E2E. Production requests repeat the protected merge/check
 sequence on test `main`. See progress for local versus merged and live evidence.
 

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { fixture } from "./processing-fixture.mjs";
 import { serviceFixture, serviceAdapter } from "./service-fixture.mjs";
+import { databaseCandidate } from "../sandbox/fixtures.mjs";
 import { coordinateInboxBatch } from "../src/inbox-batch.mjs";
 import { batchMergePlan, batchPolicy } from "../src/batch-plan.mjs";
 import { checkBatch } from "../src/batch-checks.mjs";
@@ -42,10 +43,15 @@ const releaseBuilds = (operation) => {
   );
 };
 
-export function harness(count = 2) {
+export function harness(count = 2, { databaseTickets = [] } = {}) {
   const f = fixture(sandboxProfile),
     events = [];
-  const samples = Array.from({ length: count }, () => serviceFixture());
+  const samples = Array.from({ length: count }, (_, index) => {
+    const database = databaseTickets.includes(index + 1);
+    const sample = serviceFixture(database ? databaseCandidate() : undefined);
+    if (database) sample.entry.request.database_change = "yes";
+    return sample;
+  });
   samples.forEach((sample, i) => {
     sample.entry.issue_number = i + 1;
     sample.entry.request.request_id = `${String(i + 1).padStart(8, "0")}-2222-4222-8222-222222222222`;
@@ -243,7 +249,10 @@ export function harness(count = 2) {
               ]
             })),
             service_plan: servicePlanFromSources({
-              request: { ...plan.dependency_request, database_change: "no" },
+              request: {
+                ...plan.dependency_request,
+                database_change: items[0].entry.request.database_change
+              },
               binding: plan.batch,
               report,
               runtime: batchPolicy.runtime

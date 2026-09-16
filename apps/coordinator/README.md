@@ -7,6 +7,8 @@ unscoped sandbox run can also take one selected batch through protected fake
 staging and production, locked npm builds, short-lived GitHub artifacts, and
 E2E against the built backend/frontend HTTP boundary. Select `sandbox` or `real`
 explicitly.
+The current local branch also supports one database-changing sandbox ticket on
+its own. A failed release step stops for a person without automatic restoration.
 Start with [Run the ticket workflow](#run-the-ticket-workflow) below.
 No persistent Coordinator server or timer is started. Real product release
 adapters are not configured.
@@ -302,7 +304,7 @@ CLI path. Live evidence is dated separately in the progress record.
 
 `inbox:run` **writes to the selected GitHub inbox**. It requires an authenticated
 inbox writer with Issue and contents write access, plus read access to the
-selected PR repositories. Run the complete current process for one ticket:
+selected PR repositories. Inspect and rehearse one specified ticket:
 
 ```sh
 RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --json
@@ -325,8 +327,9 @@ GitHub evidence gets `reason:merge-plan-unavailable`; an impossible generated
 scope/order gets `reason:merge-plan-invalid`. The comment explains what failed.
 A pass adds `rehearsal:passed`, with exact destinations and resulting trees.
 A scoped one-ticket run still waits because Git success alone does not prove
-application behavior or deployment. An unscoped sandbox run may continue through
-its separate saved release sequence. Conflicts, unknown evidence, and changed
+application behavior or deployment. To run the full sandbox batch and fake
+release sequence, omit `--issue`; a database-changing ticket is selected alone.
+Conflicts, unknown evidence, and changed
 inputs retain their separate rehearsal reasons. Saved reports cannot be imported.
 
 Omit the ticket selector to process all selected tickets through the same flow:
@@ -387,9 +390,9 @@ RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 
 The command completes cheap intake/scope/database and Git conflict filtering
 before creating temporary PRs for normal required CI, then runs the combined
-sample services. Each ticket must be self-contained, target the same staging or
-production environment as its batch, and have a verified no-database-change
-answer. Inseparable work belongs in one ticket;
+sample services. Each ticket must be self-contained and target one staging or
+production environment. A no-database-change group may contain several tickets;
+a verified database-changing ticket runs alone on the current branch. Inseparable work belongs in one ticket;
 cross-ticket dependency declarations are not supported yet.
 
 The account also needs contents/PR write access to both sample repositories.

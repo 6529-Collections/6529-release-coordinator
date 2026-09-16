@@ -38,7 +38,8 @@ export function validateBatchHistory(batches, profile) {
           "sandbox-batch-v1",
           "sandbox-batch-v2",
           "sandbox-batch-v3",
-          "sandbox-batch-v4"
+          "sandbox-batch-v4",
+          "sandbox-batch-v5"
         ].includes(batch.policy?.version) &&
         key === serviceHash({ inputs: batch.inputs, policy: batch.policy }) &&
         Number.isFinite(created) &&
@@ -63,10 +64,19 @@ export function validateBatchHistory(batches, profile) {
             batch.inputs[i].input.inbox?.issue_number === number &&
             batch.inputs[i].input.inbox.repository_id === profile.inbox.id &&
             (batch.policy.version === "sandbox-batch-v1" ||
-              isReleaseRequestTarget(batch.inputs[i].target))
+              isReleaseRequestTarget(batch.inputs[i].target)) &&
+            (batch.policy.version !== "sandbox-batch-v5" ||
+              ["no", "yes"].includes(batch.inputs[i].database_change))
         ),
       "batch-state",
       "Batch ticket scope changed."
+    );
+    serviceAssert(
+      batch.policy.version !== "sandbox-batch-v5" ||
+        !batch.inputs.some((input) => input.database_change === "yes") ||
+        batch.inputs.length === 1,
+      "batch-state",
+      "A database-changing release cannot contain another ticket."
     );
     const attempts = new Set(),
       identities = new Set();

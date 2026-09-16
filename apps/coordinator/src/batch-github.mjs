@@ -26,14 +26,16 @@ export function createBatchGitHub({
   policy = batchPolicy
 } = {}) {
   policy = trustedBatchPolicy(policy);
-  const requiredStep =
-    policy.version === "sandbox-batch-v4"
-      ? "Run application checks"
-      : "Run node scripts/check.mjs";
-  const requiredLogGroup =
-    policy.version === "sandbox-batch-v4"
-      ? "##[group]Run npm test"
-      : "##[group]Run node scripts/check.mjs";
+  const requiredStep = ["sandbox-batch-v4", "sandbox-batch-v5"].includes(
+    policy.version
+  )
+    ? "Run application checks"
+    : "Run node scripts/check.mjs";
+  const requiredLogGroup = ["sandbox-batch-v4", "sandbox-batch-v5"].includes(
+    policy.version
+  )
+    ? "##[group]Run npm test"
+    : "##[group]Run node scripts/check.mjs";
   serviceAssert(
     profile === sandboxProfile,
     "batch-profile",

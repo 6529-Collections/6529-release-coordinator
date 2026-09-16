@@ -7,9 +7,9 @@ const files = Object.freeze({
   "coordinator/src/release-contract.mjs":
     "395eb44286c3e9853b5cd8a87e0f17e352cbba7b",
   "coordinator/sandbox/application-build.mjs":
-    "c9e84fb479e5cd160aafe143f2f3d2cecf08fb1b",
+    "08fc55a312be1fd883f43eebcd713b82d6b6e438",
   "coordinator/sandbox/release-run.mjs":
-    "7bf071a06b96b75cee27091b3a0318b0688d115c"
+    "0ae13501b51581c6a1db88196d1b5eae356f6e21"
 });
 
 export const sandboxReleaseRuntime = Object.freeze({

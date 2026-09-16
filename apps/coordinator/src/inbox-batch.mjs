@@ -65,7 +65,11 @@ function releasedDecision(decision, result) {
       ? "No further action is required for this sandbox request."
       : waiting
         ? "Recheck the saved batch and release evidence before continuing."
-        : "Inspect the saved failing release step before deciding recovery.",
+        : result.execution?.recovery?.status === "completed"
+          ? "Staging was restored. Inspect the failed release before submitting changed code."
+          : result.execution?.message?.includes("changes the database")
+            ? "A person must inspect the database-changing release and staging state before another release."
+            : "Inspect staging and the failed release before another release starts.",
     owner: completed ? "None" : "Coordinator maintainers"
   };
   next.reasons.push(reason);
@@ -82,14 +86,15 @@ function releasedDecision(decision, result) {
       status: result.execution?.status,
       target: result.execution?.plan?.target,
       message: result.execution?.message,
-      operations: Object.values(result.execution?.operations ?? {}).map(
-        (operation) => ({
-          id: operation.id,
-          step: operation.step.id,
-          status: operation.result?.status ?? operation.state,
-          url: operation.result?.url ?? operation.result?.workflow?.url ?? null
-        })
-      )
+      operations: [
+        ...Object.values(result.execution?.operations ?? {}),
+        ...Object.values(result.execution?.recovery?.operations ?? {})
+      ].map((operation) => ({
+        id: operation.id,
+        step: operation.step.id,
+        status: operation.result?.status ?? operation.state,
+        url: operation.result?.url ?? operation.result?.workflow?.url ?? null
+      }))
     }
   };
   next.status = completed ? "completed" : waiting ? "waiting" : "action-needed";
@@ -240,7 +245,7 @@ export async function coordinateInboxBatch({
   }
   const suitable = [],
     totals = { frontend: 0, backend: 0 };
-  let selectedTarget;
+  let selectedTarget, selectedDatabase;
   runEvent({
     step: "batch.filter",
     outcome: "started",
@@ -248,7 +253,12 @@ export async function coordinateInboxBatch({
     tickets: items.map((item) => item.number)
   });
   for (const item of [...items].sort((a, b) => a.number - b.number)) {
-    if (item.recordedTerminal || !item.decision || terminal(item.decision))
+    if (
+      item.recordedTerminal ||
+      item.preservedDecision ||
+      !item.decision ||
+      terminal(item.decision)
+    )
       continue;
     const savedActiveInput = active?.inputs.find(
       (value) => value.number === item.number
@@ -256,9 +266,13 @@ export async function coordinateInboxBatch({
     let result;
     if (savedActiveInput) {
       serviceAssert(
-        item.input && Array.isArray(item.input.repositories),
+        item.input &&
+          Array.isArray(item.input.repositories) &&
+          (savedActiveInput.database_change === undefined ||
+            savedActiveInput.database_change ===
+              item.entry.request.database_change),
         "batch-state",
-        "Saved active batch input is unavailable."
+        "Saved active batch input differs from its ticket."
       );
       const counts = Object.fromEntries(
         item.input.repositories.map((repo) => [
@@ -267,6 +281,7 @@ export async function coordinateInboxBatch({
         ])
       );
       selectedTarget ??= savedActiveInput.target;
+      selectedDatabase ??= savedActiveInput.database_change ?? "no";
       suitable.push(item);
       for (const role of Object.keys(counts)) totals[role] += counts[role];
     } else if (item.coordinated?.report?.status !== "pass") {
@@ -277,20 +292,33 @@ export async function coordinateInboxBatch({
           "Initial request or Git evidence did not pass; no batch checks were started for this ticket."
       };
     } else if (
-      item.entry.request.database_change !== "no" ||
+      !["no", "yes"].includes(item.entry.request.database_change) ||
       !isReleaseRequestTarget(item.entry.request.target)
     ) {
       result = {
         status: "waiting",
         code: "batch-unsupported",
         message:
-          "Batching currently supports staging or production tickets without database changes. This whole ticket is held for the appropriate capability."
+          "A staging or production ticket needs a verified yes/no database answer before sandbox release selection."
       };
     } else if (selectedTarget && item.entry.request.target !== selectedTarget) {
       result = {
         status: "waiting",
         code: "batch-target-deferred",
         message: `This run is forming a ${selectedTarget} batch. This complete ${item.entry.request.target} ticket remains queued for a separate release.`
+      };
+    } else if (
+      selectedDatabase === "yes" ||
+      (selectedDatabase === "no" &&
+        item.entry.request.database_change === "yes")
+    ) {
+      result = {
+        status: "waiting",
+        code: "batch-deferred",
+        message:
+          selectedDatabase === "yes"
+            ? `Database-changing ticket #${suitable[0].number} is being released alone. This complete ticket remains queued.`
+            : "This run is forming a no-database-change batch. This database-changing ticket remains queued for a solo release."
       };
     } else {
       try {
@@ -324,6 +352,7 @@ export async function coordinateInboxBatch({
           };
         } else {
           selectedTarget ??= item.entry.request.target;
+          selectedDatabase ??= item.entry.request.database_change;
           suitable.push(item);
           for (const role of Object.keys(counts)) totals[role] += counts[role];
         }
@@ -366,12 +395,16 @@ export async function coordinateInboxBatch({
   });
   if (!suitable.length && !run.batch_fingerprint)
     return { status: "no-candidate", selected: [], release_authorized: false };
+  const policy = active?.policy ?? batchPolicy;
   const inputs = suitable.map((item) => ({
     number: item.entry.issue_number,
     target: item.entry.request.target,
+    ...(policy.version === "sandbox-batch-v5"
+      ? { database_change: item.entry.request.database_change }
+      : {}),
     input: item.input
   }));
-  const freshFingerprint = serviceHash({ inputs, policy: batchPolicy });
+  const freshFingerprint = serviceHash({ inputs, policy });
   const fingerprint = run.batch_fingerprint ?? freshFingerprint;
   const changed = fingerprint !== freshFingerprint;
   const original = await loadBatch(fingerprint);
@@ -395,17 +428,20 @@ export async function coordinateInboxBatch({
       ? original.inputs.map((value) => ({
           entry: {
             issue_number: value.number,
-            request: { target: value.target }
+            request: {
+              target: value.target,
+              database_change: value.database_change
+            }
           },
           input: value.input
         }))
       : suitable,
     previous: original,
-    policy: original?.policy ?? batchPolicy,
+    policy,
     signal,
     guard,
     verify: inputsChanged ? async () => false : () => verify(inputs),
-    prepare: (group) => prepare(group, { profile, signal }),
+    prepare: (group) => prepare(group, { profile, signal, policy }),
     check: (prepared, options) => check(prepared, { ...options, profile }),
     revalidate: (prepared, progress, options) =>
       revalidate(prepared, progress, { ...options, profile }),

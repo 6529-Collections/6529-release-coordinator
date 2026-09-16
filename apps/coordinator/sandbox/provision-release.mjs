@@ -20,7 +20,7 @@ if (
   );
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const output = `${root}/.release-coordinator/release-build-v5`;
+const output = `${root}/.release-coordinator/release-database-v6`;
 await mkdir(output, { recursive: true });
 const provisionFile = `${output}/provision.json`;
 const exec = promisify(execFile);
@@ -255,7 +255,7 @@ if (
   throw new Error("Saved release provisioning state is invalid.");
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
-const setupBranch = "codex/sandbox-build-runtime-v5-main";
+const setupBranch = "codex/sandbox-database-runtime-v6-main";
 const keyFor = (role, base) => `${role}:${base}`;
 const branchRef = (repository, branch) =>
   api(
@@ -321,10 +321,10 @@ for (const role of ["backend", "frontend"]) {
           pullRequests(entry.repository, entry.branch, entry.base_branch),
         create: (entry) =>
           api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-            title: "Build sandbox application artifacts in GitHub Actions",
+            title: "Check database-changing sandbox releases",
             head: entry.branch,
             base: entry.base_branch,
-            body: "Add locked npm builds, short-lived Actions artifacts, and E2E against built test output. This uses only the public sandbox repositories and GitHub-hosted runners; no product or outside environment is accessed."
+            body: "Make the sandbox release runner check the changed sample database value through built backend/frontend output. The existing isolated MySQL check still proves the database effect. This uses only test repositories and GitHub-hosted runners."
           })
       });
       console.log(`${key}: ${completed.url}`);
@@ -394,7 +394,7 @@ for (const role of ["backend", "frontend"]) {
       await writeFile(path.join(directory, file), contents);
     }
     await git(["add", "--", ...Object.keys(files)]);
-    await git(["commit", "-m", "Build sandbox application artifacts"]);
+    await git(["commit", "-m", "Check database-changing sandbox releases"]);
     const commit = await git(["rev-parse", "HEAD"]);
     const completed = await publishFixturePr(
       {
@@ -412,10 +412,10 @@ for (const role of ["backend", "frontend"]) {
           pullRequests(entry.repository, entry.branch, entry.base_branch),
         create: (entry) =>
           api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-            title: "Build sandbox application artifacts in GitHub Actions",
+            title: "Check database-changing sandbox releases",
             head: entry.branch,
             base: entry.base_branch,
-            body: "Add locked npm builds, short-lived Actions artifacts, and E2E against built test output. This uses only the public sandbox repositories and GitHub-hosted runners; no product or outside environment is accessed."
+            body: "Make the sandbox release runner check the changed sample database value through built backend/frontend output. The existing isolated MySQL check still proves the database effect. This uses only test repositories and GitHub-hosted runners."
           })
       }
     );

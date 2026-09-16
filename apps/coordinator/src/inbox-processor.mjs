@@ -90,7 +90,9 @@ export async function processInbox({
           record.status === "finished" &&
           record.selected.length &&
           (!record.execution ||
-            ["prepared", "running"].includes(record.execution.status))
+            ["prepared", "running", "recovering"].includes(
+              record.execution.status
+            ))
       );
       if (active.length > 1)
         throw new Error("More than one unfinished sandbox release exists.");

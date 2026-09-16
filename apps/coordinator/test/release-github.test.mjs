@@ -917,6 +917,117 @@ test("legacy in-flight integration states need manual recovery before any write"
   }
 });
 
+test("staging restoration uses the exact saved tree and a distinct checked integration", async () => {
+  const old = "a".repeat(40);
+  const current = "b".repeat(40);
+  const tree = "c".repeat(40);
+  const record = {
+    id: "22222222-2222-4222-8222-222222222222",
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: {
+      id: "restore:staging:integrate:backend",
+      kind: "integrate",
+      environment: "staging",
+      role: "backend",
+      recovery: true
+    },
+    state: "prepared",
+    created_at: "2026-09-11T12:00:00.000Z"
+  };
+  const reads = [];
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      reads.push(`${method} ${endpoint}`);
+      assert.equal(method, "GET");
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      if (endpoint.endsWith(`/git/commits/${old}`))
+        return apiResponse("200 OK", { sha: old, tree: { sha: tree } });
+      assert.fail(endpoint);
+    }
+  });
+  let integrations = 0;
+  client.integrate = async ({ candidate, expectedBase, save }) => {
+    integrations++;
+    assert.deepEqual(candidate, {
+      role: "backend",
+      base: current,
+      commit: current,
+      tree,
+      changed: true
+    });
+    assert.equal(expectedBase, current);
+    await save();
+    return { status: "passed", commit: "d".repeat(40), tree };
+  };
+  const actor = { id: "456", login: "tester" };
+  let saves = 0;
+  const args = {
+    record,
+    restoreTo: old,
+    expectedBase: current,
+    actor,
+    save: async () => saves++
+  };
+  await client.restore(args);
+  assert.equal(record.restore_to, old);
+  assert.equal(record.restore_tree, tree);
+  assert.equal(saves, 2);
+  assert.equal(integrations, 1);
+  assert.equal(reads.filter((value) => value.includes("/contents/")).length, 4);
+
+  record.restore_tree = "e".repeat(40);
+  await assert.rejects(client.restore(args), /restoration target changed/u);
+  assert.equal(integrations, 1);
+});
+
+test("restoration completion rereads both environment refs and exact trees", async () => {
+  const versions = { backend: "a".repeat(40), frontend: "b".repeat(40) };
+  const prodVersions = { backend: "c".repeat(40), frontend: "d".repeat(40) };
+  const trees = { backend: "e".repeat(40), frontend: "f".repeat(40) };
+  const reads = [];
+  let moved = false;
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      reads.push(`${method} ${endpoint}`);
+      assert.equal(method, "GET");
+      const role = endpoint.includes("release-coordinator-test-frontend")
+        ? "frontend"
+        : "backend";
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", {
+          object: { sha: moved ? prodVersions[role] : versions[role] }
+        });
+      if (endpoint.endsWith("/git/ref/heads/main"))
+        return apiResponse("200 OK", { object: { sha: prodVersions[role] } });
+      if (endpoint.endsWith(`/git/commits/${versions[role]}`))
+        return apiResponse("200 OK", {
+          sha: versions[role],
+          tree: { sha: trees[role] }
+        });
+      assert.fail(endpoint);
+    }
+  });
+  assert.deepEqual(
+    await client.verifyRestoredStaging({ versions, trees, prodVersions }),
+    { staging: versions, prod: prodVersions, trees }
+  );
+  assert.equal(reads.length, 6);
+  moved = true;
+  await assert.rejects(
+    client.verifyRestoredStaging({ versions, trees, prodVersions }),
+    /staging or test main moved/u
+  );
+});
+
 test("real profile and unpinned release runtime are refused", () => {
   assert.throws(
     () => createReleaseGitHub({ profile: realProfile, runtime }),

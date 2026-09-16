@@ -20,9 +20,10 @@ export async function batchFixture(t) {
     git.repositories[role].base = pr.commit;
   }
   let count = 0;
-  async function ticket(changes = {}) {
+  async function ticket(changes = {}, { databaseChange = "no" } = {}) {
     const number = ++count;
     const { entry } = serviceFixture();
+    entry.request.database_change = databaseChange;
     entry.issue_number = number;
     entry.request.request_id = `${String(number).padStart(8, "0")}-2222-4222-8222-222222222222`;
     for (const part of entry.request.release_parts) {

@@ -676,8 +676,10 @@ of PR checks. Fresh and reused passing batches require at least one recorded,
 verified trial. An unchanged repository may still be covered by the combined
 service run when another repository has a verified trial.
 
-Use independent requests without database changes first. Earlier one-ticket
-database proof does not authorize database-changing batches. Select whole tickets
+Use independent requests without database changes first. The current local
+branch also selects one verified database-changing ticket alone; it never
+combines that ticket with another request. Earlier one-ticket database proof
+does not authorize database-changing multi-ticket batches. Select whole tickets
 and validated dependency groups. Define the trusted representation of dependencies
 between tickets before adding those fixtures; the public schema does not already
 provide it. Keep the shared profile/engine direction, but only the sandbox's
@@ -819,6 +821,7 @@ real deployment. See the [execution design](./design.md#agreed-execution-directi
 | Ticket completion and cleanup | **Passed live; repeated missing-ref confirmation passed offline.** Close the ticket only after its matching release finishes and owned branches are confirmed gone twice; archive the complete release evidence. |
 | Staging-only request | **Passed offline.** Stop after matching staging E2E. No production operation is planned. |
 | Pinned release runtime changes | **Passed offline; current blobs confirmed live by read-only inspection.** Verify the workflow, contract and runner at the exact environment commit before dispatch; any mismatch stops without a workflow write. |
-| No-database-change rollback | **Future.** Create verified revert commits, then use ordinary checks and deployments. Keep the original release failed. |
-| Database change/unknown, conflicting revert or failed recovery | **Future.** Stop automatic recovery for a person and keep release ownership while unresolved. |
+| No-database-change staging restoration | **Passed live September 16.** The [controlled restoration](./testing/staging-restoration-2026-09-16.md) made new commits on the exact staging heads with pre-release trees through separate protected PRs, then passed ordered builds and matching E2E. The original ticket stayed failed and test `main` did not move. A transient GitHub error resumed the same run without replaying completed work. A final source-ref/tree readback guard was added after that run and passed offline tests. |
+| One database-changing sandbox ticket | **Passed offline and in the live test repositories on the current branch; not merged.** The [September 16 acceptance](./testing/solo-database-release-2026-09-16.md) passed combined PR checks, temporary MySQL, protected staging, matching E2E, protected fake production and final E2E. An earlier failed API smoke check stopped without automatic restoration; the failed ticket stayed open and staging was repaired manually. Two database-changing tickets are never combined. |
+| Database change/unknown, conflicting revert or failed recovery | **Database-changing multi-ticket batches remain unsupported; failed restoration has local coverage.** Missing, moved or incompatible staging evidence stops automatic work for a person. Production rollback and live restoration-failure acceptance remain future work. |
 | Real product workflow adapters | **Future.** Reuse the frontend/backend Actions and bind every result to the exact code and environment before the first real run. |
