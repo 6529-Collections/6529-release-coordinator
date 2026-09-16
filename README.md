@@ -186,9 +186,7 @@ through completion or explicit recovery. See the
 original source-level sequence. The
 [September 15 build acceptance](./docs/testing/github-build-e2e-2026-09-15.md)
 proves the GitHub-only build, artifact, built-output E2E, recovery and cleanup
-path from the current working branch.
-
-The Coordinator source is under review in
+path now merged into `main` through
 [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149).
 Continue using the test repositories for any follow-up sandbox work. Replacing
 the sandbox adapters with narrow calls to existing product Actions remains a
