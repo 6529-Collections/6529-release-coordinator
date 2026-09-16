@@ -1,6 +1,6 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-16**, against merged `main` source `2b6cc35`, the live
+Last reviewed: **2026-09-16**, against merged `main` source `a0bc848`, the live
 package and consumer evidence below, and the latest sandbox acceptance. This page
 separates implemented behavior, source delivery and live proof. Earlier
 observations carry their original dates unless a newer check is stated.
@@ -17,7 +17,7 @@ observations carry their original dates unless a newer check is stated.
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). PR #72 merged the v6 writer with exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
 | PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #149's final head passed Node 20/22/24, package, CodeQL and Snyk checks. All exact-head 6529bot lanes completed without required changes; CodeRabbit passed and no review thread remained. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
-| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, locked builds and artifacts, matching built-output E2E, then protected test `main` for production requests | [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149) is merged into `main` at `2b6cc35`. It passed all 14 build-backed operations live before source review; see [September 15 acceptance](./testing/github-build-e2e-2026-09-15.md). Review fixes were then republished through protected PRs, checked and read back byte for byte on both sandbox environment branches. No real repository is used. |
+| Sandbox release sequence | One selected no-database-change batch moves through protected test staging, locked builds and artifacts, matching built-output E2E, then protected test `main` for production requests | [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149) is merged into `main` at `2b6cc35`. The successful 14-operation path passed live before source review; see [September 15 acceptance](./testing/github-build-e2e-2026-09-15.md). Review fixes were republished through protected PRs and checked on both sandbox branches. [September 16 failure acceptance](./testing/staging-e2e-failure-2026-09-16.md) then proved a real staging E2E failure stops before production, records the failure, and cleans owned branches. No real repository is used. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -40,6 +40,13 @@ Continue in the three test repositories for follow-up sandbox work; do not
 connect the Coordinator to real product execution yet. Real adapters,
 database-changing batches, linked tickets, heartbeat/takeover, rollback and
 parallel releases remain later work.
+
+The controlled September 16 test left ticket #22 open with
+`reason:release-failed`, the journal unlocked, and both test `main` refs unchanged.
+The failed candidate reached test staging before E2E failed. Protected manual
+revert PRs restored both staging file trees to match test `main`; this does not
+implement automatic rollback or turn the failed release into a success. See the
+[failure acceptance record](./testing/staging-e2e-failure-2026-09-16.md).
 
 ## GitHub-only build and E2E acceptance, September 15
 

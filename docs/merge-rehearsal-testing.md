@@ -810,7 +810,7 @@ real deployment. See the [execution design](./design.md#agreed-execution-directi
 | Case | Required outcome and current proof |
 | --- | --- |
 | Compatible batch through staging then production | **Passed live.** Cheap filtering preceded combined checks. Production began only after matching successful staging E2E. Each fake environment kept its own workflow run. |
-| Required E2E fails, is missing, cancelled or skipped | **Passed offline.** No production dispatch or successful release. A failed test fails the attempt; uncertain evidence gets its actual reason without blaming all tickets. |
+| Required E2E fails, is missing, cancelled or skipped | **Confirmed failure passed live September 16; other outcomes passed offline.** The [controlled staging E2E failure](./testing/staging-e2e-failure-2026-09-16.md) stopped before production, kept the ticket open with its reason, and released the journal lock. Missing, cancelled and skipped outcomes still have offline coverage only. |
 | E2E belongs to another run, code or environment | **Passed offline.** The result must match the release, operation, code pair, environment, runner and attempt. Changed staging requires fresh matching evidence. |
 | Main/staging moves or contains unrelated changes | **Passed offline and exercised live during setup.** Recheck the actual base before mutation; never overwrite refs or promote all of staging. |
 | Sequential services and partial failure | **Passed offline; successful order passed live.** Backend dependencies finish before frontend; partial failure stops the sequence and preserves completed effects. |
