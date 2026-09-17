@@ -53,7 +53,9 @@ const monitoringCases = {
     role: "frontend",
     files: { "docs/monitoring-only.md": "Monitoring-only companion.\n" }
   },
-  mixed_backend: {
+  // The first mixed fixture replaced the worker with the fixture baseline and
+  // was closed; its branch name stays reserved by that closed PR.
+  mixed_v2_backend: {
     role: "backend",
     files: {
       // Test main's worker has moved past the fixture baseline; append to the

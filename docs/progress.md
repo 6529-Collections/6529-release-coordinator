@@ -1,7 +1,8 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-17**, against merged `main` source `3fd1423`, the live
-package and consumer evidence below, and the latest sandbox acceptance. This page
+Last reviewed: **2026-09-17**, against merged `main` source `f2ad24f`, the local
+`codex/sandbox-monitoring-release` implementation, the live package and consumer
+evidence below, and the latest sandbox acceptance. This page
 separates implemented behavior, source delivery and live proof. Earlier
 observations carry their original dates unless a newer check is stated.
 
@@ -10,7 +11,7 @@ observations carry their original dates unless a newer check is stated.
 | Area | What is available | Evidence boundary |
 | --- | --- | --- |
 | Request submission | Public npm CLI `0.0.5` with schema `0.000002`; old `0.000001` requests remain readable | Published from protected Coordinator `main` with provenance, then pinned and merged in frontend and backend; see [September 15 evidence](#cli-005-publication-and-consumer-adoption-september-15). |
-| Operational monitoring intake | Monitoring-only backend requests can be created, validated, displayed, labeled, and have their exact PR checked | Merged in [PR #72](https://github.com/6529-Collections/6529-release-coordinator/pull/72) with automated coverage. Deployment and target-health checks are deliberately unavailable, so these tickets stay waiting and cannot enter rehearsal/execution. |
+| Operational monitoring intake | Monitoring requests can be created, validated, displayed, labeled, and have their exact PR checked | Merged in [PR #72](https://github.com/6529-Collections/6529-release-coordinator/pull/72) with automated coverage. In the real profile, deployment and target-health checks are deliberately unavailable, so these tickets stay waiting and cannot enter rehearsal/execution. The sandbox deploys a sample monitoring package; see the row below. |
 | Ticket workflow | One manual `inbox:run` command reads requests, checks exact PRs and updates the same tickets | Unified workflow and subsequent sandbox work are merged; [command guide](../apps/coordinator/README.md#run-the-ticket-workflow). |
 | Sandbox service/database checks | One-ticket checks run sample services and temporary MySQL in GitHub Actions | Local and live acceptance passed; see [source delivery](#sandbox-source-delivery-september-10). |
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [September 10 evidence](./testing/batch-2026-09-10.md). A fresh [September 15 v3 run](./testing/batch-v3-2026-09-15.md) proved A+B failing while A and B pass alone, selected A, completed fake staging and matching E2E, and waited through long GitHub queues without an elapsed-time cutoff. The exact earlier v2 policy found in the live journal is now readable. At the time of that run, this fix existed only on the working branch; it is now merged through PR #149. |
@@ -21,6 +22,7 @@ observations carry their original dates unless a newer check is stated.
 | Sandbox staging restoration | Confirmed no-database-change staging failure creates checked undo PRs for exact changed test branches, then reruns ordered build checks and matching E2E | Merged through [PR #168](https://github.com/6529-Collections/6529-release-coordinator/pull/168). The [September 16 live test](./testing/staging-restoration-2026-09-16.md) passed protected restoration, ordered checks and restored E2E. A final source-ref/tree readback guard passed offline tests. |
 | Solo sandbox database release | One verified database-changing ticket can enter the fake release sequence alone after its temporary MySQL check; changed sample data is checked through the built-output E2E, and a failed release stops for a person without restoration | Merged through [PR #168](https://github.com/6529-Collections/6529-release-coordinator/pull/168). The corrected runtime was published to both protected test-repository branches. [September 16 live acceptance](./testing/solo-database-release-2026-09-16.md) passed the full 14-operation protected path and closed ticket #26; a prior failed check left ticket #24 open and required manual staging repair. Multi-ticket database batches remain unsupported. |
 | Sandbox fake-production restoration | After a confirmed no-database-change production failure, restore affected test `main` and staging branches with protected checked undo PRs, then rerun their normal builds and E2E; keep the original failure | Merged through [PR #172](https://github.com/6529-Collections/6529-release-coordinator/pull/172); see [delivery](#pr-172-delivery-september-17). The [September 16 controlled live test](./testing/fake-production-restoration-2026-09-16.md) passed production and staging restoration, matching builds/E2E, final ref/tree readback, and ticket projection from the then-uncommitted implementation. Offline recovery, resume, moved-ref and adapter tests pass. Review hardening also checks both environment refs before each workflow dispatch and before accepting its result; that guard has offline proof only. |
+| Sandbox monitoring deployment | A complete production ticket that selects `operational_deployments: ["monitoring"]` deploys the sample monitoring package for staging and then prod from the merged test `main` commit, before the production application deployments; a confirmed failure stops before any application deployment, restores both environments and redeploys monitoring from the restored commit | Implemented in the current branch with offline coverage. The [September 17 live acceptance](./testing/sandbox-monitoring-2026-09-17.md) passed the monitoring-only production release (ticket #30: sixteen operations, both installed templates bound to their builds and to GitHub's artifact records) and the controlled monitoring failure with full restoration (ticket #32). The mixed application-plus-monitoring release (ticket #33) also passed all sixteen operations with a changed inventory. The sample backend deploys monitoring only from test `main`, like the real backend; the real adapter is not built. Source delivery is outstanding. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -39,9 +41,15 @@ frontend or backend repositories.
 Package publication and product adoption are complete. The GitHub-only sandbox
 build/E2E stage, staging restoration, solo database-changing release and
 fake-production restoration are merged into `main`; their dated live results are
-linked above. No sandbox implementation remains local-only. The environment-ref
-guard around workflow dispatch from PR #172 has offline proof only.
-Do not connect the Coordinator to real product execution yet. Real adapters,
+linked above. The current branch adds sample operational-monitoring deployment
+to the sandbox release sequence, with its live acceptance recorded; review and
+deliver that source before treating it as merged Coordinator behavior. The
+environment-ref guard around workflow dispatch from PR #172 was exercised live
+by every September 17 monitoring operation.
+Do not connect the Coordinator to real product execution yet. Real adapters
+(including the real monitoring adapter, which must dispatch the backend's
+`Deploy operational monitoring` workflow with the exact merged `main` commit
+and verify the deployed target on the AWS side),
 database-changing multi-ticket batches, linked tickets, heartbeat/takeover, production
 rollback for real products and parallel releases remain later work.
 
@@ -526,6 +534,7 @@ snapshot is historical, not a fresh scan.
 | [Staging restoration](./testing/staging-restoration-2026-09-16.md) | Protected undo PRs on the exact staging heads, ordered builds, restored E2E, unchanged test `main` and a transient-error resume. |
 | [Solo database release](./testing/solo-database-release-2026-09-16.md) | One `database_change: yes` ticket alone through the protected path, an earlier failed check that stopped without restoration, and manual staging repair. |
 | [Fake-production restoration](./testing/fake-production-restoration-2026-09-16.md) | Test `main` restored before staging through protected undo PRs, matching builds/E2E, final ref/tree readback, the large-journal blob fallback and the still-failed ticket. |
+| [Sample monitoring deployment](./testing/sandbox-monitoring-2026-09-17.md) | Monitoring deployed for staging and prod after the test-main merge and before production application deployments, installed templates bound to builds and artifact records, a controlled monitoring failure restored with monitoring redeployed, and the intake pin, allowlist and moved-base findings. |
 
 Keep current status and next steps here. Update behavior in its owning guide;
 keep dated acceptance reports unchanged unless explicitly recording a new run.
