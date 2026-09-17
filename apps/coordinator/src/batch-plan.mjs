@@ -83,7 +83,7 @@ export const batchPolicy = Object.freeze({
   ...commonBatchPolicy,
   version: "sandbox-batch-v6",
   workflow_blob: Object.freeze({
-    backend: "83f5fed03dc366bcf3643eb8ca74a0b15f820da4",
+    backend: "58396920d9a75a6a1b524dba728f128105d3cbef",
     frontend: priorBatchPolicy.workflow_blob.frontend
   })
 });
