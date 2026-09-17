@@ -797,6 +797,18 @@ export function createReleaseGitHub({
         "Release operation lacks saved actor or workflow identity."
       );
       await verifyRuntime(role, operation[`${role}_commit`]);
+      const verifyPinnedRefs = async (stage) => {
+        for (const sourceRole of ["backend", "frontend"]) {
+          const current = (
+            await ref(sourceRole, target(runtime, operation.environment))
+          ).data.object.sha;
+          serviceAssert(
+            current === operation[`${sourceRole}_commit`],
+            "release-stale",
+            `Sandbox ${operation.environment} changed before workflow ${stage}.`
+          );
+        }
+      };
       let run = record.workflow_run_id
         ? (await call(role, "GET", `/actions/runs/${record.workflow_run_id}`))
             .data
@@ -807,6 +819,7 @@ export function createReleaseGitHub({
           "release-dispatch-uncertain",
           "A prior release dispatch has no confirmed workflow run."
         );
+        await verifyPinnedRefs("dispatch");
         record.state = "dispatching";
         await save();
         await call(
@@ -918,6 +931,7 @@ export function createReleaseGitHub({
         "release-workflow",
         "Sandbox release conclusion contradicts its exact report."
       );
+      await verifyPinnedRefs("result acceptance");
       return {
         status: report.status,
         report_hash: releaseHash(report),

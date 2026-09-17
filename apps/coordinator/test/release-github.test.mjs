@@ -47,6 +47,13 @@ function runtimeFile(endpoint, changed = false) {
   };
 }
 
+function environmentRef(endpoint, operation) {
+  const role = endpoint.includes("release-coordinator-test-frontend")
+    ? "frontend"
+    : "backend";
+  return { object: { sha: operation[`${role}_commit`] } };
+}
+
 const apiResponse = (status, data) =>
   `HTTP/2 ${status} Result\nContent-Type: application/json\n\n${data === undefined ? "" : JSON.stringify(data)}`;
 
@@ -166,6 +173,8 @@ test("release workflow result binds exact operation, commits, actor and rerun at
       const endpoint = args[args.indexOf("--method") + 2];
       let value;
       if (endpoint.includes("/contents/")) value = runtimeFile(endpoint);
+      else if (endpoint.includes("/git/ref/heads/"))
+        value = environmentRef(endpoint, f.operation);
       else if (endpoint.includes("/runs?")) {
         runSearch = endpoint;
         value = { total_count: 1, workflow_runs: [f.run] };
@@ -195,6 +204,48 @@ test("release workflow result binds exact operation, commits, actor and rerun at
   );
 });
 
+test("moved sandbox ref invalidates a matching completed workflow", async () => {
+  const f = fixture();
+  const calls = [];
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      calls.push({ method, endpoint });
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      if (endpoint.includes("/runs?"))
+        return apiResponse("200 OK", {
+          total_count: 1,
+          workflow_runs: [f.run]
+        });
+      if (endpoint.includes("/attempts/2/jobs"))
+        return apiResponse("200 OK", { total_count: 1, jobs: [f.job] });
+      if (endpoint.includes("/git/ref/heads/"))
+        return apiResponse("200 OK", {
+          object: { sha: "a".repeat(40) }
+        });
+      assert.fail(endpoint);
+    },
+    logs: async () =>
+      `COORDINATOR_RELEASE_RESULT:${Buffer.from(JSON.stringify(f.report)).toString("base64url")}\n`
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => {}
+    }),
+    /changed before workflow result acceptance/u
+  );
+  assert.equal(
+    calls.some(({ method }) => method !== "GET"),
+    false
+  );
+});
+
 test("workflow recovery searches a bounded second page for the exact run", async () => {
   const f = fixture();
   const pages = [];
@@ -210,6 +261,8 @@ test("workflow recovery searches a bounded second page for the exact run", async
       const endpoint = args[args.indexOf("--method") + 2];
       if (endpoint.includes("/contents/"))
         return apiResponse("200 OK", runtimeFile(endpoint));
+      if (endpoint.includes("/git/ref/heads/"))
+        return apiResponse("200 OK", environmentRef(endpoint, f.operation));
       if (endpoint.includes("/runs?")) {
         const page = Number(
           new URL(endpoint, "https://api.github.invalid").searchParams.get(
@@ -250,9 +303,11 @@ test("e2e workflow accepts only backend runner provenance", async () => {
         const endpoint = args[args.indexOf("--method") + 2];
         const value = endpoint.includes("/contents/")
           ? runtimeFile(endpoint)
-          : endpoint.includes("/runs?")
-            ? { total_count: 1, workflow_runs: [f.run] }
-            : { total_count: 1, jobs: [f.job] };
+          : endpoint.includes("/git/ref/heads/")
+            ? environmentRef(endpoint, f.operation)
+            : endpoint.includes("/runs?")
+              ? { total_count: 1, workflow_runs: [f.run] }
+              : { total_count: 1, jobs: [f.job] };
         return apiResponse("200 OK", value);
       },
       logs: async () =>
@@ -290,9 +345,11 @@ test("release workflow rejects a report for another exact version", async () => 
       const endpoint = args[args.indexOf("--method") + 2];
       const value = endpoint.includes("/contents/")
         ? runtimeFile(endpoint)
-        : endpoint.includes("/runs?")
-          ? { total_count: 1, workflow_runs: [f.run] }
-          : { total_count: 1, jobs: [f.job] };
+        : endpoint.includes("/git/ref/heads/")
+          ? environmentRef(endpoint, f.operation)
+          : endpoint.includes("/runs?")
+            ? { total_count: 1, workflow_runs: [f.run] }
+            : { total_count: 1, jobs: [f.job] };
       return `HTTP/2 200 OK\nContent-Type: application/json\n\n${JSON.stringify(value)}`;
     },
     logs: async () =>
@@ -318,9 +375,11 @@ test("frontend workflow rejects backend runner provenance", async () => {
       const endpoint = args[args.indexOf("--method") + 2];
       const value = endpoint.includes("/contents/")
         ? runtimeFile(endpoint)
-        : endpoint.includes("/runs?")
-          ? { total_count: 1, workflow_runs: [f.run] }
-          : { total_count: 1, jobs: [f.job] };
+        : endpoint.includes("/git/ref/heads/")
+          ? environmentRef(endpoint, f.operation)
+          : endpoint.includes("/runs?")
+            ? { total_count: 1, workflow_runs: [f.run] }
+            : { total_count: 1, jobs: [f.job] };
       return apiResponse("200 OK", value);
     },
     logs: async () =>
@@ -596,6 +655,46 @@ test("changed release runner stops before workflow lookup or dispatch", async ()
   );
   assert.equal(
     calls.some(({ endpoint }) => endpoint.includes("/runs?")),
+    false
+  );
+});
+
+test("resumed operation stops before dispatch when a sandbox ref moved", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  const calls = [];
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      calls.push({ method, endpoint });
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      if (endpoint.includes("/runs?"))
+        return apiResponse("200 OK", {
+          total_count: 0,
+          workflow_runs: []
+        });
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", {
+          object: { sha: "a".repeat(40) }
+        });
+      assert.fail(endpoint);
+    }
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => {}
+    }),
+    /changed before workflow dispatch/u
+  );
+  assert.equal(f.record.state, "prepared");
+  assert.equal(
+    calls.some(({ method }) => method !== "GET"),
     false
   );
 });
