@@ -12,9 +12,11 @@ ticket take that path alone; see progress for local versus live proof.
 Sandbox and real profiles share the same intake and selection code. Real product
 release execution and rollback are not built yet.**
 
-Current local source also accepts operational-monitoring release requests. It
-records and labels the request and checks its exact PR, then keeps the ticket
-waiting because monitoring deployment and health verification are not built.
+Operational-monitoring release requests are recorded and labelled, and their
+exact PRs are checked. The sandbox deploys a sample monitoring package for a
+complete production ticket after the merge into test `main`, before the
+production application deployments; real-profile monitoring tickets keep
+waiting because no real monitoring deployment or health verification exists.
 
 The public CLI creates a request, validates it, saves local records, and submits
 it to a central GitHub workflow. The workflow saves one public Issue and returns

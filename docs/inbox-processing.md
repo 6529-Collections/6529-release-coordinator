@@ -32,8 +32,9 @@ sandbox service/database checks, sandbox batch execution, status updates,
 decision history, and migration of existing tickets. Public consumers remain on
 CLI `0.0.5` and schema `0.000002`, including recording for operational
 monitoring. Frontend and backend pin that exact public version. Existing
-`0.000001` requests from older clients remain valid. Recording the monitoring
-work does not deploy it; that real adapter is still future work.
+`0.000001` requests from older clients remain valid. The sandbox deploys the
+sample monitoring package inside a complete sandbox ticket after the production
+merge into test `main`; the real adapter is still future work.
 
 One ticket contains one submitted release request. That request can name
 frontend PRs, backend PRs, or both. A scoped `inbox:run --issue NUMBER` handles
@@ -276,6 +277,19 @@ staging branches. Passing restoration does not complete the request: the ticket
 remains open with `reason:release-failed`, the original failed step, recovery
 steps, and Coordinator-maintainer ownership. A failed or uncertain undo leaves
 the ticket and environment for a person to inspect.
+A complete sandbox ticket whose backend part selects `operational_deployments:
+["monitoring"]` adds two release steps to a production release,
+`prod:monitoring:staging` and `prod:monitoring:prod`, after the backend merge
+into test `main` and before any production application deployment. A failed
+monitoring deployment is a confirmed failure with no application deployment
+started; the no-database-change restoration above reverts test `main` and
+staging and redeploys monitoring from the restored commit. A staging release
+does not deploy monitoring, and its completion comment says that the sample
+backend deploys monitoring only from test `main`. A monitoring-only sandbox
+request has no sample services to check, so it waits with
+`reason:coordinator-incomplete` and the action to submit the change inside a
+complete sandbox ticket. Real-profile monitoring requests keep waiting for the
+real adapter.
 For a database-changing ticket, a failed release step leaves the ticket open
 with `reason:release-failed` and Coordinator-maintainer ownership. Automatic
 restoration is not attempted; a person inspects the recorded step and affected

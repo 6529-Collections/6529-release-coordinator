@@ -6,7 +6,9 @@ rehearsal, supported sandbox service/database checks, and presentation into one
 manual run. Unscoped sandbox runs also filter and test complete tickets together,
 then move one selected no-database-change batch, or one verified database-changing
 ticket alone, through protected fake staging, matching E2E, and protected fake
-production when requested. `--issue` retains
+production when requested. A production ticket that selects operational
+monitoring also deploys the sample monitoring package for both monitoring
+environments after the test-main merge. `--issue` retains
 one-ticket service/database checks. Real service execution, release ownership,
 release builds, and deployments remain later work. See
 [progress](./progress.md) for local, live sandbox, and remote merge evidence.
@@ -27,7 +29,7 @@ credential through a request. An unknown name stops without falling back.
 | State journal | `codex/inbox-state` in the test inbox repository | Existing state branch in the real inbox repository |
 | Rehearsal destination | Current `main` of each selected test repository | Current `main` of each selected product repository |
 | Service/database checks | Fixed, pinned workflow in the test backend; temporary MySQL and sample programs | Not implemented; services are reported as `not-run` |
-| Release sequence | Protected `1a-staging` and `main` integration PRs plus a fixed, pinned fake release workflow in both test repositories | Not implemented; no real merge or deployment adapter is configured |
+| Release sequence | Protected `1a-staging` and `main` integration PRs plus a fixed, pinned fake release workflow in both test repositories, including the sample monitoring operation | Not implemented; no real merge or deployment adapter is configured |
 | Local submissions | `.release-coordinator/profiles/sandbox/submissions/` | `.release-coordinator/profiles/real/submissions/` |
 | Rehearsal reports | `.release-coordinator/merge-rehearsal/sandbox/` | `.release-coordinator/merge-rehearsal/real/` |
 
@@ -40,7 +42,10 @@ The test inbox holds only a workflow wrapper and README. The wrapper checks out
 an exact Coordinator commit and executes the shared intake implementation.
 The real inbox workflow executes that same implementation from its own checkout.
 Updating the sandbox's Coordinator source pin is an explicit fixture configuration
-change through a PR; there is no copied implementation to maintain.
+change through a PR; there is no copied implementation to maintain. On
+September 17 that pin moved from `5cab79f1` to merged `main`
+`f2ad24f1b82248a00eb258957c1f678313b15131` through test-inbox PR #28 so the
+sandbox inbox accepts schema `0.000002` requests.
 
 ## Commands and request formats
 

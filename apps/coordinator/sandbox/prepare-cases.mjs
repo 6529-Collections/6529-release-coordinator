@@ -56,9 +56,10 @@ const monitoringCases = {
   mixed_backend: {
     role: "backend",
     files: {
-      "src/worker.mjs":
-        baseline.backend["src/worker.mjs"] +
-        "// Released together with a monitoring change.\n",
+      // Test main's worker has moved past the fixture baseline; append to the
+      // current file instead of replacing it.
+      "src/worker.mjs": (current) =>
+        `${current}// Released together with a monitoring change.\n`,
       ...monitoringFiles({
         alarms: [
           { metric: "Errors", threshold: 3 },
@@ -222,7 +223,12 @@ for (const [name, value] of Object.entries(cases)) {
       await mkdir(path.dirname(path.join(directory, file)), {
         recursive: true
       });
-      await writeFile(path.join(directory, file), text);
+      await writeFile(
+        path.join(directory, file),
+        typeof text === "function"
+          ? text(await readFile(path.join(directory, file), "utf8"))
+          : text
+      );
     }
     git(["add", "--", ...Object.keys(value.files)]);
     git(["commit", "-m", `Add ${mode} acceptance fixture: ${name}`]);

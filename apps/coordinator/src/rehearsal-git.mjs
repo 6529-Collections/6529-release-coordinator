@@ -7,6 +7,7 @@ import {
   sandboxRepositories
 } from "./rehearsal-plan.mjs";
 import { runRehearsalProcess } from "./rehearsal-process.mjs";
+import { releaseMonitoringPaths } from "./release-contract.mjs";
 
 export async function createRehearsalGit({
   signal,
@@ -279,10 +280,16 @@ export async function createRehearsalGit({
               );
             const patch = [];
             for (const name of names) {
+              // The sample monitoring package is candidate-changeable only
+              // through its four bounded JSON files, and only in the backend.
+              const monitoring =
+                repo.role === "backend" &&
+                releaseMonitoringPaths.includes(name);
               if (
-                !/^(?:src\/[a-zA-Z0-9_./-]+|docs\/[a-zA-Z0-9_./-]+\.md|README\.md|shared\.txt)$/u.test(
+                (!/^(?:src\/[a-zA-Z0-9_./-]+|docs\/[a-zA-Z0-9_./-]+\.md|README\.md|shared\.txt)$/u.test(
                   name
-                ) ||
+                ) &&
+                  !monitoring) ||
                 name.includes("..")
               )
                 throw new RehearsalError(

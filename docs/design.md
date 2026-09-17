@@ -628,29 +628,59 @@ intake to close a worker-owned request merely because that worker merged its PRs
 
 ## Operational monitoring
 
-**Recording is implemented; execution is deferred.** Operational monitoring is
-code under the backend repository, but it is not an application service in the
-backend service catalog. Schema `0.000002` therefore records it as
+**Recording is implemented for both profiles; sandbox deployment is
+implemented; real deployment is deferred.** Operational monitoring is code under
+the backend repository, but it is not an application service in the backend
+service catalog. Schema `0.000002` therefore records it as
 `operational_deployments: ["monitoring"]` rather than inventing a service name.
-The Coordinator can verify the saved request and inspect its exact PR. It keeps
-the ticket waiting because it cannot dispatch the monitoring workflow or verify
-the installed target yet.
+The real profile verifies the saved request and inspects its exact PR, then
+keeps the ticket waiting because no real adapter can dispatch the monitoring
+workflow or verify the installed target.
 
-A future real adapter should use the existing operational-monitoring workflow,
-pin its exact backend commit and environment, save the workflow run, and verify
-the deployed monitoring target. In a combined release, monitoring should pass
-first so the application changes that produce signals are observed during their
-own rollout. This extends the release sequence; it does not build a new
-monitoring platform or put monitoring into the application service catalog.
+The real backend's `Deploy operational monitoring` workflow takes an
+environment (`staging` or `prod`) and a full commit SHA, and refuses any commit
+that is not already on `main` for either environment. The backend's own PR
+checks also require a new service's monitoring inventory in the same PR. So
+monitoring cannot be deployed while a change is only on `1a-staging`, and
+monitoring changes usually arrive mixed with application changes. The agreed
+order is therefore: after the production merge into `main`, deploy monitoring
+for `staging`, then for `prod`, and only then start the production application
+deployments. The staging rollout is watched by the previously installed
+monitoring; the production rollout is watched by the new one. A `staging`
+request does not deploy monitoring; its ticket says so, and the production
+release of the same change deploys it. Deploying monitoring before the staging
+rollout would need the backend to accept `1a-staging` commits, which is a
+product decision outside this repository.
+
+The sandbox implements that order against a sample `ops/monitoring` package in
+the test backend: hand-edited alarm sources, a committed inventory generated
+from the sample service catalog (the build fails when it is stale), and a
+controlled deployment switch. The pinned sandbox release workflow builds the
+package at the exact backend commit, refuses any dispatch that is not on test
+`main`, records the installed template bound to the build manifest, and the
+Coordinator reads GitHub's own artifact record back before accepting the result.
+A failed monitoring deployment is a confirmed production-stage failure: no
+application deployment has started, and restoration reverts test `main` and
+staging, then redeploys monitoring from the restored commit as an ordinary
+deploy step. The sandbox service stage needs the complete sample application,
+so a monitoring-only sandbox request waits; the sample monitoring deploys inside
+a complete sandbox ticket.
+
+A future real adapter should call the existing workflow with the exact merged
+commit and environment, bind the run to that commit, and verify the deployed
+monitoring target on the AWS side, which the sandbox cannot model. It extends
+the release sequence; it does not build a new monitoring platform or put
+monitoring into the application service catalog.
 
 ## Staging
 
 1. Save current staging refs and actually deployed frontend/service versions as
    recovery targets before the first shared change.
-2. Verify the actual merge composition with `1a-staging`. When selected and the
-   adapter exists, deploy and verify operational monitoring first. Then merge
-   backend application changes normally and dispatch `Deploy a service` with
-   `environment=staging`.
+2. Verify the actual merge composition with `1a-staging`. Merge backend
+   application changes normally and dispatch `Deploy a service` with
+   `environment=staging`. Operational monitoring is not deployed here: the
+   backend deploys it only from commits on `main`, so staging runs with the
+   currently installed monitoring.
 3. Wait for each selected backend service before dispatching the next in
    dependency order. When database-changing execution is later supported, use
    and verify the existing database service before its dependent services.
@@ -685,9 +715,10 @@ how the apps receive configuration.
 3. Recheck the destination compositions, selected PRs and required gates. Changed
    bases or scope require fresh matching combined evidence before proceeding.
 4. Merge backend changes into `main`. When selected and the adapter exists,
-   deploy and verify operational monitoring first. Then dispatch
-   `Deploy a service` with `environment=prod`, one selected application service
-   at a time in dependency order.
+   deploy and verify operational monitoring from that `main` commit, for
+   `staging` and then `prod`, first. Then dispatch `Deploy a service` with
+   `environment=prod`, one selected application service at a time in dependency
+   order.
 5. After backend prerequisites pass, merge frontend changes into `main` and
    dispatch `Web Deploy - PROD`. Preserve existing release-note grouping.
 6. Confirm exact running versions and existing health checks, and wait for the
@@ -708,7 +739,10 @@ Each affected environment reruns its ordinary ordered builds and matching E2E;
 both environment refs and trees are read back before recording recovery. The
 [controlled production-failure run](./testing/fake-production-restoration-2026-09-16.md)
 passed those steps live against the test repositories before that source was
-delivered; [progress](./progress.md) owns the delivery record.
+delivered; [progress](./progress.md) owns the delivery record. When the failed
+release had deployed sample monitoring, restoration redeploys it for both
+monitoring environments from the restored test `main` commit as an ordinary
+deploy step, so the installed sample monitoring matches the restored code.
 The original failed release and ticket stay failed. Real-product adapters and
 rollback remain design work.
 
@@ -832,6 +866,11 @@ release notes rather than creating parallel implementations.
   differ, plus clear human ownership for anything uncertain.
 - Explicit production continuation evidence and protection against a worker's own
   merged PRs being retired by intake.
+- The real operational-monitoring adapter: dispatching `Deploy operational
+  monitoring` with the exact merged `main` commit and environment, finding and
+  binding its run without an operation identity input, respecting the
+  `monitoring-*` GitHub Environment protections, and verifying the deployed
+  monitoring target on the AWS side rather than through a build artifact.
 - Archive migration, verification and focused tests in the history plan; later
   retention/disaster-recovery operations when actual usage justifies them.
 

@@ -45,6 +45,7 @@ import { monitoringFiles } from "../sandbox/monitoring-fixtures.mjs";
 import { harness } from "./inbox-batch-harness.mjs";
 import { serviceFixture } from "./service-fixture.mjs";
 import { fixture as batchGitHubFixture } from "./batch-github-fixture.mjs";
+import { batchFixture } from "./batch-fixture.mjs";
 
 const ids = {
   release_id: "11111111-1111-4111-8111-111111111111",
@@ -1092,4 +1093,25 @@ test("temporary batch PRs accept only the sample monitoring files, and only for 
       name
     );
   }
+});
+
+test("the real Git workspace publishes the sample monitoring files for a backend candidate only", async (t) => {
+  const f = await batchFixture(t);
+  const backend = await f.ticket({ backend: monitoringFiles() });
+  const prepared = await f.prepare([backend]);
+  assert.equal(prepared.status, "passed", JSON.stringify(prepared));
+  const publication = prepared.publications.find(
+    (value) => value.role === "backend"
+  );
+  for (const name of releaseMonitoringPaths)
+    assert.ok(
+      publication.patch.some((file) => file.path === name),
+      `${name} in the backend patch`
+    );
+  const frontend = await f.ticket({
+    frontend: { "ops/monitoring/src/alarms.json": "{}\n" }
+  });
+  const refused = await f.prepare([frontend]);
+  assert.notEqual(refused.status, "passed");
+  assert.equal(refused.kind, "evidence");
 });
