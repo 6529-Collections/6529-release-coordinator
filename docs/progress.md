@@ -1,6 +1,6 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-16**, against merged `main` source `6667b2e`, the live
+Last reviewed: **2026-09-17**, against merged `main` source `3fd1423`, the live
 package and consumer evidence below, and the latest sandbox acceptance. This page
 separates implemented behavior, source delivery and live proof. Earlier
 observations carry their original dates unless a newer check is stated.
@@ -16,11 +16,11 @@ observations carry their original dates unless a newer check is stated.
 | Sandbox batching | Unscoped runs filter cheap blockers before combined PR/service checks, keep tickets whole and record exclusions | Compatible, repeated and incompatible groups have [September 10 evidence](./testing/batch-2026-09-10.md). A fresh [September 15 v3 run](./testing/batch-v3-2026-09-15.md) proved A+B failing while A and B pass alone, selected A, completed fake staging and matching E2E, and waited through long GitHub queues without an elapsed-time cutoff. The exact earlier v2 policy found in the live journal is now readable. At the time of that run, this fix existed only on the working branch; it is now merged through PR #149. |
 | Run logs | Live step updates and private local logs, including explicit resume | Local tests and [live logging acceptance](./testing/run-logging-2026-09-11.md) passed. |
 | v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). PR #72 merged the v6 writer with exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
-| PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #149's final head passed Node 20/22/24, package, CodeQL and Snyk checks. All exact-head 6529bot lanes completed without required changes; CodeRabbit passed and no review thread remained. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
+| PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #172's final head passed Node 20/22/24, package, CodeQL and Snyk checks. The exact-head 6529bot general, security, deployment/Actions and follow-up lanes completed without required changes; CodeRabbit passed and no review thread was opened. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
 | Sandbox release sequence | One selected no-database-change batch moves through protected test staging, locked builds and artifacts, matching built-output E2E, then protected test `main` for production requests | [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149) is merged into `main` at `2b6cc35`. The successful 14-operation path passed live before source review; see [September 15 acceptance](./testing/github-build-e2e-2026-09-15.md). Review fixes were republished through protected PRs and checked on both sandbox branches. [September 16 failure acceptance](./testing/staging-e2e-failure-2026-09-16.md) then proved a real staging E2E failure stops before production, records the failure, and cleans owned branches. No real repository is used. |
 | Sandbox staging restoration | Confirmed no-database-change staging failure creates checked undo PRs for exact changed test branches, then reruns ordered build checks and matching E2E | Merged through [PR #168](https://github.com/6529-Collections/6529-release-coordinator/pull/168). The [September 16 live test](./testing/staging-restoration-2026-09-16.md) passed protected restoration, ordered checks and restored E2E. A final source-ref/tree readback guard passed offline tests. |
 | Solo sandbox database release | One verified database-changing ticket can enter the fake release sequence alone after its temporary MySQL check; changed sample data is checked through the built-output E2E, and a failed release stops for a person without restoration | Merged through [PR #168](https://github.com/6529-Collections/6529-release-coordinator/pull/168). The corrected runtime was published to both protected test-repository branches. [September 16 live acceptance](./testing/solo-database-release-2026-09-16.md) passed the full 14-operation protected path and closed ticket #26; a prior failed check left ticket #24 open and required manual staging repair. Multi-ticket database batches remain unsupported. |
-| Sandbox fake-production restoration | After a confirmed no-database-change production failure, restore affected test `main` and staging branches with protected checked undo PRs, then rerun their normal builds and E2E; keep the original failure | Implemented in the current branch. The [September 16 controlled live test](./testing/fake-production-restoration-2026-09-16.md) passed production and staging restoration, matching builds/E2E, final ref/tree readback, and ticket projection. Offline recovery, resume, moved-ref and adapter tests pass. Review hardening now also checks both environment refs before each workflow dispatch and before accepting its result; that guard has offline proof only. Source delivery remains outstanding. |
+| Sandbox fake-production restoration | After a confirmed no-database-change production failure, restore affected test `main` and staging branches with protected checked undo PRs, then rerun their normal builds and E2E; keep the original failure | Merged through [PR #172](https://github.com/6529-Collections/6529-release-coordinator/pull/172); see [delivery](#pr-172-delivery-september-17). The [September 16 controlled live test](./testing/fake-production-restoration-2026-09-16.md) passed production and staging restoration, matching builds/E2E, final ref/tree readback, and ticket projection from the then-uncommitted implementation. Offline recovery, resume, moved-ref and adapter tests pass. Review hardening also checks both environment refs before each workflow dispatch and before accepting its result; that guard has offline proof only. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -37,11 +37,10 @@ frontend or backend repositories.
 ## Next steps
 
 Package publication and product adoption are complete. The GitHub-only sandbox
-build/E2E stage, staging restoration and solo database-changing release are
-merged into `main`; their dated live results are linked above. The new local
-step restores test `main` and staging after a confirmed no-database-change
-fake-production failure. Its controlled live test passed; review and deliver
-the current source changes before treating this as merged Coordinator behavior.
+build/E2E stage, staging restoration, solo database-changing release and
+fake-production restoration are merged into `main`; their dated live results are
+linked above. No sandbox implementation remains local-only. The environment-ref
+guard around workflow dispatch from PR #172 has offline proof only.
 Do not connect the Coordinator to real product execution yet. Real adapters,
 database-changing multi-ticket batches, linked tickets, heartbeat/takeover, production
 rollback for real products and parallel releases remain later work.
@@ -52,6 +51,32 @@ The failed candidate reached test staging before E2E failed. Protected manual
 revert PRs restored both staging file trees to match test `main`; this does not
 implement automatic rollback or turn the failed release into a success. See the
 [failure acceptance record](./testing/staging-e2e-failure-2026-09-16.md).
+
+## PR #172 delivery, September 17
+
+[PR #172](https://github.com/6529-Collections/6529-release-coordinator/pull/172)
+merged at `3fd1423a82e1030a652712a9fc1bb29203d8953f`. Its tree matches the
+reviewed final head `9aa51ca738448d357152a26a5033db68390c6b2d`. The final PR
+head passed Node 20/22/24, package, both CodeQL jobs, Snyk and CodeRabbit. The
+exact-head 6529bot general, security, deployment/Actions and follow-up lanes found
+no required changes; the advisory GLM lane last ran on the prior head `25621fd`.
+The first head's general lane had required the journal blob fallback to reject
+an unverifiable large file; `25621fd` delivered that fix with content-SHA
+binding. No review thread was opened.
+
+The merge commit's
+[repository checks](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/35190904892)
+and [CodeQL](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/35190904932)
+also passed. A local `npm run check` on `3fd1423` passed all repository gates:
+534 tests ran, 531 passed and 3 were intentionally skipped; lint, formatting,
+workflow policy and packed-package checks also passed. This delivers
+fake-production restoration, the pinned Git blob fallback for journal files
+above 1 MiB, and the environment-ref guard around workflow dispatch and result
+acceptance to `main`. The
+[September 16 live test](./testing/fake-production-restoration-2026-09-16.md)
+ran from the then-uncommitted implementation and remains the runtime acceptance;
+the environment-ref guard has offline proof only. This does not enable real product
+releases or rollback.
 
 ## GitHub-only build and E2E acceptance, September 15
 
@@ -495,6 +520,12 @@ snapshot is historical, not a fresh scan.
 | [Run logging](./testing/run-logging-2026-09-11.md) | Live logs, source/review boundaries, cleanup and test-ticket retirement. |
 | [v5 history](./testing/history-2026-09-11.md) | Merged source, live sandbox migration, preserved archives, exact repeat and test cleanup. |
 | [Sandbox release sequence](./testing/release-sequence-2026-09-11.md) | Protected fake staging and production, 14 matching operations, interruption/resume, ticket closeout, cleanup, and the post-run stale-start guard. |
+| [Batch policy v3](./testing/batch-v3-2026-09-15.md) | A+B failing while A and B pass alone, selection of one candidate, fake staging with matching E2E, and waiting through long GitHub queues without an elapsed-time cutoff. |
+| [GitHub-only build and E2E](./testing/github-build-e2e-2026-09-15.md) | Locked builds, short-lived artifacts, built-output E2E on GitHub runners, the 14-operation production path, four fixed gaps and cleanup. |
+| [Staging E2E failure](./testing/staging-e2e-failure-2026-09-16.md) | A real staging E2E failure stopping before production, the recorded reason, released lock, owned-branch cleanup and manual staging repair. |
+| [Staging restoration](./testing/staging-restoration-2026-09-16.md) | Protected undo PRs on the exact staging heads, ordered builds, restored E2E, unchanged test `main` and a transient-error resume. |
+| [Solo database release](./testing/solo-database-release-2026-09-16.md) | One `database_change: yes` ticket alone through the protected path, an earlier failed check that stopped without restoration, and manual staging repair. |
+| [Fake-production restoration](./testing/fake-production-restoration-2026-09-16.md) | Test `main` restored before staging through protected undo PRs, matching builds/E2E, final ref/tree readback, the large-journal blob fallback and the still-failed ticket. |
 
 Keep current status and next steps here. Update behavior in its owning guide;
 keep dated acceptance reports unchanged unless explicitly recording a new run.

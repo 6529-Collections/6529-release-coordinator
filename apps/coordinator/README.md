@@ -9,9 +9,9 @@ E2E against the built backend/frontend HTTP boundary. Select `sandbox` or `real`
 explicitly.
 The merged source also supports one database-changing sandbox ticket on
 its own; a failed database-changing release stops for a person without automatic
-restoration. The current checkout adds restoration after confirmed
+restoration. It also restores test `main` and staging after confirmed
 no-database-change fake-production failures. See
-[progress](../../docs/progress.md) for its live test and source-delivery boundary.
+[progress](../../docs/progress.md) for the live test and delivery evidence.
 Start with [Run the ticket workflow](#run-the-ticket-workflow) below.
 No persistent Coordinator server or timer is started. Real product release
 adapters are not configured.
