@@ -662,32 +662,33 @@ export function createReleaseGitHub({
       serviceAssert(
         record.step.recovery === true &&
           record.step.kind === "integrate" &&
-          record.step.environment === "staging" &&
+          ["staging", "prod"].includes(record.step.environment) &&
           sha(restoreTo) &&
           sha(expectedBase),
         "release-recovery",
-        "Invalid sandbox staging restoration target."
+        "Invalid sandbox restoration target."
       );
       const role = record.step.role;
+      const environment = record.step.environment;
       serviceAssert(
         (!record.branch || record.branch === branch(record)) &&
           (!record.target_branch ||
-            record.target_branch === target(runtime, "staging")),
+            record.target_branch === target(runtime, environment)),
         "release-ownership",
-        "Staging restoration branch or destination changed."
+        "Restoration branch or destination changed."
       );
       await verifyRuntime(role, restoreTo);
       const old = (await call(role, "GET", `/git/commits/${restoreTo}`)).data;
       serviceAssert(
         old?.sha === restoreTo && sha(old.tree?.sha),
         "release-recovery",
-        "The saved staging source cannot be verified."
+        "The saved restoration source cannot be verified."
       );
       serviceAssert(
         (!record.restore_to || record.restore_to === restoreTo) &&
           (!record.restore_tree || record.restore_tree === old.tree.sha),
         "release-recovery",
-        "The saved staging restoration target changed."
+        "The saved restoration target changed."
       );
       if (!record.restore_to || !record.restore_tree) {
         record.restore_to = restoreTo;
@@ -710,9 +711,45 @@ export function createReleaseGitHub({
       serviceAssert(
         result.status !== "passed" || result.tree === record.restore_tree,
         "release-recovery",
-        "Restored staging does not match its saved source tree."
+        "Restored sandbox branch does not match its saved source tree."
       );
       return result;
+    },
+    async verifyRestoredEnvironments({ versions, trees }) {
+      const observed = {
+        prod: {},
+        staging: {},
+        trees: { prod: {}, staging: {} }
+      };
+      for (const role of ["backend", "frontend"])
+        for (const environment of ["prod", "staging"]) {
+          const expected = versions?.[environment]?.[role];
+          const expectedTree = trees?.[environment]?.[role];
+          serviceAssert(
+            sha(expected) && (!expectedTree || sha(expectedTree)),
+            "release-recovery",
+            "Restoration verification lacks exact environment versions."
+          );
+          observed[environment][role] = (
+            await ref(role, target(runtime, environment))
+          ).data.object.sha;
+          serviceAssert(
+            observed[environment][role] === expected,
+            "release-recovery-moved",
+            "Sandbox environment moved before restoration was confirmed."
+          );
+          const commit = (await call(role, "GET", `/git/commits/${expected}`))
+            .data;
+          serviceAssert(
+            commit?.sha === expected &&
+              sha(commit.tree?.sha) &&
+              (!expectedTree || commit.tree.sha === expectedTree),
+            "release-recovery-moved",
+            "Restored sandbox tree differs from the saved source."
+          );
+          observed.trees[environment][role] = commit.tree.sha;
+        }
+      return observed;
     },
     async verifyRestoredStaging({ versions, trees, prodVersions }) {
       const observed = { staging: {}, prod: {}, trees: {} };

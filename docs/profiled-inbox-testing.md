@@ -222,7 +222,13 @@ fixed workflow/runtime file at the exact environment commit. The journal saves
 an operation before dispatch and its verified
 result afterward. Resume reuses a completed matching operation; it does not run
 it again. A confirmed failure stops later steps and marks the release for a
-person. Unknown effects keep the lock for explicit reconciliation.
+person. Confirmed no-database-change failures after a test environment changed
+use protected undo PRs and repeat its normal build/E2E checks. A failure in fake
+production restores affected test `main` roles first, then affected staging
+roles; both environment refs and trees must match saved recovery evidence.
+The original ticket remains failed even when restoration passes. Database
+changes and unknown effects do not trigger automatic restoration; unknown
+effects keep the lock for explicit reconciliation.
 
 When the final required E2E passes and owned branches are gone, the Coordinator
 marks the selected ticket `status:completed` with `reason:release-completed`,

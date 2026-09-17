@@ -985,6 +985,56 @@ test("staging restoration uses the exact saved tree and a distinct checked integ
   assert.equal(integrations, 1);
 });
 
+test("fake-production restoration accepts only the saved test main destination", async () => {
+  const old = "a".repeat(40);
+  const current = "b".repeat(40);
+  const tree = "c".repeat(40);
+  const record = {
+    id: "22222222-2222-4222-8222-222222222222",
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: {
+      id: "restore:prod:integrate:backend",
+      kind: "integrate",
+      environment: "prod",
+      role: "backend",
+      recovery: true
+    },
+    target_branch: "main",
+    state: "prepared",
+    created_at: "2026-09-11T12:00:00.000Z"
+  };
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      if (endpoint.endsWith(`/git/commits/${old}`))
+        return apiResponse("200 OK", { sha: old, tree: { sha: tree } });
+      assert.fail(endpoint);
+    }
+  });
+  let integrated = false;
+  client.integrate = async ({ candidate, expectedBase }) => {
+    integrated = true;
+    assert.equal(candidate.tree, tree);
+    assert.equal(expectedBase, current);
+    return { status: "passed", commit: "d".repeat(40), tree };
+  };
+  const args = {
+    record,
+    restoreTo: old,
+    expectedBase: current,
+    actor: { id: "456", login: "tester" },
+    save: async () => {}
+  };
+  await client.restore(args);
+  assert.equal(integrated, true);
+  record.target_branch = "1a-staging";
+  await assert.rejects(client.restore(args), /destination changed/u);
+});
+
 test("restoration completion rereads both environment refs and exact trees", async () => {
   const versions = { backend: "a".repeat(40), frontend: "b".repeat(40) };
   const prodVersions = { backend: "c".repeat(40), frontend: "d".repeat(40) };
@@ -1025,6 +1075,59 @@ test("restoration completion rereads both environment refs and exact trees", asy
   await assert.rejects(
     client.verifyRestoredStaging({ versions, trees, prodVersions }),
     /staging or test main moved/u
+  );
+});
+
+test("fake-production restoration reads back both branches and rejects a moved main", async () => {
+  const versions = {
+    prod: { backend: "a".repeat(40), frontend: "b".repeat(40) },
+    staging: { backend: "c".repeat(40), frontend: "d".repeat(40) }
+  };
+  const trees = {
+    prod: { backend: "e".repeat(40), frontend: "f".repeat(40) },
+    staging: { backend: "1".repeat(40), frontend: "2".repeat(40) }
+  };
+  let moved = false;
+  const reads = [];
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const endpoint = args[args.indexOf("--method") + 2];
+      reads.push(endpoint);
+      const role = endpoint.includes("release-coordinator-test-frontend")
+        ? "frontend"
+        : "backend";
+      const environment = endpoint.endsWith("/git/ref/heads/main")
+        ? "prod"
+        : "staging";
+      if (endpoint.includes("/git/ref/heads/"))
+        return apiResponse("200 OK", {
+          object: {
+            sha:
+              moved && environment === "prod" && role === "backend"
+                ? versions.staging.backend
+                : versions[environment][role]
+          }
+        });
+      for (const environment of ["prod", "staging"])
+        if (endpoint.endsWith(`/git/commits/${versions[environment][role]}`))
+          return apiResponse("200 OK", {
+            sha: versions[environment][role],
+            tree: { sha: trees[environment][role] }
+          });
+      assert.fail(endpoint);
+    }
+  });
+  assert.deepEqual(
+    await client.verifyRestoredEnvironments({ versions, trees }),
+    { ...versions, trees }
+  );
+  assert.equal(reads.length, 8);
+  moved = true;
+  await assert.rejects(
+    client.verifyRestoredEnvironments({ versions, trees }),
+    /environment moved/u
   );
 });
 

@@ -218,6 +218,38 @@ export function createJournal(
   if (workflow !== undefined && !workflows.includes(workflow))
     throw new Error("Unsupported inbox workflow.");
   let snapshot;
+  const readSavedFile = async (
+    path,
+    head,
+    description = "Inbox state file"
+  ) => {
+    const file = await response(api, "GET", `/contents/${path}?ref=${head}`);
+    if (file.type !== "file" || file.path !== path)
+      throw new Error(`${description} is missing or invalid.`);
+    let encoded = file.content;
+    if (file.encoding === "none" && encoded === "") {
+      if (
+        !validSha(file.sha) ||
+        !Number.isSafeInteger(file.size) ||
+        file.size < 0
+      )
+        throw new Error(`${description} has no verifiable blob identity.`);
+      const blob = await response(api, "GET", `/git/blobs/${file.sha}`);
+      if (
+        blob.sha !== file.sha ||
+        blob.encoding !== "base64" ||
+        blob.size !== file.size ||
+        typeof blob.content !== "string"
+      )
+        throw new Error(`${description} blob differs from its pinned file.`);
+      encoded = blob.content;
+    } else if (file.encoding !== "base64" || typeof encoded !== "string")
+      throw new Error(`${description} encoding is invalid.`);
+    const decoded = Buffer.from(encoded, "base64");
+    if (file.size !== undefined && decoded.length !== file.size)
+      throw new Error(`${description} size differs from its pinned file.`);
+    return JSON.parse(decoded.toString("utf8"));
+  };
   const read = async () => {
     const ref = await api({
       method: "GET",
@@ -240,19 +272,8 @@ export function createJournal(
       throw new Error("Inbox state branch is unavailable.");
     const head = ref.data.object.sha;
     const commit = await response(api, "GET", `/git/commits/${head}`);
-    const file = await response(
-      api,
-      "GET",
-      `/contents/${stateFile}?ref=${head}`
-    );
-    if (
-      file.type !== "file" ||
-      file.path !== stateFile ||
-      file.encoding !== "base64"
-    )
-      throw new Error("Inbox state file is invalid.");
     const state = validateJournal(
-      JSON.parse(Buffer.from(file.content, "base64").toString("utf8")),
+      await readSavedFile(stateFile, head),
       profile
     );
     if (
@@ -265,20 +286,7 @@ export function createJournal(
     return { sha: head, tree: commit.tree.sha, state };
   };
   const readArchive = async (ref, head) => {
-    const file = await response(
-      api,
-      "GET",
-      `/contents/${ref.path}?ref=${head}`
-    );
-    if (
-      file.type !== "file" ||
-      file.path !== ref.path ||
-      file.encoding !== "base64"
-    )
-      throw new Error(
-        "History archive is missing or invalid; no new attempt is safe."
-      );
-    return JSON.parse(Buffer.from(file.content, "base64").toString("utf8"));
+    return readSavedFile(ref.path, head, "History archive");
   };
   const write = async (state, message, archives = []) => {
     const prior = snapshot.sha;

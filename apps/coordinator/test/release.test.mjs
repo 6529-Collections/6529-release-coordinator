@@ -177,6 +177,26 @@ function client(
         }
       };
     },
+    verifyRestoredEnvironments: async ({ versions, trees }) => {
+      calls.push("verify:restored-environments");
+      if (movedRestore)
+        throw new Error(
+          "Sandbox environment moved before restoration was confirmed."
+        );
+      return {
+        prod: { ...versions.prod },
+        staging: { ...versions.staging },
+        trees: Object.fromEntries(
+          ["prod", "staging"].map((environment) => [
+            environment,
+            {
+              backend: trees[environment].backend ?? "b".repeat(40),
+              frontend: trees[environment].frontend ?? "b".repeat(40)
+            }
+          ])
+        )
+      };
+    },
     run: async ({ record }) => {
       calls.push(record.step.id);
       const status =
@@ -203,6 +223,16 @@ async function selectedBatch({ database = false } = {}) {
   const reference = Object.values(h.f.state().history.batches)[0];
   const batch = structuredClone(h.f.file(reference.path).record);
   delete batch.execution;
+  return batch;
+}
+
+async function productionBatch({ database = false } = {}) {
+  const batch = await selectedBatch({ database });
+  for (const input of batch.inputs) input.target = "production";
+  batch.fingerprint = serviceHash({
+    inputs: batch.inputs,
+    policy: batch.policy
+  });
   return batch;
 }
 
@@ -310,6 +340,172 @@ test("failed staging E2E restores staging and stops before prod", async () => {
     () => validateReleaseExecution(unverified, batch),
     /Restoration position or final versions are inconsistent/u
   );
+});
+
+test("failed fake-production E2E restores test main then staging and keeps the ticket failed", async () => {
+  const batch = await productionBatch();
+  const calls = [];
+  const execution = await executeRelease({
+    batch,
+    client: client(calls, { failStep: "prod:e2e" }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.status, "needs-human");
+  assert.equal(execution.operations["prod:e2e"].result.status, "failed");
+  assert.equal(execution.recovery.plan.version, 2);
+  assert.equal(execution.recovery.status, "completed");
+  assert.deepEqual(
+    calls.filter(
+      (step) => step.startsWith("restore:") && step.includes(":integrate:")
+    ),
+    [
+      "restore:prod:integrate:backend",
+      "restore:prod:integrate:frontend",
+      "restore:staging:integrate:backend",
+      "restore:staging:integrate:frontend"
+    ]
+  );
+  assert.ok(
+    calls.indexOf("restore:prod:e2e") <
+      calls.indexOf("restore:staging:integrate:backend")
+  );
+  assert.equal(calls.at(-1), "verify:restored-environments");
+  assert.match(
+    execution.message,
+    /test main and staging branches were restored/u
+  );
+  assert.equal(releaseTicketResult(batch, 1).code, "release-failed");
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+  const missing = structuredClone(execution);
+  delete missing.recovery.verification.trees.prod.backend;
+  assert.throws(
+    () => validateReleaseExecution(missing, batch),
+    /Restoration position/u
+  );
+});
+
+test("failed fake-production check restores only branches that changed", async () => {
+  const batch = await productionBatch();
+  const calls = [];
+  const execution = await executeRelease({
+    batch,
+    client: client(calls, { failStep: "prod:deploy:backend:dbMigrationsLoop" }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.recovery.status, "completed");
+  assert.deepEqual(
+    calls.filter(
+      (step) => step.startsWith("restore:") && step.includes(":integrate:")
+    ),
+    [
+      "restore:prod:integrate:backend",
+      "restore:staging:integrate:backend",
+      "restore:staging:integrate:frontend"
+    ]
+  );
+  assert.equal(calls.includes("restore:prod:deploy:frontend:frontend"), true);
+  assert.equal(calls.includes("restore:prod:e2e"), true);
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+});
+
+test("database-changing fake-production failure stops without automatic restoration", async () => {
+  const batch = await productionBatch({ database: true });
+  const calls = [];
+  const execution = await executeRelease({
+    batch,
+    client: client(calls, { failStep: "prod:e2e" }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.status, "needs-human");
+  assert.equal(execution.recovery, undefined);
+  assert.equal(
+    calls.some((step) => step.startsWith("restore:")),
+    false
+  );
+  assert.match(execution.message, /changes the database/u);
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+});
+
+test("interrupted fake-production restoration resumes without replaying forward steps", async () => {
+  const batch = await productionBatch();
+  const calls = [];
+  let interrupted = false;
+  await assert.rejects(
+    executeRelease({
+      batch,
+      client: client(calls, { failStep: "prod:e2e" }),
+      guard: async () => {},
+      save: async (message) => {
+        if (
+          !interrupted &&
+          message === "restore step restore:staging:integrate:backend prepared"
+        ) {
+          interrupted = true;
+          throw new Error("recovery interrupted");
+        }
+      }
+    }),
+    /recovery interrupted/u
+  );
+  const forwardCalls = calls.filter(
+    (step) => !step.startsWith("restore:") && !step.startsWith("verify:")
+  );
+  assert.equal(batch.execution.status, "recovering");
+  const execution = await executeRelease({
+    batch,
+    client: client(calls, { failStep: "prod:e2e" }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.recovery.status, "completed");
+  assert.deepEqual(
+    calls.filter(
+      (step) => !step.startsWith("restore:") && !step.startsWith("verify:")
+    ),
+    forwardCalls
+  );
+  assert.equal(
+    calls.filter((step) => step === "restore:prod:integrate:backend").length,
+    1
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+});
+
+test("failed fake-production restoration preserves the original failure for a person", async () => {
+  const batch = await productionBatch();
+  const calls = [];
+  const execution = await executeRelease({
+    batch,
+    client: client(calls, { failStep: "prod:e2e", failRestore: true }),
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(execution.status, "needs-human");
+  assert.equal(execution.recovery.status, "needs-human");
+  assert.equal(execution.operations["prod:e2e"].result.status, "failed");
+  assert.equal(calls.at(-1), "restore:prod:integrate:backend");
+  assert.match(execution.message, /inspect the sandbox environments/u);
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+});
+
+test("moved fake-production ref cannot be recorded as restored", async () => {
+  const batch = await productionBatch();
+  const calls = [];
+  await assert.rejects(
+    executeRelease({
+      batch,
+      client: client(calls, { failStep: "prod:e2e", movedRestore: true }),
+      guard: async () => {},
+      save: async () => {}
+    }),
+    /environment moved/u
+  );
+  assert.equal(batch.execution.status, "recovering");
+  assert.equal(batch.execution.recovery.status, "running");
+  assert.equal(calls.at(-1), "verify:restored-environments");
 });
 
 test("a lost save response cannot bypass failed staging E2E on resume", async () => {

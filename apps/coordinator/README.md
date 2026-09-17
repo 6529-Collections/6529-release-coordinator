@@ -7,8 +7,11 @@ unscoped sandbox run can also take one selected batch through protected fake
 staging and production, locked npm builds, short-lived GitHub artifacts, and
 E2E against the built backend/frontend HTTP boundary. Select `sandbox` or `real`
 explicitly.
-The current local branch also supports one database-changing sandbox ticket on
-its own. A failed release step stops for a person without automatic restoration.
+The merged source also supports one database-changing sandbox ticket on
+its own; a failed database-changing release stops for a person without automatic
+restoration. The current checkout adds restoration after confirmed
+no-database-change fake-production failures. See
+[progress](../../docs/progress.md) for its live test and source-delivery boundary.
 Start with [Run the ticket workflow](#run-the-ticket-workflow) below.
 No persistent Coordinator server or timer is started. Real product release
 adapters are not configured.
@@ -392,7 +395,7 @@ The command completes cheap intake/scope/database and Git conflict filtering
 before creating temporary PRs for normal required CI, then runs the combined
 sample services. Each ticket must be self-contained and target one staging or
 production environment. A no-database-change group may contain several tickets;
-a verified database-changing ticket runs alone on the current branch. Inseparable work belongs in one ticket;
+a verified database-changing ticket runs alone. Inseparable work belongs in one ticket;
 cross-ticket dependency declarations are not supported yet.
 
 The account also needs contents/PR write access to both sample repositories.
@@ -424,7 +427,13 @@ operation is saved before it starts and verified against its release ID, input
 hash, actor, repository, all three pinned workflow/runtime files at the exact
 environment commit, run/attempt, environment, and exact code. The request target
 `production` has one fixed mapping: `staging` first, then `prod`; `prod` is never
-accepted as an inbox target. A confirmed failure stops later steps and needs a person. An uncertain
+accepted as an inbox target. A confirmed failure stops later forward steps. For
+a no-database-change failure after either test environment changed, the command
+uses checked undo PRs to restore the affected branches to their saved trees and
+reruns their normal build/E2E sequence. A fake-production failure restores test
+`main` first, then staging; both environments are read back before recording
+recovery. The original release remains failed and needs a person. Database
+changes or uncertain effects stop without automatic restoration. An uncertain
 effect keeps the lock for explicit resume. Completed matching operations are
 reused on resume instead of being dispatched again.
 

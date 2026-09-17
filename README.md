@@ -7,7 +7,7 @@ and updates that same ticket with the result. An unscoped sandbox run can now
 move one selected no-database-change batch through protected test staging,
 locked npm builds, matching E2E against the built backend and frontend, and
 protected test production.
-The current working branch also lets one verified database-changing sandbox
+The merged source also lets one verified database-changing sandbox
 ticket take that path alone; see progress for local versus live proof.
 Sandbox and real profiles share the same intake and selection code. Real product
 release execution and rollback are not built yet.**
@@ -127,7 +127,7 @@ and Git checks first, then runs normal PR checks on a compatible group's combine
 code using temporary PRs. Combined service checks follow. `--issue NUMBER` keeps
 the one-ticket service/database path. There is no extra full run per ticket by
 default. Confirmed test failures can divide the group within fixed limits; the
-final selected combination must itself pass. The current branch also selects
+final selected combination must itself pass. The merged implementation selects
 one database-changing ticket alone, after its exact temporary MySQL check passes.
 Staging requests stop
 after matching staging E2E. Production requests repeat the protected merge/check
@@ -196,10 +196,13 @@ the sandbox adapters with narrow calls to existing product Actions remains a
 later, separately authorized stage. This repository still has no permission or
 adapter that merges or deploys the real products.
 
-Rollback uses new commits undoing the failed batch and ordinary deployments,
-only when no database change is confirmed and restoration is safe. Database
-changes or uncertain recovery need a person. Automatic rollback remains future
-work.
+Sandbox recovery uses protected new commits undoing the failed batch and
+ordinary build/E2E checks when no database change is confirmed. Staging
+and fake-production restoration passed controlled live sandbox tests; see the
+[production-failure acceptance](./docs/testing/fake-production-restoration-2026-09-16.md).
+Database changes or uncertain recovery need a person. The fake-production
+restoration implementation remains in the current checkout pending source delivery.
+Real-product rollback remains future work.
 
 The v6 journal keeps active work complete, records release operations, and archives finished batch and
 service records in the same GitHub repository. Exact retries retain their old

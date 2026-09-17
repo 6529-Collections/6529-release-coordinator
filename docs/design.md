@@ -4,8 +4,8 @@
 inspects readiness, organizes tickets, rehearses merges, and runs supported
 sandbox checks. An unscoped sandbox run now moves one selected
 no-database-change batch through protected test staging and, after matching E2E,
-protected test production. The current local branch also supports one verified
-database-changing sandbox ticket alone. It has no real product adapter or authorization. See
+protected test production. One verified database-changing sandbox ticket can run
+alone. It has no real product adapter or authorization. See
 [progress](./progress.md) for that boundary.
 The [agreed execution direction](#agreed-execution-direction-september-11)
 and [process diagram](../release-coordinator-process.html) describe the same
@@ -698,14 +698,19 @@ how the apps receive configuration.
 
 ## Recovery path
 
-The sandbox implementation currently covers only restoring test staging after a
-confirmed failed step in a selected no-database-change batch. It makes new
-commits from the exact current staging heads with the saved pre-release staging
-trees, uses protected PRs and required checks, then reruns the ordered sandbox
-builds and matching E2E. The controlled [September 16 sandbox run](./testing/staging-restoration-2026-09-16.md)
-passed this path. A final ref/tree readback guard was added afterward and is
-covered offline; production recovery and real-product adapters below remain
-design work.
+The sandbox implementation restores test staging after a confirmed staging
+failure in a selected no-database-change batch. The controlled
+[September 16 staging run](./testing/staging-restoration-2026-09-16.md) passed
+protected undo PRs, ordered builds and matching E2E. The current local checkout
+also handles a later fake-production failure: restore changed test `main` roles
+first, then changed staging roles, using each branch's saved pre-release tree.
+Each affected environment reruns its ordinary ordered builds and matching E2E;
+both environment refs and trees are read back before recording recovery. The
+[controlled production-failure run](./testing/fake-production-restoration-2026-09-16.md)
+passed those steps live against the test repositories. Source delivery is still
+pending.
+The original failed release and ticket stay failed. Real-product adapters and
+rollback remain design work.
 
 Recovery starts only after shared refs or an environment changed and the release
 later failed. Before any mutation, failure simply holds/fails the candidate and
@@ -748,7 +753,7 @@ rules, including entities/schema and data-change code. Absence of a familiar
 migration filename does not prove `no`. Unknown coverage/identity holds execution;
 a false `no` requires a corrected request, without rewriting its original receipt.
 
-Single-ticket sandbox database tests exist. The current local branch can send
+Single-ticket sandbox database tests exist. The merged implementation can send
 one verified database-changing ticket through the fake staging/E2E/production
 sequence after its temporary MySQL check passes. It never restores staging
 automatically after that release fails. The fake environment does not have a

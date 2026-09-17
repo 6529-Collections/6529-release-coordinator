@@ -6,7 +6,7 @@ import {
   integrationCommitInput,
   operationForStep,
   validateReleasePlan,
-  validateStagingRecoveryPlan
+  validateRecoveryPlan
 } from "./release-plan.mjs";
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
 
@@ -171,12 +171,19 @@ export function validateReleaseExecution(execution, batch) {
     );
   }
   if (execution.status === "recovering" || execution.recovery)
-    validateStagingRecovery(execution, batch, ids);
+    validateRecovery(execution, batch, ids);
   return execution;
 }
 
-function validateStagingRecovery(execution, batch, ids) {
+function validateRecovery(execution, batch, ids) {
   const recovery = execution.recovery;
+  const productionFailure = recovery?.plan?.version === 2;
+  const validVersions = (value) =>
+    value &&
+    Object.keys(value).length === 2 &&
+    ["backend", "frontend"].every((role) =>
+      /^[0-9a-f]{40}$/u.test(value[role] ?? "")
+    );
   serviceAssert(
     recovery &&
       ["prepared", "running", "completed", "needs-human"].includes(
@@ -191,18 +198,19 @@ function validateStagingRecovery(execution, batch, ids) {
       recovery.versions &&
       typeof recovery.versions === "object" &&
       !Array.isArray(recovery.versions) &&
-      Object.keys(recovery.versions).length === 2 &&
-      ["backend", "frontend"].every((role) =>
-        /^[0-9a-f]{40}$/u.test(recovery.versions[role] ?? "")
-      ) &&
+      (productionFailure
+        ? Object.keys(recovery.versions).length === 2 &&
+          validVersions(recovery.versions.prod) &&
+          validVersions(recovery.versions.staging)
+        : validVersions(recovery.versions)) &&
       Number.isFinite(Date.parse(recovery.started_at)) &&
       (recovery.completed_at === null ||
         Number.isFinite(Date.parse(recovery.completed_at))) &&
       ["recovering", "needs-human"].includes(execution.status),
     "release-state",
-    "Invalid sandbox staging restoration state."
+    "Invalid sandbox restoration state."
   );
-  validateStagingRecoveryPlan(recovery.plan, execution, batch);
+  validateRecoveryPlan(recovery.plan, execution, batch);
   serviceAssert(
     Object.keys(recovery.operations).every((id) =>
       recovery.plan.steps.some((step) => step.id === id)
@@ -216,9 +224,9 @@ function validateStagingRecovery(execution, batch, ids) {
         (["completed", "needs-human"].includes(recovery.status) &&
           recovery.completed_at)),
     "release-state",
-    "Restoration is not attached to a failed staging step."
+    "Restoration is not attached to a failed release step."
   );
-  const versions = { ...recovery.plan.starting_versions };
+  const versions = structuredClone(recovery.plan.starting_versions);
   for (const [index, step] of recovery.plan.steps.entries()) {
     const record = recovery.operations[step.id];
     if (!record) {
@@ -250,25 +258,35 @@ function validateStagingRecovery(execution, batch, ids) {
         ].includes(record.state) &&
         Number.isFinite(Date.parse(record.created_at)),
       "release-state",
-      "Invalid or repeated staging restoration operation."
+      "Invalid or repeated restoration operation."
     );
     ids.add(record.id);
     if (step.kind === "integrate") {
       serviceAssert(
         !record.restore_to ||
-          record.restore_to === recovery.plan.baseline[step.role],
+          record.restore_to ===
+            (productionFailure
+              ? recovery.plan.baseline[step.environment][step.role]
+              : recovery.plan.baseline[step.role]),
         "release-state",
-        "Restoration source differs from the saved staging version."
+        "Restoration source differs from the saved environment version."
       );
       if (record.state !== "prepared")
         serviceAssert(
-          record.restore_to === recovery.plan.baseline[step.role] &&
+          record.restore_to ===
+            (productionFailure
+              ? recovery.plan.baseline[step.environment][step.role]
+              : recovery.plan.baseline[step.role]) &&
             /^[0-9a-f]{40}$/u.test(record.restore_tree ?? "") &&
             record.integration_version === 1 &&
             serviceHash(record.integration_input) ===
               serviceHash(
                 integrationCommitInput(record, {
-                  commit: recovery.plan.starting_versions[step.role],
+                  commit: productionFailure
+                    ? recovery.plan.starting_versions[step.environment][
+                        step.role
+                      ]
+                    : recovery.plan.starting_versions[step.role],
                   tree: record.restore_tree
                 })
               ) &&
@@ -294,10 +312,15 @@ function validateStagingRecovery(execution, batch, ids) {
         serviceAssert(
           serviceHash(record.operation) ===
             serviceHash(
-              operationForStep(execution.plan, step, versions, record.id)
+              operationForStep(
+                execution.plan,
+                step,
+                productionFailure ? versions[step.environment] : versions,
+                record.id
+              )
             ),
           "release-state",
-          "Restoration check uses different staging versions."
+          "Restoration check uses different environment versions."
         );
         if (record.result?.report)
           verifyReleaseReport(record.result.report, record.operation);
@@ -315,13 +338,18 @@ function validateStagingRecovery(execution, batch, ids) {
         "release-state",
         "Completed restoration position has no passing result."
       );
-      if (step.kind === "integrate") versions[step.role] = record.result.commit;
+      if (step.kind === "integrate") {
+        if (productionFailure)
+          versions[step.environment][step.role] = record.result.commit;
+        else versions[step.role] = record.result.commit;
+      }
     }
   }
   // The completed v4 sandbox restoration predates the final branch readback.
   // Its saved merge, deploy and E2E results remain readable as historical
   // evidence. New v5 releases must save the final readback before completion.
   const historicalCompletedRestoration =
+    !productionFailure &&
     batch.policy.version === "sandbox-batch-v4" &&
     batch.status === "finished" &&
     recovery.status === "completed" &&
@@ -333,23 +361,39 @@ function validateStagingRecovery(execution, batch, ids) {
           (historicalCompletedRestoration ||
             (recovery.verification?.staging &&
               recovery.verification?.prod &&
-              serviceHash(recovery.verification?.staging) ===
-                serviceHash(recovery.versions) &&
+              serviceHash(recovery.verification.staging) ===
+                serviceHash(
+                  productionFailure
+                    ? recovery.versions.staging
+                    : recovery.versions
+                ) &&
               serviceHash(recovery.verification?.prod) ===
-                serviceHash(execution.versions.prod) &&
+                serviceHash(
+                  productionFailure
+                    ? recovery.versions.prod
+                    : execution.versions.prod
+                ) &&
               Number.isFinite(Date.parse(recovery.verification?.checked_at)) &&
               ["backend", "frontend"].every((role) =>
-                /^[0-9a-f]{40}$/u.test(
-                  recovery.verification?.trees?.[role] ?? ""
+                ["staging", ...(productionFailure ? ["prod"] : [])].every(
+                  (environment) =>
+                    /^[0-9a-f]{40}$/u.test(
+                      productionFailure
+                        ? (recovery.verification?.trees?.[environment]?.[
+                            role
+                          ] ?? "")
+                        : (recovery.verification?.trees?.[role] ?? "")
+                    )
                 )
               ) &&
               recovery.plan.steps
                 .filter((step) => step.kind === "integrate")
-                .every(
-                  (step) =>
-                    recovery.verification.trees[step.role] ===
-                    recovery.operations[step.id].restore_tree
-                ))))) &&
+                .every((step) => {
+                  const tree = productionFailure
+                    ? recovery.verification.trees[step.environment][step.role]
+                    : recovery.verification.trees[step.role];
+                  return tree === recovery.operations[step.id].restore_tree;
+                }))))) &&
       (recovery.status !== "needs-human" ||
         recovery.operations[recovery.plan.steps[recovery.step_index]?.id]
           ?.result?.status === "failed"),
