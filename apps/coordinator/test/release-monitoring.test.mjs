@@ -484,6 +484,14 @@ test("the sample runner installs monitoring only from test main and binds the in
     assert.equal(staging.checks[0].name, "monitoring:source");
     assert.equal(staging.checks[0].status, "failed");
     assert.equal(staging.installed, null);
+    const noRef = await runSandboxReleaseOperation(monitoringOperation(), {
+      root,
+      runner,
+      outcomes: monitoringOutcome()
+    });
+    assert.equal(noRef.status, "failed");
+    assert.equal(noRef.checks[0].name, "monitoring:source");
+    assert.equal(noRef.installed, null);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -516,7 +524,7 @@ test("a controlled monitoring deployment failure fails only its environment", as
   }
 });
 
-test("a missing monitoring build outcome is a failed monitoring result", async () => {
+test("a missing or failed monitoring build is a failed monitoring result before any deploy check", async () => {
   const report = await runSandboxReleaseOperation(monitoringOperation(), {
     runner,
     outcomes: {},
@@ -532,6 +540,21 @@ test("a missing monitoring build outcome is a failed monitoring result", async (
     }
   ]);
   assert.equal(report.installed, null);
+  const failedBuild = await runSandboxReleaseOperation(monitoringOperation(), {
+    runner,
+    outcomes: { monitoring: { build: "failure" } },
+    ref: "refs/heads/main"
+  });
+  assert.equal(failedBuild.status, "failed");
+  assert.deepEqual(
+    failedBuild.checks.map(({ name, status }) => [name, status]),
+    [
+      ["monitoring:source", "passed"],
+      ["build:monitoring", "failed"]
+    ]
+  );
+  assert.equal(failedBuild.installed, null);
+  assert.deepEqual(failedBuild.builds, {});
 });
 
 // ------------------------------------------------------- plan and release
@@ -716,6 +739,9 @@ test("a batch without monitoring keeps the earlier plan shape", async () => {
     false
   );
   assert.doesNotMatch(releaseTicketResult(batch, 1).message, /monitoring/u);
+  assert.doesNotThrow(() =>
+    validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile)
+  );
 });
 
 test("monitoring steps produce exact operations while other steps keep their shape", () => {
