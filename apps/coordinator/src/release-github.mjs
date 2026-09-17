@@ -359,6 +359,51 @@ export function createReleaseGitHub({
     if (!matches.length) return null;
     return verifyRun(matches[0], record, workflowId).run;
   }
+  const digestOf = (value) => String(value ?? "").replace(/^sha256:/u, "");
+  // Independent readback of the sample "installed" monitoring: GitHub's own
+  // artifact record for the run must hold the exact template build the
+  // verified report says it installed. The real adapter needs the equivalent
+  // read of the deployed monitoring target.
+  async function verifyInstalledMonitoring(role, run, report) {
+    const expected = report.builds.monitoring.artifact;
+    const list = (
+      await call(role, "GET", `/actions/runs/${run.id}/artifacts?per_page=100`)
+    ).data;
+    serviceAssert(
+      Number.isSafeInteger(list?.total_count) &&
+        list.total_count <= 100 &&
+        Array.isArray(list.artifacts) &&
+        list.artifacts.length === list.total_count,
+      "release-monitoring",
+      "The sample monitoring artifact list is unreadable or incomplete."
+    );
+    const matches = list.artifacts.filter(
+      (artifact) => artifact?.name === expected.name
+    );
+    serviceAssert(
+      matches.length === 1,
+      "release-monitoring",
+      "GitHub holds no unique artifact for the installed sample monitoring."
+    );
+    const [artifact] = matches;
+    serviceAssert(
+      positive(artifact.id) &&
+        artifact.expired === false &&
+        artifact.workflow_run?.id === run.id &&
+        /^[0-9a-f]{64}$/u.test(digestOf(artifact.digest)) &&
+        digestOf(artifact.digest) === digestOf(expected.digest),
+      "release-monitoring",
+      "The installed sample monitoring artifact does not match the verified report."
+    );
+    return {
+      ...report.installed,
+      artifact: {
+        id: artifact.id,
+        name: artifact.name,
+        digest: digestOf(artifact.digest)
+      }
+    };
+  }
   return {
     async identity() {
       const actor = (await call("backend", "GET", "user")).data;
@@ -932,11 +977,16 @@ export function createReleaseGitHub({
         "Sandbox release conclusion contradicts its exact report."
       );
       await verifyPinnedRefs("result acceptance");
+      const installed =
+        operation.operation === "monitoring" && report.status === "passed"
+          ? await verifyInstalledMonitoring(role, run, report)
+          : null;
       return {
         status: report.status,
         report_hash: releaseHash(report),
         report,
-        workflow: { id: run.id, url: run.html_url }
+        workflow: { id: run.id, url: run.html_url },
+        ...(installed ? { installed } : {})
       };
     }
   };

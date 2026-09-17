@@ -6,6 +6,7 @@ import { assertDestination } from "./input-stability.mjs";
 import { batchPolicy, trustedBatchPolicy } from "./batch-plan.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { serviceFiles } from "./service-contract.mjs";
+import { releaseMonitoringPaths } from "./release-contract.mjs";
 import { effectiveRequiredChecks } from "./github-checks.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
@@ -26,14 +27,18 @@ export function createBatchGitHub({
   policy = batchPolicy
 } = {}) {
   policy = trustedBatchPolicy(policy);
-  const requiredStep = ["sandbox-batch-v4", "sandbox-batch-v5"].includes(
-    policy.version
-  )
+  const requiredStep = [
+    "sandbox-batch-v4",
+    "sandbox-batch-v5",
+    "sandbox-batch-v6"
+  ].includes(policy.version)
     ? "Run application checks"
     : "Run node scripts/check.mjs";
-  const requiredLogGroup = ["sandbox-batch-v4", "sandbox-batch-v5"].includes(
-    policy.version
-  )
+  const requiredLogGroup = [
+    "sandbox-batch-v4",
+    "sandbox-batch-v5",
+    "sandbox-batch-v6"
+  ].includes(policy.version)
     ? "##[group]Run npm test"
     : "##[group]Run node scripts/check.mjs";
   serviceAssert(
@@ -192,11 +197,13 @@ export function createBatchGitHub({
           patch.length <= 40 &&
           patch.every(
             (file) =>
-              /^(?:src\/[a-zA-Z0-9_./-]+|docs\/[a-zA-Z0-9_./-]+\.md|README\.md|shared\.txt)$/u.test(
+              /^(?:src\/[a-zA-Z0-9_./-]+|ops\/monitoring\/[a-zA-Z0-9_./-]+\.json|docs\/[a-zA-Z0-9_./-]+\.md|README\.md|shared\.txt)$/u.test(
                 file.path ?? ""
               ) &&
               !file.path.includes("..") &&
               (serviceFiles[record.role].includes(file.path) ||
+                (record.role === "backend" &&
+                  releaseMonitoringPaths.includes(file.path)) ||
                 file.path === "README.md" ||
                 file.path === "shared.txt" ||
                 file.path.startsWith("docs/")) &&

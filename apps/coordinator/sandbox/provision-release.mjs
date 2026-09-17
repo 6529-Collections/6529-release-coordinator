@@ -9,6 +9,7 @@ import { executeGitHub } from "../src/coordinator-github.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { writeFileAtomically } from "./atomic-file.mjs";
 import { sampleFiles } from "./fixtures.mjs";
+import { monitoringFiles } from "./monitoring-fixtures.mjs";
 import { publishFixturePr } from "./fixture-pr.mjs";
 
 if (
@@ -20,7 +21,7 @@ if (
   );
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const output = `${root}/.release-coordinator/release-database-v6`;
+const output = `${root}/.release-coordinator/release-monitoring-v7`;
 await mkdir(output, { recursive: true });
 const provisionFile = `${output}/provision.json`;
 const exec = promisify(execFile);
@@ -85,7 +86,19 @@ jobs:
         run: npm ci --ignore-scripts
       - name: Run application checks
         run: npm test
-      - name: Build application artifact
+${
+  role === "backend"
+    ? `      - name: Check monitoring package
+        if: hashFiles('ops/monitoring/package.json') != ''
+        working-directory: ops/monitoring
+        env:
+          SANDBOX_SOURCE_COMMIT: \${{ github.sha }}
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+`
+    : ""
+}      - name: Build application artifact
         env:
           SANDBOX_SOURCE_COMMIT: \${{ github.sha }}
         run: npm run build
@@ -144,7 +157,7 @@ jobs:
           node-version: 22
       - id: backend-build
         name: Build exact backend package
-        if: fromJSON(inputs.operation_json).operation == 'e2e' || fromJSON(inputs.operation_json).role == 'backend'
+        if: fromJSON(inputs.operation_json).operation == 'e2e' || (fromJSON(inputs.operation_json).operation == 'deploy' && fromJSON(inputs.operation_json).role == 'backend')
         continue-on-error: true
         working-directory: candidates/backend
         env:
@@ -164,7 +177,7 @@ jobs:
           retention-days: 7
       - id: frontend-build
         name: Build exact frontend package
-        if: fromJSON(inputs.operation_json).operation == 'e2e' || fromJSON(inputs.operation_json).role == 'frontend'
+        if: fromJSON(inputs.operation_json).operation == 'e2e' || (fromJSON(inputs.operation_json).operation == 'deploy' && fromJSON(inputs.operation_json).role == 'frontend')
         continue-on-error: true
         working-directory: candidates/frontend
         env:
@@ -182,6 +195,26 @@ jobs:
           path: candidates/frontend/dist
           if-no-files-found: error
           retention-days: 7
+      - id: monitoring-build
+        name: Build exact monitoring package
+        if: fromJSON(inputs.operation_json).operation == 'monitoring'
+        continue-on-error: true
+        working-directory: candidates/backend/ops/monitoring
+        env:
+          SANDBOX_SOURCE_COMMIT: \${{ fromJSON(inputs.operation_json).backend_commit }}
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - id: monitoring-artifact
+        name: Upload exact monitoring package
+        if: steps.monitoring-build.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sandbox-build-\${{ inputs.operation_id }}-monitoring
+          path: candidates/backend/ops/monitoring/dist
+          if-no-files-found: error
+          retention-days: 7
       - name: Run sandbox release operation
         env:
           OPERATION_ID: \${{ inputs.operation_id }}
@@ -192,6 +225,9 @@ jobs:
           FRONTEND_BUILD_OUTCOME: \${{ steps.frontend-build.outcome }}
           FRONTEND_ARTIFACT_OUTCOME: \${{ steps.frontend-artifact.outcome }}
           FRONTEND_ARTIFACT_DIGEST: \${{ steps.frontend-artifact.outputs.artifact-digest }}
+          MONITORING_BUILD_OUTCOME: \${{ steps.monitoring-build.outcome }}
+          MONITORING_ARTIFACT_OUTCOME: \${{ steps.monitoring-artifact.outcome }}
+          MONITORING_ARTIFACT_DIGEST: \${{ steps.monitoring-artifact.outputs.artifact-digest }}
         run: node coordinator/sandbox/release-run.mjs
 `;
 
@@ -205,6 +241,39 @@ for (const name of [
     `${root}/apps/coordinator/${name}`,
     "utf8"
   );
+
+const monitoringPackageFiles = () => {
+  const name = "release-coordinator-sandbox-monitoring";
+  const build =
+    "node ../../coordinator/sandbox/application-build.mjs monitoring";
+  return {
+    "ops/monitoring/package.json": `${JSON.stringify(
+      {
+        name,
+        version: "1.0.0",
+        private: true,
+        type: "module",
+        scripts: { build, generate: `${build} --generate` }
+      },
+      null,
+      2
+    )}\n`,
+    "ops/monitoring/package-lock.json": `${JSON.stringify(
+      {
+        name,
+        version: "1.0.0",
+        lockfileVersion: 3,
+        requires: true,
+        packages: { "": { name, version: "1.0.0" } }
+      },
+      null,
+      2
+    )}\n`,
+    "ops/monitoring/README.md":
+      "# Sample operational monitoring\n\nA separate sample package, like the real backend's ops/monitoring: hand-edited alarm sources in src/, a controlled deployment switch, and committed inventories generated from src/config/deploy-services.json. The build fails when a committed inventory is stale; run npm run generate after editing src/alarms.json. The sandbox release deploys it only from test main. No AWS account, credential or product monitoring is involved.\n",
+    ...monitoringFiles()
+  };
+};
 
 const packageFiles = (role) => {
   const name = `release-coordinator-sandbox-${role}`;
@@ -255,7 +324,7 @@ if (
   throw new Error("Saved release provisioning state is invalid.");
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
-const setupBranch = "codex/sandbox-database-runtime-v6-main";
+const setupBranch = "codex/sandbox-monitoring-runtime-v7-main";
 const keyFor = (role, base) => `${role}:${base}`;
 const branchRef = (repository, branch) =>
   api(
@@ -321,10 +390,10 @@ for (const role of ["backend", "frontend"]) {
           pullRequests(entry.repository, entry.branch, entry.base_branch),
         create: (entry) =>
           api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-            title: "Check database-changing sandbox releases",
+            title: "Deploy sample operational monitoring in sandbox releases",
             head: entry.branch,
             base: entry.base_branch,
-            body: "Make the sandbox release runner check the changed sample database value through built backend/frontend output. The existing isolated MySQL check still proves the database effect. This uses only test repositories and GitHub-hosted runners."
+            body: "Add the sample ops/monitoring package, build it on every backend PR check, and let the pinned sandbox release workflow build and install it as a monitoring operation dispatched only from test main. This uses only test repositories and GitHub-hosted runners; no product monitoring, AWS account or credential is involved."
           })
       });
       console.log(`${key}: ${completed.url}`);
@@ -383,7 +452,8 @@ for (const role of ["backend", "frontend"]) {
       ...(role === "backend"
         ? {
             "src/config/deploy-services.json":
-              sampleFiles().backend["src/config/deploy-services.json"]
+              sampleFiles().backend["src/config/deploy-services.json"],
+            ...monitoringPackageFiles()
           }
         : {})
     };
@@ -394,7 +464,7 @@ for (const role of ["backend", "frontend"]) {
       await writeFile(path.join(directory, file), contents);
     }
     await git(["add", "--", ...Object.keys(files)]);
-    await git(["commit", "-m", "Check database-changing sandbox releases"]);
+    await git(["commit", "-m", "Deploy sample operational monitoring"]);
     const commit = await git(["rev-parse", "HEAD"]);
     const completed = await publishFixturePr(
       {
@@ -412,10 +482,10 @@ for (const role of ["backend", "frontend"]) {
           pullRequests(entry.repository, entry.branch, entry.base_branch),
         create: (entry) =>
           api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-            title: "Check database-changing sandbox releases",
+            title: "Deploy sample operational monitoring in sandbox releases",
             head: entry.branch,
             base: entry.base_branch,
-            body: "Make the sandbox release runner check the changed sample database value through built backend/frontend output. The existing isolated MySQL check still proves the database effect. This uses only test repositories and GitHub-hosted runners."
+            body: "Add the sample ops/monitoring package, build it on every backend PR check, and let the pinned sandbox release workflow build and install it as a monitoring operation dispatched only from test main. This uses only test repositories and GitHub-hosted runners; no product monitoring, AWS account or credential is involved."
           })
       }
     );

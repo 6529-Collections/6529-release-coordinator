@@ -192,7 +192,10 @@ test("shows a monitoring-only request as recorded but not deployable", async () 
 
   const output = formatReport(await readInbox(github(data)));
   assert.match(output, /Operational deployments: monitoring/);
-  assert.match(output, /recording only; deployment is not implemented/);
+  assert.match(
+    output,
+    /recorded; only the sandbox deploys it, inside a complete sample ticket/
+  );
 });
 
 for (const [name, mutate, expected] of [
