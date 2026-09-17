@@ -655,6 +655,17 @@ test("a failed monitoring deployment stops before production application deploym
   assert.equal(calls.at(-1), "verify:restored-environments");
   assert.equal(releaseTicketResult(batch, 1).code, "release-failed");
   assert.match(execution.message, /prod:monitoring:staging failed/u);
+  for (const environment of ["staging", "prod"]) {
+    const restored =
+      execution.recovery.operations[`restore:prod:monitoring:${environment}`];
+    assert.doesNotThrow(() => validateReleaseOperation(restored.operation));
+    assert.equal(restored.operation.monitoring_environment, environment);
+    assert.equal(restored.operation.environment, "prod");
+    assert.equal(
+      restored.operation.backend_commit,
+      execution.recovery.versions.prod.backend
+    );
+  }
   assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
 });
 
@@ -1029,6 +1040,18 @@ test("a monitoring-only sandbox request waits with a sandbox-specific action", a
   assert.equal(reason.action, check.evidence.action);
   assert.equal(Object.hasOwn(reason.evidence, "action"), false);
   assert.deepEqual(reason.evidence.selected, check.evidence.selected);
+  // Only the operational check carries an action hint; other checks keep
+  // their evidence exactly as observed.
+  const observation = structuredClone(result);
+  const parts = observation.checks.find((item) => item.id === "release_parts");
+  parts.status = "unknown";
+  parts.message = "Fixture: release-part evidence unknown.";
+  parts.evidence = { action: "keep me", declared_part_order: null };
+  const other = decideTicket(entry, observation).reasons.find(
+    (item) => item.message === parts.message
+  );
+  assert.ok(other);
+  assert.deepEqual(other.evidence, parts.evidence);
 });
 
 test("changed sample monitoring files pass the trusted inspection rules only for the backend", () => {

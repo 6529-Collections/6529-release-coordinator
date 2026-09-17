@@ -182,6 +182,13 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
       role: null
     });
   }
+  serviceAssert(
+    steps.every(
+      (step) => step.kind !== "monitoring" || step.environment === "prod"
+    ),
+    "release-input",
+    "Sample monitoring deploys only in the prod stage, from test main."
+  );
   const contents = {
     version: 1,
     profile: "sandbox",

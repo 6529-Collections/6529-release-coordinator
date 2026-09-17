@@ -125,7 +125,7 @@ export function decideTicket(
             ? "Submit a corrected request with valid scope and dependency order."
             : "Obtain the missing catalog or prerequisite deployment evidence, then recheck.",
         item.status === "blocked" ? "Submitter" : needsMaintainers,
-        item.evidence ? evidence : item.evidence
+        operational && item.evidence ? evidence : item.evidence
       );
     }
   }
