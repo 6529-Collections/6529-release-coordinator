@@ -6,8 +6,8 @@ sequence implemented and tested by September 11, 2026.** See
 run one explicit command to inspect its ticket, rehearse suitable exact PRs,
 run supported sandbox service checks, and record the result on that same ticket.
 An unscoped sandbox run can continue one selected no-database-change batch through
-protected fake staging and production. The current branch also selects one
-verified database-changing ticket alone. Real product execution remains separate.
+protected fake staging and production. It also selects one verified
+database-changing ticket alone. Real product execution remains separate.
 
 This document owns the ticket states, labels, reasons, and first-processing
 rules. [Progress](./progress.md) owns dated implementation and live evidence.

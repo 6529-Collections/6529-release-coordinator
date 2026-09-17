@@ -15,9 +15,9 @@ staging, locked npm builds and artifacts, matching built-output E2E, protected
 fake production, and another matching E2E. Real product release execution
 remains a design; passing sandbox checks never authorize it.
 One verified database-changing ticket can use the sandbox release path alone;
-a failure then stops for a person without automatic restoration. The current
-local checkout also restores changed test `main` and staging branches after a
-confirmed no-database-change fake-production failure. Check progress for live proof.
+a failure then stops for a person without automatic restoration. The merged
+source also restores changed test `main` and staging branches after a confirmed
+no-database-change fake-production failure. Check progress for live proof.
 
 It is intended to coordinate releases across:
 

@@ -5,8 +5,8 @@ readiness, local merge engine, and ticket updates. `inbox:run` joins inspection,
 rehearsal, supported sandbox service/database checks, and presentation into one
 manual run. Unscoped sandbox runs also filter and test complete tickets together,
 then move one selected no-database-change batch, or one verified database-changing
-ticket alone on the current branch, through protected fake staging, matching
-E2E, and protected fake production when requested. `--issue` retains
+ticket alone, through protected fake staging, matching E2E, and protected fake
+production when requested. `--issue` retains
 one-ticket service/database checks. Real service execution, release ownership,
 release builds, and deployments remain later work. See
 [progress](./progress.md) for local, live sandbox, and remote merge evidence.

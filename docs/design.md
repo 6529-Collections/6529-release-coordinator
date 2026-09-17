@@ -701,14 +701,15 @@ how the apps receive configuration.
 The sandbox implementation restores test staging after a confirmed staging
 failure in a selected no-database-change batch. The controlled
 [September 16 staging run](./testing/staging-restoration-2026-09-16.md) passed
-protected undo PRs, ordered builds and matching E2E. The current local checkout
-also handles a later fake-production failure: restore changed test `main` roles
+protected undo PRs, ordered builds and matching E2E. The merged source also
+handles a later fake-production failure: restore changed test `main` roles
 first, then changed staging roles, using each branch's saved pre-release tree.
 Each affected environment reruns its ordinary ordered builds and matching E2E;
 both environment refs and trees are read back before recording recovery. The
 [controlled production-failure run](./testing/fake-production-restoration-2026-09-16.md)
-passed those steps live against the test repositories. Source delivery is still
-pending.
+passed those steps live against the test repositories before
+[PR #172](https://github.com/6529-Collections/6529-release-coordinator/pull/172)
+delivered the source.
 The original failed release and ticket stay failed. Real-product adapters and
 rollback remain design work.
 
@@ -803,7 +804,7 @@ The merged [history refactor](./inbox-processing.md#history-storage) has offline
 and a passing [live sandbox migration/repeat](./testing/history-2026-09-11.md).
 Keep the current command, profile isolation, cheap-first selection, exact evidence,
 logs, no-database-change batch boundary and manual stop-before-resume procedure.
-The sandbox release sequence is implemented locally and has
+The sandbox release sequence is merged and has
 [live acceptance](./testing/release-sequence-2026-09-11.md).
 Its request target mapping is fixed in one module: `staging` runs staging only,
 while `production` runs staging and then `prod`. Each fake workflow dispatch

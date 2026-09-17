@@ -200,8 +200,9 @@ Sandbox recovery uses protected new commits undoing the failed batch and
 ordinary build/E2E checks when no database change is confirmed. Staging
 and fake-production restoration passed controlled live sandbox tests; see the
 [production-failure acceptance](./docs/testing/fake-production-restoration-2026-09-16.md).
-Database changes or uncertain recovery need a person. The fake-production
-restoration implementation remains in the current checkout pending source delivery.
+Database changes or uncertain recovery need a person. Fake-production
+restoration is merged through
+[PR #172](https://github.com/6529-Collections/6529-release-coordinator/pull/172).
 Real-product rollback remains future work.
 
 The v6 journal keeps active work complete, records release operations, and archives finished batch and
