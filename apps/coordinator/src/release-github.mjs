@@ -433,7 +433,7 @@ export function createReleaseGitHub({
       record.target_branch ??= targetBranch;
       record.branch ??= branch(record);
       record.body ??= record.step.recovery
-        ? `Sandbox restoration for failed release ${record.release_id}\n\nRestore staging tree ${candidate.tree}`
+        ? `Sandbox restoration for failed release ${record.release_id}\n\nRestore ${record.step.environment} tree ${candidate.tree}`
         : `Sandbox release ${record.release_id}\n\nBatch: ${candidate.tree}`;
       if (!record.base) {
         record.base = (await ref(role, targetBranch)).data.object.sha;
@@ -565,7 +565,7 @@ export function createReleaseGitHub({
               "/pulls",
               {
                 title: record.step.recovery
-                  ? `Restore sandbox staging after ${record.release_id}`
+                  ? `Restore sandbox ${record.step.environment} after ${record.release_id}`
                   : `Sandbox ${record.step.environment} release ${record.release_id}`,
                 head: record.branch,
                 base: targetBranch,
@@ -614,10 +614,10 @@ export function createReleaseGitHub({
           `/pulls/${record.number}/merge`,
           {
             commit_title: record.step.recovery
-              ? `Restore sandbox staging after ${record.release_id}`
+              ? `Restore sandbox ${record.step.environment} after ${record.release_id}`
               : `Sandbox ${record.step.environment} release ${record.release_id}`,
             commit_message: record.step.recovery
-              ? `Restore staging tree ${candidate.tree}`
+              ? `Restore ${record.step.environment} tree ${candidate.tree}`
               : `Exact selected candidate ${candidate.commit}`,
             sha: integrationCommit,
             merge_method: "merge"

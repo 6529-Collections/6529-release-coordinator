@@ -236,6 +236,33 @@ async function productionBatch({ database = false } = {}) {
   return batch;
 }
 
+test("missing test-main role version stops before release mutations", async () => {
+  const batch = await productionBatch();
+  const calls = [];
+  const releaseClient = client(calls);
+  const identity = releaseClient.identity;
+  releaseClient.identity = async () => {
+    const result = await identity();
+    delete result.versions.prod.frontend;
+    return result;
+  };
+  let saves = 0;
+  await assert.rejects(
+    executeRelease({
+      batch,
+      client: releaseClient,
+      guard: async () => {},
+      save: async () => {
+        saves++;
+      }
+    }),
+    /Both exact sandbox repository versions are required/u
+  );
+  assert.deepEqual(calls, []);
+  assert.equal(saves, 0);
+  assert.equal(batch.execution, undefined);
+});
+
 test("database-changing ticket reaches the release sequence alone", async () => {
   const batch = await selectedBatch({ database: true });
   const calls = [];

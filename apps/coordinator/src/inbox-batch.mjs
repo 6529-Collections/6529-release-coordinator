@@ -69,7 +69,7 @@ function releasedDecision(decision, result) {
           ? "The affected sandbox branches were restored. Inspect the failed release before submitting changed code."
           : result.execution?.message?.includes("changes the database")
             ? "A person must inspect the database-changing release and staging state before another release."
-            : "Inspect staging and the failed release before another release starts.",
+            : "Inspect the affected sandbox environments and failed release before another release starts.",
     owner: completed ? "None" : "Coordinator maintainers"
   };
   next.reasons.push(reason);

@@ -176,6 +176,44 @@ test("omitted contents cannot use a blob with a different identity", async () =>
   assert.deepEqual(h.f.state(), before);
 });
 
+test("omitted contents cannot trust self-consistent but false blob metadata", async () => {
+  const h = await completed();
+  const before = h.f.state();
+  const api = async (call) => {
+    if (call.method === "GET" && call.path.startsWith("/git/blobs/")) {
+      const bytes = Buffer.from("{}");
+      return {
+        status: 200,
+        data: {
+          sha: "a".repeat(40),
+          size: bytes.length,
+          encoding: "base64",
+          content: bytes.toString("base64")
+        }
+      };
+    }
+    const result = await h.f.api(call);
+    if (call.method === "GET" && call.path.startsWith("/contents/"))
+      result.data = {
+        ...result.data,
+        sha: "a".repeat(40),
+        size: 2,
+        encoding: "none",
+        content: ""
+      };
+    return result;
+  };
+  await assert.rejects(
+    createJournal(api, sandboxProfile, { workflow: inboxWorkflow }).acquire(
+      await h.f.identity(),
+      undefined,
+      {}
+    ),
+    /content differs from its pinned blob/u
+  );
+  assert.deepEqual(h.f.state(), before);
+});
+
 test("more than 100 completed batches archive without resetting search budgets or losing active work", async () => {
   const h = await completed();
   const { journal, state, run, record } = await activeCopy(h);

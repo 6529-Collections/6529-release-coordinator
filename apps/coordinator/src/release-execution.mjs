@@ -236,6 +236,15 @@ export async function executeRelease({
   if (execution.status === "recovering") return restoreEnvironments();
   if (execution.status === "prepared") {
     const identity = await client.identity();
+    serviceAssert(
+      ["staging", "prod"].every((environment) =>
+        ["backend", "frontend"].every((role) =>
+          /^[0-9a-f]{40}$/u.test(identity.versions?.[environment]?.[role] ?? "")
+        )
+      ),
+      "release-runtime",
+      "Both exact sandbox repository versions are required in staging and test main before release execution."
+    );
     execution.actor = identity.actor;
     execution.runtime = identity.runtime;
     execution.versions = identity.versions;

@@ -227,7 +227,8 @@ export function createJournal(
     if (file.type !== "file" || file.path !== path)
       throw new Error(`${description} is missing or invalid.`);
     let encoded = file.content;
-    if (file.encoding === "none" && encoded === "") {
+    const omitted = file.encoding === "none" && encoded === "";
+    if (omitted) {
       if (
         !validSha(file.sha) ||
         !Number.isSafeInteger(file.size) ||
@@ -248,6 +249,14 @@ export function createJournal(
     const decoded = Buffer.from(encoded, "base64");
     if (file.size !== undefined && decoded.length !== file.size)
       throw new Error(`${description} size differs from its pinned file.`);
+    if (
+      omitted &&
+      createHash("sha1")
+        .update(`blob ${decoded.length}\0`)
+        .update(decoded)
+        .digest("hex") !== file.sha
+    )
+      throw new Error(`${description} content differs from its pinned blob.`);
     return JSON.parse(decoded.toString("utf8"));
   };
   const read = async () => {
