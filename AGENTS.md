@@ -14,9 +14,10 @@ They can also take one selected no-database-change batch through protected fake
 staging, locked npm builds and artifacts, matching built-output E2E, protected
 fake production, and another matching E2E. Real product release execution
 remains a design; passing sandbox checks never authorize it.
-The current local branch also selects one verified database-changing ticket
-alone for the sandbox release path. A failed release step then stops for a
-person without automatic staging restoration. Check progress for live proof.
+One verified database-changing ticket can use the sandbox release path alone;
+a failure then stops for a person without automatic restoration. The current
+local checkout also restores changed test `main` and staging branches after a
+confirmed no-database-change fake-production failure. Check progress for live proof.
 
 It is intended to coordinate releases across:
 
@@ -87,11 +88,11 @@ Existing limits stay unchanged until they are separately discussed.
 - `docs/merge-rehearsal-testing.md` owns the sandbox rehearsal scope,
   its test repositories, test matrices, and finish lines. The current sandbox stage
   tests one ticket's services/database behavior, bounded no-database-change
-  batches, and one database-changing ticket alone in the current local branch.
+  batches, and one database-changing ticket alone.
   Its service/database section owns the small programs, temporary MySQL baseline,
   declared-versus-observed database answer, ordered steps, retry/stop evidence,
   and cleanup. It also owns the protected fake staging/E2E/production release
-  sequence, its dated live acceptance, and the sandbox staging restoration
+  sequence, its dated live acceptance, and sandbox environment restoration
   acceptance. Keep the shared Coordinator logic and
   explicit profile boundary; sandbox actions never enable real deployment. Check progress for local
   implementation, live coverage, and GitHub account limitations.
@@ -106,16 +107,16 @@ Existing limits stay unchanged until they are separately discussed.
   checks cannot be reused across stages.
 - `docs/design.md` and the full process diagram contain the agreed execution
   direction for the real products. Its sandbox release and staging restoration
-  subsets are live tested. Product
-  adapters and production rollback are not built. Reuse existing product Actions and their
+  subsets, including fake-production restoration, are live tested in the sandbox.
+  Product adapters and real-production rollback are not built. Reuse existing product Actions and their
   environment-specific builds; no configuration redesign or portable artifacts.
   Wait for successful matching staging E2E before production merges into `main`.
   Keep one release active through completion or recovery. Automatic rollback
   requires confirmed no database change, verified revert commits and ordinary
   deploy/check steps; otherwise stop for a person. Its v0.1 logging section owns local
   run diagnostics; logs never replace journal authority or prove a process stopped.
-  Heartbeat and automatic process takeover remain deferred. Release rollback is
-  future work, distinct from process restart. Keep state in the GitHub journal;
+  Heartbeat and automatic process takeover remain deferred. Real-product release
+  rollback is future work, distinct from process restart. Keep state in the GitHub journal;
   `docs/inbox-processing.md` owns verified archives and v6 migration; preserve
   unfinished work, archive checksums, original attempts and per-run budgets.
   Lifetime record caps are removed; keep sandbox migration evidence separate from

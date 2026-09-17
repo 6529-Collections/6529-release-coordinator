@@ -1,6 +1,6 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-16**, against merged `main` source `68a7ff2`, the live
+Last reviewed: **2026-09-16**, against merged `main` source `6667b2e`, the live
 package and consumer evidence below, and the latest sandbox acceptance. This page
 separates implemented behavior, source delivery and live proof. Earlier
 observations carry their original dates unless a newer check is stated.
@@ -18,8 +18,9 @@ observations carry their original dates unless a newer check is stated.
 | v6 history | Finished batch/service/release records archive in the same journal branch; active work and original attempts remain available | v5 storage merged in [PR #66](https://github.com/6529-Collections/6529-release-coordinator/pull/66). PR #72 merged the v6 writer with exact sandbox release operations; [live staging-to-production acceptance passed](./testing/release-sequence-2026-09-11.md). The real inbox was not migrated. |
 | PR reviews/security | Fixed bot reviews, CodeRabbit drafts, CodeQL and a complete lockfile audit configured | PR #149's final head passed Node 20/22/24, package, CodeQL and Snyk checks. All exact-head 6529bot lanes completed without required changes; CodeRabbit passed and no review thread remained. Required merge rules remain active. Snyk's six-library workspace limitation remains below. |
 | Sandbox release sequence | One selected no-database-change batch moves through protected test staging, locked builds and artifacts, matching built-output E2E, then protected test `main` for production requests | [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149) is merged into `main` at `2b6cc35`. The successful 14-operation path passed live before source review; see [September 15 acceptance](./testing/github-build-e2e-2026-09-15.md). Review fixes were republished through protected PRs and checked on both sandbox branches. [September 16 failure acceptance](./testing/staging-e2e-failure-2026-09-16.md) then proved a real staging E2E failure stops before production, records the failure, and cleans owned branches. No real repository is used. |
-| Sandbox staging restoration | Confirmed no-database-change staging failure creates checked undo PRs for exact changed test branches, then reruns ordered build checks and matching E2E | Implemented on local `codex/sandbox-staging-restore`, not merged. The [September 16 live test](./testing/staging-restoration-2026-09-16.md) passed protected restoration, ordered checks and restored E2E. A final source-ref/tree readback guard was added after the live run and is covered offline. |
-| Solo sandbox database release | One verified database-changing ticket can enter the fake release sequence alone after its temporary MySQL check; changed sample data is checked through the built-output E2E, and a failed release stops for a person without restoration | Implemented on the current local branch, not merged. The corrected runtime was published to both protected test-repository branches. [September 16 live acceptance](./testing/solo-database-release-2026-09-16.md) passed the full 14-operation protected path and closed ticket #26; a prior failed check left ticket #24 open and required manual staging repair. Multi-ticket database batches remain unsupported. |
+| Sandbox staging restoration | Confirmed no-database-change staging failure creates checked undo PRs for exact changed test branches, then reruns ordered build checks and matching E2E | Merged through [PR #168](https://github.com/6529-Collections/6529-release-coordinator/pull/168). The [September 16 live test](./testing/staging-restoration-2026-09-16.md) passed protected restoration, ordered checks and restored E2E. A final source-ref/tree readback guard passed offline tests. |
+| Solo sandbox database release | One verified database-changing ticket can enter the fake release sequence alone after its temporary MySQL check; changed sample data is checked through the built-output E2E, and a failed release stops for a person without restoration | Merged through [PR #168](https://github.com/6529-Collections/6529-release-coordinator/pull/168). The corrected runtime was published to both protected test-repository branches. [September 16 live acceptance](./testing/solo-database-release-2026-09-16.md) passed the full 14-operation protected path and closed ticket #26; a prior failed check left ticket #24 open and required manual staging repair. Multi-ticket database batches remain unsupported. |
+| Sandbox fake-production restoration | After a confirmed no-database-change production failure, restore affected test `main` and staging branches with protected checked undo PRs, then rerun their normal builds and E2E; keep the original failure | Implemented in the current branch. The [September 16 controlled live test](./testing/fake-production-restoration-2026-09-16.md) passed production and staging restoration, matching builds/E2E, final ref/tree readback, and ticket projection. Offline recovery, resume, moved-ref and adapter tests pass. Review hardening now also checks both environment refs before each workflow dispatch and before accepting its result; that guard has offline proof only. Source delivery remains outstanding. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -36,23 +37,14 @@ frontend or backend repositories.
 ## Next steps
 
 Package publication and product adoption are complete. The GitHub-only sandbox
-build/E2E stage is implemented, passed live and is merged into `main` through
-[PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149).
-The local staging-restoration implementation has passed a controlled live failure
-in the three test repositories. Protected undo PRs, restored staging E2E,
-preserved failed ticket/journal evidence, and unchanged test production were
-verified. The same local branch now also has a successful solo
-database-changing sandbox release: temporary MySQL and combined PR checks,
-staging builds/E2E, then fake production builds/E2E passed for ticket #26.
-The earlier #24 attempt stopped safely on a broken sample API smoke check; its
-staging tree was repaired manually, and the check was fixed before retrying.
-See the [dated acceptance record](./testing/solo-database-release-2026-09-16.md).
-Local repository checks passed (517 passing tests, 3 optional skips,
-plus lint, formatting, workflow policy and packed-package checks); review the
-branch before merging it.
+build/E2E stage, staging restoration and solo database-changing release are
+merged into `main`; their dated live results are linked above. The new local
+step restores test `main` and staging after a confirmed no-database-change
+fake-production failure. Its controlled live test passed; review and deliver
+the current source changes before treating this as merged Coordinator behavior.
 Do not connect the Coordinator to real product execution yet. Real adapters,
 database-changing multi-ticket batches, linked tickets, heartbeat/takeover, production
-rollback and parallel releases remain later work.
+rollback for real products and parallel releases remain later work.
 
 The controlled September 16 test left ticket #22 open with
 `reason:release-failed`, the journal unlocked, and both test `main` refs unchanged.

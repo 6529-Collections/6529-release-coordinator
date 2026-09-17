@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   createJournal,
   inboxWorkflow,
@@ -82,6 +82,136 @@ test("completed batches leave the working file; ordinary saves preserve archives
   assert.equal(h.dispatches(), 1);
   assert.deepEqual(currentBatch(h.f), original);
   assert.deepEqual(h.f.state().tickets, before.tickets);
+});
+
+test("journal and archive remain readable when GitHub omits large file contents", async () => {
+  const h = await completed();
+  const blobs = new Map();
+  let blobReads = 0;
+  const api = async (call) => {
+    if (call.method === "GET" && call.path.startsWith("/git/blobs/")) {
+      blobReads++;
+      const sha = call.path.split("/").at(-1);
+      const bytes = blobs.get(sha);
+      assert.ok(bytes);
+      return {
+        status: 200,
+        data: {
+          sha,
+          size: bytes.length,
+          encoding: "base64",
+          content: bytes.toString("base64")
+        }
+      };
+    }
+    const result = await h.f.api(call);
+    if (call.method === "GET" && call.path.startsWith("/contents/")) {
+      const bytes = Buffer.from(result.data.content, "base64");
+      const sha = createHash("sha1")
+        .update(`blob ${bytes.length}\0`)
+        .update(bytes)
+        .digest("hex");
+      blobs.set(sha, bytes);
+      result.data = {
+        ...result.data,
+        sha,
+        size: bytes.length,
+        encoding: "none",
+        content: ""
+      };
+    }
+    return result;
+  };
+  const journal = createJournal(api, sandboxProfile, {
+    workflow: inboxWorkflow
+  });
+  const { state, run } = await journal.acquire(
+    await h.f.identity(),
+    undefined,
+    {}
+  );
+  const identity = Object.keys(state.history.batches)[0];
+  assert.equal(
+    (await journal.loadHistory(state, run, "batches", identity)).fingerprint,
+    identity
+  );
+  await journal.release(state, run);
+  assert.ok(blobReads >= 3);
+  assert.equal(h.f.state().lock, null);
+});
+
+test("omitted contents cannot use a blob with a different identity", async () => {
+  const h = await completed();
+  const before = h.f.state();
+  const api = async (call) => {
+    if (call.method === "GET" && call.path.startsWith("/git/blobs/"))
+      return {
+        status: 200,
+        data: {
+          sha: "f".repeat(40),
+          size: 2,
+          encoding: "base64",
+          content: "e30="
+        }
+      };
+    const result = await h.f.api(call);
+    if (call.method === "GET" && call.path.startsWith("/contents/"))
+      result.data = {
+        ...result.data,
+        sha: "a".repeat(40),
+        size: Buffer.from(result.data.content, "base64").length,
+        encoding: "none",
+        content: ""
+      };
+    return result;
+  };
+  await assert.rejects(
+    createJournal(api, sandboxProfile, { workflow: inboxWorkflow }).acquire(
+      await h.f.identity(),
+      undefined,
+      {}
+    ),
+    /blob differs from its pinned file/u
+  );
+  assert.deepEqual(h.f.state(), before);
+});
+
+test("omitted contents cannot trust self-consistent but false blob metadata", async () => {
+  const h = await completed();
+  const before = h.f.state();
+  const api = async (call) => {
+    if (call.method === "GET" && call.path.startsWith("/git/blobs/")) {
+      const bytes = Buffer.from("{}");
+      return {
+        status: 200,
+        data: {
+          sha: "a".repeat(40),
+          size: bytes.length,
+          encoding: "base64",
+          content: bytes.toString("base64")
+        }
+      };
+    }
+    const result = await h.f.api(call);
+    if (call.method === "GET" && call.path.startsWith("/contents/"))
+      result.data = {
+        ...result.data,
+        sha: "a".repeat(40),
+        size: 2,
+        encoding: "none",
+        content: ""
+      };
+    return result;
+  };
+  await assert.rejects(
+    createJournal(api, sandboxProfile, { workflow: inboxWorkflow }).acquire(
+      await h.f.identity(),
+      undefined,
+      {}
+    ),
+    /content differs from its pinned blob/u
+  );
+  assert.deepEqual(h.f.state(), before);
 });
 
 test("more than 100 completed batches archive without resetting search budgets or losing active work", async () => {
@@ -594,13 +724,18 @@ test("archive API paths are narrow and cannot delete files, write other branches
     path: `/contents/${path}?ref=${"a".repeat(40)}`
   });
   await client.request({
+    method: "GET",
+    path: `/git/blobs/${"a".repeat(40)}`
+  });
+  await client.request({
     method: "POST",
     path: "/git/trees",
     body: { base_tree: "c".repeat(40), tree: [entry, { ...entry, path }] }
   });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
   for (const call of [
     { method: "GET", path: `/contents/${path}?ref=main` },
+    { method: "GET", path: "/git/blobs/main" },
     ...["../other", "history/other/a.json", ".github/workflows/deploy.yml"].map(
       (path) => ({
         method: "POST",
@@ -626,7 +761,7 @@ test("archive API paths are narrow and cannot delete files, write other branches
     }
   ])
     await assert.rejects(client.request(call), /unsupported/);
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3);
 });
 
 test("archive readback failure reports uncertainty instead of success or an assumed lock", async () => {

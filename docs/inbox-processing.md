@@ -269,10 +269,17 @@ release step fails, and becomes `status:completed` only after every step require
 by its target passes and owned branches are removed. Excluded tickets retain the
 same comment, reasons, action owner, exact group/attempt and check links. Unknown
 results never blame a submitter.
+For a confirmed no-database-change failure after test branches changed,
+automatic restoration uses checked undo PRs and reruns normal checks. A later
+fake-production failure restores affected test `main` branches before affected
+staging branches. Passing restoration does not complete the request: the ticket
+remains open with `reason:release-failed`, the original failed step, recovery
+steps, and Coordinator-maintainer ownership. A failed or uncertain undo leaves
+the ticket and environment for a person to inspect.
 For a database-changing ticket, a failed release step leaves the ticket open
 with `reason:release-failed` and Coordinator-maintainer ownership. Automatic
-staging restoration is not attempted; a person inspects the recorded step and
-test staging before another release.
+restoration is not attempted; a person inspects the recorded step and affected
+test environments before another release.
 Reusing a saved group requires fresh input checks and a fresh read of its actual
 GitHub CI/service evidence. Missing or changed proof stops reuse; a cached journal
 result alone is insufficient. This verification starts no new CI. Its scope is the frozen eligible pool after

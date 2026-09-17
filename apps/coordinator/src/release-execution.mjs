@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { loggedStep, logOutcome } from "./run-log.mjs";
 import {
+  makeProductionRecoveryPlan,
   makeStagingRecoveryPlan,
   makeReleasePlan,
   operationForStep,
   selectedPreparation,
-  validateStagingRecoveryPlan,
+  validateRecoveryPlan,
   validateReleasePlan
 } from "./release-plan.mjs";
 import { serviceAssert } from "./service-contract.mjs";
@@ -93,9 +94,10 @@ export async function executeRelease({
     batch.execution = structuredClone(execution);
     await save(message);
   };
-  const restoreStaging = async () => {
+  const restoreEnvironments = async () => {
     const recovery = execution.recovery;
-    validateStagingRecoveryPlan(recovery.plan, execution, batch);
+    validateRecoveryPlan(recovery.plan, execution, batch);
+    const productionFailure = recovery.plan.version === 2;
     recovery.status = "running";
     while (recovery.step_index < recovery.plan.steps.length) {
       const step = recovery.plan.steps[recovery.step_index];
@@ -112,7 +114,9 @@ export async function executeRelease({
         recovery.operations[step.id] = record;
         await persist(`restore step ${step.id} prepared`);
       }
-      const versions = recovery.versions;
+      const versions = productionFailure
+        ? recovery.versions[step.environment]
+        : recovery.versions;
       let result;
       if (step.kind === "integrate") {
         record.actor ??= execution.actor;
@@ -121,26 +125,35 @@ export async function executeRelease({
             step: "release.restore",
             operation_id: record.id,
             role: step.role,
-            message: `Restore the saved ${step.role} sandbox staging tree.`
+            message: `Restore the saved ${step.role} sandbox ${step.environment} tree.`
           },
           () =>
             client.restore({
               record,
-              restoreTo: recovery.plan.baseline[step.role],
+              restoreTo: productionFailure
+                ? recovery.plan.baseline[step.environment][step.role]
+                : recovery.plan.baseline[step.role],
               expectedBase: versions[step.role],
               actor: execution.actor,
               save: () => persist(`restore step ${step.id} progress`)
             }),
           (value) => ({ outcome: logOutcome(value.status), url: value.url })
         );
-        if (successful(result))
-          recovery.versions = { ...versions, [step.role]: result.commit };
+        if (successful(result)) {
+          const updated = { ...versions, [step.role]: result.commit };
+          if (productionFailure)
+            recovery.versions = {
+              ...recovery.versions,
+              [step.environment]: updated
+            };
+          else recovery.versions = updated;
+        }
       } else {
         serviceAssert(
           /^[0-9a-f]{40}$/u.test(versions.backend ?? "") &&
             /^[0-9a-f]{40}$/u.test(versions.frontend ?? ""),
           "release-recovery",
-          "Both restored staging versions are required before checks."
+          `Both restored ${step.environment} versions are required before checks.`
         );
         record.operation ??= operationForStep(
           execution.plan,
@@ -178,37 +191,60 @@ export async function executeRelease({
         recovery.completed_at = now().toISOString();
         execution.status = "needs-human";
         execution.completed_at = recovery.completed_at;
-        execution.message = `${recovery.plan.failed_step} failed. Staging restoration stopped at ${step.id}; a person must inspect staging. Test production was not changed.`;
+        execution.message = `${recovery.plan.failed_step} failed. Restoration stopped at ${step.id}; a person must inspect the sandbox environments before another release.`;
         await persist(`restore step ${step.id} failed`);
         return execution;
       }
       recovery.step_index++;
       await persist(`restore step ${step.id} passed`);
     }
-    const restoredTrees = Object.fromEntries(
-      recovery.plan.steps
-        .filter((step) => step.kind === "integrate")
-        .map((step) => [step.role, recovery.operations[step.id].restore_tree])
-    );
-    recovery.verification = {
-      ...(await client.verifyRestoredStaging({
-        versions: recovery.versions,
-        trees: restoredTrees,
-        prodVersions: execution.versions.prod
-      })),
-      checked_at: now().toISOString()
-    };
+    const restoredTrees = (environment) =>
+      Object.fromEntries(
+        recovery.plan.steps
+          .filter(
+            (step) =>
+              step.kind === "integrate" && step.environment === environment
+          )
+          .map((step) => [step.role, recovery.operations[step.id].restore_tree])
+      );
+    const observed = productionFailure
+      ? await client.verifyRestoredEnvironments({
+          versions: recovery.versions,
+          trees: {
+            prod: restoredTrees("prod"),
+            staging: restoredTrees("staging")
+          }
+        })
+      : await client.verifyRestoredStaging({
+          versions: recovery.versions,
+          trees: restoredTrees("staging"),
+          prodVersions: execution.versions.prod
+        });
+    recovery.verification = { ...observed, checked_at: now().toISOString() };
     recovery.status = "completed";
     recovery.completed_at = now().toISOString();
     execution.status = "needs-human";
     execution.completed_at = recovery.completed_at;
-    execution.message = `${recovery.plan.failed_step} failed. Sandbox staging was restored and its matching E2E passed; test production was not changed.`;
-    await persist(`release ${execution.plan.release_id} staging restored`);
+    execution.message = productionFailure
+      ? `${recovery.plan.failed_step} failed. Changed test main and staging branches were restored to their saved trees; their matching build and E2E checks passed. The release still needs a person.`
+      : `${recovery.plan.failed_step} failed. Sandbox staging was restored and its matching E2E passed; test production was not changed.`;
+    await persist(
+      `release ${execution.plan.release_id} sandbox restoration completed`
+    );
     return execution;
   };
-  if (execution.status === "recovering") return restoreStaging();
+  if (execution.status === "recovering") return restoreEnvironments();
   if (execution.status === "prepared") {
     const identity = await client.identity();
+    serviceAssert(
+      ["staging", "prod"].every((environment) =>
+        ["backend", "frontend"].every((role) =>
+          /^[0-9a-f]{40}$/u.test(identity.versions?.[environment]?.[role] ?? "")
+        )
+      ),
+      "release-runtime",
+      "Both exact sandbox repository versions are required in staging and test main before release execution."
+    );
     execution.actor = identity.actor;
     execution.runtime = identity.runtime;
     execution.versions = identity.versions;
@@ -302,7 +338,8 @@ export async function executeRelease({
     if (!successful(result)) {
       const restoration =
         result?.status === "failed"
-          ? makeStagingRecoveryPlan(execution, batch)
+          ? (makeStagingRecoveryPlan(execution, batch) ??
+            makeProductionRecoveryPlan(execution, batch))
           : null;
       if (restoration) {
         execution.status = "recovering";
@@ -311,15 +348,13 @@ export async function executeRelease({
           plan: restoration,
           step_index: 0,
           operations: {},
-          versions: { ...restoration.starting_versions },
+          versions: structuredClone(restoration.starting_versions),
           started_at: now().toISOString(),
           completed_at: null
         };
-        execution.message = `${step.id} failed. Restoring the saved sandbox staging versions before this run finishes.`;
-        await persist(
-          `release step ${step.id} failed; staging restoration prepared`
-        );
-        return restoreStaging();
+        execution.message = `${step.id} failed. Restoring the saved sandbox environment versions before this run finishes.`;
+        await persist(`release step ${step.id} failed; restoration prepared`);
+        return restoreEnvironments();
       }
       execution.status = "needs-human";
       execution.message = databaseChange

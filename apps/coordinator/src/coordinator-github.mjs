@@ -23,6 +23,7 @@ function allowed(method, path, body) {
       /^\/labels\/[^/?]+$/u.test(path) ||
       path === `/git/ref/heads/${stateBranch}` ||
       /^\/git\/commits\/[0-9a-f]{40}$/u.test(path) ||
+      /^\/git\/blobs\/[0-9a-f]{40}$/u.test(path) ||
       new RegExp(
         `^/contents/${stateFile.replace(".", "\\.")}\\?ref=[0-9a-f]{40}$`,
         "u"

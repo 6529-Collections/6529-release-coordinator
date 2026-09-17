@@ -433,7 +433,7 @@ export function createReleaseGitHub({
       record.target_branch ??= targetBranch;
       record.branch ??= branch(record);
       record.body ??= record.step.recovery
-        ? `Sandbox restoration for failed release ${record.release_id}\n\nRestore staging tree ${candidate.tree}`
+        ? `Sandbox restoration for failed release ${record.release_id}\n\nRestore ${record.step.environment} tree ${candidate.tree}`
         : `Sandbox release ${record.release_id}\n\nBatch: ${candidate.tree}`;
       if (!record.base) {
         record.base = (await ref(role, targetBranch)).data.object.sha;
@@ -565,7 +565,7 @@ export function createReleaseGitHub({
               "/pulls",
               {
                 title: record.step.recovery
-                  ? `Restore sandbox staging after ${record.release_id}`
+                  ? `Restore sandbox ${record.step.environment} after ${record.release_id}`
                   : `Sandbox ${record.step.environment} release ${record.release_id}`,
                 head: record.branch,
                 base: targetBranch,
@@ -614,10 +614,10 @@ export function createReleaseGitHub({
           `/pulls/${record.number}/merge`,
           {
             commit_title: record.step.recovery
-              ? `Restore sandbox staging after ${record.release_id}`
+              ? `Restore sandbox ${record.step.environment} after ${record.release_id}`
               : `Sandbox ${record.step.environment} release ${record.release_id}`,
             commit_message: record.step.recovery
-              ? `Restore staging tree ${candidate.tree}`
+              ? `Restore ${record.step.environment} tree ${candidate.tree}`
               : `Exact selected candidate ${candidate.commit}`,
             sha: integrationCommit,
             merge_method: "merge"
@@ -662,32 +662,33 @@ export function createReleaseGitHub({
       serviceAssert(
         record.step.recovery === true &&
           record.step.kind === "integrate" &&
-          record.step.environment === "staging" &&
+          ["staging", "prod"].includes(record.step.environment) &&
           sha(restoreTo) &&
           sha(expectedBase),
         "release-recovery",
-        "Invalid sandbox staging restoration target."
+        "Invalid sandbox restoration target."
       );
       const role = record.step.role;
+      const environment = record.step.environment;
       serviceAssert(
         (!record.branch || record.branch === branch(record)) &&
           (!record.target_branch ||
-            record.target_branch === target(runtime, "staging")),
+            record.target_branch === target(runtime, environment)),
         "release-ownership",
-        "Staging restoration branch or destination changed."
+        "Restoration branch or destination changed."
       );
       await verifyRuntime(role, restoreTo);
       const old = (await call(role, "GET", `/git/commits/${restoreTo}`)).data;
       serviceAssert(
         old?.sha === restoreTo && sha(old.tree?.sha),
         "release-recovery",
-        "The saved staging source cannot be verified."
+        "The saved restoration source cannot be verified."
       );
       serviceAssert(
         (!record.restore_to || record.restore_to === restoreTo) &&
           (!record.restore_tree || record.restore_tree === old.tree.sha),
         "release-recovery",
-        "The saved staging restoration target changed."
+        "The saved restoration target changed."
       );
       if (!record.restore_to || !record.restore_tree) {
         record.restore_to = restoreTo;
@@ -710,9 +711,45 @@ export function createReleaseGitHub({
       serviceAssert(
         result.status !== "passed" || result.tree === record.restore_tree,
         "release-recovery",
-        "Restored staging does not match its saved source tree."
+        "Restored sandbox branch does not match its saved source tree."
       );
       return result;
+    },
+    async verifyRestoredEnvironments({ versions, trees }) {
+      const observed = {
+        prod: {},
+        staging: {},
+        trees: { prod: {}, staging: {} }
+      };
+      for (const role of ["backend", "frontend"])
+        for (const environment of ["prod", "staging"]) {
+          const expected = versions?.[environment]?.[role];
+          const expectedTree = trees?.[environment]?.[role];
+          serviceAssert(
+            sha(expected) && (!expectedTree || sha(expectedTree)),
+            "release-recovery",
+            "Restoration verification lacks exact environment versions."
+          );
+          observed[environment][role] = (
+            await ref(role, target(runtime, environment))
+          ).data.object.sha;
+          serviceAssert(
+            observed[environment][role] === expected,
+            "release-recovery-moved",
+            "Sandbox environment moved before restoration was confirmed."
+          );
+          const commit = (await call(role, "GET", `/git/commits/${expected}`))
+            .data;
+          serviceAssert(
+            commit?.sha === expected &&
+              sha(commit.tree?.sha) &&
+              (!expectedTree || commit.tree.sha === expectedTree),
+            "release-recovery-moved",
+            "Restored sandbox tree differs from the saved source."
+          );
+          observed.trees[environment][role] = commit.tree.sha;
+        }
+      return observed;
     },
     async verifyRestoredStaging({ versions, trees, prodVersions }) {
       const observed = { staging: {}, prod: {}, trees: {} };
@@ -760,6 +797,18 @@ export function createReleaseGitHub({
         "Release operation lacks saved actor or workflow identity."
       );
       await verifyRuntime(role, operation[`${role}_commit`]);
+      const verifyPinnedRefs = async (stage) => {
+        for (const sourceRole of ["backend", "frontend"]) {
+          const current = (
+            await ref(sourceRole, target(runtime, operation.environment))
+          ).data.object.sha;
+          serviceAssert(
+            current === operation[`${sourceRole}_commit`],
+            "release-stale",
+            `Sandbox ${operation.environment} changed before workflow ${stage}.`
+          );
+        }
+      };
       let run = record.workflow_run_id
         ? (await call(role, "GET", `/actions/runs/${record.workflow_run_id}`))
             .data
@@ -770,6 +819,7 @@ export function createReleaseGitHub({
           "release-dispatch-uncertain",
           "A prior release dispatch has no confirmed workflow run."
         );
+        await verifyPinnedRefs("dispatch");
         record.state = "dispatching";
         await save();
         await call(
@@ -881,6 +931,7 @@ export function createReleaseGitHub({
         "release-workflow",
         "Sandbox release conclusion contradicts its exact report."
       );
+      await verifyPinnedRefs("result acceptance");
       return {
         status: report.status,
         report_hash: releaseHash(report),

@@ -182,26 +182,16 @@ export function validateReleasePlan(plan, batch) {
   return plan;
 }
 
-export function makeStagingRecoveryPlan(execution, batch) {
-  const failed = execution.plan.steps[execution.step_index];
-  const database = selectedPreparation(batch).prepared.service_plan.database;
-  if (
-    failed?.environment !== "staging" ||
-    execution.operations[failed.id]?.result?.status !== "failed" ||
-    database?.declared !== "no" ||
-    database?.observed !== "no"
-  )
-    return null;
-  const startingVersions = execution.versions.staging;
+function recoveryStartingPoint(execution, environment) {
+  const startingVersions = execution.versions[environment];
   const changed = ["backend", "frontend"].filter(
     (role) =>
-      execution.operations[`staging:integrate:${role}`]?.result?.kind ===
+      execution.operations[`${environment}:integrate:${role}`]?.result?.kind ===
       "merge"
   );
-  if (!changed.length) return null;
   serviceAssert(
     changed.every((role) => {
-      const record = execution.operations[`staging:integrate:${role}`];
+      const record = execution.operations[`${environment}:integrate:${role}`];
       return (
         record.state === "completed" &&
         record.cleanup === "removed" &&
@@ -211,13 +201,13 @@ export function makeStagingRecoveryPlan(execution, batch) {
       );
     }),
     "release-recovery",
-    "The saved staging merges cannot identify exact restoration bases."
+    `The saved ${environment} merges cannot identify exact restoration bases.`
   );
   const baseline = Object.fromEntries(
     ["backend", "frontend"].map((role) => [
       role,
       changed.includes(role)
-        ? execution.operations[`staging:integrate:${role}`].base
+        ? execution.operations[`${environment}:integrate:${role}`].base
         : startingVersions?.[role]
     ])
   );
@@ -226,24 +216,59 @@ export function makeStagingRecoveryPlan(execution, batch) {
       (role) => sha(baseline[role]) && sha(startingVersions?.[role])
     ),
     "release-recovery",
-    "The failed staging release lacks exact starting and changed versions."
+    `The failed ${environment} release lacks exact starting and changed versions.`
   );
-  const steps = [
+  return { startingVersions, changed, baseline };
+}
+
+function recoverySteps(execution, environment, changed) {
+  if (!changed.length) return [];
+  return [
     ...changed.map((role) => ({
-      id: `restore:staging:integrate:${role}`,
+      id: `restore:${environment}:integrate:${role}`,
       kind: "integrate",
-      environment: "staging",
+      environment,
       role,
       recovery: true
     })),
     ...execution.plan.steps
       .filter(
         (step) =>
-          step.environment === "staging" &&
+          step.environment === environment &&
           ["deploy", "e2e"].includes(step.kind)
       )
       .map((step) => ({ ...step, id: `restore:${step.id}` }))
   ];
+}
+
+function confirmedRecoverableFailure(execution, batch) {
+  const failed = execution.plan.steps[execution.step_index];
+  const database = selectedPreparation(batch).prepared.service_plan.database;
+  return failed &&
+    execution.operations[failed.id]?.result?.status === "failed" &&
+    database?.declared === "no" &&
+    database?.observed === "no"
+    ? failed
+    : null;
+}
+
+export function makeStagingRecoveryPlan(execution, batch) {
+  const failed = confirmedRecoverableFailure(execution, batch);
+  if (failed?.environment !== "staging") return null;
+  if (
+    !["backend", "frontend"].some(
+      (role) =>
+        execution.operations[`staging:integrate:${role}`]?.result?.kind ===
+        "merge"
+    )
+  )
+    return null;
+  const { startingVersions, changed, baseline } = recoveryStartingPoint(
+    execution,
+    "staging"
+  );
+  if (!changed.length) return null;
+  const steps = recoverySteps(execution, "staging", changed);
   const contents = {
     version: 1,
     failed_step: failed.id,
@@ -254,12 +279,44 @@ export function makeStagingRecoveryPlan(execution, batch) {
   return { ...contents, fingerprint: releaseHash(contents) };
 }
 
-export function validateStagingRecoveryPlan(plan, execution, batch) {
-  const expected = makeStagingRecoveryPlan(execution, batch);
+export function makeProductionRecoveryPlan(execution, batch) {
+  const failed = confirmedRecoverableFailure(execution, batch);
+  if (failed?.environment !== "prod") return null;
+  serviceAssert(
+    execution.operations["staging:e2e"]?.result?.status === "passed",
+    "release-recovery",
+    "Production restoration needs the saved passing staging E2E."
+  );
+  const prod = recoveryStartingPoint(execution, "prod");
+  const staging = recoveryStartingPoint(execution, "staging");
+  if (!prod.changed.length && !staging.changed.length) return null;
+  const contents = {
+    version: 2,
+    failed_step: failed.id,
+    baseline: { prod: prod.baseline, staging: staging.baseline },
+    starting_versions: {
+      prod: { ...prod.startingVersions },
+      staging: { ...staging.startingVersions }
+    },
+    steps: [
+      ...recoverySteps(execution, "prod", prod.changed),
+      ...recoverySteps(execution, "staging", staging.changed)
+    ]
+  };
+  return { ...contents, fingerprint: releaseHash(contents) };
+}
+
+export function validateRecoveryPlan(plan, execution, batch) {
+  const expected =
+    plan?.version === 1
+      ? makeStagingRecoveryPlan(execution, batch)
+      : plan?.version === 2
+        ? makeProductionRecoveryPlan(execution, batch)
+        : null;
   serviceAssert(
     expected && releaseHash(plan) === releaseHash(expected),
     "release-state",
-    "Saved staging restoration differs from the failed release."
+    "Saved restoration differs from the failed release."
   );
   return plan;
 }
@@ -272,7 +329,7 @@ export function integrationCommitInput(record, candidate) {
   };
   return {
     message: record.step.recovery
-      ? `Sandbox staging restoration for ${record.release_id}\n\nRestore ${record.restore_to} after ${candidate.commit}`
+      ? `Sandbox ${record.step.environment} restoration for ${record.release_id}\n\nRestore ${record.restore_to} after ${candidate.commit}`
       : `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
     tree: candidate.tree,
     parents: [candidate.commit],
