@@ -6,12 +6,21 @@ import {
 } from "./service-contract.mjs";
 import { validateReleaseExecution } from "./release-state.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
-import { isReleaseBatchPolicy, trustedBatchPolicy } from "./batch-plan.mjs";
+import {
+  databaseBatchPolicies,
+  isReleaseBatchPolicy,
+  operationalBatchPolicies,
+  trustedBatchPolicy
+} from "./batch-plan.mjs";
 
 const hash = (value) => /^[0-9a-f]{64}$/u.test(value ?? "");
 const uuid = (value) =>
   /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(value ?? "");
 const statuses = ["passed", "blocked", "unknown", "stale"];
+const validOperationalDeployments = (value) =>
+  Array.isArray(value) &&
+  value.every((name) => name === "monitoring") &&
+  new Set(value).size === value.length;
 export function validateBatchHistory(batches, profile) {
   serviceAssert(
     profile.name === "sandbox" &&
@@ -39,7 +48,8 @@ export function validateBatchHistory(batches, profile) {
           "sandbox-batch-v2",
           "sandbox-batch-v3",
           "sandbox-batch-v4",
-          "sandbox-batch-v5"
+          "sandbox-batch-v5",
+          "sandbox-batch-v6"
         ].includes(batch.policy?.version) &&
         key === serviceHash({ inputs: batch.inputs, policy: batch.policy }) &&
         Number.isFinite(created) &&
@@ -65,14 +75,18 @@ export function validateBatchHistory(batches, profile) {
             batch.inputs[i].input.inbox.repository_id === profile.inbox.id &&
             (batch.policy.version === "sandbox-batch-v1" ||
               isReleaseRequestTarget(batch.inputs[i].target)) &&
-            (batch.policy.version !== "sandbox-batch-v5" ||
-              ["no", "yes"].includes(batch.inputs[i].database_change))
+            (!databaseBatchPolicies.includes(batch.policy.version) ||
+              ["no", "yes"].includes(batch.inputs[i].database_change)) &&
+            (!operationalBatchPolicies.includes(batch.policy.version) ||
+              validOperationalDeployments(
+                batch.inputs[i].operational_deployments
+              ))
         ),
       "batch-state",
       "Batch ticket scope changed."
     );
     serviceAssert(
-      batch.policy.version !== "sandbox-batch-v5" ||
+      !databaseBatchPolicies.includes(batch.policy.version) ||
         !batch.inputs.some((input) => input.database_change === "yes") ||
         batch.inputs.length === 1,
       "batch-state",

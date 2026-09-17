@@ -296,7 +296,7 @@ async function inspectCatalogs(request, github, checks) {
   }
 }
 
-function inspectOperationalDeployments(request, checks) {
+function inspectOperationalDeployments(request, checks, profile) {
   const selected = request.release_parts.flatMap((part) =>
     (part.operational_deployments ?? []).map((name) => ({
       part: part.id,
@@ -305,11 +305,45 @@ function inspectOperationalDeployments(request, checks) {
     }))
   );
   if (!selected.length) return;
+  if (profile.name !== "sandbox") {
+    checks.push(
+      check(
+        "operational_deployments",
+        "unknown",
+        "Operational monitoring is recorded in this request, but the Coordinator cannot deploy it or verify its target health yet.",
+        {
+          selected,
+          action:
+            "Use the existing operational monitoring workflow until the Coordinator deployment adapter is implemented."
+        }
+      )
+    );
+    return;
+  }
+  // The sandbox service stage needs the complete sample application, so the
+  // sample monitoring deploys only inside a complete sandbox ticket.
+  if (!request.release_parts.some((part) => part.deploy_units?.length)) {
+    checks.push(
+      check(
+        "operational_deployments",
+        "unknown",
+        "Operational monitoring is recorded, but the sandbox deploys it only inside a complete sample application ticket; this monitoring-only request has no sample services to check.",
+        {
+          selected,
+          action:
+            "Submit the monitoring change inside a complete sandbox ticket that also selects the sample application services."
+        }
+      )
+    );
+    return;
+  }
   checks.push(
     check(
       "operational_deployments",
-      "unknown",
-      "Operational monitoring is recorded in this request, but the Coordinator cannot deploy it or verify its target health yet.",
+      "pass",
+      request.target === "production"
+        ? "Operational monitoring is selected. The sandbox deploys it for staging and production from the merged test main commit before the production application deployments."
+        : "Operational monitoring is selected. A staging release does not deploy it: the sample backend deploys monitoring only from test main, so it deploys with the production release of this change.",
       { selected }
     )
   );
@@ -363,7 +397,7 @@ export async function inspectReadiness(
       { declared_part_order: graph.order }
     )
   );
-  inspectOperationalDeployments(request, checks);
+  inspectOperationalDeployments(request, checks, profile);
 
   const observed = [];
   for (const part of request.release_parts) {

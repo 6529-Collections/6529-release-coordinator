@@ -70,17 +70,48 @@ export const priorBatchPolicy = Object.freeze({
   })
 });
 
-export const batchPolicy = Object.freeze({
+export const databaseBatchPolicy = Object.freeze({
   ...commonBatchPolicy,
   version: "sandbox-batch-v5",
   workflow_blob: priorBatchPolicy.workflow_blob
 });
+
+// v6 batches record each ticket's operational deployments so the release plan
+// can deploy sample monitoring after the test-main merge. The backend check
+// workflow also builds the sample monitoring package on every PR.
+export const batchPolicy = Object.freeze({
+  ...commonBatchPolicy,
+  version: "sandbox-batch-v6",
+  workflow_blob: Object.freeze({
+    backend: "58396920d9a75a6a1b524dba728f128105d3cbef",
+    frontend: priorBatchPolicy.workflow_blob.frontend
+  })
+});
+
+export const databaseBatchPolicies = Object.freeze([
+  databaseBatchPolicy.version,
+  batchPolicy.version
+]);
+export const operationalBatchPolicies = Object.freeze([batchPolicy.version]);
+
+// One sorted list per ticket, from its request parts or a saved batch input.
+export const requestedOperationalDeployments = (request) =>
+  Array.isArray(request?.release_parts)
+    ? [
+        ...new Set(
+          request.release_parts.flatMap(
+            (part) => part.operational_deployments ?? []
+          )
+        )
+      ].sort((a, b) => a.localeCompare(b))
+    : [...(request?.operational_deployments ?? [])];
 
 export function isReleaseBatchPolicy(policy) {
   return [
     elapsedBatchPolicy.version,
     previousBatchPolicy.version,
     priorBatchPolicy.version,
+    databaseBatchPolicy.version,
     batchPolicy.version
   ].includes(policy?.version);
 }
@@ -92,6 +123,7 @@ export function trustedBatchPolicy(policy) {
     elapsedBatchPolicy,
     previousBatchPolicy,
     priorBatchPolicy,
+    databaseBatchPolicy,
     batchPolicy
   ].find(
     (candidate) =>

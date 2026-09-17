@@ -984,7 +984,10 @@ test("an unfinished v2 batch resumes after its retired deadline", async () => {
   const batch = structuredClone(h.f.file(reference.path).record);
   delete batch.execution;
   batch.policy = structuredClone(elapsedBatchPolicy);
-  for (const input of batch.inputs) delete input.database_change;
+  for (const input of batch.inputs) {
+    delete input.database_change;
+    delete input.operational_deployments;
+  }
   batch.fingerprint = serviceHash({
     inputs: batch.inputs,
     policy: batch.policy

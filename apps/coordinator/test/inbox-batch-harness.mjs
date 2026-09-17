@@ -12,22 +12,23 @@ import { servicePlanFromSources } from "../src/service-plan.mjs";
 import { executeRelease } from "../src/release-execution.mjs";
 import {
   makeReleaseBuild,
+  monitoringTemplate,
   releaseBuildFiles,
+  releaseBuildRoles,
+  releaseBuildSourceRole,
   releaseProtocol,
   verifyReleaseReport
 } from "../src/release-contract.mjs";
 import { serviceHash } from "../src/service-contract.mjs";
 
-const releaseBuilds = (operation) => {
-  const roles =
-    operation.operation === "e2e" ? ["backend", "frontend"] : [operation.role];
-  return Object.fromEntries(
-    roles.map((role) => [
+const releaseBuilds = (operation) =>
+  Object.fromEntries(
+    releaseBuildRoles(operation).map((role) => [
       role,
       {
         manifest: makeReleaseBuild({
           role,
-          source_commit: operation[`${role}_commit`],
+          source_commit: operation[`${releaseBuildSourceRole(role)}_commit`],
           files: releaseBuildFiles[role].map((path) => ({
             path,
             sha256: "a".repeat(64),
@@ -41,15 +42,34 @@ const releaseBuilds = (operation) => {
       }
     ])
   );
-};
+const installedMonitoring = (operation) =>
+  operation.operation === "monitoring"
+    ? {
+        installed: {
+          environment: operation.monitoring_environment,
+          source_commit: operation.backend_commit,
+          template: monitoringTemplate(operation.monitoring_environment),
+          sha256: "a".repeat(64)
+        }
+      }
+    : {};
 
-export function harness(count = 2, { databaseTickets = [] } = {}) {
+export function harness(
+  count = 2,
+  { databaseTickets = [], monitoringTickets = [] } = {}
+) {
   const f = fixture(sandboxProfile),
     events = [];
   const samples = Array.from({ length: count }, (_, index) => {
     const database = databaseTickets.includes(index + 1);
     const sample = serviceFixture(database ? databaseCandidate() : undefined);
     if (database) sample.entry.request.database_change = "yes";
+    if (monitoringTickets.includes(index + 1)) {
+      sample.entry.request.schema_version = "0.000002";
+      sample.entry.request.release_parts[0].operational_deployments = [
+        "monitoring"
+      ];
+    }
     return sample;
   });
   samples.forEach((sample, i) => {
@@ -165,6 +185,7 @@ export function harness(count = 2, { databaseTickets = [] } = {}) {
             status: "passed",
             checks: [{ name: "fixture", status: "passed" }],
             builds: releaseBuilds(record.operation),
+            ...installedMonitoring(record.operation),
             versions: {
               backend: record.operation.backend_commit,
               frontend: record.operation.frontend_commit

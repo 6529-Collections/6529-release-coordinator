@@ -110,6 +110,7 @@ export function decideTicket(
     ) {
       const missing = item.evidence?.missing_prerequisites?.length;
       const operational = item.id === "operational_deployments";
+      const { action: operationalAction, ...evidence } = item.evidence ?? {};
       add(
         item.status === "blocked"
           ? "invalid-dependencies"
@@ -118,12 +119,13 @@ export function decideTicket(
             : "coordinator-incomplete",
         item.message,
         operational
-          ? "Use the existing operational monitoring workflow until the Coordinator deployment adapter is implemented."
+          ? (operationalAction ??
+              "Use the existing operational monitoring workflow until the Coordinator deployment adapter is implemented.")
           : item.status === "blocked"
             ? "Submit a corrected request with valid scope and dependency order."
             : "Obtain the missing catalog or prerequisite deployment evidence, then recheck.",
         item.status === "blocked" ? "Submitter" : needsMaintainers,
-        item.evidence
+        operational && item.evidence ? evidence : item.evidence
       );
     }
   }

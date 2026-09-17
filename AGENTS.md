@@ -17,7 +17,11 @@ remains a design; passing sandbox checks never authorize it.
 One verified database-changing ticket can use the sandbox release path alone;
 a failure then stops for a person without automatic restoration. The merged
 source also restores changed test `main` and staging branches after a confirmed
-no-database-change fake-production failure. Check progress for live proof.
+no-database-change fake-production failure. The current source deploys a sample
+monitoring package for a production ticket that selects operational monitoring,
+after the test-main merge and before production application deployments; the
+sample backend deploys monitoring only from test `main`, like the real one.
+Check progress for live proof.
 
 It is intended to coordinate releases across:
 
@@ -108,6 +112,9 @@ Existing limits stay unchanged until they are separately discussed.
 - `docs/design.md` and the full process diagram contain the agreed execution
   direction for the real products. Its sandbox release and staging restoration
   subsets, including fake-production restoration, are live tested in the sandbox.
+  Its operational-monitoring section owns the agreed order: monitoring deploys
+  only from `main`, after the production merge and before production
+  application deployments; the sandbox models it with a sample package.
   Product adapters and real-production rollback are not built. Reuse existing product Actions and their
   environment-specific builds; no configuration redesign or portable artifacts.
   Wait for successful matching staging E2E before production merges into `main`.

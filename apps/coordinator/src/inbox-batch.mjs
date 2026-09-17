@@ -3,9 +3,12 @@ import { runEvent } from "./run-log.mjs";
 import { buildServicePlan } from "./service-plan.mjs";
 import {
   batchPolicy,
+  databaseBatchPolicies,
   legacyBatchPolicy,
   isReleaseBatchPolicy,
+  operationalBatchPolicies,
   prepareBatch,
+  requestedOperationalDeployments,
   trustedBatchPolicy
 } from "./batch-plan.mjs";
 import { selectBatch, batchTicketResult } from "./batch-selection.mjs";
@@ -270,7 +273,10 @@ export async function coordinateInboxBatch({
           Array.isArray(item.input.repositories) &&
           (savedActiveInput.database_change === undefined ||
             savedActiveInput.database_change ===
-              item.entry.request.database_change),
+              item.entry.request.database_change) &&
+          (savedActiveInput.operational_deployments === undefined ||
+            serviceHash(savedActiveInput.operational_deployments) ===
+              serviceHash(requestedOperationalDeployments(item.entry.request))),
         "batch-state",
         "Saved active batch input differs from its ticket."
       );
@@ -399,8 +405,15 @@ export async function coordinateInboxBatch({
   const inputs = suitable.map((item) => ({
     number: item.entry.issue_number,
     target: item.entry.request.target,
-    ...(policy.version === "sandbox-batch-v5"
+    ...(databaseBatchPolicies.includes(policy.version)
       ? { database_change: item.entry.request.database_change }
+      : {}),
+    ...(operationalBatchPolicies.includes(policy.version)
+      ? {
+          operational_deployments: requestedOperationalDeployments(
+            item.entry.request
+          )
+        }
       : {}),
     input: item.input
   }));
@@ -430,7 +443,8 @@ export async function coordinateInboxBatch({
             issue_number: value.number,
             request: {
               target: value.target,
-              database_change: value.database_change
+              database_change: value.database_change,
+              operational_deployments: value.operational_deployments
             }
           },
           input: value.input

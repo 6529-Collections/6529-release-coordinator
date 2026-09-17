@@ -432,7 +432,7 @@ export function formatReport(report) {
         }
         if (part.operational_deployments?.length)
           lines.push(
-            `    Operational deployments: ${part.operational_deployments.join(", ")} (recording only; deployment is not implemented)`
+            `    Operational deployments: ${part.operational_deployments.join(", ")} (recorded; only the sandbox deploys it, inside a complete sample ticket)`
           );
       }
     }

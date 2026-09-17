@@ -3,8 +3,11 @@ import { isReleaseBatchPolicy } from "./batch-plan.mjs";
 import {
   makeReleaseOperation,
   releaseBackendUnits,
-  releaseHash
+  releaseHash,
+  releaseMonitoringEnvironments,
+  releaseMonitoringUnit
 } from "./release-contract.mjs";
+import { databaseBatchPolicies } from "./batch-plan.mjs";
 import { serviceAssert } from "./service-contract.mjs";
 import {
   isReleaseRequestTarget,
@@ -104,7 +107,7 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
           (input) => (input.database_change ?? "no") === database.declared
         ) &&
       (database.declared !== "yes" ||
-        (batch.policy.version === "sandbox-batch-v5" &&
+        (databaseBatchPolicies.includes(batch.policy.version) &&
           batch.selected.length === 1 &&
           batch.inputs.length === 1 &&
           prepared.service_plan.steps.some(
@@ -116,15 +119,37 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
   );
   const releaseId = nextUuid();
   serviceAssert(uuid(releaseId), "release-input", "Invalid release identity.");
+  const monitoring = batch.inputs.some(
+    (input) =>
+      batch.selected.includes(input.number) &&
+      (input.operational_deployments ?? []).includes(releaseMonitoringUnit)
+  );
   const steps = [];
   for (const environment of releaseEnvironmentsForTarget(targets[0])) {
-    for (const role of ["backend", "frontend"])
-      steps.push({
-        id: `${environment}:integrate:${role}`,
-        kind: "integrate",
-        environment,
-        role
-      });
+    steps.push({
+      id: `${environment}:integrate:backend`,
+      kind: "integrate",
+      environment,
+      role: "backend"
+    });
+    // The sample backend deploys monitoring only from test main, for both
+    // monitoring environments, before any production application change.
+    if (monitoring && environment === "prod")
+      for (const monitoringEnvironment of releaseMonitoringEnvironments)
+        steps.push({
+          id: `prod:monitoring:${monitoringEnvironment}`,
+          kind: "monitoring",
+          environment,
+          role: "backend",
+          unit: releaseMonitoringUnit,
+          monitoring_environment: monitoringEnvironment
+        });
+    steps.push({
+      id: `${environment}:integrate:frontend`,
+      kind: "integrate",
+      environment,
+      role: "frontend"
+    });
     // Execution later keeps these steps in their declared dependency order,
     // but backend always completes before frontend is exposed.
     for (const step of prepared.service_plan.steps.filter(
@@ -157,6 +182,13 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
       role: null
     });
   }
+  serviceAssert(
+    steps.every(
+      (step) => step.kind !== "monitoring" || step.environment === "prod"
+    ),
+    "release-input",
+    "Sample monitoring deploys only in the prod stage, from test main."
+  );
   const contents = {
     version: 1,
     profile: "sandbox",
@@ -235,7 +267,7 @@ function recoverySteps(execution, environment, changed) {
       .filter(
         (step) =>
           step.environment === environment &&
-          ["deploy", "e2e"].includes(step.kind)
+          ["deploy", "e2e", "monitoring"].includes(step.kind)
       )
       .map((step) => ({ ...step, id: `restore:${step.id}` }))
   ];
@@ -345,8 +377,11 @@ export function operationForStep(plan, step, versions, operationId) {
     operation: step.kind,
     environment: step.environment,
     role: step.kind === "e2e" ? null : step.role,
-    unit: step.kind === "deploy" ? step.unit : null,
+    unit: ["deploy", "monitoring"].includes(step.kind) ? step.unit : null,
     backend_commit: versions.backend,
-    frontend_commit: versions.frontend
+    frontend_commit: versions.frontend,
+    ...(step.kind === "monitoring"
+      ? { monitoring_environment: step.monitoring_environment }
+      : {})
   });
 }

@@ -10,7 +10,8 @@ explicitly.
 The merged source also supports one database-changing sandbox ticket on
 its own; a failed database-changing release stops for a person without automatic
 restoration. It also restores test `main` and staging after confirmed
-no-database-change fake-production failures. See
+no-database-change fake-production failures, and deploys the sample monitoring
+package for a production ticket that selects operational monitoring. See
 [progress](../../docs/progress.md) for the live test and delivery evidence.
 Start with [Run the ticket workflow](#run-the-ticket-workflow) below.
 No persistent Coordinator server or timer is started. Real product release
@@ -160,11 +161,15 @@ it checks:
    replaced as unknown because this reader has no verified release-outcome source. Issue closure, labels, PR merge state, and newer requests cannot
    substitute for that history.
 
-A recorded operational-monitoring selection gets its own unknown check. The PR
-checks above still run, but the Coordinator does not fetch the application
-service catalog for a monitoring-only request and cannot claim deployment or
-target health. The ticket stays waiting and cannot enter merge rehearsal or
-execution until a separate adapter is implemented.
+A recorded operational-monitoring selection gets its own check. In the real
+profile it is unknown: the PR checks above still run, but the Coordinator does
+not fetch the application service catalog for a monitoring-only request and
+cannot claim deployment or target health, so the ticket stays waiting until a
+real adapter exists. In the sandbox it passes for a complete sample ticket; the
+sample monitoring deploys after the production merge into test `main`, and a
+staging request records that it does not deploy monitoring. A monitoring-only
+sandbox request waits because the service stage needs the complete sample
+application.
 
 An omitted catalog prerequisite stays **unknown** until there is proof that its
 required state already runs in the requested environment. The checker does not
@@ -424,15 +429,21 @@ runs these steps in order for each required environment:
 A staging request stops after step 5. A production request repeats the same
 sequence on test `main`, but only after matching staging E2E passes. Each
 operation is saved before it starts and verified against its release ID, input
-hash, actor, repository, all three pinned workflow/runtime files at the exact
-environment commit, run/attempt, environment, and exact code. The request target
+hash, actor, repository, all four pinned workflow/runtime files at the exact
+environment commit, run/attempt, environment, and exact code. When the batch
+selects operational monitoring, the production stage deploys the sample
+monitoring package for `staging` and then `prod` from the merged test `main`
+commit before the production application deployments; each result must carry
+the installed template bound to its build and GitHub's matching artifact
+record. The request target
 `production` has one fixed mapping: `staging` first, then `prod`; `prod` is never
 accepted as an inbox target. A confirmed failure stops later forward steps. For
 a no-database-change failure after either test environment changed, the command
 uses checked undo PRs to restore the affected branches to their saved trees and
 reruns their normal build/E2E sequence. A fake-production failure restores test
 `main` first, then staging; both environments are read back before recording
-recovery. The original release remains failed and needs a person. Database
+recovery, and any sample monitoring is redeployed from the restored commit. The
+original release remains failed and needs a person. Database
 changes or uncertain effects stop without automatic restoration. An uncertain
 effect keeps the lock for explicit resume. Completed matching operations are
 reused on resume instead of being dispatched again.

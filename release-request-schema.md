@@ -132,9 +132,12 @@ A request may contain both. Frontend parts cannot contain any of these backend
 deployment fields.
 
 The Coordinator can save, display, label, and inspect the PRs in a monitoring
-request. It reports the monitoring deployment check as unknown and keeps the
-ticket waiting because no monitoring deployment or target-health adapter exists
-yet. Such a request cannot enter the current rehearsal or execution path.
+request. In the real profile it reports the monitoring deployment check as
+unknown and keeps the ticket waiting because no real monitoring deployment or
+target-health adapter exists yet. In the sandbox, a complete production ticket
+that selects monitoring deploys a sample monitoring package after the merge
+into test `main`, before the production application deployments; a
+monitoring-only sandbox request still waits.
 
 ## What the database answer means
 

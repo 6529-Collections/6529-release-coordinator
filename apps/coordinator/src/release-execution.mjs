@@ -12,6 +12,18 @@ import {
 import { serviceAssert } from "./service-contract.mjs";
 
 const successful = (result) => result?.status === "passed";
+const requestsMonitoring = (batch) =>
+  batch.inputs.some(
+    (input) =>
+      batch.selected.includes(input.number) &&
+      (input.operational_deployments ?? []).includes("monitoring")
+  );
+function monitoringNote(batch, execution) {
+  if (!requestsMonitoring(batch)) return "";
+  return execution.plan.target === "production"
+    ? " Operational monitoring was deployed for staging and production from the merged test main commit before the production application deployments."
+    : " Operational monitoring in this request was not deployed: the sample backend deploys monitoring only from test main, so it deploys with the production release of this change.";
+}
 
 export function releaseTicketResult(batch, number) {
   const execution = batch.execution;
@@ -30,7 +42,7 @@ export function releaseTicketResult(batch, number) {
       status: "completed",
       batch_status: "passed",
       code: "release-completed",
-      message: `The exact selected sandbox batch passed ${execution.plan.target === "production" ? "staging and production" : "staging"} deployment checks and matching E2E.`,
+      message: `The exact selected sandbox batch passed ${execution.plan.target === "production" ? "staging and production" : "staging"} deployment checks and matching E2E.${monitoringNote(batch, execution)}`,
       execution
     };
   if (execution?.status === "needs-human")
@@ -319,7 +331,9 @@ export async function executeRelease({
           message:
             step.kind === "e2e"
               ? `Run matching ${step.environment} E2E.`
-              : `Run ${step.role} ${step.unit} sandbox deployment check.`
+              : step.kind === "monitoring"
+                ? `Deploy sample monitoring for ${step.monitoring_environment} from test main.`
+                : `Run ${step.role} ${step.unit} sandbox deployment check.`
         },
         () =>
           client.run({

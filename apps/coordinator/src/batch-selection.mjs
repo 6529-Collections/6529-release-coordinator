@@ -5,7 +5,12 @@ import {
   serviceAssert,
   ServiceError
 } from "./service-contract.mjs";
-import { batchPolicy } from "./batch-plan.mjs";
+import {
+  batchPolicy,
+  databaseBatchPolicies,
+  operationalBatchPolicies,
+  requestedOperationalDeployments
+} from "./batch-plan.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
 
 const members = (items) => items.map((item) => item.entry.issue_number);
@@ -33,10 +38,17 @@ export async function selectBatch({
   const inputs = ordered.map((item) => ({
     number: item.entry.issue_number,
     target: item.entry.request?.target ?? item.target,
-    ...(policy.version === "sandbox-batch-v5"
+    ...(databaseBatchPolicies.includes(policy.version)
       ? {
           database_change:
             item.entry.request?.database_change ?? item.database_change
+        }
+      : {}),
+    ...(operationalBatchPolicies.includes(policy.version)
+      ? {
+          operational_deployments: requestedOperationalDeployments(
+            item.entry.request
+          )
         }
       : {}),
     input: item.input
@@ -45,10 +57,10 @@ export async function selectBatch({
     inputs.every(
       ({ target, database_change: database }) =>
         isReleaseRequestTarget(target) &&
-        (policy.version !== "sandbox-batch-v5" ||
+        (!databaseBatchPolicies.includes(policy.version) ||
           ["no", "yes"].includes(database))
     ) &&
-      (policy.version !== "sandbox-batch-v5" ||
+      (!databaseBatchPolicies.includes(policy.version) ||
         !inputs.some((item) => item.database_change === "yes") ||
         inputs.length === 1),
     "batch-unsupported",

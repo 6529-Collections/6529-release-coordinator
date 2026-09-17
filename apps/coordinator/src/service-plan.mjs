@@ -1,4 +1,5 @@
 import { canonicalRequest, sandboxProfile } from "./profiles.mjs";
+import { releaseMonitoringPaths } from "./release-contract.mjs";
 import { inboxBinding } from "./inbox-merge-plan.mjs";
 import {
   catalogServices,
@@ -86,9 +87,12 @@ export function servicePlanFromSources({ request, binding, report, runtime }) {
       "source-unverified",
       "The sample application files could not be captured from the exact merged tree."
     );
+    // The sample monitoring package is bounded JSON checked by its own build;
+    // it is not captured into the service plan, so older plans stay valid.
     const unsupported = snapshot.changed_paths.filter(
       (name) =>
         !serviceFiles[repo.role].includes(name) &&
+        !(repo.role === "backend" && releaseMonitoringPaths.includes(name)) &&
         !["README.md", "shared.txt"].includes(name) &&
         !/^docs\/[a-zA-Z0-9_./-]+\.md$/u.test(name)
     );

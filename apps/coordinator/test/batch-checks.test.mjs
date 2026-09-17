@@ -245,6 +245,7 @@ test("durable batch history requires the exact selected group and completed clea
         number: item.number,
         target: item.entry.request.target,
         database_change: item.entry.request.database_change,
+        operational_deployments: [],
         input: item.input
       })),
       policy: batchPolicy
