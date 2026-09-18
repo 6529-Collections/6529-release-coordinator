@@ -937,6 +937,171 @@ test("an interrupted wait presses nothing and keeps the step resumable", async (
   );
 });
 
+test("a resumed running operation polls its own run and never waits for it", async () => {
+  const f = fixture();
+  f.record.state = "running";
+  const own = { ...f.run, status: "in_progress", conclusion: null };
+  let waits = 0;
+  const calls = [];
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    wait: async () => {
+      waits++;
+    },
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      calls.push({ method, endpoint });
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      // The Coordinator's own run is active in the listing, and matches the
+      // saved release title and actor; it must never count as a blocker.
+      if (endpoint.includes("/runs?status="))
+        return apiResponse("200 OK", { total_count: 1, workflow_runs: [own] });
+      if (endpoint.includes("/runs?"))
+        return apiResponse("200 OK", { total_count: 1, workflow_runs: [own] });
+      if (endpoint.endsWith(`/actions/runs/${f.run.id}`))
+        return apiResponse("200 OK", waits ? f.run : own);
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", environmentRef(endpoint, f.operation));
+      if (endpoint.includes("/attempts/2/jobs"))
+        return apiResponse("200 OK", { total_count: 1, jobs: [f.job] });
+      assert.fail(`${method} ${endpoint}`);
+    },
+    logs: async () =>
+      `COORDINATOR_RELEASE_RESULT:${Buffer.from(JSON.stringify(f.report)).toString("base64url")}\n`
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(waits, 1);
+  assert.equal(
+    calls.some(({ endpoint }) => endpoint.includes("/runs?status=")),
+    false
+  );
+  assert.equal(
+    calls.some(({ method }) => method !== "GET"),
+    false
+  );
+  assert.equal(Object.hasOwn(f.record, "waited_for"), false);
+});
+
+test("a blocking run that changes status keeps its latest observed status", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  let rounds = 0;
+  const saves = [];
+  const { client } = dispatchingClient(f, {
+    active: () =>
+      rounds === 0
+        ? [activeRun(12, "queued")]
+        : rounds === 1
+          ? [activeRun(12, "in_progress")]
+          : [],
+    wait: async () => {
+      rounds++;
+    }
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => saves.push(structuredClone(f.record))
+  });
+  assert.equal(result.status, "passed");
+  // One save when first seen, then the dispatching, running and run-identity
+  // saves; the status change itself triggers no extra journal write.
+  assert.equal(saves.filter((record) => record.waited_for).length, 4);
+  assert.equal(
+    saves.find((record) => record.waited_for).waited_for.runs[0].status,
+    "queued"
+  );
+  assert.deepEqual(f.record.waited_for.runs, [
+    { id: 12, url: `${runUrl}/12`, status: "in_progress", actor: "alice" }
+  ]);
+});
+
+test("more than one page of active runs stops instead of being ignored", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    execute: async (args) => {
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      if (endpoint.includes("/runs?status="))
+        return apiResponse("200 OK", {
+          total_count: 101,
+          workflow_runs: Array.from({ length: 100 }, (_, index) =>
+            activeRun(1000 + index, "queued")
+          )
+        });
+      if (endpoint.includes("/runs?"))
+        return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
+      assert.fail(endpoint);
+    }
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => {}
+    }),
+    /exceed one page/u
+  );
+  assert.equal(f.record.state, "prepared");
+});
+
+test("an interruption after a quiet check rechecks on resume before dispatching", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  let rounds = 0;
+  let interrupt = true;
+  const { client, calls } = dispatchingClient(f, {
+    active: () => (rounds < 1 ? [activeRun(21, "in_progress")] : []),
+    wait: async () => {
+      rounds++;
+    }
+  });
+  const save = async () => {
+    // The stop signal fires while the dispatching state is being saved: the
+    // journal still holds the prepared state, and nothing was pressed.
+    if (interrupt && f.record.state === "dispatching") {
+      f.record.state = "prepared";
+      throw new DOMException("Stopped.", "AbortError");
+    }
+  };
+  await assert.rejects(
+    client.run({ record: f.record, actor: f.record.actor, save }),
+    (error) => error.name === "AbortError"
+  );
+  assert.equal(
+    calls.some(({ method }) => method !== "GET"),
+    false
+  );
+  assert.equal(f.record.waited_for.checks, 2);
+  const before = calls.length;
+  interrupt = false;
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save
+  });
+  assert.equal(result.status, "passed");
+  const resumed = calls.slice(before);
+  assert.ok(resumed.some(({ endpoint }) => endpoint.includes("/runs?status=")));
+  assert.ok(
+    resumed.findIndex(({ endpoint }) => endpoint.includes("/runs?status=")) <
+      resumed.findIndex(({ method }) => method === "POST")
+  );
+  assert.equal(calls.filter(({ method }) => method === "POST").length, 1);
+});
+
 test("a resumed wait checks again and dispatches once", async () => {
   const f = fixture();
   f.record.state = "prepared";

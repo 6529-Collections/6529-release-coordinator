@@ -374,13 +374,16 @@ export function createReleaseGitHub({
           `/actions/workflows/${runtime.workflow}/runs?status=${status}&per_page=100`
         )
       ).data;
+      // The page must be complete: more than one page of active runs for one
+      // status cannot be waited for exactly, so stop instead of ignoring them.
       serviceAssert(
         Number.isSafeInteger(list?.total_count) &&
           list.total_count >= 0 &&
+          list.total_count <= 100 &&
           Array.isArray(list.workflow_runs) &&
-          list.workflow_runs.length <= list.total_count,
+          list.workflow_runs.length === list.total_count,
         "release-workflow",
-        "Active sandbox release workflow runs are unreadable."
+        "Active sandbox release workflow runs are unreadable or exceed one page."
       );
       for (const run of list.workflow_runs)
         if (positive(run?.id) && run.status !== "completed")
@@ -400,7 +403,10 @@ export function createReleaseGitHub({
   // about to change, then continue. There is deliberately no time limit: the
   // operator chose to wait as long as it takes (2026-09-18, docs/design.md).
   // Every check is logged; the blocking runs are saved on the step record when
-  // first seen, and Ctrl-C stops the wait before anything is pressed.
+  // first seen, and Ctrl-C stops the wait before anything is pressed. The
+  // Coordinator never waits for itself: this runs only while the step has no
+  // run of its own, and the release advances past a step only after that
+  // step's run completed, so no earlier Coordinator run can still be active.
   async function waitForQuietWorkflow(role, record, save, purpose) {
     for (let checks = 1; ; checks++) {
       signal?.throwIfAborted();
@@ -412,10 +418,14 @@ export function createReleaseGitHub({
         }
         return;
       }
-      const known = new Set(
-        (record.waited_for?.runs ?? []).map((run) => run.id)
+      const known = new Map(
+        (record.waited_for?.runs ?? []).map((run) => [run.id, run])
       );
       const fresh = active.filter((run) => !known.has(run.id));
+      // A run seen before keeps its latest observed status; the next journal
+      // write carries it rather than saving on every status change.
+      for (const run of active)
+        if (known.has(run.id)) known.get(run.id).status = run.status;
       if (!record.waited_for) {
         record.waited_for = {
           purpose,

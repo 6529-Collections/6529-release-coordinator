@@ -421,7 +421,12 @@ logs each check as `release.wait`, and saves the blocking runs on the step
 record as `waited_for` when first seen. This wait has no time limit: the
 operator decided on September 18, 2026 to wait as long as it takes rather than
 add a cutoff. Ctrl-C stops the wait before anything is pressed, and resume
-rechecks. The sandbox adapter implements this against the pinned
+always lists the runs again; a saved wait note never stands in for a fresh
+check. A run that someone starts in the seconds between the last check and the
+press is ordered by GitHub's lock, not by the Coordinator: that gap cannot be
+closed from outside GitHub, and the existing guards (the ref recheck before
+dispatch, the exact-commit and version checks) decide what happens next.
+The sandbox adapter implements this against the pinned
 `sandbox-release.yml`; the real adapters must apply the same rule to the real
 lock groups (`deploy-control-<env>` and `deploy-service-<env>-<service>`,
 `staging-deploy`, `web-deploy-prod`, `operational-monitoring-<env>`).
