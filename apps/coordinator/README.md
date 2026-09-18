@@ -454,7 +454,10 @@ requested or in-progress run in that test repository, on any branch. It checks
 every ten seconds, writes one `release.wait` log line per check, and has no
 time limit. The step record keeps `waited_for` with the blocking runs. Ctrl-C
 during the wait stops before anything is dispatched; `--resume` checks again
-and dispatches once.
+and dispatches once. The pinned sandbox workflow holds one lock per
+environment, like the real deploy workflows, so a run that did queue behind
+another would be cancelled by a third arrival; the wait exists so that never
+happens to a Coordinator run.
 
 After the final required E2E and owned-branch cleanup, selected tickets receive
 `status:completed` and `reason:release-completed` and close. This records only the

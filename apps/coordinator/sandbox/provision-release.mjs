@@ -21,7 +21,7 @@ if (
   );
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const output = `${root}/.release-coordinator/release-monitoring-v7`;
+const output = `${root}/.release-coordinator/release-lock-v8`;
 await mkdir(output, { recursive: true });
 const provisionFile = `${output}/provision.json`;
 const exec = promisify(execFile);
@@ -124,8 +124,11 @@ on:
         type: string
 permissions:
   contents: read
+# One lock per environment, like the real deploy workflows: one run holds it,
+# one more waits, and a third arrival cancels the waiting one. The Coordinator
+# therefore waits for a quiet workflow before it dispatches.
 concurrency:
-  group: sandbox-release-\${{ inputs.operation_id }}
+  group: sandbox-release-\${{ fromJSON(inputs.operation_json).environment }}
   cancel-in-progress: false
 jobs:
   release:
@@ -324,7 +327,7 @@ if (
   throw new Error("Saved release provisioning state is invalid.");
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
-const setupBranch = "codex/sandbox-monitoring-runtime-v7-main";
+const setupBranch = "codex/sandbox-release-lock-v8-main";
 const keyFor = (role, base) => `${role}:${base}`;
 const branchRef = (repository, branch) =>
   api(
@@ -390,10 +393,10 @@ for (const role of ["backend", "frontend"]) {
           pullRequests(entry.repository, entry.branch, entry.base_branch),
         create: (entry) =>
           api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-            title: "Deploy sample operational monitoring in sandbox releases",
+            title: "Lock sandbox release runs per environment",
             head: entry.branch,
             base: entry.base_branch,
-            body: "Add the sample ops/monitoring package, build it on every backend PR check, and let the pinned sandbox release workflow build and install it as a monitoring operation dispatched only from test main. This uses only test repositories and GitHub-hosted runners; no product monitoring, AWS account or credential is involved."
+            body: "Change the pinned sandbox release workflow's concurrency group from one lock per operation to one lock per environment (sandbox-release-<environment>), so runs for the same environment queue behind each other the way the real deploy workflows do: one running, one waiting, cancel-in-progress false. The Coordinator already waits for a quiet workflow before it dispatches; this lock makes that wait observable in the sandbox. The other pinned runtime files are republished unchanged, and the sample monitoring sources return to their fixture baseline after the September 17 test releases. This uses only test repositories and GitHub-hosted runners."
           })
       });
       console.log(`${key}: ${completed.url}`);
@@ -464,7 +467,7 @@ for (const role of ["backend", "frontend"]) {
       await writeFile(path.join(directory, file), contents);
     }
     await git(["add", "--", ...Object.keys(files)]);
-    await git(["commit", "-m", "Deploy sample operational monitoring"]);
+    await git(["commit", "-m", "Lock sandbox release runs per environment"]);
     const commit = await git(["rev-parse", "HEAD"]);
     const completed = await publishFixturePr(
       {
@@ -482,10 +485,10 @@ for (const role of ["backend", "frontend"]) {
           pullRequests(entry.repository, entry.branch, entry.base_branch),
         create: (entry) =>
           api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-            title: "Deploy sample operational monitoring in sandbox releases",
+            title: "Lock sandbox release runs per environment",
             head: entry.branch,
             base: entry.base_branch,
-            body: "Add the sample ops/monitoring package, build it on every backend PR check, and let the pinned sandbox release workflow build and install it as a monitoring operation dispatched only from test main. This uses only test repositories and GitHub-hosted runners; no product monitoring, AWS account or credential is involved."
+            body: "Change the pinned sandbox release workflow's concurrency group from one lock per operation to one lock per environment (sandbox-release-<environment>), so runs for the same environment queue behind each other the way the real deploy workflows do: one running, one waiting, cancel-in-progress false. The Coordinator already waits for a quiet workflow before it dispatches; this lock makes that wait observable in the sandbox. The other pinned runtime files are republished unchanged, and the sample monitoring sources return to their fixture baseline after the September 17 test releases. This uses only test repositories and GitHub-hosted runners."
           })
       }
     );
