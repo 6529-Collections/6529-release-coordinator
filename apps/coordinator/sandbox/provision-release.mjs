@@ -11,6 +11,7 @@ import { writeFileAtomically } from "./atomic-file.mjs";
 import { sampleFiles } from "./fixtures.mjs";
 import { monitoringFiles } from "./monitoring-fixtures.mjs";
 import { publishFixturePr } from "./fixture-pr.mjs";
+import { releaseWorkflow } from "./release-workflow.mjs";
 
 if (
   process.argv.length !== 3 ||
@@ -21,7 +22,7 @@ if (
   );
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const output = `${root}/.release-coordinator/release-monitoring-v7`;
+const output = `${root}/.release-coordinator/release-lock-v8`;
 await mkdir(output, { recursive: true });
 const provisionFile = `${output}/provision.json`;
 const exec = promisify(execFile);
@@ -109,126 +110,6 @@ ${
           path: dist
           if-no-files-found: error
           retention-days: 7
-`;
-
-const releaseWorkflow = `name: Sandbox release
-run-name: Sandbox release \${{ inputs.operation_id }}
-on:
-  workflow_dispatch:
-    inputs:
-      operation_id:
-        required: true
-        type: string
-      operation_json:
-        required: true
-        type: string
-permissions:
-  contents: read
-concurrency:
-  group: sandbox-release-\${{ inputs.operation_id }}
-  cancel-in-progress: false
-jobs:
-  release:
-    name: Sandbox release
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Check out pinned runtime
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          persist-credentials: false
-      - name: Check out exact backend
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          repository: 6529-Collections/release-coordinator-test-backend
-          ref: \${{ fromJSON(inputs.operation_json).backend_commit }}
-          path: candidates/backend
-          persist-credentials: false
-      - name: Check out exact frontend
-        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-        with:
-          repository: 6529-Collections/release-coordinator-test-frontend
-          ref: \${{ fromJSON(inputs.operation_json).frontend_commit }}
-          path: candidates/frontend
-          persist-credentials: false
-      - name: Set up Node
-        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
-        with:
-          node-version: 22
-      - id: backend-build
-        name: Build exact backend package
-        if: fromJSON(inputs.operation_json).operation == 'e2e' || (fromJSON(inputs.operation_json).operation == 'deploy' && fromJSON(inputs.operation_json).role == 'backend')
-        continue-on-error: true
-        working-directory: candidates/backend
-        env:
-          SANDBOX_SOURCE_COMMIT: \${{ fromJSON(inputs.operation_json).backend_commit }}
-        run: |
-          npm ci --ignore-scripts
-          npm run build
-      - id: backend-artifact
-        name: Upload exact backend package
-        if: steps.backend-build.outcome == 'success'
-        continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: sandbox-build-\${{ inputs.operation_id }}-backend
-          path: candidates/backend/dist
-          if-no-files-found: error
-          retention-days: 7
-      - id: frontend-build
-        name: Build exact frontend package
-        if: fromJSON(inputs.operation_json).operation == 'e2e' || (fromJSON(inputs.operation_json).operation == 'deploy' && fromJSON(inputs.operation_json).role == 'frontend')
-        continue-on-error: true
-        working-directory: candidates/frontend
-        env:
-          SANDBOX_SOURCE_COMMIT: \${{ fromJSON(inputs.operation_json).frontend_commit }}
-        run: |
-          npm ci --ignore-scripts
-          npm run build
-      - id: frontend-artifact
-        name: Upload exact frontend package
-        if: steps.frontend-build.outcome == 'success'
-        continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: sandbox-build-\${{ inputs.operation_id }}-frontend
-          path: candidates/frontend/dist
-          if-no-files-found: error
-          retention-days: 7
-      - id: monitoring-build
-        name: Build exact monitoring package
-        if: fromJSON(inputs.operation_json).operation == 'monitoring'
-        continue-on-error: true
-        working-directory: candidates/backend/ops/monitoring
-        env:
-          SANDBOX_SOURCE_COMMIT: \${{ fromJSON(inputs.operation_json).backend_commit }}
-        run: |
-          npm ci --ignore-scripts
-          npm run build
-      - id: monitoring-artifact
-        name: Upload exact monitoring package
-        if: steps.monitoring-build.outcome == 'success'
-        continue-on-error: true
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: sandbox-build-\${{ inputs.operation_id }}-monitoring
-          path: candidates/backend/ops/monitoring/dist
-          if-no-files-found: error
-          retention-days: 7
-      - name: Run sandbox release operation
-        env:
-          OPERATION_ID: \${{ inputs.operation_id }}
-          OPERATION_JSON: \${{ inputs.operation_json }}
-          BACKEND_BUILD_OUTCOME: \${{ steps.backend-build.outcome }}
-          BACKEND_ARTIFACT_OUTCOME: \${{ steps.backend-artifact.outcome }}
-          BACKEND_ARTIFACT_DIGEST: \${{ steps.backend-artifact.outputs.artifact-digest }}
-          FRONTEND_BUILD_OUTCOME: \${{ steps.frontend-build.outcome }}
-          FRONTEND_ARTIFACT_OUTCOME: \${{ steps.frontend-artifact.outcome }}
-          FRONTEND_ARTIFACT_DIGEST: \${{ steps.frontend-artifact.outputs.artifact-digest }}
-          MONITORING_BUILD_OUTCOME: \${{ steps.monitoring-build.outcome }}
-          MONITORING_ARTIFACT_OUTCOME: \${{ steps.monitoring-artifact.outcome }}
-          MONITORING_ARTIFACT_DIGEST: \${{ steps.monitoring-artifact.outputs.artifact-digest }}
-        run: node coordinator/sandbox/release-run.mjs
 `;
 
 const bundle = {};
@@ -324,7 +205,7 @@ if (
   throw new Error("Saved release provisioning state is invalid.");
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
-const setupBranch = "codex/sandbox-monitoring-runtime-v7-main";
+const setupBranch = "codex/sandbox-release-lock-v8-main";
 const keyFor = (role, base) => `${role}:${base}`;
 const branchRef = (repository, branch) =>
   api(
@@ -390,10 +271,10 @@ for (const role of ["backend", "frontend"]) {
           pullRequests(entry.repository, entry.branch, entry.base_branch),
         create: (entry) =>
           api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-            title: "Deploy sample operational monitoring in sandbox releases",
+            title: "Lock sandbox release runs per environment",
             head: entry.branch,
             base: entry.base_branch,
-            body: "Add the sample ops/monitoring package, build it on every backend PR check, and let the pinned sandbox release workflow build and install it as a monitoring operation dispatched only from test main. This uses only test repositories and GitHub-hosted runners; no product monitoring, AWS account or credential is involved."
+            body: "Change the pinned sandbox release workflow's concurrency group from one lock per operation to one lock per environment (sandbox-release-<environment>), so runs for the same environment queue behind each other the way the real deploy workflows do: one running, one waiting, cancel-in-progress false. The Coordinator already waits for a quiet workflow before it dispatches; this lock makes that wait observable in the sandbox. The other pinned runtime files are republished unchanged, and the sample monitoring sources return to their fixture baseline after the September 17 test releases. This uses only test repositories and GitHub-hosted runners."
           })
       });
       console.log(`${key}: ${completed.url}`);
@@ -464,7 +345,7 @@ for (const role of ["backend", "frontend"]) {
       await writeFile(path.join(directory, file), contents);
     }
     await git(["add", "--", ...Object.keys(files)]);
-    await git(["commit", "-m", "Deploy sample operational monitoring"]);
+    await git(["commit", "-m", "Lock sandbox release runs per environment"]);
     const commit = await git(["rev-parse", "HEAD"]);
     const completed = await publishFixturePr(
       {
@@ -482,10 +363,10 @@ for (const role of ["backend", "frontend"]) {
           pullRequests(entry.repository, entry.branch, entry.base_branch),
         create: (entry) =>
           api(`repos/${entry.repository.full_name}/pulls`, "POST", {
-            title: "Deploy sample operational monitoring in sandbox releases",
+            title: "Lock sandbox release runs per environment",
             head: entry.branch,
             base: entry.base_branch,
-            body: "Add the sample ops/monitoring package, build it on every backend PR check, and let the pinned sandbox release workflow build and install it as a monitoring operation dispatched only from test main. This uses only test repositories and GitHub-hosted runners; no product monitoring, AWS account or credential is involved."
+            body: "Change the pinned sandbox release workflow's concurrency group from one lock per operation to one lock per environment (sandbox-release-<environment>), so runs for the same environment queue behind each other the way the real deploy workflows do: one running, one waiting, cancel-in-progress false. The Coordinator already waits for a quiet workflow before it dispatches; this lock makes that wait observable in the sandbox. The other pinned runtime files are republished unchanged, and the sample monitoring sources return to their fixture baseline after the September 17 test releases. This uses only test repositories and GitHub-hosted runners."
           })
       }
     );
