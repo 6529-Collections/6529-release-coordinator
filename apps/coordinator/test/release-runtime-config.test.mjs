@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { sandboxReleaseRuntime } from "../src/release-runtime-config.mjs";
+import { releaseWorkflow } from "../sandbox/release-workflow.mjs";
 
 // The sandbox repositories receive these files verbatim from this checkout, so
 // each pinned bundle blob must equal the git blob of the local source. A stale
@@ -43,9 +44,12 @@ test("pinned bundle blobs equal the local source files for both roles", async ()
         gitBlob(await readFile(url)),
         `${role} ${path}`
       );
-    assert.match(
+    // The workflow is generated text, so its pin must equal the git blob of the
+    // template the provisioning tool publishes.
+    assert.equal(
       files[".github/workflows/sandbox-release.yml"],
-      /^[0-9a-f]{40}$/u
+      gitBlob(Buffer.from(releaseWorkflow, "utf8")),
+      `${role} .github/workflows/sandbox-release.yml`
     );
   }
 });
