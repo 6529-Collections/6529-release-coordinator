@@ -416,7 +416,13 @@ third arrives, so a Coordinator run must never queue behind someone else's
 deploy. Before each merge into a shared branch and before each workflow
 dispatch, the adapter lists the release workflow's queued, waiting, pending,
 requested and in-progress runs in the repository it is about to change, on any
-branch, and continues only when there are none. It rechecks every ten seconds,
+branch, and continues only when there are none. It reads both GitHub's newest
+page of runs and its per-status counts, because the status-filtered listing
+lags behind run transitions for seconds at a time and can omit an active run
+(observed live on September 18, 2026, when a merge went ahead on a false
+quiet); the workflow is quiet only when the newest page shows no unfinished run
+and every count is zero, so a stale count only lengthens the wait. It rechecks
+every ten seconds,
 logs each check as `release.wait`, and saves the blocking runs on the step
 record as `waited_for` when first seen. This wait has no time limit: the
 operator decided on September 18, 2026 to wait as long as it takes rather than

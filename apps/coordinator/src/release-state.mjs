@@ -34,7 +34,9 @@ function validateWaitedFor(record) {
       ["dispatch", "merge"].includes(waited.purpose) &&
       Number.isFinite(Date.parse(waited.first_seen_at)) &&
       Array.isArray(waited.runs) &&
-      waited.runs.length > 0 &&
+      (waited.unlisted === undefined ||
+        (Number.isSafeInteger(waited.unlisted) && waited.unlisted >= 0)) &&
+      (waited.runs.length > 0 || waited.unlisted > 0) &&
       waited.runs.every(
         (run) =>
           Number.isSafeInteger(run?.id) &&

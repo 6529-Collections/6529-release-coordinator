@@ -450,9 +450,13 @@ reused on resume instead of being dispatched again.
 
 Before each protected merge and each workflow dispatch, the command waits until
 the pinned `sandbox-release.yml` workflow has no queued, waiting, pending,
-requested or in-progress run in that test repository, on any branch. It checks
+requested or in-progress run in that test repository, on any branch. It reads
+GitHub's newest page of runs and its per-status counts and treats the workflow
+as quiet only when both show nothing active, because the status-filtered
+listing lags behind run transitions. It checks
 every ten seconds, writes one `release.wait` log line per check, and has no
-time limit. The step record keeps `waited_for` with the blocking runs. Ctrl-C
+time limit. The step record keeps `waited_for` with the blocking runs and the
+highest number of runs GitHub counted without listing them. Ctrl-C
 during the wait stops before anything is dispatched; `--resume` checks again
 and dispatches once. The pinned sandbox workflow holds one lock per
 environment, like the real deploy workflows, so a run that did queue behind
