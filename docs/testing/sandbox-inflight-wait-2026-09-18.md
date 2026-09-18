@@ -77,8 +77,9 @@ transitions: it returned pairs such as `in_progress` 1/0, `queued` 1/0 and
 nothing while a run is active. The unfiltered newest page (`runs?per_page=100`)
 showed the active runs and their current statuses every time.
 
-The fix in this PR reads both: the workflow is quiet only when the newest page
-holds no unfinished run **and** every status count is zero. A count without a
+The fix, delivered together with this record, reads both: the workflow is
+quiet only when the newest page holds no unfinished run **and** every status
+count is zero. A count without a
 listed run still blocks, and `waited_for.unlisted` keeps the highest lag
 indicator seen, the excess of the status counts over the runs listed. Offline tests cover the lagging listing and the newest-page case, and
 the earlier strict page assertion is gone.
@@ -107,10 +108,10 @@ run existed on `1a-staging`.
 
 After the sixty-second settle, `--resume c3c097b3…` started 08:40:56Z and
 reached the same deploy step at 08:41:14Z. With the helper still running it
-logged `release.wait` 72 times between 08:41:14Z and 09:08:36Z, twenty-seven
+logged `release.wait` 73 times between 08:41:32Z and 09:09:01Z, twenty-seven
 minutes, and pressed nothing. The helper was stopped at 09:08:45Z (110
-dispatches in that window). The next check found the workflow quiet and the
-Coordinator dispatched; `staging:deploy:backend:dbMigrationsLoop` passed at
+dispatches in that window). The 74th check, at 09:09:17Z, found the workflow
+quiet and the Coordinator dispatched; `staging:deploy:backend:dbMigrationsLoop` passed at
 09:10:06Z with run
 [35328064837](https://github.com/6529-Collections/release-coordinator-test-backend/actions/runs/35328064837)
 (1,732 s in the step, almost all of it waiting).
@@ -139,9 +140,11 @@ this order (execution started 08:20:21Z, completed 09:35:20Z):
 
 The record's `waited_for` notes come from the archived batch
 (`history/batches/df95072b…json` on `codex/inbox-state`). The first backend
-dispatch note spans both resumes: its `first_seen_at` is from resume one and
-its 74 checks and `quiet_at` from resume two; `unlisted` 1 shows one check in
-which GitHub counted a run its listing did not show.
+dispatch note spans both resumes: its `first_seen_at` is from resume one,
+while its 74 checks (73 blocking, then the quiet one) and `quiet_at` are from
+resume two, because an interrupted wait does not persist its check count;
+`unlisted` 1 shows one check in which GitHub counted a run its listing did not
+show.
 
 ## Final state
 

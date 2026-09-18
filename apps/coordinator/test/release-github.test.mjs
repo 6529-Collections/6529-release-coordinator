@@ -1098,6 +1098,50 @@ test("a lagging status listing blocks dispatch while it counts runs it does not 
   assert.equal(f.record.waited_for.unlisted, 1);
 });
 
+test("a rising lag indicator is saved before an interruption can lose it", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  const controller = new AbortController();
+  let rounds = 0;
+  const saves = [];
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    signal: controller.signal,
+    wait: async () => {
+      rounds++;
+      if (rounds === 2) controller.abort();
+    },
+    execute: async (args) => {
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      // Round one counts one unlisted run, round two counts two.
+      if (endpoint.includes("/runs?status=queued"))
+        return apiResponse("200 OK", {
+          total_count: rounds + 1,
+          workflow_runs: []
+        });
+      if (endpoint.includes("/runs?"))
+        return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
+      assert.fail(endpoint);
+    }
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => saves.push(structuredClone(f.record))
+    }),
+    (error) => error.name === "AbortError"
+  );
+  assert.deepEqual(
+    saves.map((record) => record.waited_for.unlisted),
+    [1, 2]
+  );
+  assert.equal(f.record.state, "prepared");
+});
+
 test("an unfinished run on the newest page blocks dispatch even when every status count is zero", async () => {
   const f = fixture();
   f.record.state = "prepared";

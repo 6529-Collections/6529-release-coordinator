@@ -467,14 +467,13 @@ export function createReleaseGitHub({
       } else {
         // unlisted keeps the highest lag indicator seen during this wait: the
         // excess of GitHub's status counts over the distinct runs it listed.
-        record.waited_for.unlisted = Math.max(
-          record.waited_for.unlisted ?? 0,
-          unlisted
-        );
-        if (fresh.length) {
-          record.waited_for.runs.push(...fresh);
-          await save();
-        }
+        // A new run or a higher indicator is saved at once, so an interruption
+        // never loses what explained the wait.
+        const highest = Math.max(record.waited_for.unlisted ?? 0, unlisted);
+        const raised = highest !== (record.waited_for.unlisted ?? 0);
+        record.waited_for.unlisted = highest;
+        if (fresh.length) record.waited_for.runs.push(...fresh);
+        if (fresh.length || raised) await save();
       }
       const [first] = active;
       runEvent({
