@@ -455,8 +455,9 @@ GitHub's newest page of runs and its per-status counts and treats the workflow
 as quiet only when both show nothing active, because the status-filtered
 listing lags behind run transitions. It checks
 every ten seconds, writes one `release.wait` log line per check, and has no
-time limit. The step record keeps `waited_for` with the blocking runs and the
-highest number of runs GitHub counted without listing them. Ctrl-C
+time limit. The step record keeps `waited_for` with the blocking runs and a
+lag indicator, `unlisted`, the highest excess of GitHub's status counts over
+the runs it listed. Ctrl-C
 during the wait stops before anything is dispatched; `--resume` checks again
 and dispatches once. The pinned sandbox workflow holds one lock per
 environment, like the real deploy workflows, so a run that did queue behind

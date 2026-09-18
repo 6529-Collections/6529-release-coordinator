@@ -79,8 +79,8 @@ showed the active runs and their current statuses every time.
 
 The fix in this PR reads both: the workflow is quiet only when the newest page
 holds no unfinished run **and** every status count is zero. A count without a
-listed run still blocks, and `waited_for.unlisted` keeps the highest such
-count. Offline tests cover the lagging listing and the newest-page case, and
+listed run still blocks, and `waited_for.unlisted` keeps the highest lag
+indicator seen, the excess of the status counts over the runs listed. Offline tests cover the lagging listing and the newest-page case, and
 the earlier strict page assertion is gone.
 
 ## Resume one: the wait, then Ctrl-C

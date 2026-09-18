@@ -1048,7 +1048,7 @@ test("a lagging status listing blocks dispatch while it counts runs it does not 
     wait: async () => {
       rounds++;
     },
-    execute: async (args, body) => {
+    execute: async (args) => {
       const method = args[args.indexOf("--method") + 1];
       const endpoint = args[args.indexOf("--method") + 2];
       if (endpoint.includes("/contents/"))
@@ -1061,11 +1061,14 @@ test("a lagging status listing blocks dispatch while it counts runs it does not 
         });
       if (endpoint.includes("/runs?status="))
         return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
+      // The newest page is empty throughout: the block comes from the count.
       if (endpoint.endsWith("/runs?per_page=100"))
         return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
+      // findRun's event-filtered listing: the dispatched run appears after
+      // the first round, once the dispatch has happened.
       if (endpoint.includes("/runs?"))
         return apiResponse("200 OK", {
-          total_count: body ? 1 : rounds ? 1 : 0,
+          total_count: rounds ? 1 : 0,
           workflow_runs: rounds ? [f.run] : []
         });
       if (endpoint.endsWith("/git/ref/heads/1a-staging"))

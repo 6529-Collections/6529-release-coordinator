@@ -371,12 +371,18 @@ export function createReleaseGitHub({
     actor: run.actor?.login ?? null
   });
   // GitHub's status-filtered run listing lags behind run transitions: its
-  // total_count and its list disagree for seconds at a time, and the list can
-  // be empty while a run is queued, pending or in progress (observed live on
+  // total_count and its list disagree for seconds at a time, and both can
+  // miss a run that is queued, pending or in progress (observed live on
   // 2026-09-18, when a merge went ahead on a false "quiet"). The newest page of
   // the unfiltered listing shows current statuses reliably. Read both: the
   // workflow is quiet only when that page holds no unfinished run and every
-  // status count is zero. A stale count can only make the wait longer.
+  // status count is zero. The newest page covers runs in or near transition;
+  // the counts cover a run active long enough to fall behind a hundred newer
+  // ones, which the status index has long since caught up with. Neither page
+  // is paged further, so no new bound on history is introduced; a stale count
+  // can only make the wait longer. The returned `unlisted` is a lag indicator,
+  // the excess of the status counts over the distinct runs actually listed,
+  // not an exact number of hidden runs.
   async function activeWorkflowRuns(role) {
     const active = new Map();
     const recent = (
@@ -459,8 +465,8 @@ export function createReleaseGitHub({
         };
         await save();
       } else {
-        // unlisted keeps the highest number of runs GitHub counted without
-        // listing them, a record of the listing lag this wait rode out.
+        // unlisted keeps the highest lag indicator seen during this wait: the
+        // excess of GitHub's status counts over the distinct runs it listed.
         record.waited_for.unlisted = Math.max(
           record.waited_for.unlisted ?? 0,
           unlisted
