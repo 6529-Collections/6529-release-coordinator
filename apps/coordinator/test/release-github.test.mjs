@@ -5,6 +5,7 @@ import {
   makeReleaseBuild,
   makeReleaseOperation,
   releaseBuildFiles,
+  releaseEnvironments,
   releaseProtocol
 } from "../src/release-contract.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
@@ -182,10 +183,10 @@ function dispatchingClient(f, { active, wait, signal, pollMs } = {}) {
     signal,
     ...(wait ? { wait } : {}),
     ...(pollMs ? { pollMs } : {}),
-    execute: async (args) => {
+    execute: async (args, body) => {
       const method = args[args.indexOf("--method") + 1];
       const endpoint = args[args.indexOf("--method") + 2];
-      calls.push({ method, endpoint });
+      calls.push({ method, endpoint, body });
       if (endpoint.includes("/contents/"))
         return apiResponse("200 OK", runtimeFile(endpoint));
       if (endpoint.includes("/runs?status=")) {
@@ -1100,6 +1101,27 @@ test("an interruption after a quiet check rechecks on resume before dispatching"
       resumed.findIndex(({ method }) => method === "POST")
   );
   assert.equal(calls.filter(({ method }) => method === "POST").length, 1);
+});
+
+test("the dispatch input carries the validated environment the workflow lock is keyed on", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  const { client, calls } = dispatchingClient(f, { active: () => [] });
+  await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => {}
+  });
+  const dispatch = calls.find(
+    ({ method, endpoint }) =>
+      method === "POST" && endpoint.endsWith("/dispatches")
+  );
+  assert.equal(dispatch.body.ref, "1a-staging");
+  const operation = JSON.parse(dispatch.body.inputs.operation_json);
+  assert.equal(operation.environment, "staging");
+  assert.ok(releaseEnvironments.includes(operation.environment));
+  assert.equal(dispatch.body.inputs.operation_id, f.record.id);
+  assert.equal(operation.fingerprint, f.operation.fingerprint);
 });
 
 test("a resumed wait checks again and dispatches once", async () => {
