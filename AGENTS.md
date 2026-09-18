@@ -17,7 +17,7 @@ remains a design; passing sandbox checks never authorize it.
 One verified database-changing ticket can use the sandbox release path alone;
 a failure then stops for a person without automatic restoration. The merged
 source also restores changed test `main` and staging branches after a confirmed
-no-database-change fake-production failure. The current source deploys a sample
+no-database-change fake-production failure. The merged source deploys a sample
 monitoring package for a production ticket that selects operational monitoring,
 after the test-main merge and before production application deployments; the
 sample backend deploys monitoring only from test `main`, like the real one.
