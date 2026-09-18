@@ -15,11 +15,12 @@ import { publishFixturePr } from "./fixture-pr.mjs";
 const modes = {
   "--create-sample-prs": "service",
   "--create-batch-prs": "batch",
-  "--create-monitoring-prs": "monitoring"
+  "--create-monitoring-prs": "monitoring",
+  "--create-wait-prs": "wait"
 };
 if (!modes[process.argv[2]] || process.argv.length !== 3)
   throw new Error(
-    "Explicit --create-sample-prs, --create-batch-prs or --create-monitoring-prs required; creates only sandbox branches and PRs."
+    "Explicit --create-sample-prs, --create-batch-prs, --create-monitoring-prs or --create-wait-prs required; creates only sandbox branches and PRs."
   );
 const mode = modes[process.argv[2]];
 const batchMode = mode === "batch";
@@ -83,87 +84,125 @@ const monitoringCases = {
     files: { "docs/monitoring-fail.md": "Failing monitoring companion.\n" }
   }
 };
+// A plain no-database-change pair for the in-flight wait acceptance: the
+// release itself is ordinary, the proof is in the wait before its presses.
+const waitCases = {
+  wait_backend: {
+    role: "backend",
+    files: {
+      "docs/wait-case.md":
+        "Companion for the in-flight workflow wait acceptance.\n"
+    }
+  },
+  wait_frontend: {
+    role: "frontend",
+    files: {
+      "docs/wait-case.md":
+        "Companion for the in-flight workflow wait acceptance.\n"
+    }
+  }
+};
+const labels = {
+  service: {
+    branch: "services",
+    title: "Service",
+    purpose: "one-ticket service/database"
+  },
+  batch: { branch: "batch", title: "Batch", purpose: "combined-ticket batch" },
+  monitoring: {
+    branch: "monitoring",
+    title: "Monitoring",
+    purpose: "sample monitoring deployment"
+  },
+  wait: {
+    branch: "wait",
+    title: "Wait",
+    purpose: "in-flight workflow wait"
+  }
+};
 const cases =
   mode === "monitoring"
     ? monitoringCases
-    : batchMode
-      ? {
-          a_backend: {
-            role: "backend",
-            files: {
-              "src/api.mjs":
-                "export function run({ row }) { return { id: row.id, value: row.value, batch_flag: true }; }\n"
-            }
-          },
-          a_frontend: {
-            role: "frontend",
-            files: { "docs/batch-a.md": "Batch A companion.\n" }
-          },
-          b_backend: {
-            role: "backend",
-            files: { "docs/batch-b.md": "Batch B companion.\n" }
-          },
-          b_frontend: {
-            role: "frontend",
-            files: {
-              "src/render.mjs":
-                "export function run({ payload }) { if (payload.batch_flag) throw new Error('Controlled A+B incompatibility'); return `Value: ${payload.value}`; }\n"
-            }
-          },
-          c_backend: {
-            role: "backend",
-            files: { "docs/batch-c.md": "Independent compatible batch C.\n" }
-          },
-          c_frontend: {
-            role: "frontend",
-            files: { "docs/batch-c.md": "Independent compatible batch C.\n" }
-          }
-        }
-      : {
-          frontend: {
-            role: "frontend",
-            files: {
-              "src/render.mjs":
-                baseline.frontend["src/render.mjs"] +
-                "// Sandbox integration candidate.\n"
-            }
-          },
-          no: {
-            role: "backend",
-            files: {
-              "src/worker.mjs":
-                baseline.backend["src/worker.mjs"] +
-                "// No release-specific database change.\n"
-            }
-          },
-          yes: { role: "backend", files: upgrade.backend },
-          schema: {
-            role: "backend",
-            files: {
-              "src/entities/item.json":
-                upgrade.backend["src/entities/item.json"],
-              "src/worker.mjs": upgrade.backend["src/worker.mjs"]
-            }
-          },
-          partial: {
-            role: "backend",
-            files: {
-              "src/data/change.json":
-                JSON.stringify(
-                  { id: "baseline", increment: 0, fail_after_schema: true },
-                  null,
-                  2
-                ) + "\n"
-            }
-          },
-          api: {
-            role: "backend",
-            files: {
-              "src/api.mjs":
-                "export function run({ row }) { if ('display_value' in row) throw new Error('Controlled incompatibility with schema 2'); return { id: row.id, value: row.value }; }\n"
+    : mode === "wait"
+      ? waitCases
+      : batchMode
+        ? {
+            a_backend: {
+              role: "backend",
+              files: {
+                "src/api.mjs":
+                  "export function run({ row }) { return { id: row.id, value: row.value, batch_flag: true }; }\n"
+              }
+            },
+            a_frontend: {
+              role: "frontend",
+              files: { "docs/batch-a.md": "Batch A companion.\n" }
+            },
+            b_backend: {
+              role: "backend",
+              files: { "docs/batch-b.md": "Batch B companion.\n" }
+            },
+            b_frontend: {
+              role: "frontend",
+              files: {
+                "src/render.mjs":
+                  "export function run({ payload }) { if (payload.batch_flag) throw new Error('Controlled A+B incompatibility'); return `Value: ${payload.value}`; }\n"
+              }
+            },
+            c_backend: {
+              role: "backend",
+              files: { "docs/batch-c.md": "Independent compatible batch C.\n" }
+            },
+            c_frontend: {
+              role: "frontend",
+              files: { "docs/batch-c.md": "Independent compatible batch C.\n" }
             }
           }
-        };
+        : {
+            frontend: {
+              role: "frontend",
+              files: {
+                "src/render.mjs":
+                  baseline.frontend["src/render.mjs"] +
+                  "// Sandbox integration candidate.\n"
+              }
+            },
+            no: {
+              role: "backend",
+              files: {
+                "src/worker.mjs":
+                  baseline.backend["src/worker.mjs"] +
+                  "// No release-specific database change.\n"
+              }
+            },
+            yes: { role: "backend", files: upgrade.backend },
+            schema: {
+              role: "backend",
+              files: {
+                "src/entities/item.json":
+                  upgrade.backend["src/entities/item.json"],
+                "src/worker.mjs": upgrade.backend["src/worker.mjs"]
+              }
+            },
+            partial: {
+              role: "backend",
+              files: {
+                "src/data/change.json":
+                  JSON.stringify(
+                    { id: "baseline", increment: 0, fail_after_schema: true },
+                    null,
+                    2
+                  ) + "\n"
+              }
+            },
+            api: {
+              role: "backend",
+              files: {
+                "src/api.mjs":
+                  "export function run({ row }) { if ('display_value' in row) throw new Error('Controlled incompatibility with schema 2'); return { id: row.id, value: row.value }; }\n"
+              }
+            }
+          };
 for (const [name, value] of Object.entries(cases)) {
   if (record[name]?.url) {
     console.log(`${name}: already recorded ${record[name].url}`);
@@ -182,7 +221,7 @@ for (const [name, value] of Object.entries(cases)) {
   )
     throw new Error("Sandbox identity/access changed.");
   let entry = record[name];
-  const branch = `codex/${mode === "monitoring" ? "monitoring" : batchMode ? "batch" : "services"}-case-${name}`;
+  const branch = `codex/${labels[mode].branch}-case-${name}`;
   if (
     entry &&
     (entry.role !== value.role ||
@@ -256,8 +295,8 @@ for (const [name, value] of Object.entries(cases)) {
   const body = {
     head: branch,
     base: "main",
-    title: `${mode === "monitoring" ? "Monitoring" : batchMode ? "Batch" : "Service"} acceptance fixture: ${name}`,
-    body: `Controlled sample for ${mode === "monitoring" ? "sample monitoring deployment" : batchMode ? "combined-ticket batch" : "one-ticket service/database"} acceptance. Normal required application checks must pass before Coordinator execution. This PR is retained as test input; it is not a product release.`
+    title: `${labels[mode].title} acceptance fixture: ${name}`,
+    body: `Controlled sample for ${labels[mode].purpose} acceptance. Normal required application checks must pass before Coordinator execution. This PR is retained as test input; it is not a product release.`
   };
   const completed = await publishFixturePr(entry, {
     save: async (value) => {

@@ -189,8 +189,18 @@ function dispatchingClient(f, { active, wait, signal, pollMs } = {}) {
       calls.push({ method, endpoint, body });
       if (endpoint.includes("/contents/"))
         return apiResponse("200 OK", runtimeFile(endpoint));
+      // GitHub's status filter returns only runs in that status; the newest
+      // unfiltered page shows every recent run with its current status.
       if (endpoint.includes("/runs?status=")) {
-        const runs = active(endpoint.match(/status=([a-z_]+)/u)[1]);
+        const status = endpoint.match(/status=([a-z_]+)/u)[1];
+        const runs = active(status).filter((run) => run.status === status);
+        return apiResponse("200 OK", {
+          total_count: runs.length,
+          workflow_runs: runs
+        });
+      }
+      if (endpoint.endsWith("/runs?per_page=100")) {
+        const runs = [...active("recent"), ...(dispatched ? [f.run] : [])];
         return apiResponse("200 OK", {
           total_count: runs.length,
           workflow_runs: runs
@@ -625,10 +635,12 @@ test("integration uses a unique checked commit with the exact candidate tree", a
         return apiResponse("200 OK", pr);
       if (endpoint.endsWith(`/git/commits/${testMerge}`))
         return apiResponse("200 OK", { tree: { sha: candidate.tree } });
-      if (endpoint.includes("/runs?status="))
+      if (endpoint.includes("/runs?"))
         return apiResponse(
           "200 OK",
-          waited
+          waited ||
+            (endpoint.includes("status=") &&
+              !endpoint.includes("status=in_progress"))
             ? { total_count: 0, workflow_runs: [] }
             : { total_count: 1, workflow_runs: [activeRun(555, "in_progress")] }
         );
@@ -1025,22 +1037,90 @@ test("a blocking run that changes status keeps its latest observed status", asyn
   ]);
 });
 
-test("more than one page of active runs stops instead of being ignored", async () => {
+test("a lagging status listing blocks dispatch while it counts runs it does not show", async () => {
   const f = fixture();
   f.record.state = "prepared";
+  let rounds = 0;
+  const saves = [];
   const client = createReleaseGitHub({
     profile: sandboxProfile,
     runtime,
+    wait: async () => {
+      rounds++;
+    },
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      // Observed live: total_count says one in-progress run, the list is empty.
+      if (endpoint.includes("/runs?status=in_progress"))
+        return apiResponse("200 OK", {
+          total_count: rounds ? 0 : 1,
+          workflow_runs: []
+        });
+      if (endpoint.includes("/runs?status="))
+        return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
+      // The newest page is empty throughout: the block comes from the count.
+      if (endpoint.endsWith("/runs?per_page=100"))
+        return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
+      // findRun's event-filtered listing: the dispatched run appears after
+      // the first round, once the dispatch has happened.
+      if (endpoint.includes("/runs?"))
+        return apiResponse("200 OK", {
+          total_count: rounds ? 1 : 0,
+          workflow_runs: rounds ? [f.run] : []
+        });
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", environmentRef(endpoint, f.operation));
+      if (method === "POST" && endpoint.endsWith("/dispatches"))
+        return apiResponse("204 No Content");
+      if (endpoint.endsWith(`/actions/runs/${f.run.id}`))
+        return apiResponse("200 OK", f.run);
+      if (endpoint.includes("/attempts/2/jobs"))
+        return apiResponse("200 OK", { total_count: 1, jobs: [f.job] });
+      assert.fail(`${method} ${endpoint}`);
+    },
+    logs: async () =>
+      `COORDINATOR_RELEASE_RESULT:${Buffer.from(JSON.stringify(f.report)).toString("base64url")}\n`
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => saves.push(structuredClone(f.record))
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(rounds, 1);
+  const first = saves.find((record) => record.waited_for);
+  assert.deepEqual(first.waited_for.runs, []);
+  assert.equal(first.waited_for.unlisted, 1);
+  assert.equal(f.record.waited_for.checks, 2);
+  assert.equal(f.record.waited_for.unlisted, 1);
+});
+
+test("a rising lag indicator is saved before an interruption can lose it", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  const controller = new AbortController();
+  let rounds = 0;
+  const saves = [];
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    signal: controller.signal,
+    wait: async () => {
+      rounds++;
+      if (rounds === 2) controller.abort();
+    },
     execute: async (args) => {
       const endpoint = args[args.indexOf("--method") + 2];
       if (endpoint.includes("/contents/"))
         return apiResponse("200 OK", runtimeFile(endpoint));
-      if (endpoint.includes("/runs?status="))
+      // Round one counts one unlisted run, round two counts two.
+      if (endpoint.includes("/runs?status=queued"))
         return apiResponse("200 OK", {
-          total_count: 101,
-          workflow_runs: Array.from({ length: 100 }, (_, index) =>
-            activeRun(1000 + index, "queued")
-          )
+          total_count: rounds + 1,
+          workflow_runs: []
         });
       if (endpoint.includes("/runs?"))
         return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
@@ -1051,11 +1131,41 @@ test("more than one page of active runs stops instead of being ignored", async (
     client.run({
       record: f.record,
       actor: f.record.actor,
-      save: async () => {}
+      save: async () => saves.push(structuredClone(f.record))
     }),
-    /exceed one page/u
+    (error) => error.name === "AbortError"
+  );
+  assert.deepEqual(
+    saves.map((record) => record.waited_for.unlisted),
+    [1, 2]
   );
   assert.equal(f.record.state, "prepared");
+});
+
+test("an unfinished run on the newest page blocks dispatch even when every status count is zero", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  let rounds = 0;
+  const { client } = dispatchingClient(f, {
+    active: (query) =>
+      query === "recent" && rounds === 0
+        ? [activeRun(31, "queued", "carol")]
+        : [],
+    wait: async () => {
+      rounds++;
+    }
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(rounds, 1);
+  assert.deepEqual(f.record.waited_for.runs, [
+    { id: 31, url: `${runUrl}/31`, status: "queued", actor: "carol" }
+  ]);
+  assert.equal(f.record.waited_for.unlisted, 0);
 });
 
 test("an interruption after a quiet check rechecks on resume before dispatching", async () => {

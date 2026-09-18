@@ -315,6 +315,13 @@ test("a saved wait for another workflow run validates; malformed notes are rejec
     runs: waited.runs
   };
   assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+  record.waited_for = {
+    purpose: "dispatch",
+    first_seen_at: waited.first_seen_at,
+    runs: [],
+    unlisted: 1
+  };
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
   for (const bad of [
     null,
     { ...waited, runs: [] },
@@ -327,6 +334,8 @@ test("a saved wait for another workflow run validates; malformed notes are rejec
     },
     { ...waited, runs: [{ ...waited.runs[0], actor: 7 }] },
     { ...waited, checks: 0 },
+    { ...waited, runs: [], unlisted: 0 },
+    { ...waited, unlisted: -1 },
     { ...waited, quiet_at: "later" }
   ]) {
     record.waited_for = bad;

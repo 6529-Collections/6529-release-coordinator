@@ -23,7 +23,10 @@ export const activeWorkflowRunStatuses = Object.freeze([
 ]);
 
 // A step that found someone else's active workflow run records what it waited
-// for before its merge or dispatch. Older records without this note stay valid.
+// for before its merge or dispatch. `unlisted` is a lag indicator (status
+// counts in excess of listed runs), not an exact count of hidden runs; a note
+// with no listed run needs a positive indicator to explain the wait. Older
+// records without this note stay valid.
 function validateWaitedFor(record) {
   if (!Object.hasOwn(record, "waited_for")) return;
   const waited = record.waited_for;
@@ -34,7 +37,9 @@ function validateWaitedFor(record) {
       ["dispatch", "merge"].includes(waited.purpose) &&
       Number.isFinite(Date.parse(waited.first_seen_at)) &&
       Array.isArray(waited.runs) &&
-      waited.runs.length > 0 &&
+      (waited.unlisted === undefined ||
+        (Number.isSafeInteger(waited.unlisted) && waited.unlisted >= 0)) &&
+      (waited.runs.length > 0 || waited.unlisted > 0) &&
       waited.runs.every(
         (run) =>
           Number.isSafeInteger(run?.id) &&

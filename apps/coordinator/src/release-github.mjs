@@ -364,8 +364,45 @@ export function createReleaseGitHub({
     if (!matches.length) return null;
     return verifyRun(matches[0], record, workflowId).run;
   }
+  const runSummary = (run) => ({
+    id: run.id,
+    url: run.html_url,
+    status: run.status,
+    actor: run.actor?.login ?? null
+  });
+  // GitHub's status-filtered run listing lags behind run transitions: its
+  // total_count and its list disagree for seconds at a time, and both can
+  // miss a run that is queued, pending or in progress (observed live on
+  // 2026-09-18, when a merge went ahead on a false "quiet"). The newest page of
+  // the unfiltered listing shows current statuses reliably. Read both: the
+  // workflow is quiet only when that page holds no unfinished run and every
+  // status count is zero. The newest page covers runs in or near transition;
+  // the counts cover a run active long enough to fall behind a hundred newer
+  // ones, which the status index has long since caught up with. Neither page
+  // is paged further, so no new bound on history is introduced; a stale count
+  // can only make the wait longer. The returned `unlisted` is a lag indicator,
+  // the excess of the status counts over the distinct runs actually listed,
+  // not an exact number of hidden runs.
   async function activeWorkflowRuns(role) {
     const active = new Map();
+    const recent = (
+      await call(
+        role,
+        "GET",
+        `/actions/workflows/${runtime.workflow}/runs?per_page=100`
+      )
+    ).data;
+    serviceAssert(
+      Number.isSafeInteger(recent?.total_count) &&
+        recent.total_count >= 0 &&
+        Array.isArray(recent.workflow_runs),
+      "release-workflow",
+      "Sandbox release workflow runs are unreadable."
+    );
+    for (const run of recent.workflow_runs)
+      if (positive(run?.id) && run.status !== "completed")
+        active.set(run.id, runSummary(run));
+    let counted = 0;
     for (const status of activeWorkflowRunStatuses) {
       const list = (
         await call(
@@ -374,27 +411,20 @@ export function createReleaseGitHub({
           `/actions/workflows/${runtime.workflow}/runs?status=${status}&per_page=100`
         )
       ).data;
-      // The page must be complete: more than one page of active runs for one
-      // status cannot be waited for exactly, so stop instead of ignoring them.
       serviceAssert(
         Number.isSafeInteger(list?.total_count) &&
           list.total_count >= 0 &&
-          list.total_count <= 100 &&
-          Array.isArray(list.workflow_runs) &&
-          list.workflow_runs.length === list.total_count,
+          Array.isArray(list.workflow_runs),
         "release-workflow",
-        "Active sandbox release workflow runs are unreadable or exceed one page."
+        "Active sandbox release workflow runs are unreadable."
       );
+      counted += list.total_count;
       for (const run of list.workflow_runs)
         if (positive(run?.id) && run.status !== "completed")
-          active.set(run.id, {
-            id: run.id,
-            url: run.html_url,
-            status: run.status,
-            actor: run.actor?.login ?? null
-          });
+          active.set(run.id, runSummary(run));
     }
-    return [...active.values()];
+    const runs = [...active.values()];
+    return { runs, unlisted: Math.max(0, counted - runs.length) };
   }
   // GitHub keeps one running and one waiting run per concurrency group and
   // cancels the waiting run when a third arrives, so a Coordinator run must
@@ -410,8 +440,8 @@ export function createReleaseGitHub({
   async function waitForQuietWorkflow(role, record, save, purpose) {
     for (let checks = 1; ; checks++) {
       signal?.throwIfAborted();
-      const active = await activeWorkflowRuns(role);
-      if (!active.length) {
+      const { runs: active, unlisted } = await activeWorkflowRuns(role);
+      if (!active.length && !unlisted) {
         if (record.waited_for) {
           record.waited_for.checks = checks;
           record.waited_for.quiet_at = now().toISOString();
@@ -430,23 +460,37 @@ export function createReleaseGitHub({
         record.waited_for = {
           purpose,
           first_seen_at: now().toISOString(),
-          runs: fresh
+          runs: fresh,
+          unlisted
         };
         await save();
-      } else if (fresh.length) {
-        record.waited_for.runs.push(...fresh);
-        await save();
+      } else {
+        // unlisted keeps the highest lag indicator seen during this wait: the
+        // excess of GitHub's status counts over the distinct runs it listed.
+        // A new run or a higher indicator is saved at once, so an interruption
+        // never loses what explained the wait.
+        const highest = Math.max(record.waited_for.unlisted ?? 0, unlisted);
+        const raised = highest !== (record.waited_for.unlisted ?? 0);
+        record.waited_for.unlisted = highest;
+        if (fresh.length) record.waited_for.runs.push(...fresh);
+        if (fresh.length || raised) await save();
       }
       const [first] = active;
       runEvent({
         step: "release.wait",
         outcome: "waiting",
         role,
-        url: first.url,
-        workflow_run_id: first.id,
-        workflow_run_status: first.status,
+        ...(first
+          ? {
+              url: first.url,
+              workflow_run_id: first.id,
+              workflow_run_status: first.status
+            }
+          : {}),
         checks,
-        message: `Waiting for ${active.length} active ${runtime.workflow} run${active.length === 1 ? "" : "s"} before ${purpose}; run ${first.id} by ${first.actor ?? "an unknown actor"} is ${first.status}.`
+        message: first
+          ? `Waiting for ${active.length} active ${runtime.workflow} run${active.length === 1 ? "" : "s"}${unlisted ? ` and ${unlisted} counted but unlisted` : ""} before ${purpose}; run ${first.id} by ${first.actor ?? "an unknown actor"} is ${first.status}.`
+          : `Waiting before ${purpose}: GitHub counts ${unlisted} active ${runtime.workflow} run${unlisted === 1 ? "" : "s"} that its listing does not show yet.`
       });
       await wait(pollMs, { signal });
     }
