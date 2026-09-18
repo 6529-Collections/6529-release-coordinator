@@ -162,6 +162,64 @@ function fixture(role = "backend", kind = "deploy") {
   return { operation, record, run, report, job };
 }
 
+const runUrl =
+  "https://github.com/6529-Collections/release-coordinator-test-backend/actions/runs";
+const activeRun = (id, status, login = "alice") => ({
+  id,
+  status,
+  html_url: `${runUrl}/${id}`,
+  actor: { login }
+});
+
+// A dispatching client: pinned runtime files, the active-run listing, the
+// environment ref, the dispatch itself and the completed run's evidence.
+function dispatchingClient(f, { active, wait, signal, pollMs } = {}) {
+  const calls = [];
+  let dispatched = false;
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    signal,
+    ...(wait ? { wait } : {}),
+    ...(pollMs ? { pollMs } : {}),
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      calls.push({ method, endpoint });
+      if (endpoint.includes("/contents/"))
+        return apiResponse("200 OK", runtimeFile(endpoint));
+      if (endpoint.includes("/runs?status=")) {
+        const runs = active(endpoint.match(/status=([a-z_]+)/u)[1]);
+        return apiResponse("200 OK", {
+          total_count: runs.length,
+          workflow_runs: runs
+        });
+      }
+      if (endpoint.includes("/runs?"))
+        return apiResponse(
+          "200 OK",
+          dispatched
+            ? { total_count: 1, workflow_runs: [f.run] }
+            : { total_count: 0, workflow_runs: [] }
+        );
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", environmentRef(endpoint, f.operation));
+      if (method === "POST" && endpoint.endsWith("/dispatches")) {
+        dispatched = true;
+        return apiResponse("204 No Content");
+      }
+      if (endpoint.endsWith(`/actions/runs/${f.run.id}`))
+        return apiResponse("200 OK", f.run);
+      if (endpoint.includes("/attempts/2/jobs"))
+        return apiResponse("200 OK", { total_count: 1, jobs: [f.job] });
+      assert.fail(`${method} ${endpoint}`);
+    },
+    logs: async () =>
+      `COORDINATOR_RELEASE_RESULT:${Buffer.from(JSON.stringify(f.report)).toString("base64url")}\n`
+  });
+  return { client, calls };
+}
+
 test("release workflow result binds exact operation, commits, actor and rerun attempt", async () => {
   const f = fixture();
   let runSearch;
@@ -471,10 +529,15 @@ test("integration uses a unique checked commit with the exact candidate tree", a
   const codeRabbitSummary =
     "\n\n<!-- This is an auto-generated comment: release notes by coderabbit.ai -->\n\nA generated summary.\n\n<!-- end of auto-generated comment: release notes by coderabbit.ai -->";
   let summaryAdded = false;
+  let waited = false;
+  const order = [];
   const client = createReleaseGitHub({
     profile: sandboxProfile,
     runtime,
-    wait: async () => {},
+    wait: async () => {
+      waited = true;
+      order.push("wait");
+    },
     gates: {
       pullRequest: async () => {
         if (!summaryAdded) {
@@ -561,8 +624,16 @@ test("integration uses a unique checked commit with the exact candidate tree", a
         return apiResponse("200 OK", pr);
       if (endpoint.endsWith(`/git/commits/${testMerge}`))
         return apiResponse("200 OK", { tree: { sha: candidate.tree } });
+      if (endpoint.includes("/runs?status="))
+        return apiResponse(
+          "200 OK",
+          waited
+            ? { total_count: 0, workflow_runs: [] }
+            : { total_count: 1, workflow_runs: [activeRun(555, "in_progress")] }
+        );
       if (method === "PUT" && endpoint.endsWith("/pulls/7/merge")) {
         assert.equal(body.sha, integrationCommit);
+        order.push("merge");
         merged = true;
         pr = {
           ...pr,
@@ -625,6 +696,16 @@ test("integration uses a unique checked commit with the exact candidate tree", a
       }
     ]
   );
+  // Branch cleanup polls with the same sleep after the merge.
+  assert.deepEqual(order.slice(0, 2), ["wait", "merge"]);
+  assert.equal(record.waited_for.purpose, "merge");
+  assert.equal(record.waited_for.checks, 2);
+  assert.deepEqual(record.waited_for.runs, [
+    { id: 555, url: `${runUrl}/555`, status: "in_progress", actor: "alice" }
+  ]);
+  const waitingSave = saved.find((value) => value.waited_for);
+  assert.equal(waitingSave.state, "checking");
+  assert.equal(waitingSave.waited_for.checks, undefined);
 });
 
 test("changed release runner stops before workflow lookup or dispatch", async () => {
@@ -697,6 +778,198 @@ test("resumed operation stops before dispatch when a sandbox ref moved", async (
     calls.some(({ method }) => method !== "GET"),
     false
   );
+});
+
+test("dispatch waits without a time limit until the release workflow is quiet", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  let rounds = 0;
+  const waits = [];
+  const saves = [];
+  const { client, calls } = dispatchingClient(f, {
+    active: () => (rounds < 2 ? [activeRun(555, "in_progress")] : []),
+    wait: async (ms, options) => {
+      waits.push({ ms, signal: options?.signal });
+      rounds++;
+    }
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => saves.push(structuredClone(f.record))
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(waits.length, 2);
+  assert.ok(waits.every((entry) => entry.ms === 10_000));
+  const statusQueries = calls.flatMap(({ endpoint }, index) =>
+    endpoint.includes("/runs?status=") ? [index] : []
+  );
+  const dispatch = calls.findIndex(
+    ({ method, endpoint }) =>
+      method === "POST" && endpoint.endsWith("/dispatches")
+  );
+  assert.ok(dispatch > statusQueries.at(-1));
+  assert.deepEqual(
+    [
+      ...new Set(
+        statusQueries.map(
+          (index) => calls[index].endpoint.match(/status=([a-z_]+)/u)[1]
+        )
+      )
+    ].sort(),
+    ["in_progress", "pending", "queued", "requested", "waiting"]
+  );
+  assert.ok(
+    statusQueries.every((index) =>
+      calls[index].endpoint.startsWith(
+        "repos/6529-Collections/release-coordinator-test-backend/actions/workflows/sandbox-release.yml/runs?"
+      )
+    )
+  );
+  const waitingSave = saves.find((record) => record.waited_for);
+  assert.equal(waitingSave.state, "prepared");
+  assert.equal(waitingSave.waited_for.checks, undefined);
+  assert.deepEqual(waitingSave.waited_for.runs, [
+    { id: 555, url: `${runUrl}/555`, status: "in_progress", actor: "alice" }
+  ]);
+  assert.equal(saves.filter((record) => record.waited_for).length, 4);
+  assert.equal(f.record.waited_for.purpose, "dispatch");
+  assert.equal(f.record.waited_for.checks, 3);
+  assert.ok(Number.isFinite(Date.parse(f.record.waited_for.first_seen_at)));
+  assert.ok(Number.isFinite(Date.parse(f.record.waited_for.quiet_at)));
+});
+
+test("queued, waiting, pending and requested runs block dispatch; completed runs do not", async () => {
+  for (const status of ["queued", "waiting", "pending", "requested"]) {
+    const f = fixture();
+    f.record.state = "prepared";
+    let waits = 0;
+    const { client } = dispatchingClient(f, {
+      active: () => (waits ? [] : [activeRun(7, status, "bob")]),
+      wait: async () => {
+        waits++;
+      }
+    });
+    const result = await client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => {}
+    });
+    assert.equal(result.status, "passed", status);
+    assert.equal(waits, 1, status);
+    assert.deepEqual(f.record.waited_for.runs, [
+      { id: 7, url: `${runUrl}/7`, status, actor: "bob" }
+    ]);
+  }
+  const f = fixture();
+  f.record.state = "prepared";
+  let waits = 0;
+  const { client } = dispatchingClient(f, {
+    active: () => [activeRun(8, "completed")],
+    wait: async () => {
+      waits++;
+    }
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(waits, 0);
+  assert.equal(Object.hasOwn(f.record, "waited_for"), false);
+});
+
+test("an interrupted wait presses nothing and keeps the step resumable", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  const controller = new AbortController();
+  const saves = [];
+  const { client, calls } = dispatchingClient(f, {
+    signal: controller.signal,
+    active: () => [activeRun(9, "queued")],
+    wait: async () => {
+      controller.abort();
+    }
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => saves.push(structuredClone(f.record))
+    }),
+    (error) => error.name === "AbortError"
+  );
+  assert.equal(
+    calls.some(({ method }) => method !== "GET"),
+    false
+  );
+  assert.equal(f.record.state, "prepared");
+  assert.equal(saves.length, 1);
+  assert.equal(saves[0].waited_for.purpose, "dispatch");
+  assert.equal(saves[0].waited_for.checks, undefined);
+
+  // The default sleep also stops early when the signal fires mid-wait.
+  const g = fixture();
+  g.record.state = "prepared";
+  const late = new AbortController();
+  const { client: sleeping, calls: sleepingCalls } = dispatchingClient(g, {
+    signal: late.signal,
+    pollMs: 5_000,
+    active: () => {
+      setTimeout(() => late.abort(), 20);
+      return [activeRun(10, "in_progress")];
+    }
+  });
+  const started = performance.now();
+  await assert.rejects(
+    sleeping.run({
+      record: g.record,
+      actor: g.record.actor,
+      save: async () => {}
+    }),
+    (error) => error.name === "AbortError"
+  );
+  assert.ok(performance.now() - started < 2_000);
+  assert.equal(
+    sleepingCalls.some(({ method }) => method !== "GET"),
+    false
+  );
+});
+
+test("a resumed wait checks again and dispatches once", async () => {
+  const f = fixture();
+  f.record.state = "prepared";
+  f.record.waited_for = {
+    purpose: "dispatch",
+    first_seen_at: "2026-09-18T10:00:00.000Z",
+    runs: [
+      { id: 555, url: `${runUrl}/555`, status: "in_progress", actor: "alice" }
+    ]
+  };
+  let waits = 0;
+  const { client, calls } = dispatchingClient(f, {
+    active: () => [],
+    wait: async () => {
+      waits++;
+    }
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(waits, 0);
+  assert.equal(
+    calls.filter(
+      ({ method, endpoint }) =>
+        method === "POST" && endpoint.endsWith("/dispatches")
+    ).length,
+    1
+  );
+  assert.equal(f.record.waited_for.runs.length, 1);
+  assert.equal(f.record.waited_for.checks, 1);
 });
 
 test("owned branch cleanup requires two consecutive missing reads", async () => {

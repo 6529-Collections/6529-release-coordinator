@@ -725,6 +725,43 @@ test("legacy service verification uses its saved plan and still detects destinat
   assert.equal(f.state().lock, null);
 });
 
+test("the sandbox release client receives the command's stop signal", async () => {
+  const f = fixture(sandboxProfile);
+  const controller = new AbortController();
+  const clients = [];
+  let executed = 0;
+  const result = await invoke(f, {
+    args: ["--json"],
+    signal: controller.signal,
+    createReleaseClient: (options) => {
+      clients.push(options);
+      return { fake: true };
+    },
+    executeSandboxRelease: async ({ client, signal }) => {
+      executed++;
+      assert.equal(client.fake, true);
+      assert.equal(signal, controller.signal);
+      return { status: "completed" };
+    },
+    run: async (options) => {
+      await options.release({
+        batch: {},
+        state: {},
+        run: {},
+        signal: options.signal,
+        guard: async () => {},
+        save: async () => {}
+      });
+      return { run_id: "33333333-3333-4333-8333-333333333333", requests: [] };
+    }
+  });
+  assert.equal(result.code, 0);
+  assert.equal(executed, 1);
+  assert.equal(clients.length, 1);
+  assert.equal(clients[0].profile.name, "sandbox");
+  assert.equal(clients[0].signal, controller.signal);
+});
+
 test("one inbox scan generates a separate saved plan for each suitable ticket", async () => {
   const f = fixture();
   const first = (await readInbox({ get: f.get, profile: f.profile }))

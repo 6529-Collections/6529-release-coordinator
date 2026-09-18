@@ -448,6 +448,14 @@ changes or uncertain effects stop without automatic restoration. An uncertain
 effect keeps the lock for explicit resume. Completed matching operations are
 reused on resume instead of being dispatched again.
 
+Before each protected merge and each workflow dispatch, the command waits until
+the pinned `sandbox-release.yml` workflow has no queued, waiting, pending,
+requested or in-progress run in that test repository, on any branch. It checks
+every ten seconds, writes one `release.wait` log line per check, and has no
+time limit. The step record keeps `waited_for` with the blocking runs. Ctrl-C
+during the wait stops before anything is dispatched; `--resume` checks again
+and dispatches once.
+
 After the final required E2E and owned-branch cleanup, selected tickets receive
 `status:completed` and `reason:release-completed` and close. This records only the
 fake sandbox result. The
@@ -558,7 +566,8 @@ when reached. A legacy interrupted run retains its previously recorded plan. A
 nonterminal ticket is rehearsed afresh; an old passing report is never reused.
 An active saved release is different: resume verifies and reuses its completed
 matching operations so a lost response or ticket-write failure does not deploy
-the same step twice.
+the same step twice. A run stopped while waiting for someone else's workflow run
+has dispatched nothing; resume simply waits again.
 Do not combine `--resume` with `--issue` or `--close-test`. It does not process
 other tickets from a scoped test. There is no automatic timeout, lock stealing,
 or background retry. Never resume while another copy may still be running.

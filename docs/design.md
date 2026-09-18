@@ -410,6 +410,24 @@ actual merge composition, preserve others' work, and do not claim staging
 validated a different production composition. Changed bases or scope require
 fresh matching combined evidence; if that cannot be established, stop.
 
+Conflicting runs are handled by waiting, not by racing. GitHub keeps one running
+and one waiting run per concurrency group and cancels the waiting run when a
+third arrives, so a Coordinator run must never queue behind someone else's
+deploy. Before each merge into a shared branch and before each workflow
+dispatch, the adapter lists the release workflow's queued, waiting, pending,
+requested and in-progress runs in the repository it is about to change, on any
+branch, and continues only when there are none. It rechecks every ten seconds,
+logs each check as `release.wait`, and saves the blocking runs on the step
+record as `waited_for` when first seen. This wait has no time limit: the
+operator decided on September 18, 2026 to wait as long as it takes rather than
+add a cutoff. Ctrl-C stops the wait before anything is pressed, and resume
+rechecks. The sandbox adapter implements this against the pinned
+`sandbox-release.yml`; the real adapters must apply the same rule to the real
+lock groups (`deploy-control-<env>` and `deploy-service-<env>-<service>`,
+`staging-deploy`, `web-deploy-prod`, `operational-monitoring-<env>`).
+Re-dispatching a Coordinator run that was cancelled before it started remains
+later work.
+
 Verified integration references on September 11: frontend
 [`deploy-6529`](https://github.com/6529-Collections/6529seize-frontend/blob/faf4aa616bc3a25ccab5a0db8162980d9cdaedd1/ops/skills/deploy-6529/SKILL.md),
 [`Web Deploy - STAGING`](https://github.com/6529-Collections/6529seize-frontend/blob/faf4aa616bc3a25ccab5a0db8162980d9cdaedd1/.github/workflows/deploy-staging.yml),
