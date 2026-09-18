@@ -1,6 +1,6 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-18**, against merged `main` source `3c01a5f`, the live
+Last reviewed: **2026-09-18**, against merged `main` source `dc6f859`, the live
 package and consumer evidence below, and the latest sandbox acceptance. This page
 separates implemented behavior, source delivery and live proof. Earlier
 observations carry their original dates unless a newer check is stated.
@@ -64,6 +64,54 @@ The failed candidate reached test staging before E2E failed. Protected manual
 revert PRs restored both staging file trees to match test `main`; this does not
 implement automatic rollback or turn the failed release into a success. See the
 [failure acceptance record](./testing/staging-e2e-failure-2026-09-16.md).
+
+## PR #181, #182 and #187 delivery, September 18
+
+[PR #181](https://github.com/6529-Collections/6529-release-coordinator/pull/181)
+merged at `2d7b2d2ea1e46162a8271cbdbb82463c7e1423ab` (final head
+`8eb1bc1f08283ec7f0fd5586e79ae88bd058679a`),
+[PR #182](https://github.com/6529-Collections/6529-release-coordinator/pull/182)
+at `30b61ceb2d788511276499fe21489792f7753ba4` (final head
+`79c09b01ce38f14ece8bdb4f368cdbc88edfbefb`) and
+[PR #187](https://github.com/6529-Collections/6529-release-coordinator/pull/187)
+at `dc6f85974f32e0e65288c9e70071423497563735` (final head
+`206a74c4c41c5498ee60f6c36b6e965546fa93ea`). Each final head passed Node
+20/22/24, package, both CodeQL jobs and Snyk. The 6529bot general lane asked
+for changes on the first head of each PR and reported "good to merge" on every
+final head; the security and deployment/Actions lanes found nothing on any
+head, and the follow-up lanes found no new findings. CodeRabbit opened one
+thread on PR #182 (hash the generated workflow template against its pin) and
+three on PR #187 (save a rising lag indicator at once, separate merged
+behaviour from the pending correction, reconcile the wait count); each was
+fixed in a follow-up commit and resolved. Three general-lane suggestions were
+declined with stated reasons: excluding the Coordinator's own run from the
+active listing (the wait never runs while the step's own run exists), keying
+the sandbox lock on a declared input (another runtime republish for no
+Coordinator change), and paging the whole workflow history on every check
+(hundreds of calls per hour, and a created-time horizon would be a new bound).
+
+The merge commits' repository checks and CodeQL also passed:
+[#181 checks](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/35320419923)
+and [CodeQL](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/35320420025),
+[#182 checks](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/35322727232)
+and [CodeQL](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/35322727250),
+[#187 checks](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/35332796182)
+and [CodeQL](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/35332796166).
+A local `npm run check` on `dc6f859` passed all repository gates: 566 tests
+ran, 563 passed and 3 were intentionally skipped; lint, formatting, workflow
+policy and packed-package checks also passed.
+
+This delivers the wait for other active workflow runs before each protected
+merge and each workflow dispatch (no time limit, one logged line per check,
+`waited_for` on the step record, an abortable sleep and resume that rechecks),
+the per-environment sandbox release lock republished to both test repositories
+with new workflow and build-helper pins and the offline pin-equals-source
+tests, the two-source quiet check that the live acceptance required, the
+fixture tool's wait case, and the
+[September 18 acceptance record](./testing/sandbox-inflight-wait-2026-09-18.md).
+The acceptance ran from the then-unmerged PR #187 branch and remains the
+runtime acceptance. This does not enable real product releases; the real
+adapters are not built.
 
 ## PR #178 delivery, September 17
 
