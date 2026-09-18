@@ -1,3 +1,4 @@
+import { setTimeout as delay } from "node:timers/promises";
 import { executeGitHub } from "./coordinator-github.mjs";
 import { createRehearsalGitHub } from "./rehearsal-github.mjs";
 import { readServiceLogs } from "./service-github.mjs";
@@ -11,6 +12,8 @@ import {
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { effectiveRequiredChecks } from "./github-checks.mjs";
 import { integrationCommitInput } from "./release-plan.mjs";
+import { activeWorkflowRunStatuses } from "./release-state.mjs";
+import { runEvent } from "./run-log.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -34,7 +37,9 @@ export function createReleaseGitHub({
   execute = executeGitHub,
   logs = readServiceLogs,
   gates = createRehearsalGitHub(sandboxProfile),
-  wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  signal,
+  wait = (ms, options) => delay(ms, undefined, options),
+  now = () => new Date(),
   polls = 60,
   pollMs = 10_000
 } = {}) {
@@ -146,7 +151,7 @@ export function createReleaseGitHub({
           "The owned sandbox release branch changed during cleanup."
         );
       }
-      if (attempt < 3) await wait(1000);
+      if (attempt < 3) await wait(1000, { signal });
     }
     throw new ServiceError(
       "release-cleanup",
@@ -236,7 +241,7 @@ export function createReleaseGitHub({
           );
         return { passed, observed };
       }
-      if (poll + 1 < polls) await wait(pollMs);
+      if (poll + 1 < polls) await wait(pollMs, { signal });
     }
     throw new ServiceError(
       "release-checks-pending",
@@ -358,6 +363,93 @@ export function createReleaseGitHub({
     );
     if (!matches.length) return null;
     return verifyRun(matches[0], record, workflowId).run;
+  }
+  async function activeWorkflowRuns(role) {
+    const active = new Map();
+    for (const status of activeWorkflowRunStatuses) {
+      const list = (
+        await call(
+          role,
+          "GET",
+          `/actions/workflows/${runtime.workflow}/runs?status=${status}&per_page=100`
+        )
+      ).data;
+      // The page must be complete: more than one page of active runs for one
+      // status cannot be waited for exactly, so stop instead of ignoring them.
+      serviceAssert(
+        Number.isSafeInteger(list?.total_count) &&
+          list.total_count >= 0 &&
+          list.total_count <= 100 &&
+          Array.isArray(list.workflow_runs) &&
+          list.workflow_runs.length === list.total_count,
+        "release-workflow",
+        "Active sandbox release workflow runs are unreadable or exceed one page."
+      );
+      for (const run of list.workflow_runs)
+        if (positive(run?.id) && run.status !== "completed")
+          active.set(run.id, {
+            id: run.id,
+            url: run.html_url,
+            status: run.status,
+            actor: run.actor?.login ?? null
+          });
+    }
+    return [...active.values()];
+  }
+  // GitHub keeps one running and one waiting run per concurrency group and
+  // cancels the waiting run when a third arrives, so a Coordinator run must
+  // never queue behind someone else's deploy. Before each merge and dispatch,
+  // wait until the pinned release workflow has no active run in the repository
+  // about to change, then continue. There is deliberately no time limit: the
+  // operator chose to wait as long as it takes (2026-09-18, docs/design.md).
+  // Every check is logged; the blocking runs are saved on the step record when
+  // first seen, and Ctrl-C stops the wait before anything is pressed. The
+  // Coordinator never waits for itself: this runs only while the step has no
+  // run of its own, and the release advances past a step only after that
+  // step's run completed, so no earlier Coordinator run can still be active.
+  async function waitForQuietWorkflow(role, record, save, purpose) {
+    for (let checks = 1; ; checks++) {
+      signal?.throwIfAborted();
+      const active = await activeWorkflowRuns(role);
+      if (!active.length) {
+        if (record.waited_for) {
+          record.waited_for.checks = checks;
+          record.waited_for.quiet_at = now().toISOString();
+        }
+        return;
+      }
+      const known = new Map(
+        (record.waited_for?.runs ?? []).map((run) => [run.id, run])
+      );
+      const fresh = active.filter((run) => !known.has(run.id));
+      // A run seen before keeps its latest observed status; the next journal
+      // write carries it rather than saving on every status change.
+      for (const run of active)
+        if (known.has(run.id)) known.get(run.id).status = run.status;
+      if (!record.waited_for) {
+        record.waited_for = {
+          purpose,
+          first_seen_at: now().toISOString(),
+          runs: fresh
+        };
+        await save();
+      } else if (fresh.length) {
+        record.waited_for.runs.push(...fresh);
+        await save();
+      }
+      const [first] = active;
+      runEvent({
+        step: "release.wait",
+        outcome: "waiting",
+        role,
+        url: first.url,
+        workflow_run_id: first.id,
+        workflow_run_status: first.status,
+        checks,
+        message: `Waiting for ${active.length} active ${runtime.workflow} run${active.length === 1 ? "" : "s"} before ${purpose}; run ${first.id} by ${first.actor ?? "an unknown actor"} is ${first.status}.`
+      });
+      await wait(pollMs, { signal });
+    }
   }
   const digestOf = (value) => String(value ?? "").replace(/^sha256:/u, "");
   // Independent readback of the sample "installed" monitoring: GitHub's own
@@ -635,6 +727,7 @@ export function createReleaseGitHub({
           await save();
           return cleanupFailedPull(role, record, candidate, save);
         }
+        await waitForQuietWorkflow(role, record, save, "merge");
         pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
         verifyPull(pr, record, candidate);
         serviceAssert(
@@ -864,6 +957,7 @@ export function createReleaseGitHub({
           "release-dispatch-uncertain",
           "A prior release dispatch has no confirmed workflow run."
         );
+        await waitForQuietWorkflow(role, record, save, "dispatch");
         await verifyPinnedRefs("dispatch");
         record.state = "dispatching";
         await save();
@@ -899,7 +993,7 @@ export function createReleaseGitHub({
           if (identityChanged || stateChanged) await save();
           if (run.status === "completed") break;
         }
-        if (poll + 1 < polls) await wait(pollMs);
+        if (poll + 1 < polls) await wait(pollMs, { signal });
         if (record.workflow_run_id)
           run = (
             await call(role, "GET", `/actions/runs/${record.workflow_run_id}`)

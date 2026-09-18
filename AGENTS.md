@@ -115,6 +115,10 @@ Existing limits stay unchanged until they are separately discussed.
   Its operational-monitoring section owns the agreed order: monitoring deploys
   only from `main`, after the production merge and before production
   application deployments; the sandbox models it with a sample package.
+  Before each shared-branch merge and workflow dispatch, the sandbox adapter
+  waits without a time limit until the pinned release workflow has no active
+  run in the target repository; that no-limit wait is an explicit user decision.
+  Check progress for its live proof and the sandbox workflow lock scope.
   Product adapters and real-production rollback are not built. Reuse existing product Actions and their
   environment-specific builds; no configuration redesign or portable artifacts.
   Wait for successful matching staging E2E before production merges into `main`.

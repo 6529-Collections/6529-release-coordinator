@@ -154,7 +154,7 @@ export async function runInboxRunCli(
         release:
           profile.name === "sandbox"
             ? (options) => {
-                releaseClient ??= createReleaseClient({ profile });
+                releaseClient ??= createReleaseClient({ profile, signal });
                 return executeSandboxRelease({
                   ...options,
                   client: releaseClient

@@ -282,6 +282,61 @@ test("database-changing ticket reaches the release sequence alone", async () => 
   assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
 });
 
+test("a saved wait for another workflow run validates; malformed notes are rejected", async () => {
+  const batch = await selectedBatch();
+  const execution = await executeRelease({
+    batch,
+    client: client([]),
+    guard: async () => {},
+    save: async () => {}
+  });
+  const record = Object.values(execution.operations).find(
+    (value) => value.step.kind !== "integrate"
+  );
+  const waited = {
+    purpose: "dispatch",
+    first_seen_at: "2026-09-18T10:00:00.000Z",
+    runs: [
+      {
+        id: 555,
+        url: "https://github.com/6529-Collections/release-coordinator-test-backend/actions/runs/555",
+        status: "in_progress",
+        actor: "alice"
+      }
+    ],
+    checks: 3,
+    quiet_at: "2026-09-18T10:00:20.000Z"
+  };
+  record.waited_for = waited;
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+  record.waited_for = {
+    purpose: "merge",
+    first_seen_at: waited.first_seen_at,
+    runs: waited.runs
+  };
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+  for (const bad of [
+    null,
+    { ...waited, runs: [] },
+    { ...waited, purpose: "deploy" },
+    { ...waited, first_seen_at: "soon" },
+    { ...waited, runs: [{ ...waited.runs[0], status: "completed" }] },
+    {
+      ...waited,
+      runs: [{ ...waited.runs[0], url: "https://example.invalid/run" }]
+    },
+    { ...waited, runs: [{ ...waited.runs[0], actor: 7 }] },
+    { ...waited, checks: 0 },
+    { ...waited, quiet_at: "later" }
+  ]) {
+    record.waited_for = bad;
+    assert.throws(
+      () => validateReleaseExecution(execution, batch),
+      /Invalid saved wait/u
+    );
+  }
+});
+
 test("a failed database-changing release stops for a person without staging restoration", async () => {
   const batch = await selectedBatch({ database: true });
   for (const input of batch.inputs) input.target = "production";

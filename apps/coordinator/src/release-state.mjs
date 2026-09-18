@@ -13,6 +13,45 @@ import { serviceAssert, serviceHash } from "./service-contract.mjs";
 const uuid = (value) =>
   /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(value ?? "");
 
+// GitHub workflow-run statuses that still hold or wait for a concurrency slot.
+export const activeWorkflowRunStatuses = Object.freeze([
+  "in_progress",
+  "queued",
+  "waiting",
+  "pending",
+  "requested"
+]);
+
+// A step that found someone else's active workflow run records what it waited
+// for before its merge or dispatch. Older records without this note stay valid.
+function validateWaitedFor(record) {
+  if (!Object.hasOwn(record, "waited_for")) return;
+  const waited = record.waited_for;
+  serviceAssert(
+    waited &&
+      typeof waited === "object" &&
+      !Array.isArray(waited) &&
+      ["dispatch", "merge"].includes(waited.purpose) &&
+      Number.isFinite(Date.parse(waited.first_seen_at)) &&
+      Array.isArray(waited.runs) &&
+      waited.runs.length > 0 &&
+      waited.runs.every(
+        (run) =>
+          Number.isSafeInteger(run?.id) &&
+          run.id > 0 &&
+          /^https:\/\/github\.com\//u.test(run.url ?? "") &&
+          activeWorkflowRunStatuses.includes(run.status) &&
+          (run.actor === null || typeof run.actor === "string")
+      ) &&
+      (waited.checks === undefined ||
+        (Number.isSafeInteger(waited.checks) && waited.checks > 0)) &&
+      (waited.quiet_at === undefined ||
+        Number.isFinite(Date.parse(waited.quiet_at))),
+    "release-state",
+    "Invalid saved wait for active workflow runs."
+  );
+}
+
 export function validateReleaseExecution(execution, batch) {
   serviceAssert(
     execution?.version === 1 &&
@@ -76,6 +115,7 @@ export function validateReleaseExecution(execution, batch) {
       "Invalid or repeated sandbox release step state."
     );
     ids.add(record.id);
+    validateWaitedFor(record);
     const hasIntegrationCommit = Object.hasOwn(record, "integration_commit");
     const hasIntegrationInput = Object.hasOwn(record, "integration_input");
     const hasIntegrationVersion = Object.hasOwn(record, "integration_version");
@@ -261,6 +301,7 @@ function validateRecovery(execution, batch, ids) {
       "Invalid or repeated restoration operation."
     );
     ids.add(record.id);
+    validateWaitedFor(record);
     if (step.kind === "integrate") {
       serviceAssert(
         !record.restore_to ||
