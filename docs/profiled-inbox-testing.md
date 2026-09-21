@@ -232,8 +232,10 @@ The inbox accepts `staging` or `production`; one shared mapping turns
 Each integration uses a protected PR and required `Sandbox check`. Each workflow
 result must match the saved release ID, operation ID, operation input hash, exact
 commits, environment, role, unit, runner repository, run, attempt, and every
-fixed workflow/runtime file at the exact environment commit. The journal saves
-an operation before dispatch and its verified
+fixed workflow/runtime file. The default `product-workflows` adapter checks those
+files at each operation's exact source commit. The explicit `generic` fallback
+checks them at the target environment commit. The journal saves an operation
+before dispatch and its verified
 result afterward. Resume reuses a completed matching operation; it does not run
 it again. A confirmed failure stops later steps and marks the release for a
 person. Confirmed no-database-change failures after a test environment changed

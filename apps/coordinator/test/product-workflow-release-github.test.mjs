@@ -165,6 +165,11 @@ function directHarness(
             ...priorRuns
           ]
         });
+      if (query.get("per_page") === "1")
+        return apiResponse("200 OK", {
+          total_count: priorRuns.length,
+          workflow_runs: priorRuns.slice(0, 1)
+        });
       return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
     }
     if (method === "POST" && endpoint.endsWith("/dispatches")) {
@@ -343,6 +348,19 @@ test("a fresh manual operation cannot adopt an older matching workflow run", asy
   });
   assert.equal(result.status, "passed");
   assert.equal(result.workflow.id, harness.run.id);
+  assert.equal(harness.record.dispatch_after_run_id, priorRun.id);
+  assert.equal(
+    harness.calls.some(({ endpoint }) => {
+      if (
+        !endpoint.includes("/actions/workflows/") ||
+        !endpoint.includes("/runs?")
+      )
+        return false;
+      const query = new URL(`https://example.invalid/${endpoint}`).searchParams;
+      return query.get("head_sha") === commits.backend;
+    }),
+    true
+  );
   assert.equal(
     harness.calls.filter(
       (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
@@ -849,7 +867,10 @@ test("product-shaped reports reject a deployment artifact that is not the saved 
     frontend_commit: commits.frontend
   });
   const report = dependencyReport(operation, "backend", 901, "api");
-  report.builds.backend.artifact.name = "forged";
+  report.builds.backend.artifact = {
+    ...report.builds.backend.artifact,
+    name: "forged"
+  };
   assert.throws(
     () => verifyProductWorkflowReport(report, operation),
     /does not match its saved operation/u

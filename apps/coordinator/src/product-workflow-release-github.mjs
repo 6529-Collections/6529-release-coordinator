@@ -536,7 +536,8 @@ export function createProductWorkflowReleaseGitHub({
   async function findDirectRun(descriptor, workflowIdentity, actor, record) {
     const runs = await listRuns(descriptor.role, descriptor.workflow, {
       event: descriptor.event,
-      branch: descriptor.ref
+      branch: descriptor.ref,
+      head_sha: descriptor.sourceCommit
     });
     const matches = runs.filter(
       (run) =>
@@ -761,8 +762,24 @@ export function createProductWorkflowReleaseGitHub({
         "dispatch"
       );
       await verifyEnvironment(operation, "dispatch");
-      const recent = await listRuns(descriptor.role, descriptor.workflow);
-      record.dispatch_after_run_id = Math.max(0, ...recent.map(({ id }) => id));
+      const newest = (
+        await call(
+          descriptor.role,
+          "GET",
+          `/actions/workflows/${descriptor.workflow}/runs?per_page=1`
+        )
+      ).data;
+      serviceAssert(
+        Number.isSafeInteger(newest?.total_count) &&
+          newest.total_count >= 0 &&
+          Array.isArray(newest.workflow_runs) &&
+          newest.workflow_runs.length === Math.min(newest.total_count, 1) &&
+          (newest.workflow_runs.length === 0 ||
+            positive(newest.workflow_runs[0]?.id)),
+        "release-workflow",
+        "Product-shaped workflow dispatch boundary is unreadable."
+      );
+      record.dispatch_after_run_id = newest.workflow_runs[0]?.id ?? 0;
       record.state = "dispatching";
       await save();
       await call(
