@@ -37,6 +37,15 @@ test("adapter evidence uses canonical dated names and progress links", () => {
       validateAdapterEvidence({
         gate,
         progress: pending,
+        testingFiles: ["adapter-recovery-2026-02-30.md"]
+      }),
+    /dated canonical filename/u
+  );
+  assert.throws(
+    () =>
+      validateAdapterEvidence({
+        gate,
+        progress: pending,
         testingFiles: ["adapter-success-path-2026-13-01.md"]
       }),
     /dated canonical filename/u
