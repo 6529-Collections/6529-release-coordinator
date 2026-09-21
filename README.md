@@ -195,8 +195,11 @@ path now merged into `main` through
 [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149).
 Continue using the test repositories for any follow-up sandbox work. Replacing
 the sandbox adapters with narrow calls to existing product Actions remains a
-later, separately authorized stage. This repository still has no permission or
-adapter that merges or deploys the real products.
+later, separately authorized stage. Product-shaped test workflow interfaces are
+merged through frontend test PR #92 and backend test PR #100 so that adapter
+behavior can be learned against fake deployments first. The current Coordinator
+does not consume them yet. This repository still has no permission or adapter
+that merges or deploys the real products.
 
 Sandbox recovery uses protected new commits undoing the failed batch and
 ordinary build/E2E checks when no database change is confirmed. Staging

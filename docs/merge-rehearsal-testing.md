@@ -443,6 +443,32 @@ The real backend was inspected at `main` commit
 These observations inform test fidelity, not a requirement to copy the earlier
 Release Bus architecture. Recheck product adapters before any future real use.
 
+### Product-shaped workflow mirror
+
+The existing `sandbox-release.yml` remains the currently implemented Coordinator
+interface. Frontend test PR #92 and backend test PR #100 merged a second,
+deliberately unused interface whose outside shape matches the current product workflows:
+workflow filenames and names, dispatch inputs, staging/main branch rules,
+concurrency groups, canonical deploy job names, and the successful deploy run ID
+passed into frontend E2E. Static contract checks keep those required names visible
+inside each sample repository.
+
+The mirror does not copy product deployment internals. Each deploy builds the
+small sample package and uploads exact fake deployment evidence; frontend E2E
+downloads evidence from the selected deploy run, verifies its source identity,
+and executes the built sample output. No product credentials or targets are
+present. The daily production canary schedule is outside the Coordinator contract
+and is not copied. The real workflow inputs were compared with the proposed test
+workflows on September 21; future drift must be checked again before real adapter
+work.
+
+The source PRs are merged, but acceptance for this mirror is not complete until
+protected test-branch runs prove staging deploy -> exact staging E2E and production
+deploy -> exact production E2E, along with backend service and monitoring dispatches.
+Only after that should the sandbox profile gain a new adapter that calls the
+separate mirrored workflows. Keep the generic adapter until the new path has
+equivalent journal, stop and recovery evidence.
+
 ### Small executable example
 
 The sample backend contains database setup/change definitions, a worker, and an
