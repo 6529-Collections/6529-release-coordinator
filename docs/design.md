@@ -464,13 +464,16 @@ starts. After any in-flight-run wait is quiet, the final GitHub read before the
 dispatch call must re-read frontend `main`, verify it still represents the
 approved production composition, and pass that exact commit. It must not reuse
 an earlier staging read. Any mismatch ends the attempt. Save it, keep the lane
-for a person, and require explicit authorization plus fresh matching evidence
-for a new attempt; never reuse the newer SHA, omit the input or deploy the newer
-composition. Adapter tests must cover the exact input, refuse an omitted or
-malformed input on the Coordinator path, repeat the final ref read after a wait,
-and treat a workflow source mismatch as a stop before accepting any build. This
-closes the source race inside the workflow, but it does not build or authorize
-the real adapter and it is not deployment proof.
+for a person, mark the ticket `status:action-needed` with
+`reason:release-failed`, and require explicit authorization plus fresh matching
+evidence for a new attempt; never reuse the newer SHA, omit the input or deploy
+the newer composition. The failed guard changes no environment, so the
+[failure and recovery rules](#failure-and-recovery-rules) start with saving and
+revalidation, not a source revert. Adapter tests must cover the exact input,
+refuse an omitted or malformed input on the Coordinator path, repeat the final
+ref read after every wait, and treat a workflow source mismatch as a stop before
+accepting any build. This closes the source race inside the workflow, but it does
+not build or authorize the real adapter and it is not deployment proof.
 
 ## Core rule: one release lane
 
@@ -777,11 +780,16 @@ how the apps receive configuration.
    of frontend `main`, confirm that it still represents the approved production
    composition, then dispatch `Web Deploy - PROD` with `expected_source_sha` set
    to that exact commit. Do this for every selected frontend production dispatch,
-   even when no frontend merge was needed. If no frontend deployment is selected,
-   record the actual deployed frontend instead of claiming the guard ran. Preserve
-   existing release-note grouping. Any mismatch ends the attempt. Save it, keep
+   even when no frontend merge was needed. Repeat the quiet check and final ref
+   read before each dispatch; one read does not cover a later dispatch. If no
+   frontend deployment is selected, save the actual frontend version in the
+   release record's deployed-version evidence using the verified runtime source
+   required by steps 2 and 6, not a staging or `main` ref, and do not claim the
+   guard ran. Preserve existing release-note grouping. Any mismatch ends the
+   attempt. Save it as `status:action-needed` with `reason:release-failed`, keep
    the lane for a person, and require explicit authorization plus fresh matching
-   evidence for a new attempt; never reuse the newer SHA.
+   evidence for a new attempt; never reuse the newer SHA. Because the guard stops
+   before a build, no source revert starts automatically.
 6. Confirm exact running versions and existing health checks, and wait for the
    configured required production-safe E2E results.
 7. Save the result before closing the successful release and freeing its lane.
