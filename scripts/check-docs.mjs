@@ -28,9 +28,18 @@ function adapterLinks(progress) {
   const links = [];
   for (const match of progress.matchAll(markdownLink)) {
     const contents = match[1].trim();
-    const destinationWithSuffix = contents.startsWith("<")
-      ? contents.slice(1, contents.indexOf(">"))
-      : contents.split(/\s/u, 1)[0];
+    let destinationWithSuffix;
+    if (contents.startsWith("<")) {
+      const close = contents.indexOf(">");
+      assert.notEqual(
+        close,
+        -1,
+        "Angle-bracket Markdown link in docs/progress.md needs a closing >"
+      );
+      destinationWithSuffix = contents.slice(1, close);
+    } else {
+      destinationWithSuffix = contents.split(/\s/u, 1)[0];
+    }
     const destination = destinationWithSuffix.split(/[?#]/u, 1)[0];
     const name = path.posix.basename(destination);
     if (!recordPrefix.test(name)) continue;
@@ -48,7 +57,12 @@ function adapterLinks(progress) {
   return links;
 }
 
-export function validateAdapterEvidence({ gate, progress, testingFiles }) {
+export function validateAdapterEvidence({
+  gate,
+  otherDocsFiles = [],
+  progress,
+  testingFiles
+}) {
   for (const name of documentedPatterns) {
     assert.ok(
       gate.includes(`\`${name}\``),
@@ -65,6 +79,12 @@ export function validateAdapterEvidence({ gate, progress, testingFiles }) {
     assert.ok(
       isRecord(name),
       `Adapter acceptance record must use a dated canonical filename: ${name}`
+    );
+  }
+  for (const name of otherDocsFiles) {
+    assert.ok(
+      !recordPrefix.test(path.posix.basename(name)),
+      `Adapter acceptance filename prefixes are reserved for docs/testing/: ${name}`
     );
   }
 
@@ -87,14 +107,31 @@ export function validateAdapterEvidence({ gate, progress, testingFiles }) {
   }
 }
 
+function filesBelow(directory, prefix = "") {
+  const files = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const name = path.posix.join(prefix, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...filesBelow(path.join(directory, entry.name), name));
+    } else if (entry.isFile()) {
+      files.push(name);
+    }
+  }
+  return files;
+}
+
 export function readAdapterEvidence(root) {
+  const docs = path.join(root, "docs");
   return {
     gate: readFileSync(
       path.join(root, "docs/merge-rehearsal-testing.md"),
       "utf8"
     ),
+    otherDocsFiles: filesBelow(docs).filter(
+      (name) => !name.startsWith("testing/")
+    ),
     progress: readFileSync(path.join(root, "docs/progress.md"), "utf8"),
-    testingFiles: readdirSync(path.join(root, "docs/testing"))
+    testingFiles: readdirSync(path.join(docs, "testing"))
   };
 }
 

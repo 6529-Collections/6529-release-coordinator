@@ -80,6 +80,25 @@ test("adapter evidence uses canonical dated names and progress links", () => {
   assert.throws(
     () =>
       validateAdapterEvidence({
+        gate,
+        otherDocsFiles: ["history/adapter-recovery-2026-09-21.md"],
+        progress: pending,
+        testingFiles: []
+      }),
+    /reserved for docs\/testing/u
+  );
+  assert.throws(
+    () =>
+      validateAdapterEvidence({
+        gate,
+        progress: `${pending}\n[Success](<./testing/${success})`,
+        testingFiles: [success]
+      }),
+    /needs a closing >/u
+  );
+  assert.throws(
+    () =>
+      validateAdapterEvidence({
         gate: "No filename contract.",
         progress: pending,
         testingFiles: []

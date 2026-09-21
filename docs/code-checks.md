@@ -35,7 +35,8 @@ The install downloads locked dependencies. The check command then runs:
    The `adapter-success-path` and `adapter-recovery` filename prefixes are
    reserved for these dated acceptance records; notes and history files must use
    other names. The retirement contract intentionally keeps the authoritative
-   records in `docs/testing/`, not `docs/history/`.
+   records in `docs/testing/`, not `docs/history/`; the check scans the rest of
+   `docs/` to enforce that boundary. Malformed angle-bracket links also fail.
 5. `npm run check:workflows`: parses all workflow YAML and verifies job permissions,
    triggers, pinned actions, the required result, and publishing/intake boundaries.
    It also verifies the CodeQL analysis and fixed automatic review set below.
