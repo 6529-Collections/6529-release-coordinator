@@ -65,6 +65,8 @@ function deploymentsMatch(report, operation, requiredRoles) {
     })
   )
     return false;
+  // A failed workflow can stop before it creates an artifact. Validate every
+  // deployment it did report, but require the complete role set only on pass.
   return (
     report.status !== "passed" ||
     (entries.length === requiredRoles.length &&
@@ -98,6 +100,8 @@ export function verifyProductWorkflowReport(report, operation) {
   const buildEntries = object(report?.builds)
     ? Object.entries(report.builds)
     : [];
+  // Like deployments, failed workflows may legitimately have no build yet.
+  // Every supplied build is still validated and bound to supplied deployment.
   const buildsValid = buildEntries.every(([role, build]) => {
     try {
       const deployment = report.deployments?.[role];

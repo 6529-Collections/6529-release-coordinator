@@ -8,7 +8,7 @@ export const sandboxReleaseAdapters = Object.freeze([
 ]);
 
 export function selectSandboxReleaseAdapter(value) {
-  const selected = value || "product-workflows";
+  const selected = value === undefined ? "product-workflows" : value;
   serviceAssert(
     sandboxReleaseAdapters.includes(selected),
     "release-runtime",
@@ -19,7 +19,10 @@ export function selectSandboxReleaseAdapter(value) {
 
 export function createSandboxReleaseGitHub({ adapter, ...options } = {}) {
   const selected = selectSandboxReleaseAdapter(adapter);
-  return selected === "product-workflows"
-    ? createProductWorkflowReleaseGitHub(options)
-    : createReleaseGitHub(options);
+  const client =
+    selected === "product-workflows"
+      ? createProductWorkflowReleaseGitHub(options)
+      : createReleaseGitHub(options);
+  client.releaseAdapter = selected;
+  return client;
 }

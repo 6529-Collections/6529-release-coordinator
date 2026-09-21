@@ -60,8 +60,19 @@ export async function processInbox({
     { step: "journal.acquire", message: "Acquire the inbox journal lock." },
     () => journal.acquire(actor, resume, scope)
   );
+  bindRunLog(run.run_id, Boolean(resume));
+  serviceAssert(
+    run.scope &&
+      state.lock?.scope &&
+      typeof state.lock.scope === "object" &&
+      !Array.isArray(state.lock.scope) &&
+      (run.scope.issue_number === null || isNumber(run.scope.issue_number)) &&
+      typeof run.scope.close_test === "boolean",
+    "run-scope",
+    "The saved inbox run has no valid Issue selection or action."
+  );
   if (releaseAdapter) {
-    const savedAdapter = run.scope?.release_adapter ?? "generic";
+    const savedAdapter = run.scope.release_adapter ?? "generic";
     serviceAssert(
       savedAdapter === releaseAdapter,
       "release-adapter",
@@ -73,14 +84,6 @@ export async function processInbox({
       await journal.save(state, run, "record legacy sandbox release adapter");
     }
   }
-  bindRunLog(run.run_id, Boolean(resume));
-  serviceAssert(
-    run.scope &&
-      (run.scope.issue_number === null || isNumber(run.scope.issue_number)) &&
-      typeof run.scope.close_test === "boolean",
-    "run-scope",
-    "The saved inbox run has no valid Issue selection or action."
-  );
   issueNumber = run.scope.issue_number ?? undefined;
   closeTest = run.scope.close_test;
   const results = [];

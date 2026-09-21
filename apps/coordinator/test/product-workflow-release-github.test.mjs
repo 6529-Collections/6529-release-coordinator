@@ -8,6 +8,7 @@ import {
 } from "../src/release-contract.mjs";
 import {
   productWorkflowReleaseAdapter,
+  verifySavedReleaseReport,
   verifyProductWorkflowReport
 } from "../src/product-workflow-contract.mjs";
 import { createProductWorkflowReleaseGitHub } from "../src/product-workflow-release-github.mjs";
@@ -95,7 +96,12 @@ function runFixture(
 function directHarness(
   descriptor,
   operation,
-  { conclusion = "success", priorRuns = [], mutateManifest } = {}
+  {
+    boundaryResponse,
+    conclusion = "success",
+    priorRuns = [],
+    mutateManifest
+  } = {}
 ) {
   const calls = [];
   let dispatched = false;
@@ -156,10 +162,15 @@ function directHarness(
       if (query.has("status"))
         return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
       if (query.get("per_page") === "1")
-        return apiResponse("200 OK", {
-          total_count: priorRuns.length,
-          workflow_runs: priorRuns.slice(0, 1)
-        });
+        return apiResponse(
+          "200 OK",
+          boundaryResponse ?? {
+            // This branch simulates GitHub's already-filtered newest-first
+            // response to the exact event/branch/head_sha query.
+            total_count: priorRuns.length,
+            workflow_runs: priorRuns.slice(0, 1)
+          }
+        );
       if (query.has("event"))
         return apiResponse("200 OK", {
           total_count:
@@ -305,6 +316,66 @@ test("product workflow contract keeps staging services on 1a-staging and staging
   );
 });
 
+test("product workflow integration waits for its pinned workflows to become quiet", async () => {
+  let quiet = false;
+  let waits = 0;
+  let integrations = 0;
+  let saves = 0;
+  const blockingRun = {
+    id: 490,
+    html_url: "https://example.invalid/runs/490",
+    status: "queued",
+    actor: { login: "another-operator" }
+  };
+  const execute = async (args) => {
+    const endpoint = args[args.indexOf("--method") + 2];
+    if (
+      endpoint.includes("/actions/workflows/") &&
+      endpoint.includes("/runs?")
+    ) {
+      const query = new URL(`https://example.invalid/${endpoint}`).searchParams;
+      const runs =
+        !quiet && endpoint.includes("/deploy.yml/") && !query.has("status")
+          ? [blockingRun]
+          : [];
+      return apiResponse("200 OK", {
+        total_count: runs.length,
+        workflow_runs: runs
+      });
+    }
+    throw new Error(`Unexpected endpoint ${endpoint}`);
+  };
+  const client = createProductWorkflowReleaseGitHub({
+    profile: sandboxProfile,
+    execute,
+    base: {
+      integrate: async () => {
+        integrations++;
+        return { status: "passed" };
+      }
+    },
+    wait: async () => {
+      waits++;
+      quiet = true;
+    },
+    pollMs: 0
+  });
+  const record = { step: { role: "backend" } };
+  const result = await client.integrate({
+    record,
+    save: async () => {
+      saves++;
+    }
+  });
+  assert.deepEqual(result, { status: "passed" });
+  assert.equal(waits, 1);
+  assert.equal(integrations, 1);
+  assert.equal(saves, 1);
+  assert.equal(record.waited_for.runs[0].id, blockingRun.id);
+  assert.equal(record.waited_for.checks, 2);
+  assert.ok(record.waited_for.quiet_at);
+});
+
 test("a fresh manual operation cannot adopt an older matching workflow run", async () => {
   const operation = makeReleaseOperation({
     release_id: "12121212-1212-4212-8212-121212121212",
@@ -423,6 +494,54 @@ test("a resumed manual operation cannot adopt any run without its saved dispatch
   );
 });
 
+test("an inconsistent newest-run response stops before dispatch", async () => {
+  const operation = makeReleaseOperation({
+    release_id: "89898989-8989-4989-8989-898989898989",
+    operation_id: "90909090-9090-4090-8090-909090909090",
+    operation: "monitoring",
+    environment: "prod",
+    role: "backend",
+    unit: "monitoring",
+    monitoring_environment: "prod",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "monitoring",
+    role: "backend",
+    buildRole: "monitoring",
+    environment: "prod",
+    sourceCommit: commits.backend,
+    ref: "main",
+    event: "workflow_dispatch",
+    workflow: "deploy-operational-monitoring.yml",
+    workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
+    title: "Deploy operational monitoring",
+    unit: null,
+    jobs: ["monitoring"]
+  };
+  const harness = directHarness(descriptor, operation, {
+    boundaryResponse: { total_count: 1, workflow_runs: [] }
+  });
+  await assert.rejects(
+    harness.client.run({
+      record: harness.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [harness.record.step],
+      save: async () => {}
+    }),
+    /dispatch boundary is unreadable/u
+  );
+  assert.equal(
+    harness.calls.some(
+      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+    ),
+    false
+  );
+});
+
 test("a changed staging frontend adopts its automatic push deployment without dispatching another", async () => {
   const operation = makeReleaseOperation({
     release_id: "55555555-5555-4555-8555-555555555555",
@@ -512,6 +631,15 @@ test("a confirmed product-shaped workflow failure returns failed evidence for re
   assert.deepEqual(result.report.builds, {});
   assert.deepEqual(result.report.deployments, {});
   assert.equal(result.report.checks[0].status, "failed");
+  assert.equal(
+    verifyProductWorkflowReport(result.report, operation),
+    result.report
+  );
+  const explicitNoInstall = { ...result.report, installed: null };
+  assert.equal(
+    verifyProductWorkflowReport(explicitNoInstall, operation),
+    explicitNoInstall
+  );
 });
 
 test("a monitoring build without its target template fails with a specific evidence error", async () => {
@@ -917,4 +1045,45 @@ test("product-shaped reports reject malformed and partial contract evidence", ()
       name
     );
   }
+});
+
+test("failed non-monitoring reports reject installed evidence", () => {
+  const operation = makeReleaseOperation({
+    release_id: "30303030-3030-4030-8030-303030303030",
+    operation_id: "40404040-4040-4040-8040-404040404040",
+    operation: "deploy",
+    environment: "staging",
+    role: "backend",
+    unit: "api",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const report = dependencyReport(operation, "backend", 903, "api");
+  report.status = "failed";
+  report.checks[0].status = "failed";
+  assert.equal(verifyProductWorkflowReport(report, operation), report);
+  report.installed = null;
+  assert.throws(
+    () => verifyProductWorkflowReport(report, operation),
+    /does not match its saved operation/u
+  );
+});
+
+test("reports with product deployment fields cannot route as generic", () => {
+  const operation = makeReleaseOperation({
+    release_id: "50505050-5050-4050-8050-505050505050",
+    operation_id: "60606060-6060-4060-8060-606060606060",
+    operation: "deploy",
+    environment: "staging",
+    role: "backend",
+    unit: "api",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const report = dependencyReport(operation, "backend", 904, "api");
+  delete report.adapter;
+  assert.throws(
+    () => verifySavedReleaseReport(report, operation),
+    /Unknown sandbox release report adapter/u
+  );
 });

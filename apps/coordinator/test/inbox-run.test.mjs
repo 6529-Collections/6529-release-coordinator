@@ -695,6 +695,44 @@ test("resuming a legacy interrupted run preserves its recorded plan while upgrad
   assert.equal(f.state().lock, null);
 });
 
+test("a legacy sandbox run requires and records the explicit generic adapter on resume", async () => {
+  const f = fixture(sandboxProfile);
+  const input = await inputPlan(f);
+  const legacy = createJournal(f.api, f.profile, { workflow: "inbox-run-v1" });
+  const { run } = await legacy.acquire(await f.identity(), undefined, {
+    workflow: "inbox-run-v1",
+    issue_number: 1,
+    close_test: false,
+    merge_plan: input
+  });
+  const defaultResume = await invoke(f, {
+    args: ["--resume", run.run_id, "--json"],
+    plan: async () => assert.fail("adapter mismatch must stop before planning"),
+    rehearse: async () =>
+      assert.fail("adapter mismatch must stop before rehearsal")
+  });
+  assert.equal(defaultResume.code, 2);
+  assert.equal(f.state().lock.scope.release_adapter, undefined);
+  let observed = 0;
+  const genericResume = await invoke(f, {
+    args: ["--resume", run.run_id, "--json"],
+    env: {
+      RELEASE_COORDINATOR_PROFILE: "sandbox",
+      RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER: "generic"
+    },
+    plan: async () => assert.fail("must preserve the legacy run scope"),
+    rehearse: async (entry, plan) => {
+      observed++;
+      assert.equal(f.state().lock.scope.release_adapter, "generic");
+      assert.deepEqual(plan, input);
+      return fakeReport(entry, plan, f.profile);
+    }
+  });
+  assert.equal(genericResume.code, 0);
+  assert.equal(observed, 1);
+  assert.equal(f.state().lock, null);
+});
+
 test("legacy service verification uses its saved plan and still detects destination movement", async () => {
   const f = fixture();
   const input = await inputPlan(f);

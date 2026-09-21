@@ -14,18 +14,29 @@ test("the product-workflow adapter is the sandbox default and generic remains an
     "product-workflows"
   );
   assert.throws(
+    () => selectSandboxReleaseAdapter(""),
+    /must be generic or product-workflows/u
+  );
+  assert.throws(
     () => selectSandboxReleaseAdapter("real"),
     /must be generic or product-workflows/u
   );
 });
 
-test("the product-workflow selection creates only a sandbox client", () => {
-  const client = createSandboxReleaseGitHub({
-    adapter: "product-workflows",
+test("construction preserves the selected sandbox adapter identity", () => {
+  const productClient = createSandboxReleaseGitHub({
     profile: sandboxProfile,
     base: {}
   });
-  assert.equal(typeof client.identity, "function");
-  assert.equal(typeof client.integrate, "function");
-  assert.equal(typeof client.run, "function");
+  const genericClient = createSandboxReleaseGitHub({
+    adapter: "generic",
+    profile: sandboxProfile
+  });
+  assert.equal(productClient.releaseAdapter, "product-workflows");
+  assert.equal(genericClient.releaseAdapter, "generic");
+  for (const client of [productClient, genericClient]) {
+    assert.equal(typeof client.identity, "function");
+    assert.equal(typeof client.integrate, "function");
+    assert.equal(typeof client.run, "function");
+  }
 });
