@@ -69,9 +69,10 @@ release call with a test-profile adapter that dispatches those separate backend,
 monitoring, frontend and E2E workflows. The existing generic sandbox workflow
 stays available until that adapter satisfies the
 [separate-workflow adapter retirement gate](./merge-rehearsal-testing.md#separate-workflow-adapter-retirement-gate).
-Adapter retirement evidence remains pending: no dated adapter success-path or
-controlled-failure recovery acceptance record exists yet. The September 21
-record proves the mirror interface itself; it does not satisfy either of the two
+Adapter retirement evidence remains pending: neither the dated
+`adapter-success-path-YYYY-MM-DD.md` record nor the dated
+`adapter-recovery-YYYY-MM-DD.md` record exists yet. The September 21 record
+proves the mirror interface itself; it does not satisfy either of the two
 required adapter acceptance records.
 Do not connect the Coordinator to real product execution yet. Real adapters
 (including the real monitoring adapter, which must dispatch the backend's
