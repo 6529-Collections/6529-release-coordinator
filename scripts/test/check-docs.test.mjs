@@ -16,7 +16,7 @@ test("adapter evidence uses canonical dated names and progress links", () => {
 
   const success = "adapter-success-path-2026-09-21.md";
   const recovery = "adapter-recovery-2026-09-22.md";
-  const progress = `${pending}\n[Success](./testing/${success})\n[Recovery](testing/${recovery}#result)`;
+  const progress = `${pending}\n[Success](<./testing/${success}> "result")\n[Recovery](testing/${recovery}#result)`;
   validateAdapterEvidence({
     gate,
     progress,

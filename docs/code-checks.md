@@ -29,7 +29,9 @@ The install downloads locked dependencies. The check command then runs:
 4. `npm run check:docs`: keeps the two adapter-acceptance record names dated and
    canonical, requires any such record under `docs/testing/` to be linked from
    progress exactly once, and rejects invalid calendar dates, missing link
-   targets, and links outside the docs-relative `testing/` directory.
+   targets, and links outside the docs-relative `testing/` directory. Plain and
+   angle-bracket Markdown destinations, optional link titles, query strings and
+   anchors are normalized before the check.
    The `adapter-success-path` and `adapter-recovery` filename prefixes are
    reserved for these dated acceptance records; notes and history files must use
    other names. The retirement contract intentionally keeps the authoritative

@@ -10,7 +10,7 @@ const documentedPatterns = [
   "adapter-recovery-YYYY-MM-DD.md"
 ];
 const recordPrefix = /^adapter-(?:recovery|success-path)/u;
-const markdownLink = /\]\(([^)\s]+)\)/gu;
+const markdownLink = /\]\(([^)\n]*)\)/gu;
 
 function isRecord(name) {
   const match = name.match(canonicalRecord);
@@ -27,7 +27,11 @@ function isRecord(name) {
 function adapterLinks(progress) {
   const links = [];
   for (const match of progress.matchAll(markdownLink)) {
-    const destination = match[1].split(/[?#]/u, 1)[0];
+    const contents = match[1].trim();
+    const destinationWithSuffix = contents.startsWith("<")
+      ? contents.slice(1, contents.indexOf(">"))
+      : contents.split(/\s/u, 1)[0];
+    const destination = destinationWithSuffix.split(/[?#]/u, 1)[0];
     const name = path.posix.basename(destination);
     if (!recordPrefix.test(name)) continue;
     assert.ok(
