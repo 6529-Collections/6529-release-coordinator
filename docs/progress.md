@@ -73,7 +73,9 @@ Adapter retirement evidence remains pending: neither the dated
 `adapter-success-path-YYYY-MM-DD.md` record nor the dated
 `adapter-recovery-YYYY-MM-DD.md` record exists yet. The September 21 record
 proves the mirror interface itself; it does not satisfy either of the two
-required adapter acceptance records.
+required adapter acceptance records. The repository check enforces those dated
+filename patterns, existing link targets and progress links for any future
+adapter acceptance record.
 Do not connect the Coordinator to real product execution yet. Real adapters
 (including the real monitoring adapter, which must dispatch the backend's
 `Deploy operational monitoring` workflow with the exact merged `main` commit

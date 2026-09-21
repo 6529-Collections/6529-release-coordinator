@@ -56,6 +56,7 @@ if (
       "lint",
       "format:check",
       "test",
+      "check:docs",
       "check:workflows",
       "check:package"
     ]) {
