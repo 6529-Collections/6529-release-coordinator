@@ -448,6 +448,35 @@ and [`Deploy a service`](https://github.com/6529-Collections/6529seize-backend/b
 These are source observations, not deployments performed in this review.
 The retired Release Bus has no design authority here.
 
+Frontend [PR #4072](https://github.com/6529-Collections/6529seize-frontend/pull/4072)
+merged on September 21 at `7471ac113cb2535940b19f036bf38f47f4d44eb6`.
+The real
+[`Web Deploy - PROD`](https://github.com/6529-Collections/6529seize-frontend/blob/7471ac113cb2535940b19f036bf38f47f4d44eb6/.github/workflows/build-upload-deploy-prod.yml)
+workflow now accepts an optional
+`expected_source_sha`. An ordinary manual dispatch may leave it empty and keeps
+the previous behavior under the repository's existing human authorization. That
+empty-input path is deliberate manual compatibility, not a path the Coordinator
+may use. This manual behavior is a source observation read back from frontend
+PR #4072, not a guarantee the Coordinator enforces. When the input is provided,
+it must be a full lowercase commit SHA and must match the `main` commit GitHub
+fixed for that run; otherwise the workflow stops before the production build
+starts. After any in-flight-run wait is quiet, the final GitHub read before the
+dispatch call must re-read frontend `main`, verify it still represents the
+approved production composition, and pass that exact commit. It must not reuse
+an earlier staging read. Any mismatch ends the attempt. Save it, keep the lane
+for a person, mark the ticket
+[`status:action-needed`](./inbox-processing.md#status-labels) with
+[`reason:release-failed`](./inbox-processing.md#reason-and-scope-labels), and
+require explicit authorization plus fresh matching
+evidence for a new attempt; never reuse the newer SHA, omit the input or deploy
+the newer composition. The failed guard changes no environment, so the
+[failure and recovery rules](#failure-and-recovery-rules) start with saving and
+revalidation, not a source revert. Adapter tests must cover the exact input,
+refuse an omitted or malformed input on the Coordinator path, repeat the final
+ref read after every wait, and treat a workflow source mismatch as a stop before
+accepting any build. This closes the source race inside the workflow, but it does
+not build or authorize the real adapter and it is not deployment proof.
+
 ## Core rule: one release lane
 
 Many requests may wait, but only one release batch progresses at a time.
@@ -748,8 +777,26 @@ how the apps receive configuration.
    `staging` and then `prod`, first. Then dispatch `Deploy a service` with
    `environment=prod`, one selected application service at a time in dependency
    order.
-5. After backend prerequisites pass, merge frontend changes into `main` and
-   dispatch `Web Deploy - PROD`. Preserve existing release-note grouping.
+5. After backend prerequisites pass, merge selected frontend changes into `main`
+   when a merge is required. Then complete a separate sequence for every selected
+   frontend production dispatch: wait for conflicting runs; after that wait is
+   quiet, make the final GitHub read of frontend `main`; confirm it still
+   represents the approved production composition; and dispatch
+   `Web Deploy - PROD` with `expected_source_sha` set to that exact commit. This
+   sequence also applies when no frontend merge was needed. `N` dispatches require
+   `N` complete quiet-check-and-final-read pairs; evidence from one dispatch does
+   not cover a later dispatch. If no frontend deployment is selected, save the
+   actual frontend version in the release record's deployed-version evidence from
+   the trusted runtime-version contract selected under
+   [Remaining integration decisions](#remaining-integration-decisions), not a
+   staging or `main` ref, and do not claim the guard ran. That contract must be
+   chosen and verified before the real adapter is implemented. Preserve existing
+   release-note grouping. Any mismatch ends the attempt. Save it as
+   [`status:action-needed`](./inbox-processing.md#status-labels) with
+   [`reason:release-failed`](./inbox-processing.md#reason-and-scope-labels), keep
+   the lane for a person, and require explicit authorization plus fresh matching
+   evidence for a new attempt; never reuse the newer SHA. Because the guard stops
+   before a build, no source revert starts automatically.
 6. Confirm exact running versions and existing health checks, and wait for the
    configured required production-safe E2E results.
 7. Save the result before closing the successful release and freeing its lane.
