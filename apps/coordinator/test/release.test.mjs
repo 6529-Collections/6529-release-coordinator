@@ -1259,6 +1259,7 @@ test("a malformed resumed run scope fails with a controlled error", async () => 
     processInbox({
       identity: async () => ({ id: "456", login: "tester" }),
       resume: "11111111-1111-4111-8111-111111111111",
+      releaseAdapter: "generic",
       journal: {
         acquire: async () => ({
           state: {},
@@ -1284,7 +1285,13 @@ test("a terminal failed release is not adopted by the next unscoped run", async 
       journal: {
         acquire: async () => ({
           state: {
-            lock: {},
+            lock: {
+              scope: {
+                issue_number: null,
+                close_test: false,
+                workflow: "inbox-run-v6"
+              }
+            },
             batches: {
               failed: {
                 fingerprint: "f".repeat(64),

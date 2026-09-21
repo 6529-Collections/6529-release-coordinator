@@ -30,6 +30,7 @@ export async function processInbox({
   signal,
   now = () => new Date(),
   profile = realProfile,
+  releaseAdapter,
   journal = createJournal(api, profile, {
     workflow: rehearsal ? inboxWorkflow : undefined
   }),
@@ -52,7 +53,8 @@ export async function processInbox({
       : {
           issue_number: issueNumber ?? null,
           close_test: closeTest,
-          ...(rehearsal ? { workflow: inboxWorkflow } : {})
+          ...(rehearsal ? { workflow: inboxWorkflow } : {}),
+          ...(releaseAdapter ? { release_adapter: releaseAdapter } : {})
         };
   const { state, run } = await loggedStep(
     { step: "journal.acquire", message: "Acquire the inbox journal lock." },
@@ -61,11 +63,27 @@ export async function processInbox({
   bindRunLog(run.run_id, Boolean(resume));
   serviceAssert(
     run.scope &&
+      state.lock?.scope &&
+      typeof state.lock.scope === "object" &&
+      !Array.isArray(state.lock.scope) &&
       (run.scope.issue_number === null || isNumber(run.scope.issue_number)) &&
       typeof run.scope.close_test === "boolean",
     "run-scope",
     "The saved inbox run has no valid Issue selection or action."
   );
+  if (releaseAdapter) {
+    const savedAdapter = run.scope.release_adapter ?? "generic";
+    serviceAssert(
+      savedAdapter === releaseAdapter,
+      "release-adapter",
+      `Resume requires the saved sandbox release adapter ${savedAdapter}.`
+    );
+    if (resume && run.scope.release_adapter === undefined) {
+      run.scope.release_adapter = savedAdapter;
+      state.lock.scope.release_adapter = savedAdapter;
+      await journal.save(state, run, "record legacy sandbox release adapter");
+    }
+  }
   issueNumber = run.scope.issue_number ?? undefined;
   closeTest = run.scope.close_test;
   const results = [];

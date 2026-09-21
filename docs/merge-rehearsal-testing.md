@@ -445,9 +445,9 @@ Release Bus architecture. Recheck product adapters before any future real use.
 
 ### Product-shaped workflow mirror
 
-The existing `sandbox-release.yml` remains the currently implemented Coordinator
-interface. Frontend test PR #92 and backend test PR #100 merged a second,
-deliberately unused interface whose outside shape matches the current product workflows:
+The generic `sandbox-release.yml` remains available as an explicit fallback.
+Frontend test PR #92 and backend test PR #100 merged a second interface whose
+outside shape matches the current product workflows:
 workflow filenames and names, dispatch inputs, staging/main branch rules,
 concurrency groups, canonical deploy job names, and the successful deploy run ID
 passed into frontend E2E. Static contract checks keep those required names visible
@@ -466,12 +466,16 @@ The source PRs are merged, and the
 [September 21 live acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md)
 proved protected staging deploy -> exact staging E2E, production deploy -> exact
 production E2E, backend service dispatches for both environments and monitoring
-dispatches from test `main`. The next sandbox step is a new adapter that calls
-these separate mirrored workflows.
+dispatches from test `main`. The sandbox Coordinator now calls those separate
+mirrored workflows by default. Set
+`RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER=generic` only when the old generic
+test workflow is deliberately required. This selection exists only in the
+sandbox profile and cannot enable a real-product release.
 
 #### Separate-workflow adapter retirement gate
 
-Keep the generic adapter until the new adapter satisfies every condition below:
+The generic adapter could stop being the sandbox default only after the new
+adapter satisfied every condition below:
 
 - it records equivalent journal operations and stops at the same boundaries;
 - it independently completes one full success-path live acceptance;
@@ -484,6 +488,16 @@ Keep the generic adapter until the new adapter satisfies every condition below:
 Save the success-path record as `adapter-success-path-YYYY-MM-DD.md` and the
 controlled-failure recovery record as `adapter-recovery-YYYY-MM-DD.md` under
 `docs/testing/`. Link both from progress before retiring the generic adapter.
+
+That gate passed on September 21. The
+[success-path record](./testing/adapter-success-path-2026-09-21.md) covers the
+complete staging and production sequence. The
+[recovery record](./testing/adapter-recovery-2026-09-21.md) covers a confirmed
+monitoring failure, production-first restoration, staging restoration, matching
+deploy/E2E proof and explicit resume without duplicate dispatch. Separate
+contract and recovery tests assert that monitoring uses backend `main`, ordinary
+staging services use `1a-staging`, and recovery preserves the distinction. The
+generic client remains a selectable fallback; it is not the default.
 
 ### Small executable example
 
@@ -894,7 +908,7 @@ real deployment. See the [execution design](./design.md#agreed-execution-directi
 | Journal save response is lost or briefly stale | **Passed offline and live.** Read the intended commit back with bounded retries; accept only the exact saved state and lock token. A different state still stops. |
 | Ticket completion and cleanup | **Passed live; repeated missing-ref confirmation passed offline.** Close the ticket only after its matching release finishes and owned branches are confirmed gone twice; archive the complete release evidence. |
 | Staging-only request | **Passed offline.** Stop after matching staging E2E. No production operation is planned. |
-| Pinned release runtime changes | **Passed offline; current blobs confirmed live by read-only inspection.** Verify the workflow, contract and runner at the exact environment commit before dispatch; any mismatch stops without a workflow write. |
+| Pinned release runtime changes | **Passed offline; current blobs confirmed live by read-only inspection.** The default product-workflow adapter verifies its workflow, contract and runner at each operation's exact source commit; the explicit generic fallback verifies them at the target environment commit. Any mismatch stops without a workflow write. |
 | No-database-change staging restoration | **Passed live September 16.** The [controlled restoration](./testing/staging-restoration-2026-09-16.md) made new commits on the exact staging heads with pre-release trees through separate protected PRs, then passed ordered builds and matching E2E. The original ticket stayed failed and test `main` did not move. A transient GitHub error resumed the same run without replaying completed work. A final source-ref/tree readback guard was added after that run and passed offline tests. |
 | No-database-change fake-production restoration | **Passed offline and live September 16; merged through PR #172.** The [controlled production E2E failure](./testing/fake-production-restoration-2026-09-16.md) restored changed test `main` roles first, then staging roles through protected checked undo PRs. Each affected environment passed its ordered builds and matching E2E. The original ticket stayed failed. The same run resumed after GitHub omitted inline journal content for a file above 1 MiB; a focused fallback fix then passed the complete local check suite. Moved-ref and failed-undo cases have offline coverage. |
 | One database-changing sandbox ticket | **Passed offline and live; merged through PR #168.** The [September 16 acceptance](./testing/solo-database-release-2026-09-16.md) passed combined PR checks, temporary MySQL, protected staging, matching E2E, protected fake production and final E2E. An earlier failed API smoke check stopped without automatic restoration; the failed ticket stayed open and staging was repaired manually. Two database-changing tickets are never combined. |

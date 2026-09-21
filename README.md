@@ -5,8 +5,8 @@ backend. **Request intake is live. One local command now checks a ticket,
 rehearses its suitable PRs, runs supported sandbox service/database checks,
 and updates that same ticket with the result. An unscoped sandbox run can now
 move one selected no-database-change batch through protected test staging,
-locked npm builds, matching E2E against the built backend and frontend, and
-protected test production.
+product-shaped deployment workflow mirrors, matching E2E against the built
+backend and frontend, and protected test production.
 The merged source also lets one verified database-changing sandbox
 ticket take that path alone; see progress for local versus live proof.
 Sandbox and real profiles share the same intake and selection code. Real product
@@ -193,16 +193,20 @@ original source-level sequence. The
 proves the GitHub-only build, artifact, built-output E2E, recovery and cleanup
 path now merged into `main` through
 [PR #149](https://github.com/6529-Collections/6529-release-coordinator/pull/149).
-Continue using the test repositories for any follow-up sandbox work. Replacing
-the sandbox adapters with narrow calls to existing product Actions remains a
-later, separately authorized stage. Product-shaped test workflow interfaces are
+Continue using the test repositories for any follow-up sandbox work. The sandbox
+Coordinator now defaults to a narrow adapter for the product-shaped test
+workflows; the generic test workflow remains an explicit fallback. Connecting
+the same design to real product Actions remains a later, separately authorized
+stage. Product-shaped test workflow interfaces are
 merged through frontend test PR #92 and backend test PR #100 so that adapter
 behavior can be learned against fake deployments first. The mirror's protected
 staging/production success path now has
 [live acceptance](./docs/testing/product-shaped-workflow-mirror-2026-09-21.md);
-adapter failure and recovery acceptance remain pending. The current Coordinator
-does not consume them yet. This repository still has no permission or adapter
-that merges or deploys the real products.
+the Coordinator adapter has separate
+[success](./docs/testing/adapter-success-path-2026-09-21.md) and
+[failure/recovery](./docs/testing/adapter-recovery-2026-09-21.md) acceptance.
+This repository still has no permission or adapter that merges or deploys the
+real products.
 
 Sandbox recovery uses protected new commits undoing the failed batch and
 ordinary build/E2E checks when no database change is confirmed. Staging

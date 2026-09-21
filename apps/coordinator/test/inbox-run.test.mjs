@@ -509,7 +509,7 @@ test("stale, unknown, forged-pass, and failed report saves never publish a passe
 });
 
 test("interrupted run retains generated destinations; resume rechecks them and a new run captures current destinations", async () => {
-  const f = fixture(),
+  const f = fixture(sandboxProfile),
     input = await inputPlan(f),
     controller = new AbortController();
   const first = await invoke(f, {
@@ -523,8 +523,26 @@ test("interrupted run retains generated destinations; resume rechecks them and a
   assert.equal(f.comments.length, 0);
   assert.equal(issueWrites(f).length, 0);
   const run = f.state().lock;
+  assert.equal(run.scope.release_adapter, "product-workflows");
   assert.deepEqual(run.plans[1], input);
   f.pr.baseRefOid = "e".repeat(40);
+  const mismatched = await invoke(f, {
+    args: ["--resume", run.run_id, "--json"],
+    env: {
+      RELEASE_COORDINATOR_PROFILE: "sandbox",
+      RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER: "generic"
+    },
+    plan: async () => assert.fail("adapter mismatch must stop before planning"),
+    rehearse: async () =>
+      assert.fail("adapter mismatch must stop before rehearsal")
+  });
+  assert.equal(mismatched.code, 2);
+  assert.match(
+    JSON.stringify(mismatched.report),
+    /saved sandbox release adapter product-workflows/u
+  );
+  assert.equal(f.state().lock.run_id, run.run_id);
+  assert.equal(f.state().lock.scope.release_adapter, "product-workflows");
   let calls = 0;
   const resumed = await invoke(f, {
     args: ["--resume", run.run_id, "--json"],
@@ -596,6 +614,22 @@ test("profile, scope, report-file and old-command validation fails before reads 
       run: never
     });
     assert.equal(result.code, 2);
+  }
+  const sandbox = fixture(sandboxProfile);
+  for (const value of ["", " "]) {
+    const result = await invoke(sandbox, {
+      env: {
+        RELEASE_COORDINATOR_PROFILE: "sandbox",
+        RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER: value
+      },
+      get: never,
+      run: never
+    });
+    assert.equal(result.code, 2);
+    assert.match(
+      JSON.stringify(result.report),
+      /must be generic or product-workflows/u
+    );
   }
   for (const args of [
     ["--issue", "1", "--plan", "x"],
@@ -681,6 +715,44 @@ test("resuming a legacy interrupted run preserves its recorded plan while upgrad
   assert.equal(f.state().lock, null);
 });
 
+test("a legacy sandbox run requires and records the explicit generic adapter on resume", async () => {
+  const f = fixture(sandboxProfile);
+  const input = await inputPlan(f);
+  const legacy = createJournal(f.api, f.profile, { workflow: "inbox-run-v1" });
+  const { run } = await legacy.acquire(await f.identity(), undefined, {
+    workflow: "inbox-run-v1",
+    issue_number: 1,
+    close_test: false,
+    merge_plan: input
+  });
+  const defaultResume = await invoke(f, {
+    args: ["--resume", run.run_id, "--json"],
+    plan: async () => assert.fail("adapter mismatch must stop before planning"),
+    rehearse: async () =>
+      assert.fail("adapter mismatch must stop before rehearsal")
+  });
+  assert.equal(defaultResume.code, 2);
+  assert.equal(f.state().lock.scope.release_adapter, undefined);
+  let observed = 0;
+  const genericResume = await invoke(f, {
+    args: ["--resume", run.run_id, "--json"],
+    env: {
+      RELEASE_COORDINATOR_PROFILE: "sandbox",
+      RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER: "generic"
+    },
+    plan: async () => assert.fail("must preserve the legacy run scope"),
+    rehearse: async (entry, plan) => {
+      observed++;
+      assert.equal(f.state().lock.scope.release_adapter, "generic");
+      assert.deepEqual(plan, input);
+      return fakeReport(entry, plan, f.profile);
+    }
+  });
+  assert.equal(genericResume.code, 0);
+  assert.equal(observed, 1);
+  assert.equal(f.state().lock, null);
+});
+
 test("legacy service verification uses its saved plan and still detects destination movement", async () => {
   const f = fixture();
   const input = await inputPlan(f);
@@ -759,6 +831,7 @@ test("the sandbox release client receives the command's stop signal", async () =
   assert.equal(executed, 1);
   assert.equal(clients.length, 1);
   assert.equal(clients[0].profile.name, "sandbox");
+  assert.equal(clients[0].adapter, "product-workflows");
   assert.equal(clients[0].signal, controller.signal);
 });
 

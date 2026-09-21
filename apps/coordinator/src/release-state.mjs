@@ -1,7 +1,5 @@
-import {
-  validateReleaseOperation,
-  verifyReleaseReport
-} from "./release-contract.mjs";
+import { validateReleaseOperation } from "./release-contract.mjs";
+import { verifySavedReleaseReport } from "./product-workflow-contract.mjs";
 import {
   integrationCommitInput,
   operationForStep,
@@ -179,7 +177,7 @@ export function validateReleaseExecution(execution, batch) {
         "Saved operation identity differs from its release step."
       );
       if (record.result?.report)
-        verifyReleaseReport(record.result.report, record.operation);
+        verifySavedReleaseReport(record.result.report, record.operation);
     }
     if (record.step.kind === "integrate" && record.result)
       serviceAssert(
@@ -369,7 +367,7 @@ function validateRecovery(execution, batch, ids) {
           "Restoration check uses different environment versions."
         );
         if (record.result?.report)
-          verifyReleaseReport(record.result.report, record.operation);
+          verifySavedReleaseReport(record.result.report, record.operation);
       }
       if (record.state === "completed")
         serviceAssert(

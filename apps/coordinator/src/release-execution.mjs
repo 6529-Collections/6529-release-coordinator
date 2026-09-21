@@ -188,6 +188,9 @@ export async function executeRelease({
             client.run({
               record,
               actor: execution.actor,
+              runtime: execution.runtime,
+              operations: recovery.operations,
+              steps: recovery.plan.steps,
               save: () => persist(`restore step ${step.id} progress`)
             }),
           (value) => ({
@@ -339,6 +342,9 @@ export async function executeRelease({
           client.run({
             record,
             actor: execution.actor,
+            runtime: execution.runtime,
+            operations: execution.operations,
+            steps: execution.plan.steps,
             save: () => persist(`release step ${step.id} progress`)
           }),
         (value) => ({
