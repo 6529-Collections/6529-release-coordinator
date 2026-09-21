@@ -30,6 +30,10 @@ The install downloads locked dependencies. The check command then runs:
    canonical, requires any such record under `docs/testing/` to be linked from
    progress exactly once, and rejects invalid calendar dates, missing link
    targets, and links outside the docs-relative `testing/` directory.
+   The `adapter-success-path` and `adapter-recovery` filename prefixes are
+   reserved for these dated acceptance records; notes and history files must use
+   other names. The retirement contract intentionally keeps the authoritative
+   records in `docs/testing/`, not `docs/history/`.
 5. `npm run check:workflows`: parses all workflow YAML and verifies job permissions,
    triggers, pinned actions, the required result, and publishing/intake boundaries.
    It also verifies the CodeQL analysis and fixed automatic review set below.
