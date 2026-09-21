@@ -41,11 +41,11 @@ because that is the real backend workflow's source contract. The future adapter'
 contract and recovery tests must preserve this distinction from ordinary staging
 service dispatches, which run from `1a-staging`.
 
-The exact monitoring dispatch requests were:
-
 This table covers only the monitoring workflow's dispatch source. The ordinary
 backend service used protected `1a-staging` for staging in run `35605923124` and
 `main` for production in run `35606173242`, as recorded in the run table above.
+
+The exact monitoring dispatch requests were:
 
 | Environment | Dispatch source branch/ref | `environment` input | `commit_sha` input |
 | --- | --- | --- | --- |
