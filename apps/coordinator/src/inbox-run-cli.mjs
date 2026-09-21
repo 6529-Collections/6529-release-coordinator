@@ -9,7 +9,10 @@ import { generateInboxPlan } from "./inbox-merge-plan.mjs";
 import { coordinateServices } from "./inbox-services.mjs";
 import { coordinateInboxBatch } from "./inbox-batch.mjs";
 import { executeRelease } from "./release-execution.mjs";
-import { createReleaseGitHub } from "./release-github.mjs";
+import {
+  createSandboxReleaseGitHub,
+  selectSandboxReleaseAdapter
+} from "./sandbox-release-client.mjs";
 
 const help = `Check requests, filter conflicts before expensive batch checks, and update the same Issues and history.
 
@@ -65,7 +68,7 @@ export async function runInboxRunCli(
     services = coordinateServices,
     batch = coordinateInboxBatch,
     executeSandboxRelease = executeRelease,
-    createReleaseClient = createReleaseGitHub,
+    createReleaseClient = createSandboxReleaseGitHub,
     signal,
     logRoot,
     createLog = createRunLog,
@@ -121,6 +124,12 @@ export async function runInboxRunCli(
   let profile, log;
   try {
     profile = selectProfile(env.RELEASE_COORDINATOR_PROFILE);
+    const releaseAdapter =
+      profile.name === "sandbox"
+        ? selectSandboxReleaseAdapter(
+            env.RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER
+          )
+        : null;
     log = createLog({
       profile,
       resume: options.resume,
@@ -154,7 +163,11 @@ export async function runInboxRunCli(
         release:
           profile.name === "sandbox"
             ? (options) => {
-                releaseClient ??= createReleaseClient({ profile, signal });
+                releaseClient ??= createReleaseClient({
+                  profile,
+                  signal,
+                  adapter: releaseAdapter
+                });
                 return executeSandboxRelease({
                   ...options,
                   client: releaseClient

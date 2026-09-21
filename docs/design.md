@@ -432,8 +432,9 @@ check. A run that someone starts in the seconds between the last check and the
 press is ordered by GitHub's lock, not by the Coordinator: that gap cannot be
 closed from outside GitHub, and the existing guards (the ref recheck before
 dispatch, the exact-commit and version checks) decide what happens next.
-The sandbox adapter implements this against the pinned
-`sandbox-release.yml`; the real adapters must apply the same rule to the real
+The default sandbox adapter implements this against each pinned product-shaped
+workflow mirror; the explicit generic fallback implements it against
+`sandbox-release.yml`. Real adapters must apply the same rule to the real
 lock groups (`deploy-control-<env>` and `deploy-service-<env>-<service>`,
 `staging-deploy`, `web-deploy-prod`, `operational-monitoring-<env>`).
 Re-dispatching a Coordinator run that was cancelled before it started remains

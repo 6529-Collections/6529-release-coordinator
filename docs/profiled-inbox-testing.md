@@ -29,7 +29,7 @@ credential through a request. An unknown name stops without falling back.
 | State journal | `codex/inbox-state` in the test inbox repository | Existing state branch in the real inbox repository |
 | Rehearsal destination | Current `main` of each selected test repository | Current `main` of each selected product repository |
 | Service/database checks | Fixed, pinned workflow in the test backend; temporary MySQL and sample programs | Not implemented; services are reported as `not-run` |
-| Release sequence | Protected `1a-staging` and `main` integration PRs plus a fixed, pinned fake release workflow in both test repositories, including the sample monitoring operation | Not implemented; no real merge or deployment adapter is configured |
+| Release sequence | Protected `1a-staging` and `main` integration PRs plus pinned product-shaped backend, monitoring, frontend and E2E workflow mirrors; the old generic fake workflow is an explicit fallback | Not implemented; no real merge or deployment adapter is configured |
 | Local submissions | `.release-coordinator/profiles/sandbox/submissions/` | `.release-coordinator/profiles/real/submissions/` |
 | Rehearsal reports | `.release-coordinator/merge-rehearsal/sandbox/` | `.release-coordinator/merge-rehearsal/real/` |
 
@@ -37,6 +37,13 @@ All pinned repositories are public. Live inbox commands verify inbox numeric
 identity and visibility. The rehearsal GitHub adapter binds each PR and source
 repository to the profile's numeric IDs. Git transport uses the same selected
 repository allowlist. Profile selection grants no additional GitHub permission.
+
+The sandbox release adapter defaults to the separate product-shaped workflow
+mirrors after their success and recovery acceptance. Set
+`RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER=generic` only to select the old
+generic `sandbox-release.yml` test client deliberately. The other accepted value
+is `product-workflows`. The variable is validated only for `sandbox`; it cannot
+add a release executor to `real`.
 
 The test inbox holds only a workflow wrapper and README. The wrapper checks out
 an exact Coordinator commit and executes the shared intake implementation.

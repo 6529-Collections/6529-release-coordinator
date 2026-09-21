@@ -348,7 +348,12 @@ RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
 
 Sandbox runs first inspect and rehearse each ticket, then test suitable whole
 tickets together through the bounded batch flow described below. The selected
-batch continues through the fake release sequence. Real runs retain individual
+batch continues through the fake release sequence. By default that sequence
+dispatches the separate product-shaped backend, monitoring, frontend and E2E
+workflow mirrors. Set
+`RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER=generic` to select the older
+`sandbox-release.yml` test client explicitly; `product-workflows` selects the
+default adapter explicitly. This setting is sandbox-only. Real runs retain individual
 ticket plans and Git rehearsals. Use
 `npm run --silent inbox:run` to suppress npm's banner for JSON.
 
@@ -429,8 +434,8 @@ runs these steps in order for each required environment:
 A staging request stops after step 5. A production request repeats the same
 sequence on test `main`, but only after matching staging E2E passes. Each
 operation is saved before it starts and verified against its release ID, input
-hash, actor, repository, all four pinned workflow/runtime files at the exact
-environment commit, run/attempt, environment, and exact code. When the batch
+hash, actor, repository, the adapter's pinned workflow/runtime files at the
+exact source commit, run/attempt, environment, and exact code. When the batch
 selects operational monitoring, the production stage deploys the sample
 monitoring package for `staging` and then `prod` from the merged test `main`
 commit before the production application deployments; each result must carry
@@ -449,7 +454,7 @@ effect keeps the lock for explicit resume. Completed matching operations are
 reused on resume instead of being dispatched again.
 
 Before each protected merge and each workflow dispatch, the command waits until
-the pinned `sandbox-release.yml` workflow has no queued, waiting, pending,
+the pinned workflow used for that operation has no queued, waiting, pending,
 requested or in-progress run in that test repository, on any branch. It reads
 GitHub's newest page of runs and its per-status counts and treats the workflow
 as quiet only when both show nothing active, because the status-filtered
@@ -459,10 +464,9 @@ time limit. The step record keeps `waited_for` with the blocking runs and a
 lag indicator, `unlisted`, the highest excess of GitHub's status counts over
 the runs it listed. Ctrl-C
 during the wait stops before anything is dispatched; `--resume` checks again
-and dispatches once. The pinned sandbox workflow holds one lock per
-environment, like the real deploy workflows, so a run that did queue behind
-another would be cancelled by a third arrival; the wait exists so that never
-happens to a Coordinator run.
+and dispatches once. The mirrored deployment workflows hold their product-shaped
+environment locks. The wait prevents a Coordinator operation from relying on
+queue cancellation behavior.
 
 After the final required E2E and owned-branch cleanup, selected tickets receive
 `status:completed` and `reason:release-completed` and close. This records only the
