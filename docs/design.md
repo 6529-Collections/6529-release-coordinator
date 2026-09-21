@@ -464,8 +464,10 @@ starts. After any in-flight-run wait is quiet, the final GitHub read before the
 dispatch call must re-read frontend `main`, verify it still represents the
 approved production composition, and pass that exact commit. It must not reuse
 an earlier staging read. Any mismatch ends the attempt. Save it, keep the lane
-for a person, mark the ticket `status:action-needed` with
-`reason:release-failed`, and require explicit authorization plus fresh matching
+for a person, mark the ticket
+[`status:action-needed`](./inbox-processing.md#status-labels) with
+[`reason:release-failed`](./inbox-processing.md#reason-and-scope-labels), and
+require explicit authorization plus fresh matching
 evidence for a new attempt; never reuse the newer SHA, omit the input or deploy
 the newer composition. The failed guard changes no environment, so the
 [failure and recovery rules](#failure-and-recovery-rules) start with saving and
@@ -775,18 +777,23 @@ how the apps receive configuration.
    `staging` and then `prod`, first. Then dispatch `Deploy a service` with
    `environment=prod`, one selected application service at a time in dependency
    order.
-5. After backend prerequisites pass, merge frontend changes into `main` and
-   wait for conflicting runs. After the wait is quiet, make the final GitHub read
-   of frontend `main`, confirm that it still represents the approved production
-   composition, then dispatch `Web Deploy - PROD` with `expected_source_sha` set
-   to that exact commit. Do this for every selected frontend production dispatch,
-   even when no frontend merge was needed. Repeat the quiet check and final ref
-   read before each dispatch; one read does not cover a later dispatch. If no
-   frontend deployment is selected, save the actual frontend version in the
-   release record's deployed-version evidence using the verified runtime source
-   required by steps 2 and 6, not a staging or `main` ref, and do not claim the
-   guard ran. Preserve existing release-note grouping. Any mismatch ends the
-   attempt. Save it as `status:action-needed` with `reason:release-failed`, keep
+5. After backend prerequisites pass, merge selected frontend changes into `main`
+   when a merge is required. Then complete a separate sequence for every selected
+   frontend production dispatch: wait for conflicting runs; after that wait is
+   quiet, make the final GitHub read of frontend `main`; confirm it still
+   represents the approved production composition; and dispatch
+   `Web Deploy - PROD` with `expected_source_sha` set to that exact commit. This
+   sequence also applies when no frontend merge was needed. `N` dispatches require
+   `N` complete quiet-check-and-final-read pairs; evidence from one dispatch does
+   not cover a later dispatch. If no frontend deployment is selected, save the
+   actual frontend version in the release record's deployed-version evidence from
+   the trusted runtime-version contract selected under
+   [Remaining integration decisions](#remaining-integration-decisions), not a
+   staging or `main` ref, and do not claim the guard ran. That contract must be
+   chosen and verified before the real adapter is implemented. Preserve existing
+   release-note grouping. Any mismatch ends the attempt. Save it as
+   [`status:action-needed`](./inbox-processing.md#status-labels) with
+   [`reason:release-failed`](./inbox-processing.md#reason-and-scope-labels), keep
    the lane for a person, and require explicit authorization plus fresh matching
    evidence for a new attempt; never reuse the newer SHA. Because the guard stops
    before a build, no source revert starts automatically.
