@@ -25,8 +25,10 @@ const savedRuntime = {
   }
 };
 
-function recoveryDispatch(operation, step) {
+function recoveryDispatch(operation, step, { block = false } = {}) {
   const calls = [];
+  let quiet = !block;
+  let waits = 0;
   const execute = async (args, body) => {
     const method = args[args.indexOf("--method") + 1];
     const endpoint = args[args.indexOf("--method") + 2];
@@ -48,8 +50,27 @@ function recoveryDispatch(operation, step) {
         : "backend";
       return apiResponse("200 OK", { object: { sha: commits[role] } });
     }
-    if (endpoint.includes("/actions/workflows/") && endpoint.includes("/runs?"))
-      return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
+    if (
+      endpoint.includes("/actions/workflows/") &&
+      endpoint.includes("/runs?")
+    ) {
+      const query = new URL(`https://example.invalid/${endpoint}`).searchParams;
+      const blocking =
+        !quiet && query.get("per_page") === "100" && !query.has("status")
+          ? [
+              {
+                id: 490,
+                html_url: "https://example.invalid/runs/490",
+                status: "queued",
+                actor: { login: "another-operator" }
+              }
+            ]
+          : [];
+      return apiResponse("200 OK", {
+        total_count: blocking.length,
+        workflow_runs: blocking
+      });
+    }
     if (method === "POST" && endpoint.endsWith("/dispatches"))
       return apiResponse("204 No Content");
     throw new Error(`Unexpected ${method} ${endpoint}`);
@@ -59,7 +80,10 @@ function recoveryDispatch(operation, step) {
     execute,
     base: {},
     polls: 1,
-    wait: async () => {}
+    wait: async () => {
+      waits++;
+      quiet = true;
+    }
   });
   const record = {
     id: operation.operation_id,
@@ -72,6 +96,7 @@ function recoveryDispatch(operation, step) {
   };
   return {
     calls,
+    waits: () => waits,
     run: () =>
       client.run({
         record,
@@ -96,13 +121,17 @@ test("recovery keeps restored staging services on 1a-staging and restored stagin
     backend_commit: commits.backend,
     frontend_commit: commits.frontend
   });
-  const backend = recoveryDispatch(backendOperation, {
-    id: "restore:staging:deploy:backend:api",
-    kind: "deploy",
-    environment: "staging",
-    role: "backend",
-    unit: "api"
-  });
+  const backend = recoveryDispatch(
+    backendOperation,
+    {
+      id: "restore:staging:deploy:backend:api",
+      kind: "deploy",
+      environment: "staging",
+      role: "backend",
+      unit: "api"
+    },
+    { block: true }
+  );
   await assert.rejects(
     backend.run(),
     /pending or ended without usable evidence/u
@@ -113,6 +142,7 @@ test("recovery keeps restored staging services on 1a-staging and restored stagin
   assert.equal(backendRequest.body.ref, "1a-staging");
   assert.equal(backendRequest.body.inputs.environment, "staging");
   assert.equal(backendRequest.body.inputs.expected_source_sha, commits.backend);
+  assert.equal(backend.waits(), 1);
 
   const monitoringOperation = makeReleaseOperation({
     release_id: releaseId,

@@ -321,6 +321,7 @@ test("product workflow integration waits for its pinned workflows to become quie
   let waits = 0;
   let integrations = 0;
   let saves = 0;
+  const queries = [];
   const blockingRun = {
     id: 490,
     html_url: "https://example.invalid/runs/490",
@@ -333,6 +334,7 @@ test("product workflow integration waits for its pinned workflows to become quie
       endpoint.includes("/actions/workflows/") &&
       endpoint.includes("/runs?")
     ) {
+      queries.push(endpoint);
       const query = new URL(`https://example.invalid/${endpoint}`).searchParams;
       const runs =
         !quiet && endpoint.includes("/deploy.yml/") && !query.has("status")
@@ -374,6 +376,20 @@ test("product workflow integration waits for its pinned workflows to become quie
   assert.equal(record.waited_for.runs[0].id, blockingRun.id);
   assert.equal(record.waited_for.checks, 2);
   assert.ok(record.waited_for.quiet_at);
+  assert.ok(
+    queries.some(
+      (endpoint) =>
+        endpoint.includes("/deploy.yml/runs?per_page=100") &&
+        !endpoint.includes("status=")
+    )
+  );
+  assert.ok(
+    queries.some(
+      (endpoint) =>
+        endpoint.includes("/deploy.yml/runs?status=queued") &&
+        endpoint.includes("per_page=100")
+    )
+  );
 });
 
 test("a fresh manual operation cannot adopt an older matching workflow run", async () => {

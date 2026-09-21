@@ -537,6 +537,10 @@ test("interrupted run retains generated destinations; resume rechecks them and a
       assert.fail("adapter mismatch must stop before rehearsal")
   });
   assert.equal(mismatched.code, 2);
+  assert.match(
+    JSON.stringify(mismatched.report),
+    /saved sandbox release adapter product-workflows/u
+  );
   assert.equal(f.state().lock.run_id, run.run_id);
   assert.equal(f.state().lock.scope.release_adapter, "product-workflows");
   let calls = 0;
