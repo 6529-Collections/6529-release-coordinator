@@ -37,7 +37,9 @@ or manual dispatch.
 Every run completed successfully on its first attempt. The final readback found
 no active or queued run in either test repository. Both monitoring dispatches
 intentionally ran from backend `main`, including the staging-environment deploy,
-because that is the real backend workflow's source contract.
+because that is the real backend workflow's source contract. The future adapter's
+contract and recovery tests must preserve this distinction from ordinary staging
+service dispatches, which run from `1a-staging`.
 
 ## Deployment evidence readback
 
@@ -68,5 +70,6 @@ recovery or any real-product execution. The Coordinator still calls
 
 The next implementation step is a sandbox-profile adapter that dispatches these
 separate workflows, saves every operation in the journal, stops on failures and
-receives equivalent success and recovery acceptance before the generic adapter
-is retired.
+independently passes both a complete success-path live acceptance and a
+controlled-failure recovery live acceptance before the generic adapter is
+retired.
