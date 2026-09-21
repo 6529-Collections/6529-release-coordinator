@@ -41,6 +41,13 @@ because that is the real backend workflow's source contract. The future adapter'
 contract and recovery tests must preserve this distinction from ordinary staging
 service dispatches, which run from `1a-staging`.
 
+The exact monitoring dispatch requests were:
+
+| Environment | Workflow ref | `environment` input | `commit_sha` input |
+| --- | --- | --- | --- |
+| staging | `main` | `staging` | `75658981146704d71f7e0179526b8f3acf7a8f40` |
+| prod | `main` | `prod` | `75658981146704d71f7e0179526b8f3acf7a8f40` |
+
 ## Deployment evidence readback
 
 The fake deployment artifacts were downloaded independently after the runs. All
@@ -69,7 +76,6 @@ recovery or any real-product execution. The Coordinator still calls
 `sandbox-release.yml`.
 
 The next implementation step is a sandbox-profile adapter that dispatches these
-separate workflows, saves every operation in the journal, stops on failures and
-independently passes both a complete success-path live acceptance and a
-controlled-failure recovery live acceptance before the generic adapter is
-retired.
+separate workflows. It must satisfy the canonical
+[separate-workflow adapter retirement gate](../merge-rehearsal-testing.md#separate-workflow-adapter-retirement-gate)
+before the generic adapter is retired.

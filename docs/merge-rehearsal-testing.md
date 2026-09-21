@@ -467,12 +467,21 @@ The source PRs are merged, and the
 proved protected staging deploy -> exact staging E2E, production deploy -> exact
 production E2E, backend service dispatches for both environments and monitoring
 dispatches from test `main`. The next sandbox step is a new adapter that calls
-these separate mirrored workflows. Keep the generic adapter until the new path
-has equivalent journal and stop behavior and has independently passed both a
-complete success-path live acceptance and a controlled-failure recovery live
-acceptance. Its contract tests must assert that monitoring staging dispatches
-from backend `main`, ordinary staging services dispatch from `1a-staging`, and
-recovery preserves that branch-source distinction.
+these separate mirrored workflows.
+
+#### Separate-workflow adapter retirement gate
+
+Keep the generic adapter until the new adapter satisfies every condition below:
+
+- it records equivalent journal operations and stops at the same boundaries;
+- it independently completes one full success-path live acceptance;
+- it independently completes one controlled-failure recovery live acceptance;
+- its contract and recovery tests assert that monitoring staging dispatches from
+  backend `main`, ordinary staging services dispatch from `1a-staging`, and
+  recovery preserves that branch-source distinction.
+
+Save both adapter acceptance records under `docs/testing/` and link them from
+progress before retiring the generic adapter.
 
 ### Small executable example
 

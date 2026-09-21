@@ -67,11 +67,10 @@ backend test PR #100, and their protected staging/production success path has
 next sandbox integration step is to replace the Coordinator's generic sandbox
 release call with a test-profile adapter that dispatches those separate backend,
 monitoring, frontend and E2E workflows. The existing generic sandbox workflow
-stays available until that adapter has equivalent journal and stop behavior plus
-two independent live acceptances: one complete success path and one controlled
-failure with completed recovery. Its contract tests must keep monitoring staging
-on backend `main`, distinct from ordinary staging service dispatches on
-`1a-staging`, and preserve that distinction during recovery.
+stays available until that adapter satisfies the
+[separate-workflow adapter retirement gate](./merge-rehearsal-testing.md#separate-workflow-adapter-retirement-gate).
+Adapter retirement evidence remains pending: no dated adapter success-path or
+controlled-failure recovery acceptance record exists yet.
 Do not connect the Coordinator to real product execution yet. Real adapters
 (including the real monitoring adapter, which must dispatch the backend's
 `Deploy operational monitoring` workflow with the exact merged `main` commit
