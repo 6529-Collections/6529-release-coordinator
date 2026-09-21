@@ -1,12 +1,11 @@
 # Progress and next steps
 
 Last reviewed: **2026-09-21**, against merged Coordinator `main` source
-`3510ef5`, frontend `main` source `7471ac1`, backend `main` source `fe7f0cd`, the live package and consumer
+`4ae7425`, frontend `main` source `7471ac1`, backend `main` source `fe7f0cd`, the live package and consumer
 evidence below, and the latest sandbox acceptance. This page separates
 implemented behavior, source delivery and live proof. Earlier observations carry
-their original dates unless a newer check is stated. Coordinator `3510ef5` is
-the merged baseline and parent of this documentation-only PR, not the eventual
-merge commit for this update.
+their original dates unless a newer check is stated. Coordinator `4ae7425` is
+the merged baseline and parent of this documentation-only update.
 
 ## Current state
 
@@ -27,7 +26,7 @@ merge commit for this update.
 | Sandbox monitoring deployment | A complete production ticket that selects `operational_deployments: ["monitoring"]` deploys the sample monitoring package for staging and then prod from the merged test `main` commit, before the production application deployments; a confirmed failure stops before any application deployment, restores both environments and redeploys monitoring from the restored commit | Merged through [PR #178](https://github.com/6529-Collections/6529-release-coordinator/pull/178); see [delivery](#pr-178-delivery-september-17). The [September 17 live acceptance](./testing/sandbox-monitoring-2026-09-17.md) ran from the then-unmerged branch and passed the monitoring-only production release (ticket #30: sixteen operations, both installed templates bound to their builds and to GitHub's artifact records) and the controlled monitoring failure with full restoration (ticket #32). The mixed application-plus-monitoring release (ticket #33) also passed all sixteen operations with a changed inventory. The sample backend deploys monitoring only from test `main`, like the real backend; the real adapter is not built. |
 | Waiting for other workflow runs | Before each protected merge and each workflow dispatch, the sandbox adapter waits without a time limit until the pinned release workflow has no active run in the target repository, logs each check and saves the blocking runs | Merged through [PR #181](https://github.com/6529-Collections/6529-release-coordinator/pull/181) with offline coverage for the dispatch and merge paths, every active status, interruption, resume and state validation; see the [acceptance case](./merge-rehearsal-testing.md#release-sequence-acceptance). The pinned sandbox workflow holds one lock per environment, republished through [PR #182](https://github.com/6529-Collections/6529-release-coordinator/pull/182) to both test repositories' `main` and `1a-staging` (backend [PR #94](https://github.com/6529-Collections/release-coordinator-test-backend/pull/94), frontend [PR #86](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/86)). The [September 18 live acceptance](./testing/sandbox-inflight-wait-2026-09-18.md) found that GitHub's status-filtered run listing lags and can report a false quiet. The correction, reading the newest unfiltered page as well, is delivered together with that record rather than by PR #181; run from that corrected source, the resumed run waited 27 minutes before its first dispatch, stopped cleanly on Ctrl-C during a wait, resumed and dispatched once, waited before a frontend merge, and completed all fourteen operations for ticket #34. |
 | Frontend production source guard | The real `Web Deploy - PROD` workflow accepts an optional `expected_source_sha` and refuses before building when it does not match the `main` commit fixed for the run | Frontend [PR #4072](https://github.com/6529-Collections/6529seize-frontend/pull/4072) merged at `7471ac1`; the exact [workflow source](https://github.com/6529-Collections/6529seize-frontend/blob/7471ac113cb2535940b19f036bf38f47f4d44eb6/.github/workflows/build-upload-deploy-prod.yml) was read back from frontend `main`. Manual dispatches may still omit the input under existing human authorization. The future adapter specification requires the Coordinator never to omit it: after every conflicting-run wait it must re-read `main` as the final GitHub step before each dispatch and provide the exact approved commit. No adapter enforces this yet. This is source delivery, not a Coordinator adapter or deployment. |
-| Product-shaped test workflow mirror | Merged test frontend and backend workflows expose the real workflow filenames, names, dispatch inputs, branch rules, concurrency groups, deploy job names and deploy-to-E2E run linking while building only sample code and publishing fake deployment evidence | Frontend test [PR #92](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/92) merged at `42a2a5f`; backend test [PR #100](https://github.com/6529-Collections/release-coordinator-test-backend/pull/100) merged at `7565898`. Their normal sandbox PR checks passed and their final follow-up reviews found no new issues. Dispatch inputs were compared locally with the current real workflow sources; fake build/evidence creation and verification passed locally. They are not live-accepted yet, and the Coordinator still calls `sandbox-release.yml`. |
+| Product-shaped test workflow mirror | Merged test frontend and backend workflows expose the real workflow filenames, names, dispatch inputs, branch rules, concurrency groups, deploy job names and deploy-to-E2E run linking while building only sample code and publishing fake deployment evidence | Frontend test [PR #92](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/92) merged at `42a2a5f`; backend test [PR #100](https://github.com/6529-Collections/release-coordinator-test-backend/pull/100) merged at `7565898`. Protected staging publication and the complete staging/production success path passed [September 21 live acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md), including exact deploy-to-E2E linking, backend service dispatches, monitoring from test `main` and downloaded evidence readback. The Coordinator still calls `sandbox-release.yml`; the separate-workflow adapter and its recovery coverage are not built. |
 | Real releases | Existing product release procedures remain in use; the frontend product workflow has an exact-source guard | The [trusted runtime-version contract](./design.md#remaining-integration-decisions) is not selected. Coordinator staging/production execution, source-guard enforcement, authorization and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -61,12 +60,14 @@ frontend PR #4072. A future real frontend adapter must pass the exact verified
 `main` commit as `expected_source_sha` after re-reading it immediately before
 dispatch; ordinary authorized manual dispatches remain backward compatible when
 the input is empty.
-The product-shaped test workflows are now merged through frontend test PR #92
-and backend test PR #100. The next sandbox integration step is to live-test them,
-then replace the Coordinator's generic sandbox release call with a
-test-profile adapter that dispatches those separate backend, monitoring,
-frontend and E2E workflows. The existing generic sandbox workflow stays available
-until that adapter has equivalent live acceptance and recovery coverage.
+The product-shaped test workflows are merged through frontend test PR #92 and
+backend test PR #100, and their protected staging/production success path has
+[live acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md). The
+next sandbox integration step is to replace the Coordinator's generic sandbox
+release call with a test-profile adapter that dispatches those separate backend,
+monitoring, frontend and E2E workflows. The existing generic sandbox workflow
+stays available until that adapter has equivalent journal, stop, live acceptance
+and recovery coverage.
 Do not connect the Coordinator to real product execution yet. Real adapters
 (including the real monitoring adapter, which must dispatch the backend's
 `Deploy operational monitoring` workflow with the exact merged `main` commit
@@ -134,9 +135,18 @@ Both final heads passed their normal sandbox PR checks and follow-up reviews
 reported no new findings. Local workflow parsing, exact dispatch-input
 comparison against the current product workflows, sample builds and fake evidence
 creation/readback also passed. The existing container-backed full sample test was
-not available locally, but the same test passed in both PR checks. This is now
-merged source and PR-CI evidence: no mirror workflow has been dispatched from
-protected test branches, and no Coordinator code consumes them.
+not available locally, but the same test passed in both PR checks.
+
+Protected main-to-staging PRs [frontend #93](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/93)
+and [backend #101](https://github.com/6529-Collections/release-coordinator-test-backend/pull/101)
+then published the same merged histories to `1a-staging`. The
+[September 21 live acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md)
+passed staging frontend deploy -> automatic exact-run E2E, staging backend API,
+monitoring staging and prod from backend `main`, production backend API, and
+production frontend deploy -> automatic exact-run E2E. Independent artifact
+readback matched every role, environment, source SHA, workflow path and run ID.
+This proves the separate test interfaces' success path; no Coordinator code
+consumes them yet, and adapter journal, stop and recovery behavior remains next.
 
 ## PR #181, #182 and #187 delivery, September 18
 
