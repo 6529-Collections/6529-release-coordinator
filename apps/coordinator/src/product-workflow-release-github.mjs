@@ -6,7 +6,11 @@ import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { verifyApplicationBuild } from "../sandbox/application-build.mjs";
 import { executeGitHub } from "./coordinator-github.mjs";
-import { releaseHash, validateReleaseOperation } from "./release-contract.mjs";
+import {
+  monitoringTemplate,
+  releaseHash,
+  validateReleaseOperation
+} from "./release-contract.mjs";
 import { createReleaseGitHub } from "./release-github.mjs";
 import {
   productWorkflowAdapter,
@@ -61,6 +65,8 @@ async function downloadProductArtifact(
       "release-evidence",
       "The product-shaped deployment artifact has unexpected files."
     );
+    // Hash the same immutable downloaded file whose parsed contents are
+    // validated by verifyApplicationBuild below.
     const manifestText = await readFile(
       path.join(root, "dist", "build-manifest.json")
     );
@@ -707,6 +713,16 @@ export function createProductWorkflowReleaseGitHub({
       descriptor.workflowKey,
       savedRuntime
     );
+    if (
+      descriptor.event === "workflow_dispatch" &&
+      ["dispatching", "running"].includes(record.state)
+    )
+      serviceAssert(
+        Number.isSafeInteger(record.dispatch_after_run_id) &&
+          record.dispatch_after_run_id >= 0,
+        "release-dispatch-uncertain",
+        "A resumed product-shaped dispatch lacks its saved workflow boundary."
+      );
     await verifyFiles(descriptor.role, descriptor.sourceCommit);
     let run = record.workflow_run_id
       ? (
@@ -808,14 +824,20 @@ export function createProductWorkflowReleaseGitHub({
       builds = { [descriptor.buildRole]: evidence.build };
       deployments = { [descriptor.buildRole]: evidence.deployment };
       if (descriptor.kind === "monitoring") {
-        const template = `monitoring-${descriptor.environment}.json`;
+        const template = monitoringTemplate(descriptor.environment);
+        const templateFile = evidence.build.manifest.files.find(
+          (file) => file.path === template
+        );
+        serviceAssert(
+          templateFile,
+          "release-evidence",
+          "The product-shaped monitoring build is missing its installed template."
+        );
         installed = {
           environment: descriptor.environment,
           source_commit: operation.backend_commit,
           template,
-          sha256: evidence.build.manifest.files.find(
-            (file) => file.path === template
-          )?.sha256
+          sha256: templateFile.sha256
         };
       }
     }

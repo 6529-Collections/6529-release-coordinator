@@ -95,12 +95,13 @@ function runFixture(
 function directHarness(
   descriptor,
   operation,
-  { conclusion = "success", priorRuns = [] } = {}
+  { conclusion = "success", priorRuns = [], mutateManifest } = {}
 ) {
   const calls = [];
   let dispatched = false;
   const run = runFixture(descriptor, { conclusion });
   const manifest = build(descriptor.buildRole, descriptor.sourceCommit);
+  mutateManifest?.(manifest);
   const artifact = {
     id: 701,
     name:
@@ -350,6 +351,55 @@ test("a fresh manual operation cannot adopt an older matching workflow run", asy
   );
 });
 
+test("a resumed manual operation cannot adopt any run without its saved dispatch boundary", async () => {
+  const operation = makeReleaseOperation({
+    release_id: "56565656-5656-4656-8656-565656565656",
+    operation_id: "78787878-7878-4878-8878-787878787878",
+    operation: "monitoring",
+    environment: "prod",
+    role: "backend",
+    unit: "monitoring",
+    monitoring_environment: "prod",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "monitoring",
+    role: "backend",
+    buildRole: "monitoring",
+    environment: "prod",
+    sourceCommit: commits.backend,
+    ref: "main",
+    event: "workflow_dispatch",
+    workflow: "deploy-operational-monitoring.yml",
+    workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
+    title: "Deploy operational monitoring",
+    unit: null,
+    jobs: ["monitoring"]
+  };
+  const harness = directHarness(descriptor, operation, {
+    priorRuns: [runFixture(descriptor, { id: 777 })]
+  });
+  harness.record.state = "running";
+  await assert.rejects(
+    harness.client.run({
+      record: harness.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [harness.record.step],
+      save: async () => {}
+    }),
+    /lacks its saved workflow boundary/u
+  );
+  assert.equal(
+    harness.calls.some(
+      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+    ),
+    false
+  );
+});
+
 test("a changed staging frontend adopts its automatic push deployment without dispatching another", async () => {
   const operation = makeReleaseOperation({
     release_id: "55555555-5555-4555-8555-555555555555",
@@ -439,6 +489,52 @@ test("a confirmed product-shaped workflow failure returns failed evidence for re
   assert.deepEqual(result.report.builds, {});
   assert.deepEqual(result.report.deployments, {});
   assert.equal(result.report.checks[0].status, "failed");
+});
+
+test("a monitoring build without its target template fails with a specific evidence error", async () => {
+  const operation = makeReleaseOperation({
+    release_id: "abababab-abab-4bab-8bab-abababababab",
+    operation_id: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd",
+    operation: "monitoring",
+    environment: "prod",
+    role: "backend",
+    unit: "monitoring",
+    monitoring_environment: "staging",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "monitoring",
+    role: "backend",
+    buildRole: "monitoring",
+    environment: "staging",
+    sourceCommit: commits.backend,
+    ref: "main",
+    event: "workflow_dispatch",
+    workflow: "deploy-operational-monitoring.yml",
+    workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
+    title: "Deploy operational monitoring",
+    unit: null,
+    jobs: ["monitoring"]
+  };
+  const harness = directHarness(descriptor, operation, {
+    mutateManifest: (manifest) => {
+      manifest.files = manifest.files.filter(
+        (file) => file.path !== "monitoring-staging.json"
+      );
+    }
+  });
+  await assert.rejects(
+    harness.client.run({
+      record: harness.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [harness.record.step],
+      save: async () => {}
+    }),
+    /missing its installed template/u
+  );
 });
 
 function dependencyReport(operation, role, runId, unit) {
