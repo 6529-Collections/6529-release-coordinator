@@ -462,12 +462,28 @@ and is not copied. The real workflow inputs were compared with the proposed test
 workflows on September 21; future drift must be checked again before real adapter
 work.
 
-The source PRs are merged, but acceptance for this mirror is not complete until
-protected test-branch runs prove staging deploy -> exact staging E2E and production
-deploy -> exact production E2E, along with backend service and monitoring dispatches.
-Only after that should the sandbox profile gain a new adapter that calls the
-separate mirrored workflows. Keep the generic adapter until the new path has
-equivalent journal, stop and recovery evidence.
+The source PRs are merged, and the
+[September 21 live acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md)
+proved protected staging deploy -> exact staging E2E, production deploy -> exact
+production E2E, backend service dispatches for both environments and monitoring
+dispatches from test `main`. The next sandbox step is a new adapter that calls
+these separate mirrored workflows.
+
+#### Separate-workflow adapter retirement gate
+
+Keep the generic adapter until the new adapter satisfies every condition below:
+
+- it records equivalent journal operations and stops at the same boundaries;
+- it independently completes one full success-path live acceptance;
+- it independently completes one controlled-failure recovery live acceptance;
+- both its contract-test suite and its recovery-test suite independently assert
+  that monitoring staging dispatches from backend `main`, ordinary staging
+  services dispatch from `1a-staging`, and recovery preserves that branch-source
+  distinction.
+
+Save the success-path record as `adapter-success-path-YYYY-MM-DD.md` and the
+controlled-failure recovery record as `adapter-recovery-YYYY-MM-DD.md` under
+`docs/testing/`. Link both from progress before retiring the generic adapter.
 
 ### Small executable example
 

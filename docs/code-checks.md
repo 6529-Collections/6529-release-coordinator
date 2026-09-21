@@ -26,12 +26,23 @@ The install downloads locked dependencies. The check command then runs:
    `scripts`, excluding dependencies and generated runtime records. Each root
    must contain tests. Tests use controlled inputs, simulated GitHub responses,
    and temporary real Git repositories.
-4. `npm run check:workflows`: parses all workflow YAML and verifies job permissions,
+4. `npm run check:docs`: keeps the two adapter-acceptance record names dated and
+   canonical, requires any such record under `docs/testing/` to be linked from
+   progress exactly once, and rejects invalid calendar dates, missing link
+   targets, and links outside the docs-relative `testing/` directory. Plain and
+   angle-bracket Markdown destinations, optional link titles, query strings and
+   anchors are normalized before the check.
+   The `adapter-success-path` and `adapter-recovery` filename prefixes are
+   reserved for these dated acceptance records; notes and history files must use
+   other names. The retirement contract intentionally keeps the authoritative
+   records in `docs/testing/`, not `docs/history/`; the check scans the rest of
+   `docs/` to enforce that boundary. Malformed angle-bracket links also fail.
+5. `npm run check:workflows`: parses all workflow YAML and verifies job permissions,
    triggers, pinned actions, the required result, and publishing/intake boundaries.
    It also verifies the CodeQL analysis and fixed automatic review set below.
    Duplicate keys, aliases, merge keys, and other unsupported YAML constructs
    fail explicitly. A new workflow needs an explicit policy and tests.
-5. `npm run check:package`: packs the public CLI, checks its reviewed nine-file
+6. `npm run check:package`: packs the public CLI, checks its reviewed nine-file
    allowlist, and installs that archive in a clean temporary consumer folder.
    The install uses the repository's locked production dependencies from npm's
    cache, with scripts disabled and offline mode enabled. It tests the installed
