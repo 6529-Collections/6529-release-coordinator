@@ -448,6 +448,19 @@ and [`Deploy a service`](https://github.com/6529-Collections/6529seize-backend/b
 These are source observations, not deployments performed in this review.
 The retired Release Bus has no design authority here.
 
+Frontend [PR #4072](https://github.com/6529-Collections/6529seize-frontend/pull/4072)
+merged on September 21 at `7471ac113cb2535940b19f036bf38f47f4d44eb6`.
+The real `Web Deploy - PROD` workflow now accepts an optional
+`expected_source_sha`. An ordinary manual dispatch may leave it empty and keeps
+the previous behavior. When it is provided, it must be a full lowercase commit
+SHA and must match the `main` commit GitHub fixed for that run; otherwise the
+workflow stops before the production build starts. A future Coordinator adapter
+must always provide the exact verified frontend `main` commit. A mismatch means
+the destination changed and needs fresh evidence; it is not permission to omit
+the input or deploy the newer composition. This closes the source race inside
+the workflow, but it does not build or authorize the real adapter and it is not
+deployment proof.
+
 ## Core rule: one release lane
 
 Many requests may wait, but only one release batch progresses at a time.
@@ -749,7 +762,9 @@ how the apps receive configuration.
    `environment=prod`, one selected application service at a time in dependency
    order.
 5. After backend prerequisites pass, merge frontend changes into `main` and
-   dispatch `Web Deploy - PROD`. Preserve existing release-note grouping.
+   dispatch `Web Deploy - PROD` with `expected_source_sha` set to that exact
+   verified frontend `main` commit. Preserve existing release-note grouping.
+   A source mismatch stops for fresh evidence before any production build.
 6. Confirm exact running versions and existing health checks, and wait for the
    configured required production-safe E2E results.
 7. Save the result before closing the successful release and freeing its lane.
