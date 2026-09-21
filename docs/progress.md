@@ -4,7 +4,9 @@ Last reviewed: **2026-09-21**, against merged Coordinator `main` source
 `9fc476e`, frontend `main` source `7471ac1`, the live package and consumer
 evidence below, and the latest sandbox acceptance. This page separates
 implemented behavior, source delivery and live proof. Earlier observations carry
-their original dates unless a newer check is stated.
+their original dates unless a newer check is stated. Coordinator `9fc476e` is
+the merged baseline and parent of this documentation-only PR, not the eventual
+merge commit for this update.
 
 ## Current state
 
@@ -24,7 +26,7 @@ their original dates unless a newer check is stated.
 | Sandbox fake-production restoration | After a confirmed no-database-change production failure, restore affected test `main` and staging branches with protected checked undo PRs, then rerun their normal builds and E2E; keep the original failure | Merged through [PR #172](https://github.com/6529-Collections/6529-release-coordinator/pull/172); see [delivery](#pr-172-delivery-september-17). The [September 16 controlled live test](./testing/fake-production-restoration-2026-09-16.md) passed production and staging restoration, matching builds/E2E, final ref/tree readback, and ticket projection from the then-uncommitted implementation. Offline recovery, resume, moved-ref and adapter tests pass. Review hardening also checks both environment refs before each workflow dispatch and before accepting its result; that guard has offline proof only. |
 | Sandbox monitoring deployment | A complete production ticket that selects `operational_deployments: ["monitoring"]` deploys the sample monitoring package for staging and then prod from the merged test `main` commit, before the production application deployments; a confirmed failure stops before any application deployment, restores both environments and redeploys monitoring from the restored commit | Merged through [PR #178](https://github.com/6529-Collections/6529-release-coordinator/pull/178); see [delivery](#pr-178-delivery-september-17). The [September 17 live acceptance](./testing/sandbox-monitoring-2026-09-17.md) ran from the then-unmerged branch and passed the monitoring-only production release (ticket #30: sixteen operations, both installed templates bound to their builds and to GitHub's artifact records) and the controlled monitoring failure with full restoration (ticket #32). The mixed application-plus-monitoring release (ticket #33) also passed all sixteen operations with a changed inventory. The sample backend deploys monitoring only from test `main`, like the real backend; the real adapter is not built. |
 | Waiting for other workflow runs | Before each protected merge and each workflow dispatch, the sandbox adapter waits without a time limit until the pinned release workflow has no active run in the target repository, logs each check and saves the blocking runs | Merged through [PR #181](https://github.com/6529-Collections/6529-release-coordinator/pull/181) with offline coverage for the dispatch and merge paths, every active status, interruption, resume and state validation; see the [acceptance case](./merge-rehearsal-testing.md#release-sequence-acceptance). The pinned sandbox workflow holds one lock per environment, republished through [PR #182](https://github.com/6529-Collections/6529-release-coordinator/pull/182) to both test repositories' `main` and `1a-staging` (backend [PR #94](https://github.com/6529-Collections/release-coordinator-test-backend/pull/94), frontend [PR #86](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/86)). The [September 18 live acceptance](./testing/sandbox-inflight-wait-2026-09-18.md) found that GitHub's status-filtered run listing lags and can report a false quiet. The correction, reading the newest unfiltered page as well, is delivered together with that record rather than by PR #181; run from that corrected source, the resumed run waited 27 minutes before its first dispatch, stopped cleanly on Ctrl-C during a wait, resumed and dispatched once, waited before a frontend merge, and completed all fourteen operations for ticket #34. |
-| Frontend production source guard | The real `Web Deploy - PROD` workflow accepts an optional `expected_source_sha` and refuses before building when it does not match the `main` commit fixed for the run | Frontend [PR #4072](https://github.com/6529-Collections/6529seize-frontend/pull/4072) merged at `7471ac1`; the workflow was read back from frontend `main`. Manual dispatches may still omit the input. A future Coordinator adapter must always provide it. This is source delivery, not a Coordinator adapter or deployment. |
+| Frontend production source guard | The real `Web Deploy - PROD` workflow accepts an optional `expected_source_sha` and refuses before building when it does not match the `main` commit fixed for the run | Frontend [PR #4072](https://github.com/6529-Collections/6529seize-frontend/pull/4072) merged at `7471ac1`; the exact [workflow source](https://github.com/6529-Collections/6529seize-frontend/blob/7471ac113cb2535940b19f036bf38f47f4d44eb6/.github/workflows/build-upload-deploy-prod.yml) was read back from frontend `main`. Manual dispatches may still omit the input under existing human authorization. A future Coordinator adapter must re-read `main` immediately before dispatch and always provide the exact approved commit. This is source delivery, not a Coordinator adapter or deployment. |
 | Real releases | Existing product release procedures remain in use | Coordinator staging/production execution and rollback are not built. |
 
 The manual command runs once and exits. Real mode inspects and rehearses Git;
@@ -55,8 +57,9 @@ the same wait to the real lock groups and must not rely on GitHub's
 status-filtered run listing alone.
 The frontend production workflow's exact-source guard is now merged through
 frontend PR #4072. A future real frontend adapter must pass the exact verified
-`main` commit as `expected_source_sha`; ordinary manual dispatches remain
-backward compatible when the input is empty.
+`main` commit as `expected_source_sha` after re-reading it immediately before
+dispatch; ordinary authorized manual dispatches remain backward compatible when
+the input is empty.
 Do not connect the Coordinator to real product execution yet. Real adapters
 (including the real monitoring adapter, which must dispatch the backend's
 `Deploy operational monitoring` workflow with the exact merged `main` commit
@@ -75,16 +78,21 @@ implement automatic rollback or turn the failed release into a success. See the
 
 Frontend [PR #4072](https://github.com/6529-Collections/6529seize-frontend/pull/4072)
 merged at `7471ac113cb2535940b19f036bf38f47f4d44eb6` (final head
-`c6df6d0f493104f4878f97039bb315ac846205f2`). Readback from frontend `main`
-confirmed the optional `expected_source_sha`, its full lowercase commit check,
-the equality check against GitHub's fixed `github.sha`, and the dependency that
-stops the production build when the guard fails. Leaving the input empty keeps
-ordinary manual production dispatches compatible with their earlier behavior.
+`c6df6d0f493104f4878f97039bb315ac846205f2`). Readback of the exact
+[`Web Deploy - PROD` workflow](https://github.com/6529-Collections/6529seize-frontend/blob/7471ac113cb2535940b19f036bf38f47f4d44eb6/.github/workflows/build-upload-deploy-prod.yml)
+from frontend `main` confirmed the optional `expected_source_sha`, its full
+lowercase commit check, the equality check against GitHub's fixed `github.sha`,
+and the dependency that stops the production build when the guard fails. Leaving
+the input empty keeps ordinary production dispatches compatible under the
+repository's existing human authorization; it is not the Coordinator path.
 
-The future Coordinator frontend production adapter must always provide the exact
-verified merged `main` commit. This closes the check-to-dispatch source
-gap inside the product workflow. It does not create the adapter, authorize a
-real release, or prove that a deployment occurred.
+Immediately before dispatch, the future Coordinator frontend production adapter
+must re-read frontend `main`, verify that it still represents the approved
+production composition, and provide that exact commit. It must not reuse an
+earlier staging read. A mismatch ends the release attempt and requires fresh
+matching evidence before a retry. This closes the check-to-dispatch source gap
+inside the product workflow. It does not create the adapter, authorize a real
+release, or prove that a deployment occurred.
 
 ## PR #181, #182 and #187 delivery, September 18
 

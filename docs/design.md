@@ -450,16 +450,24 @@ The retired Release Bus has no design authority here.
 
 Frontend [PR #4072](https://github.com/6529-Collections/6529seize-frontend/pull/4072)
 merged on September 21 at `7471ac113cb2535940b19f036bf38f47f4d44eb6`.
-The real `Web Deploy - PROD` workflow now accepts an optional
+The real
+[`Web Deploy - PROD`](https://github.com/6529-Collections/6529seize-frontend/blob/7471ac113cb2535940b19f036bf38f47f4d44eb6/.github/workflows/build-upload-deploy-prod.yml)
+workflow now accepts an optional
 `expected_source_sha`. An ordinary manual dispatch may leave it empty and keeps
-the previous behavior. When it is provided, it must be a full lowercase commit
-SHA and must match the `main` commit GitHub fixed for that run; otherwise the
-workflow stops before the production build starts. A future Coordinator adapter
-must always provide the exact verified frontend `main` commit. A mismatch means
-the destination changed and needs fresh evidence; it is not permission to omit
-the input or deploy the newer composition. This closes the source race inside
-the workflow, but it does not build or authorize the real adapter and it is not
-deployment proof.
+the previous behavior under the repository's existing human authorization. That
+empty-input path is deliberate manual compatibility, not a path the Coordinator
+may use. When the input is provided, it must be a full lowercase commit SHA and
+must match the `main` commit GitHub fixed for that run; otherwise the workflow
+stops before the production build starts. Immediately before dispatch, a future
+Coordinator adapter must re-read frontend `main`, verify it still represents the
+approved production composition, and pass that exact commit. It must not reuse an
+earlier staging read. A mismatch ends that release attempt and requires fresh
+matching evidence; it is not permission to retry with the newer SHA, omit the
+input or deploy the newer composition. Adapter tests must cover the exact input,
+refuse an omitted or malformed input on the Coordinator path, and treat a
+workflow source mismatch as a stop before accepting any build. This closes the
+source race inside the workflow, but it does not build or authorize the real
+adapter and it is not deployment proof.
 
 ## Core rule: one release lane
 
@@ -762,9 +770,11 @@ how the apps receive configuration.
    `environment=prod`, one selected application service at a time in dependency
    order.
 5. After backend prerequisites pass, merge frontend changes into `main` and
-   dispatch `Web Deploy - PROD` with `expected_source_sha` set to that exact
-   verified frontend `main` commit. Preserve existing release-note grouping.
-   A source mismatch stops for fresh evidence before any production build.
+   re-read frontend `main` immediately before dispatch. Confirm that it still
+   represents the approved production composition, then dispatch
+   `Web Deploy - PROD` with `expected_source_sha` set to that exact commit.
+   Preserve existing release-note grouping. A source mismatch ends this release
+   attempt and requires fresh evidence before any production build or retry.
 6. Confirm exact running versions and existing health checks, and wait for the
    configured required production-safe E2E results.
 7. Save the result before closing the successful release and freeing its lane.
