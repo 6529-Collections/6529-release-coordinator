@@ -456,18 +456,21 @@ workflow now accepts an optional
 `expected_source_sha`. An ordinary manual dispatch may leave it empty and keeps
 the previous behavior under the repository's existing human authorization. That
 empty-input path is deliberate manual compatibility, not a path the Coordinator
-may use. When the input is provided, it must be a full lowercase commit SHA and
-must match the `main` commit GitHub fixed for that run; otherwise the workflow
-stops before the production build starts. Immediately before dispatch, a future
-Coordinator adapter must re-read frontend `main`, verify it still represents the
-approved production composition, and pass that exact commit. It must not reuse an
-earlier staging read. A mismatch ends that release attempt and requires fresh
-matching evidence; it is not permission to retry with the newer SHA, omit the
-input or deploy the newer composition. Adapter tests must cover the exact input,
-refuse an omitted or malformed input on the Coordinator path, and treat a
-workflow source mismatch as a stop before accepting any build. This closes the
-source race inside the workflow, but it does not build or authorize the real
-adapter and it is not deployment proof.
+may use. This manual behavior is a source observation read back from frontend
+PR #4072, not a guarantee the Coordinator enforces. When the input is provided,
+it must be a full lowercase commit SHA and must match the `main` commit GitHub
+fixed for that run; otherwise the workflow stops before the production build
+starts. After any in-flight-run wait is quiet, the final GitHub read before the
+dispatch call must re-read frontend `main`, verify it still represents the
+approved production composition, and pass that exact commit. It must not reuse
+an earlier staging read. Any mismatch ends the attempt. Save it, keep the lane
+for a person, and require explicit authorization plus fresh matching evidence
+for a new attempt; never reuse the newer SHA, omit the input or deploy the newer
+composition. Adapter tests must cover the exact input, refuse an omitted or
+malformed input on the Coordinator path, repeat the final ref read after a wait,
+and treat a workflow source mismatch as a stop before accepting any build. This
+closes the source race inside the workflow, but it does not build or authorize
+the real adapter and it is not deployment proof.
 
 ## Core rule: one release lane
 
@@ -770,11 +773,15 @@ how the apps receive configuration.
    `environment=prod`, one selected application service at a time in dependency
    order.
 5. After backend prerequisites pass, merge frontend changes into `main` and
-   re-read frontend `main` immediately before dispatch. Confirm that it still
-   represents the approved production composition, then dispatch
-   `Web Deploy - PROD` with `expected_source_sha` set to that exact commit.
-   Preserve existing release-note grouping. A source mismatch ends this release
-   attempt and requires fresh evidence before any production build or retry.
+   wait for conflicting runs. After the wait is quiet, make the final GitHub read
+   of frontend `main`, confirm that it still represents the approved production
+   composition, then dispatch `Web Deploy - PROD` with `expected_source_sha` set
+   to that exact commit. Do this for every selected frontend production dispatch,
+   even when no frontend merge was needed. If no frontend deployment is selected,
+   record the actual deployed frontend instead of claiming the guard ran. Preserve
+   existing release-note grouping. Any mismatch ends the attempt. Save it, keep
+   the lane for a person, and require explicit authorization plus fresh matching
+   evidence for a new attempt; never reuse the newer SHA.
 6. Confirm exact running versions and existing health checks, and wait for the
    configured required production-safe E2E results.
 7. Save the result before closing the successful release and freeing its lane.
