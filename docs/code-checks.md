@@ -28,7 +28,8 @@ The install downloads locked dependencies. The check command then runs:
    and temporary real Git repositories.
 4. `npm run check:docs`: keeps the two adapter-acceptance record names dated and
    canonical, requires any such record under `docs/testing/` to be linked from
-   progress, and rejects missing link targets.
+   progress exactly once, and rejects invalid calendar dates, missing link
+   targets, and links outside the docs-relative `testing/` directory.
 5. `npm run check:workflows`: parses all workflow YAML and verifies job permissions,
    triggers, pinned actions, the required result, and publishing/intake boundaries.
    It also verifies the CodeQL analysis and fixed automatic review set below.

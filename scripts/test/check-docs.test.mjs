@@ -16,7 +16,7 @@ test("adapter evidence uses canonical dated names and progress links", () => {
 
   const success = "adapter-success-path-2026-09-21.md";
   const recovery = "adapter-recovery-2026-09-22.md";
-  const progress = `${pending}\n[Success](./testing/${success})\n[Recovery](./testing/${recovery})`;
+  const progress = `${pending}\n[Success](./testing/${success})\n[Recovery](testing/${recovery}#result)`;
   validateAdapterEvidence({
     gate,
     progress,
@@ -28,7 +28,16 @@ test("adapter evidence uses canonical dated names and progress links", () => {
       validateAdapterEvidence({
         gate,
         progress: pending,
-        testingFiles: ["adapter-success-path-latest.md"]
+        testingFiles: ["adapter-recovery.md"]
+      }),
+    /dated canonical filename/u
+  );
+  assert.throws(
+    () =>
+      validateAdapterEvidence({
+        gate,
+        progress: pending,
+        testingFiles: ["adapter-success-path-2026-13-01.md"]
       }),
     /dated canonical filename/u
   );
@@ -49,6 +58,24 @@ test("adapter evidence uses canonical dated names and progress links", () => {
         testingFiles: [success]
       }),
     /must be linked from docs\/progress\.md/u
+  );
+  assert.throws(
+    () =>
+      validateAdapterEvidence({
+        gate,
+        progress: `${pending}\n[Success](./testing/${success})\n[Again](testing/${success})`,
+        testingFiles: [success]
+      }),
+    /link each adapter acceptance record once/u
+  );
+  assert.throws(
+    () =>
+      validateAdapterEvidence({
+        gate,
+        progress: `${pending}\n[Success](docs/testing/${success})`,
+        testingFiles: [success]
+      }),
+    /must target testing/u
   );
   assert.throws(
     () =>
