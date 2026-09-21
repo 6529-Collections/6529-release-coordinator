@@ -149,9 +149,9 @@ explanation. Reasons are not permissions.
 | `reason:rehearsal-unverified` | Restore missing evidence or report storage, then rerun. |
 | `reason:rehearsal-stale` | Inspect changed inputs, refresh the plan where appropriate, then rerun. |
 | `reason:batch-target-deferred` | Keep the complete ticket queued for a later run because the current batch uses the other release target. |
-| `reason:release-completed` | The exact sandbox release plan reached its requested target and every matching check passed. Close the sandbox ticket as completed. |
+| `reason:release-completed` | The exact release plan reached its requested target and every matching check passed. Close the ticket as completed. |
 | `reason:release-failed` | A confirmed release step failed after execution began. Stop later steps and hand the saved partial state to a person. |
-| `reason:release-unverified` | The selected sandbox release is unfinished or its effect is uncertain. Keep the ticket waiting and reconcile the saved operation before retrying. |
+| `reason:release-unverified` | The selected release is unfinished or its effect is uncertain. Keep the ticket waiting and reconcile the saved operation before retrying. |
 | `reason:cancelled` | Close after an authorized cancellation is recorded. |
 | `reason:replaced` | Close with an explicit replacement request link and recorded replacement decision. |
 | `reason:test` | Close a confirmed test after its purpose is complete. Editable title text alone does not establish this. |
