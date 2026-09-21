@@ -762,11 +762,19 @@ export function createProductWorkflowReleaseGitHub({
         "dispatch"
       );
       await verifyEnvironment(operation, "dispatch");
+      const boundaryQuery = new URLSearchParams({
+        branch: descriptor.ref,
+        event: descriptor.event,
+        head_sha: descriptor.sourceCommit,
+        per_page: "1"
+      });
+      // GitHub returns workflow runs newest-first, so one exact candidate is
+      // sufficient to fence every matching run that existed before dispatch.
       const newest = (
         await call(
           descriptor.role,
           "GET",
-          `/actions/workflows/${descriptor.workflow}/runs?per_page=1`
+          `/actions/workflows/${descriptor.workflow}/runs?${boundaryQuery}`
         )
       ).data;
       serviceAssert(

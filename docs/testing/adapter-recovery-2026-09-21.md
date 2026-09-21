@@ -48,7 +48,11 @@ and frontend [PR #101](https://github.com/6529-Collections/release-coordinator-t
 The restored database, worker, API, and frontend deployments passed, followed by
 [matching staging E2E](https://github.com/6529-Collections/release-coordinator-test-frontend/actions/runs/35641234776).
 Monitoring recovery continued to dispatch from restored backend `main`; ordinary
-staging services continued to dispatch from restored `1a-staging`.
+staging services continued to dispatch from restored `1a-staging`. The offline
+test `recovery keeps restored staging services on 1a-staging and restored staging
+monitoring on main` in
+[`product-workflow-recovery.test.mjs`](../../apps/coordinator/test/product-workflow-recovery.test.mjs)
+enforces the same split.
 
 Independent GitHub readback found the final branch trees equal in each test
 repository:
@@ -71,6 +75,10 @@ GitHub transport error. The process stopped with the original run lock, as
 designed. After the documented sixty-second settling period, explicit resume of
 the same run reread the receipts, reused every completed operation without a
 second dispatch, reconciled the ticket writes, and released the lock.
+The offline test `an interrupted monitoring deployment resumes without
+dispatching the finished one again` in
+[`release-monitoring.test.mjs`](../../apps/coordinator/test/release-monitoring.test.mjs)
+deterministically checks that idempotency rule.
 
 Ticket #37 remains open with `status:action-needed` and
 `reason:release-failed`. Its status comment identifies

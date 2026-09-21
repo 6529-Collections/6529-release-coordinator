@@ -155,6 +155,11 @@ function directHarness(
       const query = new URL(`https://example.invalid/${endpoint}`).searchParams;
       if (query.has("status"))
         return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
+      if (query.get("per_page") === "1")
+        return apiResponse("200 OK", {
+          total_count: priorRuns.length,
+          workflow_runs: priorRuns.slice(0, 1)
+        });
       if (query.has("event"))
         return apiResponse("200 OK", {
           total_count:
@@ -164,11 +169,6 @@ function directHarness(
             ...(dispatched || descriptor.event === "push" ? [run] : []),
             ...priorRuns
           ]
-        });
-      if (query.get("per_page") === "1")
-        return apiResponse("200 OK", {
-          total_count: priorRuns.length,
-          workflow_runs: priorRuns.slice(0, 1)
         });
       return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
     }
@@ -357,7 +357,12 @@ test("a fresh manual operation cannot adopt an older matching workflow run", asy
       )
         return false;
       const query = new URL(`https://example.invalid/${endpoint}`).searchParams;
-      return query.get("head_sha") === commits.backend;
+      return (
+        query.get("per_page") === "1" &&
+        query.get("event") === descriptor.event &&
+        query.get("branch") === descriptor.ref &&
+        query.get("head_sha") === commits.backend
+      );
     }),
     true
   );
