@@ -30,6 +30,7 @@ export async function processInbox({
   signal,
   now = () => new Date(),
   profile = realProfile,
+  releaseAdapter,
   journal = createJournal(api, profile, {
     workflow: rehearsal ? inboxWorkflow : undefined
   }),
@@ -52,12 +53,26 @@ export async function processInbox({
       : {
           issue_number: issueNumber ?? null,
           close_test: closeTest,
-          ...(rehearsal ? { workflow: inboxWorkflow } : {})
+          ...(rehearsal ? { workflow: inboxWorkflow } : {}),
+          ...(releaseAdapter ? { release_adapter: releaseAdapter } : {})
         };
   const { state, run } = await loggedStep(
     { step: "journal.acquire", message: "Acquire the inbox journal lock." },
     () => journal.acquire(actor, resume, scope)
   );
+  if (releaseAdapter) {
+    const savedAdapter = run.scope?.release_adapter ?? "generic";
+    serviceAssert(
+      savedAdapter === releaseAdapter,
+      "release-adapter",
+      `Resume requires the saved sandbox release adapter ${savedAdapter}.`
+    );
+    if (resume && run.scope.release_adapter === undefined) {
+      run.scope.release_adapter = savedAdapter;
+      state.lock.scope.release_adapter = savedAdapter;
+      await journal.save(state, run, "record legacy sandbox release adapter");
+    }
+  }
   bindRunLog(run.run_id, Boolean(resume));
   serviceAssert(
     run.scope &&

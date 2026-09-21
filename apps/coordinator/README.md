@@ -353,8 +353,11 @@ dispatches the separate product-shaped backend, monitoring, frontend and E2E
 workflow mirrors. Set
 `RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER=generic` to select the older
 `sandbox-release.yml` test client explicitly; `product-workflows` selects the
-default adapter explicitly. This setting is sandbox-only. Real runs retain individual
-ticket plans and Git rehearsals. Use
+default adapter explicitly. This setting is sandbox-only. Its selected value is
+saved in the run's journal scope, and resume must use that exact value. A saved
+run from before adapter identities existed is treated as `generic` and requires
+that explicit setting before it can resume. Real runs retain individual ticket
+plans and Git rehearsals. Use
 `npm run --silent inbox:run` to suppress npm's banner for JSON.
 
 For a complete supported sandbox ticket, the same command continues through

@@ -43,7 +43,9 @@ mirrors after their success and recovery acceptance. Set
 `RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER=generic` only to select the old
 generic `sandbox-release.yml` test client deliberately. The other accepted value
 is `product-workflows`. The variable is validated only for `sandbox`; it cannot
-add a release executor to `real`.
+add a release executor to `real`. New sandbox runs save the selected adapter in
+their journal scope. Explicit resume must name the same adapter; a pre-adapter
+saved run is treated as `generic` and cannot silently switch to the new default.
 
 The test inbox holds only a workflow wrapper and README. The wrapper checks out
 an exact Coordinator commit and executes the shared intake implementation.

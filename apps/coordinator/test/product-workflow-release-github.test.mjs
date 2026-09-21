@@ -792,6 +792,51 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
   assert.equal(result.report_hash, releaseHash(result.report));
 });
 
+test("E2E refuses a plan without matching successful backend and frontend deployments", async () => {
+  const operation = makeReleaseOperation({
+    release_id: "edededed-eded-4ded-8ded-edededededed",
+    operation_id: "fefefefe-fefe-4efe-8efe-fefefefefefe",
+    operation: "e2e",
+    environment: "staging",
+    role: null,
+    unit: null,
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const step = {
+    id: "staging:e2e",
+    kind: "e2e",
+    environment: "staging",
+    role: null
+  };
+  const client = createProductWorkflowReleaseGitHub({
+    profile: sandboxProfile,
+    execute: async () => assert.fail("dependency failure must precede GitHub"),
+    base: {},
+    polls: 1,
+    wait: async () => {}
+  });
+  await assert.rejects(
+    client.run({
+      record: {
+        id: operation.operation_id,
+        release_id: operation.release_id,
+        step,
+        state: "prepared",
+        actor,
+        created_at: "2026-09-21T16:00:00.000Z",
+        operation
+      },
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [step],
+      save: async () => {}
+    }),
+    /Matching backend and frontend deployments are required before E2E/u
+  );
+});
+
 test("product-shaped reports reject a deployment artifact that is not the saved workflow artifact", () => {
   const operation = makeReleaseOperation({
     release_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
@@ -809,4 +854,41 @@ test("product-shaped reports reject a deployment artifact that is not the saved 
     () => verifyProductWorkflowReport(report, operation),
     /does not match its saved operation/u
   );
+});
+
+test("product-shaped reports reject malformed and partial contract evidence", () => {
+  const operation = makeReleaseOperation({
+    release_id: "10101010-1010-4010-8010-101010101010",
+    operation_id: "20202020-2020-4020-8020-202020202020",
+    operation: "deploy",
+    environment: "staging",
+    role: "backend",
+    unit: "api",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const valid = dependencyReport(operation, "backend", 902, "api");
+  for (const [name, mutate] of [
+    ["adapter", (report) => (report.adapter = "unknown")],
+    ["deployment", (report) => delete report.deployments.backend],
+    ["checks", (report) => (report.checks = [])],
+    ["runner workflow", (report) => delete report.runner.workflow],
+    [
+      "artifact identity",
+      (report) => {
+        report.builds.backend.artifact = {
+          ...report.builds.backend.artifact,
+          id: report.builds.backend.artifact.id + 1
+        };
+      }
+    ]
+  ]) {
+    const report = structuredClone(valid);
+    mutate(report);
+    assert.throws(
+      () => verifyProductWorkflowReport(report, operation),
+      /does not match its saved operation/u,
+      name
+    );
+  }
 });

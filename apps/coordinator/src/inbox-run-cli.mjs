@@ -154,6 +154,7 @@ export async function runInboxRunCli(
         ...options,
         signal,
         profile,
+        releaseAdapter,
         api: client.request,
         identity: client.identity,
         get,
