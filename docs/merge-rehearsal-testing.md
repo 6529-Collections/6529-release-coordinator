@@ -468,7 +468,8 @@ proved protected staging deploy -> exact staging E2E, production deploy -> exact
 production E2E, backend service dispatches for both environments and monitoring
 dispatches from test `main`. The next sandbox step is a new adapter that calls
 these separate mirrored workflows. Keep the generic adapter until the new path
-has equivalent journal, stop, live acceptance and recovery evidence.
+has equivalent journal and stop behavior plus its own success-path and recovery
+live acceptance.
 
 ### Small executable example
 

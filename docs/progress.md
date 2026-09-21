@@ -5,7 +5,8 @@ Last reviewed: **2026-09-21**, against merged Coordinator `main` source
 evidence below, and the latest sandbox acceptance. This page separates
 implemented behavior, source delivery and live proof. Earlier observations carry
 their original dates unless a newer check is stated. Coordinator `4ae7425` is
-the merged baseline and parent of this documentation-only update.
+the merged baseline reviewed immediately before this documentation-only update,
+not the eventual merge commit for the update.
 
 ## Current state
 
@@ -66,8 +67,8 @@ backend test PR #100, and their protected staging/production success path has
 next sandbox integration step is to replace the Coordinator's generic sandbox
 release call with a test-profile adapter that dispatches those separate backend,
 monitoring, frontend and E2E workflows. The existing generic sandbox workflow
-stays available until that adapter has equivalent journal, stop, live acceptance
-and recovery coverage.
+stays available until that adapter has equivalent journal and stop behavior plus
+its own success-path and recovery live acceptance.
 Do not connect the Coordinator to real product execution yet. Real adapters
 (including the real monitoring adapter, which must dispatch the backend's
 `Deploy operational monitoring` workflow with the exact merged `main` commit

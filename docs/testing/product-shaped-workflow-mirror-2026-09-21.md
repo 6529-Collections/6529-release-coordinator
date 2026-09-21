@@ -35,7 +35,9 @@ or manual dispatch.
 | Exact production E2E | [run 35606488650](https://github.com/6529-Collections/release-coordinator-test-frontend/actions/runs/35606488650) passed as `Production E2E automatic 35606279043` |
 
 Every run completed successfully on its first attempt. The final readback found
-no active or queued run in either test repository.
+no active or queued run in either test repository. Both monitoring dispatches
+intentionally ran from backend `main`, including the staging-environment deploy,
+because that is the real backend workflow's source contract.
 
 ## Deployment evidence readback
 
