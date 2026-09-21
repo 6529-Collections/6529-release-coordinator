@@ -891,8 +891,20 @@ export function createProductWorkflowReleaseGitHub({
     };
   }
 
-  async function findAutomaticRun(role, workflowIdentity, title, event) {
-    const runs = await listRuns(role, workflowIdentity.file, { event });
+  async function findAutomaticRun(
+    role,
+    workflowIdentity,
+    title,
+    event,
+    expectedActor,
+    createdAt
+  ) {
+    const runs = await listRuns(role, workflowIdentity.file, {
+      actor: expectedActor.login,
+      branch: "main",
+      created: `>=${createdAt}`,
+      event
+    });
     const matches = runs.filter(
       (run) =>
         run.display_title === title && run.workflow_id === workflowIdentity.id
@@ -949,7 +961,9 @@ export function createProductWorkflowReleaseGitHub({
         "frontend",
         dispatch,
         dispatchTitle,
-        "workflow_run"
+        "workflow_run",
+        actor,
+        record.created_at
       );
       if (dispatchRun?.status === "completed") {
         serviceAssert(
@@ -961,7 +975,9 @@ export function createProductWorkflowReleaseGitHub({
           "frontend",
           e2e,
           e2eTitle,
-          "workflow_dispatch"
+          "workflow_dispatch",
+          runtime.githubActionsActor,
+          record.created_at
         );
         if (e2eRun) {
           const changed =
@@ -1001,6 +1017,7 @@ export function createProductWorkflowReleaseGitHub({
           positive(run.run_attempt) &&
           run.path === `.github/workflows/${identity.file}` &&
           run.display_title === title &&
+          Date.parse(run.created_at) >= Date.parse(record.created_at) &&
           String(run.actor?.id) === expectedActor.id &&
           run.actor?.login === expectedActor.login &&
           run.workflow_id === identity.id &&

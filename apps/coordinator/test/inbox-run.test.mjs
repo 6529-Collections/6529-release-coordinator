@@ -615,6 +615,22 @@ test("profile, scope, report-file and old-command validation fails before reads 
     });
     assert.equal(result.code, 2);
   }
+  const sandbox = fixture(sandboxProfile);
+  for (const value of ["", " "]) {
+    const result = await invoke(sandbox, {
+      env: {
+        RELEASE_COORDINATOR_PROFILE: "sandbox",
+        RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER: value
+      },
+      get: never,
+      run: never
+    });
+    assert.equal(result.code, 2);
+    assert.match(
+      JSON.stringify(result.report),
+      /must be generic or product-workflows/u
+    );
+  }
   for (const args of [
     ["--issue", "1", "--plan", "x"],
     ["--manifest", "x"],

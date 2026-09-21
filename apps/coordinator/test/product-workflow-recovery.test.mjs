@@ -81,6 +81,8 @@ function recoveryDispatch(operation, step, { block = false } = {}) {
     base: {},
     polls: 1,
     wait: async () => {
+      // Each recoveryDispatch fixture runs one operation; its first wait makes
+      // that operation's simulated external blocker finish.
       waits++;
       quiet = true;
     }
@@ -143,6 +145,11 @@ test("recovery keeps restored staging services on 1a-staging and restored stagin
   assert.equal(backendRequest.body.inputs.environment, "staging");
   assert.equal(backendRequest.body.inputs.expected_source_sha, commits.backend);
   assert.equal(backend.waits(), 1);
+  assert.ok(
+    backend.calls.some(({ endpoint }) =>
+      endpoint.includes("/deploy.yml/runs?status=queued")
+    )
+  );
 
   const monitoringOperation = makeReleaseOperation({
     release_id: releaseId,

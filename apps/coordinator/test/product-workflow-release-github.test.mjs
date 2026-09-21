@@ -821,6 +821,7 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     status: "completed",
     conclusion: "success",
     html_url: "https://example.invalid/runs/603",
+    created_at: "2026-09-21T16:00:00.000Z",
     updated_at: "2026-09-21T16:01:00.000Z"
   };
   const e2eRun = {
@@ -834,6 +835,7 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     html_url: "https://example.invalid/runs/604",
     updated_at: "2026-09-21T16:02:00.000Z"
   };
+  const automaticQueries = [];
   const execute = async (args) => {
     const endpoint = args[args.indexOf("--method") + 2];
     if (endpoint.includes("/contents/"))
@@ -842,13 +844,17 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
       const role = repositoryRole(endpoint);
       return apiResponse("200 OK", { object: { sha: commits[role] } });
     }
-    if (endpoint.includes("staging-e2e-dispatch.yml/runs?"))
+    if (endpoint.includes("staging-e2e-dispatch.yml/runs?")) {
+      automaticQueries.push(endpoint);
       return apiResponse("200 OK", {
         total_count: 1,
         workflow_runs: [wrapper]
       });
-    if (endpoint.includes("staging-e2e.yml/runs?"))
+    }
+    if (endpoint.includes("staging-e2e.yml/runs?")) {
+      automaticQueries.push(endpoint);
       return apiResponse("200 OK", { total_count: 1, workflow_runs: [e2eRun] });
+    }
     if (
       endpoint.endsWith(
         `/actions/runs/${wrapper.id}/attempts/1/jobs?per_page=100`
@@ -957,6 +963,21 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
   assert.equal(result.report.deployments.frontend.run_id, 602);
   assert.equal(result.report.report_hash, undefined);
   assert.equal(result.report_hash, releaseHash(result.report));
+  assert.equal(automaticQueries.length, 2);
+  for (const [endpoint, event, expectedActor] of [
+    [automaticQueries[0], "workflow_run", actor.login],
+    [
+      automaticQueries[1],
+      "workflow_dispatch",
+      productWorkflowRuntime.githubActionsActor.login
+    ]
+  ]) {
+    const query = new URL(`https://example.invalid/${endpoint}`).searchParams;
+    assert.equal(query.get("actor"), expectedActor);
+    assert.equal(query.get("branch"), "main");
+    assert.equal(query.get("created"), ">=2026-09-21T16:00:00.000Z");
+    assert.equal(query.get("event"), event);
+  }
 });
 
 test("E2E refuses a plan without matching successful backend and frontend deployments", async () => {
