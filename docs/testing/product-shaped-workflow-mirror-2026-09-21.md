@@ -43,6 +43,10 @@ service dispatches, which run from `1a-staging`.
 
 The exact monitoring dispatch requests were:
 
+This table covers only the monitoring workflow's dispatch source. The ordinary
+backend service used protected `1a-staging` for staging in run `35605923124` and
+`main` for production in run `35606173242`, as recorded in the run table above.
+
 | Environment | Dispatch source branch/ref | `environment` input | `commit_sha` input |
 | --- | --- | --- | --- |
 | staging | `main` | `staging` | `75658981146704d71f7e0179526b8f3acf7a8f40` |

@@ -476,12 +476,14 @@ Keep the generic adapter until the new adapter satisfies every condition below:
 - it records equivalent journal operations and stops at the same boundaries;
 - it independently completes one full success-path live acceptance;
 - it independently completes one controlled-failure recovery live acceptance;
-- its contract and recovery tests assert that monitoring staging dispatches from
-  backend `main`, ordinary staging services dispatch from `1a-staging`, and
-  recovery preserves that branch-source distinction.
+- both its contract-test suite and its recovery-test suite independently assert
+  that monitoring staging dispatches from backend `main`, ordinary staging
+  services dispatch from `1a-staging`, and recovery preserves that branch-source
+  distinction.
 
-Save both adapter acceptance records under `docs/testing/` and link them from
-progress before retiring the generic adapter.
+Save the success-path record as `adapter-success-path-YYYY-MM-DD.md` and the
+controlled-failure recovery record as `adapter-recovery-YYYY-MM-DD.md` under
+`docs/testing/`. Link both from progress before retiring the generic adapter.
 
 ### Small executable example
 

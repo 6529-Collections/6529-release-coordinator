@@ -198,10 +198,11 @@ the sandbox adapters with narrow calls to existing product Actions remains a
 later, separately authorized stage. Product-shaped test workflow interfaces are
 merged through frontend test PR #92 and backend test PR #100 so that adapter
 behavior can be learned against fake deployments first. The mirror's protected
-staging/production path now has
-[live acceptance](./docs/testing/product-shaped-workflow-mirror-2026-09-21.md).
-The current Coordinator does not consume them yet. This repository still has no
-permission or adapter that merges or deploys the real products.
+staging/production success path now has
+[live acceptance](./docs/testing/product-shaped-workflow-mirror-2026-09-21.md);
+adapter failure and recovery acceptance remain pending. The current Coordinator
+does not consume them yet. This repository still has no permission or adapter
+that merges or deploys the real products.
 
 Sandbox recovery uses protected new commits undoing the failed batch and
 ordinary build/E2E checks when no database change is confirmed. Staging
