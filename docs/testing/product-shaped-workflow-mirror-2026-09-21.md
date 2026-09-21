@@ -43,7 +43,7 @@ service dispatches, which run from `1a-staging`.
 
 The exact monitoring dispatch requests were:
 
-| Environment | Workflow ref | `environment` input | `commit_sha` input |
+| Environment | Dispatch source branch/ref | `environment` input | `commit_sha` input |
 | --- | --- | --- | --- |
 | staging | `main` | `staging` | `75658981146704d71f7e0179526b8f3acf7a8f40` |
 | prod | `main` | `prod` | `75658981146704d71f7e0179526b8f3acf7a8f40` |
