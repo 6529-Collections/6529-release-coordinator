@@ -310,7 +310,7 @@ function inspectOperationalDeployments(request, checks, profile) {
       check(
         "operational_deployments",
         "pass",
-        "Operational monitoring is recorded and will use the pinned product monitoring workflow from main.",
+        "The selected product monitoring workflow is supported. Deployment and target health have not run.",
         {
           selected
         }

@@ -173,6 +173,7 @@ test("a duplicate request outside the filtered inbox cannot block a selected tic
   h.samples[1].entry.request.request_id = h.samples[0].entry.request.request_id;
   for (const sample of h.samples) {
     sample.entry.status = "invalid";
+    sample.entry.duplicate_issue_numbers = [1, 2];
     sample.entry.errors = [
       "The same request ID appears in multiple open Issues: #1, #2."
     ];
@@ -192,6 +193,46 @@ test("a duplicate request outside the filtered inbox cannot block a selected tic
   assert.deepEqual(result.batch.selected, [1]);
   assert.equal(h.f.issues[0].state, "closed");
   assert.equal(h.f.issues[1].state, "open");
+});
+
+test("two selected Issues with one request ID stop before journal or release writes", async () => {
+  const h = harness();
+  h.samples[1].entry.request.request_id = h.samples[0].entry.request.request_id;
+  for (const sample of h.samples) {
+    sample.entry.status = "invalid";
+    sample.entry.duplicate_issue_numbers = [1, 2];
+    sample.entry.errors = [
+      "The same request ID appears in multiple open Issues: #1, #2."
+    ];
+  }
+  await assert.rejects(
+    processInbox({
+      ...h.options,
+      selectionMode: "filtered",
+      issueNumbers: [1, 2],
+      actorLogin: "trusted-user"
+    }),
+    /available verified request from the selected actor/u
+  );
+  assert.equal(h.f.head, null);
+  assert.equal(h.dispatches(), 0);
+  assert.deepEqual(h.f.comments, []);
+});
+
+test("filtered tickets with one login but different verified actor IDs stop", async () => {
+  const h = harness();
+  h.samples[1].entry.github_actor.id = 987654;
+  await assert.rejects(
+    processInbox({
+      ...h.options,
+      selectionMode: "filtered",
+      issueNumbers: [1, 2],
+      actorLogin: "trusted-user"
+    }),
+    /available verified request from the selected actor/u
+  );
+  assert.equal(h.f.head, null);
+  assert.equal(h.dispatches(), 0);
 });
 
 for (const exclusion of ["unsupported", "limit"]) {

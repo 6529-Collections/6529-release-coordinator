@@ -858,7 +858,11 @@ test("accepts the pinned monitoring workflow without fetching an application ser
   const result = await inspectReadiness(f.entry, f);
   const operational = getCheck(result, "operational_deployments");
   assert.equal(operational.status, "pass");
-  assert.match(operational.message, /pinned product monitoring workflow/);
+  assert.match(
+    operational.message,
+    /product monitoring workflow is supported/u
+  );
+  assert.match(operational.message, /target health have not run/u);
   assert.deepEqual(f.calls, [
     ["pr", repo, 10],
     ["pr", repo, 10]

@@ -186,8 +186,8 @@ The real backend's catalog, sequential deployment instructions, database handler
 and existing temporary-MySQL tests inform this example; the guide records pinned
 sources. The local Coordinator inspects the sample database definitions and
 runs the sample service checks through a pinned GitHub workflow. The controlled
-local and live cases have their expected results recorded in progress; real
-execution remains unimplemented.
+local and live cases have their expected results recorded in progress; the
+current real adapter has offline tests but no live product acceptance.
 
 Keep one `inbox:run` workflow and shared decision logic. Sandbox actions
 operate on isolated temporary resources, with exact service versions and results
@@ -197,10 +197,9 @@ evidence holds execution. Preserve failures, partial effects, and safe retry
 decisions in the same ticket's history without claiming release completion.
 
 The shared profile selects configuration and available actions, not permissions.
-Real execution adapters remain absent. Testing the order and data behavior in
-sandbox does not implement the real lane, merge timing, builds, production database
-inspection, or deployment/recovery rules. The later batch stage still starts
-with requests without database changes.
+The real adapter uses the same release sequence with product repositories and
+pinned workflows. Its local tests do not prove product merge timing, builds,
+database behavior, deployments, or recovery in a live environment.
 
 <a id="proposed-batch-testing-and-selection"></a>
 
@@ -210,9 +209,9 @@ with requests without database changes.
 for local checks versus live acceptance and source delivery. A sandbox
 `inbox:run` selects and tests the visible whole tickets together. The visibility
 may be the complete inbox or a guarded list of Issue numbers from one verified
-actor; it does not change batch, database, target, or release policy. Real mode
-remains inspection and Git rehearsal only. No manual plan, extra batch command,
-product merge or release permission is introduced.
+actor; it does not change batch, database, target, or release policy. The real
+profile uses the same batch and release sequence; it has offline tests only.
+No manual plan, extra batch command or independent release permission is introduced.
 
 ### Cheap elimination before expensive checks
 

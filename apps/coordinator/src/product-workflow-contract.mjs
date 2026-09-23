@@ -178,7 +178,8 @@ export function verifyProductWorkflowReport(report, operation) {
     !object(report.builds) ||
     (operation.profile === "real" &&
       operation.operation === "e2e" &&
-      !requiredRoles.includes("frontend")) ||
+      (requiredRoles.some((role) => !["backend", "frontend"].includes(role)) ||
+        (report.status === "passed" && !requiredRoles.includes("frontend")))) ||
     !buildsValid ||
     !deploymentsMatch(report, operation, requiredRoles, runtime) ||
     (operation.profile === "sandbox" &&

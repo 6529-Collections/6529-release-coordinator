@@ -3,7 +3,10 @@ import test from "node:test";
 import { fixture } from "./processing-fixture.mjs";
 import { processInbox } from "../src/inbox-processor.mjs";
 import { createJournal, validateJournal } from "../src/inbox-journal.mjs";
-import { saveOrganizedReleaseRequestIssue } from "../src/ticket-presentation.mjs";
+import {
+  saveOrganizedReleaseRequestIssue,
+  statusComment
+} from "../src/ticket-presentation.mjs";
 import { createCoordinatorGitHub } from "../src/coordinator-github.mjs";
 import { runInboxRunCli } from "../src/inbox-run-cli.mjs";
 import { readInbox } from "../src/inbox-reader.mjs";
@@ -40,6 +43,33 @@ const saveFixtureRequest = (f) => {
     checksum: releaseRequestChecksum(f.request)
   });
 };
+
+test("legacy sandbox release comments keep their sandbox label", () => {
+  const body = statusComment({
+    decision: {
+      status: "completed",
+      next_action: "None",
+      action_owner: "none",
+      submitter_action: "None",
+      reasons: [],
+      batch: {
+        status: "passed",
+        message: "Completed",
+        release: { status: "passed", message: "Completed" }
+      }
+    },
+    actor: { id: 456, login: "tester" },
+    at: "2026-09-23T00:00:00.000Z",
+    submitter: null,
+    request: null,
+    number: 1,
+    marker: "11111111-1111-4111-8111-111111111111",
+    assignment: "assigned",
+    profile: "sandbox"
+  });
+  assert.match(body, /Sandbox release: passed/u);
+  assert.doesNotMatch(body, /Real-profile release/u);
+});
 
 test("new intake creates readable scope, received status, verified assignment, and one separate comment", async () => {
   const f = fixture();
@@ -781,6 +811,7 @@ test("an already closed legacy test is not reopened, reset, or invented as compl
   assert.deepEqual(result.requests, []);
   assert.equal(issueWrites(f).length, 0);
   assert.deepEqual(f.state().tickets, {});
+  assert.deepEqual(f.comments, []);
   assert.equal(f.issue.state, "closed");
 });
 

@@ -401,22 +401,30 @@ export async function prepareBatch(
   };
 }
 
-function realServicePlan(plan, report, items) {
-  const graph = report.repositories
-    .flatMap((repository) => repository.checks)
-    .find((check) => check.id === "combined_services")?.evidence;
-  serviceAssert(
-    graph?.status === "pass" && Array.isArray(graph.order),
-    "invalid-services",
-    "The exact product backend catalog did not confirm the requested deployment order."
+export function realServicePlan(plan, report, items) {
+  // runMergePlan reads the backend catalog from the exact combined commit and
+  // records this check independently of the profile-specific captureRepository.
+  const backend = report.repositories.find(
+    (repository) => repository.role === "backend"
   );
+  const graph = backend?.checks.find(
+    (check) => check.id === "combined_services"
+  )?.evidence;
+  if (backend)
+    serviceAssert(
+      graph?.status === "pass" &&
+        Array.isArray(graph.order) &&
+        Array.isArray(graph.edges),
+      "invalid-services",
+      "The exact product backend catalog did not confirm the requested deployment order."
+    );
   const declared = items[0].entry.request.database_change;
   serviceAssert(
     ["yes", "no"].includes(declared),
     "database-unverified",
     "The product request needs a verified yes/no database answer."
   );
-  const steps = graph.order.map((node) => {
+  const steps = (graph?.order ?? []).map((node) => {
     const unit = node.split("/").at(-1);
     return {
       unit,

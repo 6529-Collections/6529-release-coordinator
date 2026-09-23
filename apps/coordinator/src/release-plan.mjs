@@ -358,12 +358,25 @@ export function validateRecoveryPlan(plan, execution, batch) {
 
 export function integrationCommitInput(record, candidate) {
   const profile = record.profile ?? record.operation?.profile ?? "sandbox";
+  serviceAssert(
+    profile !== "real" ||
+      (Number.isSafeInteger(Number(record.actor?.id)) &&
+        Number(record.actor.id) > 0 &&
+        /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u.test(
+          record.actor?.login ?? ""
+        )),
+    "release-identity",
+    "The product integration commit needs the verified GitHub actor."
+  );
   const signature = {
     name:
       profile === "sandbox"
         ? "Coordinator sandbox"
         : "6529 Release Coordinator",
-    email: "rehearsal@example.invalid",
+    email:
+      profile === "real"
+        ? `${record.actor.id}+${record.actor.login}@users.noreply.github.com`
+        : "rehearsal@example.invalid",
     date: record.created_at
   };
   return {

@@ -3,16 +3,22 @@ const duplicateRequest =
   /^The same request ID appears in multiple open Issues:/u;
 const isIssueNumber = (value) => Number.isSafeInteger(value) && value > 0;
 
-function removeOutsideDuplicateFinding(entry) {
+function removeOutsideDuplicateFinding(entry, allowed) {
   if (
     entry.status !== "invalid" ||
     !entry.request ||
     !entry.github_actor ||
+    !Array.isArray(entry.duplicate_issue_numbers) ||
+    !entry.duplicate_issue_numbers.includes(entry.issue_number) ||
+    entry.duplicate_issue_numbers.some(
+      (number) => number !== entry.issue_number && allowed.has(number)
+    ) ||
     !entry.errors?.length ||
     !entry.errors.every((error) => duplicateRequest.test(error))
   )
     return entry;
-  return { ...entry, status: "valid", errors: [] };
+  const { duplicate_issue_numbers: _, ...rest } = entry;
+  return { ...rest, status: "valid", errors: [] };
 }
 
 export const inboxScopes = Object.freeze(["filtered", "inbox"]);
@@ -97,7 +103,7 @@ export function filterInboxRequests(
     // The shared reader reports duplicate request IDs across the full inbox.
     // Recompute that policy after filtering so a hidden ticket cannot affect
     // the virtual inbox, while two selected duplicates still block below.
-    .map(removeOutsideDuplicateFinding)
+    .map((entry) => removeOutsideDuplicateFinding(entry, allowed))
     .filter(
       (entry) =>
         entry.status === "valid" &&
@@ -106,7 +112,8 @@ export function filterInboxRequests(
   if (
     exact &&
     (visible.length !== allowed.size ||
-      visible.some((entry) => !allowed.has(entry.issue_number)))
+      visible.some((entry) => !allowed.has(entry.issue_number)) ||
+      new Set(visible.map((entry) => entry.github_actor.id)).size !== 1)
   )
     throw new Error(
       "Every filtered Issue must be an available verified request from the selected actor."

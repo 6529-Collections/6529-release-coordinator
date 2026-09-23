@@ -432,6 +432,9 @@ export function createBatchGitHub({
           )
         )
           return null;
+        // A trial PR is checked, then closed without merging. Its merge-state
+        // summary can be BLOCKED by review requirements; the protected
+        // integration PR is separately gated before an actual merge.
         const passed =
           observed.mergeable === "MERGEABLE" &&
           required.every((check) =>

@@ -314,8 +314,8 @@ does not deploy monitoring, and its completion comment says that the sample
 backend deploys monitoring only from test `main`. A monitoring-only sandbox
 request has no sample services to check, so it waits with
 `reason:coordinator-incomplete` and the action to submit the change inside a
-complete sandbox ticket. Real-profile monitoring requests keep waiting for the
-real adapter.
+complete sandbox ticket. The real adapter can select the existing monitoring
+workflow, but that path has offline tests only and no live product acceptance.
 For a database-changing ticket, a failed release step leaves the ticket open
 with `reason:release-failed` and Coordinator-maintainer ownership. Automatic
 restoration is not attempted; a person inspects the recorded step and affected

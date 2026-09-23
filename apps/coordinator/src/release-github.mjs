@@ -248,6 +248,8 @@ export function createReleaseGitHub({
       if (!pending) {
         const passed =
           observed.mergeable === "MERGEABLE" &&
+          (profile.name !== "real" ||
+            ["CLEAN", "UNSTABLE"].includes(observed.mergeStateStatus)) &&
           required.every((check) =>
             check.__typename === "CheckRun"
               ? check.conclusion === "SUCCESS"

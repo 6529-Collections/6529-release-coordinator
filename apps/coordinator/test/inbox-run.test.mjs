@@ -343,7 +343,9 @@ test("monitoring-only intake can enter the same rehearsal path", async () => {
 
   const { report } = await invoke(f, {
     rehearse: async (entry, plan, { profile }) =>
-      fakeReport(entry, plan, profile)
+      fakeReport(entry, plan, profile),
+    executeReleaseSequence: async () =>
+      assert.fail("monitoring-only rehearsal must not execute a release")
   });
 
   assert.equal(report.requests[0].status, "waiting");

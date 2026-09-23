@@ -1219,3 +1219,55 @@ test("a real product report trusts the exact workflow run instead of sandbox art
     /does not match its saved operation/u
   );
 });
+
+test("a failed real E2E is valid without successful deployment entries", () => {
+  const operation = makeProfileReleaseOperation({
+    profile: "real",
+    release_id: "70707070-7070-4070-8070-707070707070",
+    operation_id: "80808080-8080-4080-8080-808080808080",
+    operation: "e2e",
+    environment: "staging",
+    role: null,
+    unit: null,
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const report = {
+    protocol: operation.protocol,
+    profile: "real",
+    adapter: productWorkflowReleaseAdapter,
+    release_id: operation.release_id,
+    operation_id: operation.operation_id,
+    operation_hash: operation.fingerprint,
+    operation: "e2e",
+    environment: "staging",
+    role: null,
+    unit: null,
+    status: "failed",
+    checks: [{ name: "product-workflow", status: "failed" }],
+    builds: {},
+    deployments: {},
+    versions: { ...commits },
+    runner: {
+      repository: realProfile.repositories.frontend.full_name,
+      run_id: 906,
+      attempt: 1,
+      commit: commits.frontend,
+      workflow: ".github/workflows/staging-e2e.yml"
+    },
+    completed_at: "2026-09-22T12:00:00.000Z"
+  };
+  assert.equal(verifyProductWorkflowReport(report, operation), report);
+  report.deployments.unexpected = {
+    role: "unexpected",
+    environment: "staging",
+    repository: realProfile.repositories.frontend.full_name,
+    run_id: 906,
+    run_attempt: 1,
+    workflow: ".github/workflows/staging-e2e.yml"
+  };
+  assert.throws(
+    () => verifyProductWorkflowReport(report, operation),
+    /does not match its saved operation/u
+  );
+});

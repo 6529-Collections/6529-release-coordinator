@@ -316,7 +316,7 @@ export async function createRehearsalGit({
                     name
                   ) &&
                   !monitoring) ||
-                name.includes("..")
+                (candidatePatchMode === "sandbox" && name.includes(".."))
               )
                 throw new RehearsalError(
                   "invalid_snapshot",
@@ -421,6 +421,7 @@ export async function createRehearsalGit({
               await git(cwd, [
                 "diff",
                 "--no-ext-diff",
+                "--no-renames",
                 "--name-only",
                 "-z",
                 base,

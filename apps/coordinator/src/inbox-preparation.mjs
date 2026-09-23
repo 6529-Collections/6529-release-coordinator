@@ -128,6 +128,15 @@ export async function scanRunTickets({
       );
     entries.set(number, entry);
   }
+  if (selection.mode === "filtered" && !selection.legacy_single) {
+    const actors = new Set(
+      [...entries.values()].map((entry) => entry.github_actor?.id)
+    );
+    if (actors.size !== 1 || actors.has(undefined))
+      throw new Error(
+        "The filtered Issues no longer have one verified submitter account."
+      );
+  }
   const all = new Map(
     visibleRequests.map((entry) => [entry.issue_number, entry])
   );

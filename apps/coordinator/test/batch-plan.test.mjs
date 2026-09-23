@@ -6,6 +6,7 @@ import {
   earlierElapsedBatchPolicy,
   previousBatchPolicy,
   realBatchPolicy,
+  realServicePlan,
   trustedBatchPolicy
 } from "../src/batch-plan.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
@@ -58,4 +59,40 @@ test("the selected profile chooses one exact trusted batch policy", () => {
     () => trustedBatchPolicy(changed),
     /not a trusted Coordinator policy/u
   );
+});
+
+test("a frontend-only product batch has no backend service catalog to require", () => {
+  const plan = { batch: { profile: "real", tickets: [1] } };
+  const report = {
+    input_hash: "a".repeat(64),
+    repositories: [{ role: "frontend", checks: [] }]
+  };
+  const items = [{ entry: { request: { database_change: "no" } } }];
+  const servicePlan = realServicePlan(plan, report, items);
+  assert.deepEqual(servicePlan.steps, []);
+  assert.equal(servicePlan.database.observed, "no");
+});
+
+test("a product backend batch requires the exact combined catalog graph", () => {
+  const plan = { batch: { profile: "real", tickets: [1] } };
+  const report = {
+    input_hash: "a".repeat(64),
+    repositories: [{ role: "backend", checks: [] }]
+  };
+  const items = [{ entry: { request: { database_change: "no" } } }];
+  assert.throws(
+    () => realServicePlan(plan, report, items),
+    /exact product backend catalog/u
+  );
+  report.repositories[0].checks.push({
+    id: "combined_services",
+    evidence: {
+      status: "pass",
+      order: ["backend/api"],
+      edges: []
+    }
+  });
+  assert.deepEqual(realServicePlan(plan, report, items).steps, [
+    { role: "backend", unit: "api", depends_on: [] }
+  ]);
 });

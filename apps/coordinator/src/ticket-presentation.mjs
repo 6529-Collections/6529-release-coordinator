@@ -338,7 +338,7 @@ export function statusComment({
     }
     if (batch.release) {
       lines.push(
-        `${batch.release.profile === "sandbox" ? "Sandbox" : "Real-profile"} release: ${prose(batch.release.status)}. ${prose(batch.release.message)}`
+        `${(batch.release.profile ?? profile) === "sandbox" ? "Sandbox" : "Real-profile"} release: ${prose(batch.release.status)}. ${prose(batch.release.message)}`
       );
       for (const operation of batch.release.operations ?? [])
         lines.push(

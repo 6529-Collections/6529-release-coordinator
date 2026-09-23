@@ -179,6 +179,79 @@ test("MR-06/MR-07: separate frontend/backend trees with whole-request outcome", 
   assert.ok(report.repositories[1].final_tree);
 });
 
+test("the combined backend catalog check survives profile-specific source capture", async (t) => {
+  const { f, pr } = await single(t);
+  const backend = await f.branch("backend", "feature/catalog-proof", {
+    "feature.txt": "backend change\n"
+  });
+  const report = await f.run(
+    f.manifest([
+      { role: "backend", pulls: [backend] },
+      { role: "frontend", pulls: [pr], depends_on: ["backend"] }
+    ]),
+    {
+      captureRepository: async () => ({
+        base_tree: "a".repeat(40),
+        changed_paths: [],
+        patch: []
+      })
+    }
+  );
+  assert.equal(report.status, "pass");
+  const backendResult = report.repositories.find(
+    (repository) => repository.role === "backend"
+  );
+  assert.equal(backendResult.service_source.patch.length, 0);
+  assert.deepEqual(
+    backendResult.checks.find((check) => check.id === "combined_services")
+      .evidence.order,
+    ["backend/dbMigrationsLoop", "backend/api", "frontend/frontend"]
+  );
+  assert.match(backendResult.catalog.blob_sha, /^[0-9a-f]{40}$/u);
+});
+
+test("real candidate capture keeps both sides of a rename and catch-all paths", async (t) => {
+  const f = await rehearsalFixture(t);
+  const pr = await f.branch("frontend", "feature/product-paths", {
+    "src/[...slug]/page.tsx": "route\n"
+  });
+  await f.git(f.repositories.frontend.cwd, ["mv", "shared.txt", "renamed.txt"]);
+  await f.git(f.repositories.frontend.cwd, ["commit", "--amend", "--no-edit"]);
+  pr.commit = await f.git(f.repositories.frontend.cwd, ["rev-parse", "HEAD"]);
+  const report = await f.run(f.manifest([{ role: "frontend", pulls: [pr] }]), {
+    createGit: (options) =>
+      f.createGit({ ...options, candidatePatchMode: "real" }),
+    captureRepository: async (workspace, repo, commit) => {
+      const changedPaths = await workspace.changedPaths(
+        repo.destination.commit,
+        commit
+      );
+      return {
+        changed_paths: changedPaths,
+        patch: await workspace.patch(
+          repo.destination.commit,
+          commit,
+          changedPaths
+        )
+      };
+    }
+  });
+  assert.equal(report.status, "pass");
+  const source = report.repositories[0].service_source;
+  assert.deepEqual(
+    [...source.changed_paths].sort(),
+    ["renamed.txt", "shared.txt", "src/[...slug]/page.tsx"].sort()
+  );
+  assert.equal(
+    source.patch.find((item) => item.path === "shared.txt").sha,
+    null
+  );
+  assert.match(
+    source.patch.find((item) => item.path === "renamed.txt").sha,
+    /^[0-9a-f]{40}$/u
+  );
+});
+
 test("MR-08: changed requested head or destination is not silently substituted", async (t) => {
   const { f, input } = await single(t);
   input.repositories[0].pull_requests[0].commit = "d".repeat(40);
