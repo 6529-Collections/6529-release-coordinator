@@ -816,6 +816,57 @@ test("a changed staging frontend adopts its automatic push deployment without di
   assert.equal(result.workflow.id, harness.run.id);
 });
 
+test("staging recovery dispatches a fresh frontend deploy after backend recovery", async () => {
+  const operation = makeReleaseOperation({
+    release_id: "12121212-1212-4212-8212-121212121212",
+    operation_id: "34343434-3434-4434-8434-343434343434",
+    operation: "deploy",
+    environment: "staging",
+    role: "frontend",
+    unit: "frontend",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "frontend",
+    role: "frontend",
+    buildRole: "frontend",
+    environment: "staging",
+    sourceCommit: commits.frontend,
+    ref: "1a-staging",
+    event: "workflow_dispatch",
+    workflow: "deploy-staging.yml",
+    workflowId: savedRuntime.frontend.workflows.stagingDeploy.workflow_id,
+    title: null,
+    unit: null,
+    jobs: ["Build exact staging artifact", "Deploy exact staging artifact"]
+  };
+  const harness = directHarness(descriptor, operation);
+  harness.record.step.id = "restore:staging:deploy:frontend:frontend";
+  const result = await harness.client.run({
+    record: harness.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {
+      "restore:staging:integrate:frontend": {
+        result: { status: "passed", kind: "merge" }
+      }
+    },
+    steps: [harness.record.step],
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  const dispatches = harness.calls.filter(
+    (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+  );
+  assert.equal(dispatches.length, 1);
+  assert.deepEqual(dispatches[0].body, {
+    ref: "1a-staging",
+    inputs: {}
+  });
+  assert.equal(result.workflow.id, harness.run.id);
+});
+
 test("a confirmed product-shaped workflow failure returns failed evidence for recovery", async () => {
   const operation = makeReleaseOperation({
     release_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
@@ -963,7 +1014,7 @@ function dependencyReport(operation, role, runId, unit) {
       commit: sourceCommit,
       workflow
     },
-    completed_at: "2026-09-21T16:00:00.000Z"
+    completed_at: "2026-09-21T15:58:00.000Z"
   };
   verifyProductWorkflowReport(report, operation);
   return report;
@@ -1210,6 +1261,18 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
   assert.equal(failed.status, "failed");
   assert.deepEqual(failed.report.builds, {});
   assert.deepEqual(failed.report.deployments, {});
+  deploymentRun.created_at = "2026-09-21T15:57:00.000Z";
+  await assert.rejects(
+    client.run({
+      record: makeRecord(),
+      actor,
+      runtime: savedRuntime,
+      operations,
+      steps,
+      save: async () => {}
+    }),
+    /frontend deployment started before the matching backend deployment finished/u
+  );
   assert.equal(automaticQueries.length, 4);
   for (const [index, endpoint] of automaticQueries.entries()) {
     const dispatchQuery = index % 2 === 0;

@@ -809,7 +809,13 @@ export function createProductWorkflowReleaseGitHub({
       operation.role === "frontend" && operation.environment === "staging"
         ? integrationChanged(record, operations)
         : false;
-    const descriptor = directDescriptor(operation, sourceChanged, runtime);
+    // Recovery integrates all saved refs before redeploying backend services.
+    // Its frontend staging merge can auto-deploy/E2E too early to prove the
+    // restored backend+frontend combination, so dispatch a fresh deploy after
+    // the ordered backend recovery steps instead of adopting that push run.
+    const useAutomaticPush =
+      sourceChanged && !record.step.id.startsWith("restore:");
+    const descriptor = directDescriptor(operation, useAutomaticPush, runtime);
     const workflowIdentity = workflow(
       descriptor.role,
       descriptor.workflowKey,
@@ -1067,6 +1073,16 @@ export function createProductWorkflowReleaseGitHub({
         Number.isFinite(Date.parse(deploymentRun.created_at)),
       "release-workflow",
       "The matching frontend deployment run has no trusted creation time."
+    );
+    const backendCompletedAt =
+      dependencies.backend?.result?.report?.completed_at;
+    serviceAssert(
+      !dependencies.backend ||
+        (Number.isFinite(Date.parse(backendCompletedAt)) &&
+          Date.parse(deploymentRun.created_at) >=
+            Date.parse(backendCompletedAt)),
+      "release-workflow",
+      "The frontend deployment started before the matching backend deployment finished; its E2E cannot prove the final combination."
     );
     // GitHub starts the automatic E2E chain as soon as the deployment run
     // completes. The Coordinator may save the E2E operation afterwards, so
