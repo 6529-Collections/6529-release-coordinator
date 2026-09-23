@@ -37,8 +37,12 @@ staging PR on its configured reported checks without requiring GitHub to mark
 them mandatory; product `main` and test `main` still require GitHub-enforced
 checks. GitHub readback confirms optional `Sandbox check` on both test staging
 PRs and retained required checks on both test `main` branches. All offline
-checks pass, but a fresh end-to-end sandbox release under these settings and
-any real-product release remain unproved. The table's earlier protected
+checks pass. A fresh filtered end-to-end sandbox staging release completed
+[Issue #45](./testing/staging-check-alignment-2026-09-23.md#fresh-live-sandbox-staging-acceptance):
+both integration PRs passed `Sandbox check` while GitHub reported it optional,
+backend and frontend staging deployments passed, matching staging E2E passed,
+and the journal lock was released. Real-product release and failure/recovery
+under the new staging settings remain unproved. The table's earlier protected
 staging acceptance links describe the prior rules, not this new setting.
 
 The manual command runs once and exits. Profile selection chooses repositories,
@@ -55,7 +59,7 @@ both profiles. Only the sandbox version has live acceptance; the real version ha
 not changed a product repository.
 
 After the PR #218 review fixes, `npm run check` passed locally on September 23:
-603 tests ran, 600 passed and the three explicitly Docker-only cases were
+604 tests ran, 601 passed and the three explicitly Docker-only cases were
 skipped. Lint, formatting, documentation, workflow policy and package checks
 also passed. GitHub CI and live product acceptance are separate evidence.
 

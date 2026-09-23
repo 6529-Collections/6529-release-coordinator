@@ -42,7 +42,38 @@ passing. Focused release tests cover optional staging checks, a status-context
 Snyk result, missing checks, unrelated required checks, failed staging checks,
 and retained required-check enforcement for production.
 
-This is live settings readback plus offline Coordinator proof, **not** a fresh
-end-to-end sandbox release after the settings change. The earlier protected
-staging acceptance reports remain historical evidence only. No real product
-release or rollback was run.
+## Fresh live sandbox staging acceptance
+
+After the policy change, a filtered run selected only sandbox
+[Issue #45](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/45)
+for verified actor `simo6529`. Its documentation-only backend
+[PR #136](https://github.com/6529-Collections/release-coordinator-test-backend/pull/136)
+and frontend
+[PR #124](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/124)
+declared no database change. The intake
+[run](https://github.com/6529-Collections/release-coordinator-test-inbox/actions/runs/35831889150)
+and local submission command verified the receipt. The Coordinator run ID was
+`355ba84e-a5f7-4478-a740-3d90f250328f`.
+
+The exact combined PR and service checks passed. The Coordinator then merged
+backend staging
+[PR #138](https://github.com/6529-Collections/release-coordinator-test-backend/pull/138)
+and frontend staging
+[PR #126](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/126)
+in dependency order. GitHub reported `Sandbox check` as `SUCCESS` and
+`isRequired: false` on each integration PR. The configured optional-check gate
+accepted those passing results. Backend staging deploys passed for
+[dbMigrationsLoop](https://github.com/6529-Collections/release-coordinator-test-backend/actions/runs/35833576976),
+[worker](https://github.com/6529-Collections/release-coordinator-test-backend/actions/runs/35833739022)
+and [api](https://github.com/6529-Collections/release-coordinator-test-backend/actions/runs/35833916039).
+The frontend
+[deployment](https://github.com/6529-Collections/release-coordinator-test-frontend/actions/runs/35834219799)
+and its matching staging
+[E2E](https://github.com/6529-Collections/release-coordinator-test-frontend/actions/runs/35834313683)
+passed. The command exited 0, marked Issue #45 completed, and released the
+journal lock.
+
+This proves the new optional-check success path in the test repositories. It
+does not prove real product deployment or the failure/recovery path under the
+new staging settings. The earlier protected staging acceptance reports remain
+historical evidence only. No real product release or rollback was run.
