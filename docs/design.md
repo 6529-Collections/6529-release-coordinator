@@ -741,11 +741,16 @@ that residual timing risk for filtered real release testing. Local code now
 implements the branch and input change, but this is not permission to execute
 a product release.
 
-The dispatch API does not return the new run ID. If another run by the same
-actor appears for the same monitoring workflow and branch in that dispatch
-window, the Coordinator stops for a person instead of guessing which run is
-its own. Filtering only by commit could silently adopt an unrelated run while
-the Coordinator's actual dispatch used a moved branch tip.
+GitHub's [workflow dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
+now offers `return_run_details`. The Coordinator requests and saves the returned
+run ID, then still checks that exact run's repository, actor, workflow, branch
+and commit. If GitHub returns the older empty response, the existing bounded
+run search remains the fallback. In that fallback, another same-actor run for
+the monitoring workflow and branch makes the Coordinator stop rather than
+guess which run it dispatched. An unusable ID in a claimed detailed response
+also stops with the dispatch unresolved. Filtering only by commit could
+silently adopt an unrelated run while the actual dispatch used a moved branch
+tip.
 GitHub may report a workflow run completed before its job records update. The
 product adapter waits on the already-identified run's exact job set to settle;
 it never treats a run-level success alone as deployment proof or dispatches a

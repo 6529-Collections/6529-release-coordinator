@@ -103,7 +103,14 @@ remains: a branch move between the pre-dispatch check and GitHub's dispatch can
 still deploy a different commit. The local adapter detects a mismatching run
 and stops rather than reporting success; it cannot prevent that deployment.
 If two same-actor monitoring runs appear after dispatch, it also stops rather
-than guessing which one belongs to the release.
+than guessing which one belongs to the release when GitHub supplies no direct
+run ID. PR #219 now requests that direct ID and verifies the exact returned run;
+the old ambiguous-run stop remains for empty dispatch responses. This API
+opt-in has offline tests plus a direct test-backend
+[API probe](./testing/monitoring-branch-contract-2026-09-23.md#direct-dispatch-id-api-probe)
+returning HTTP 200 and a passing exact run. The dated full Coordinator sandbox
+release preceded the opt-in; a direct probe does not promote it into
+real-product proof.
 
 PR #218 is merged. After the remaining product-contract findings are fixed and
 verified, perform one deliberately filtered real acceptance with explicitly

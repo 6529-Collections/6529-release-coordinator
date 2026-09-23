@@ -253,3 +253,15 @@ Together these sandbox runs accept the corrected sample success, staging
 failure/recovery, and production failure/recovery paths, including final E2E
 causality. They do not prove a real-product deployment or independent AWS
 monitoring health.
+
+## Direct dispatch-ID API probe
+
+After the full release runs, an isolated test-backend monitoring dispatch on
+`1a-staging` requested `return_run_details: true` with GitHub REST API version
+`2022-11-28`. GitHub returned HTTP 200 with exact
+[run ID 35885612602](https://github.com/6529-Collections/release-coordinator-test-backend/actions/runs/35885612602).
+The run then passed as a `workflow_dispatch` on `1a-staging` at restored commit
+`d0e738dd5a43ff446f071ff68b4bf0506650f2d5`. This independently verifies
+the opt-in response and sample workflow identity. The Coordinator's new
+persist-and-verify path has offline tests, but this direct API probe is not a
+new full Coordinator release or real-product acceptance.

@@ -915,18 +915,39 @@ export function createProductWorkflowReleaseGitHub({
       record.dispatch_after_run_id = newest.workflow_runs[0]?.id ?? 0;
       record.state = "dispatching";
       await save();
-      await call(
+      const dispatched = await call(
         descriptor.role,
         "POST",
         `/actions/workflows/${descriptor.workflow}/dispatches`,
-        { ref: descriptor.ref, inputs: descriptor.inputs },
-        [204]
+        {
+          ref: descriptor.ref,
+          inputs: descriptor.inputs,
+          return_run_details: true
+        },
+        [200, 204]
       );
+      if (dispatched.status === 200) {
+        serviceAssert(
+          positive(dispatched.data?.workflow_run_id),
+          "release-dispatch-uncertain",
+          "GitHub accepted the product workflow dispatch without a usable run ID."
+        );
+        record.workflow_run_id = dispatched.data.workflow_run_id;
+        record.workflow_id = workflowIdentity.id;
+      }
       record.state = "running";
       await save();
     }
     for (let poll = 0; poll < polls; poll++) {
-      run ??= await findDirectRun(descriptor, workflowIdentity, actor, record);
+      run ??= record.workflow_run_id
+        ? (
+            await call(
+              descriptor.role,
+              "GET",
+              `/actions/runs/${record.workflow_run_id}`
+            )
+          ).data
+        : await findDirectRun(descriptor, workflowIdentity, actor, record);
       if (run) {
         verifyDirectRun(run, descriptor, workflowIdentity, actor, record);
         const changed =

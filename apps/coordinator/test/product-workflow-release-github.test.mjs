@@ -105,6 +105,8 @@ function directHarness(
     conclusion = "success",
     concurrentRuns = [],
     priorRuns = [],
+    returnRunDetails = false,
+    dispatchRunId,
     jobStatuses = [],
     mutateManifest,
     mutateRun,
@@ -147,6 +149,8 @@ function directHarness(
       const role = repositoryRole(endpoint);
       return apiResponse("200 OK", { object: { sha: commits[role] } });
     }
+    if (method === "GET" && endpoint.endsWith(`/actions/runs/${run.id}`))
+      return apiResponse("200 OK", run);
     if (
       endpoint.includes("/actions/runs/") &&
       endpoint.endsWith("/jobs?per_page=100")
@@ -208,7 +212,13 @@ function directHarness(
     }
     if (method === "POST" && endpoint.endsWith("/dispatches")) {
       dispatched = true;
-      return apiResponse("204 No Content");
+      return returnRunDetails
+        ? apiResponse("200 OK", {
+            workflow_run_id: dispatchRunId ?? run.id,
+            run_url: `https://api.github.com/runs/${run.id}`,
+            html_url: run.html_url
+          })
+        : apiResponse("204 No Content");
     }
     throw new Error(`Unexpected ${method} ${endpoint}`);
   };
@@ -287,6 +297,7 @@ test("product workflow contract dispatches staging services and monitoring from 
     (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
   );
   assert.equal(backendDispatch.body.ref, "1a-staging");
+  assert.equal(backendDispatch.body.return_run_details, true);
   assert.deepEqual(backendDispatch.body.inputs, {
     environment: "staging",
     service: "transactionsProcessingLoop",
@@ -396,7 +407,8 @@ test("the real monitoring adapter uses each branch and only the existing workflo
     );
     assert.deepEqual(dispatch.body, {
       ref,
-      inputs: { environment }
+      inputs: { environment },
+      return_run_details: true
     });
     assert.equal(result.report.runner.commit, commits.backend);
     assert.equal(result.report.builds.monitoring, undefined);
@@ -432,6 +444,7 @@ test("a monitoring run from a moved branch tip is detected after dispatch", asyn
   };
   const harness = directHarness(descriptor, operation, {
     profile: realProfile,
+    returnRunDetails: true,
     mutateRun: (run) => {
       run.head_sha = "c".repeat(40);
     }
@@ -454,7 +467,7 @@ test("a monitoring run from a moved branch tip is detected after dispatch", asyn
   );
 });
 
-test("concurrent monitoring runs stop instead of guessing which dispatch is ours", async () => {
+test("concurrent monitoring runs require an exact dispatch ID or stop", async () => {
   const operation = makeProfileReleaseOperation({
     profile: "real",
     release_id: "abababab-abab-4bab-8bab-abababababab",
@@ -503,6 +516,39 @@ test("concurrent monitoring runs stop instead of guessing which dispatch is ours
       (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
     )
   );
+  const exact = directHarness(descriptor, operation, {
+    profile: realProfile,
+    concurrentRuns: [concurrent],
+    returnRunDetails: true
+  });
+  const result = await exact.client.run({
+    record: exact.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {},
+    steps: [exact.record.step],
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(exact.record.workflow_run_id, 501);
+  assert.equal(exact.calls.filter((call) => call.method === "POST").length, 1);
+  const missingId = directHarness(descriptor, operation, {
+    profile: realProfile,
+    returnRunDetails: true,
+    dispatchRunId: -1
+  });
+  await assert.rejects(
+    missingId.client.run({
+      record: missingId.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [missingId.record.step],
+      save: async () => {}
+    }),
+    /without a usable run ID/u
+  );
+  assert.equal(missingId.record.state, "dispatching");
 });
 
 test("an unfinished v1 monitoring step cannot use the new branch-only workflow", async () => {
@@ -882,7 +928,8 @@ test("staging recovery dispatches a fresh frontend deploy after backend recovery
   assert.equal(dispatches.length, 1);
   assert.deepEqual(dispatches[0].body, {
     ref: "1a-staging",
-    inputs: {}
+    inputs: {},
+    return_run_details: true
   });
   assert.equal(result.workflow.id, harness.run.id);
 });
