@@ -24,6 +24,7 @@ export const sandboxProductWorkflowRuntime = Object.freeze({
         api: "api"
       }),
       integrationChecks: Object.freeze(["Sandbox check"]),
+      stagingIntegrationChecks: Object.freeze(["Sandbox check"]),
       files: Object.freeze({
         ".github/workflows/deploy.yml":
           "f8c8e8f0841998dc833e20fad50661cad71af32c",
@@ -48,6 +49,7 @@ export const sandboxProductWorkflowRuntime = Object.freeze({
     }),
     frontend: Object.freeze({
       integrationChecks: Object.freeze(["Sandbox check"]),
+      stagingIntegrationChecks: Object.freeze(["Sandbox check"]),
       files: Object.freeze({
         ".github/workflows/deploy-staging.yml":
           "0d08fcf15a053d0a6516539fbbc6ced30ba13548",
@@ -108,6 +110,7 @@ export const realProductWorkflowRuntime = Object.freeze({
     backend: Object.freeze({
       deployUnits: "identity",
       integrationChecks: Object.freeze(["Build backend and API"]),
+      stagingIntegrationChecks: Object.freeze(["DCO", "security/snyk (6529)"]),
       files: Object.freeze({
         ".github/workflows/deploy.yml": Object.freeze({
           staging: "9644738f3e06f2ddc26cd5b63f138f1f8fbbbc6a",
@@ -135,6 +138,7 @@ export const realProductWorkflowRuntime = Object.freeze({
         "Installed app checks",
         "Debt ratchet"
       ]),
+      stagingIntegrationChecks: Object.freeze(["DCO", "security/snyk (6529)"]),
       files: Object.freeze({
         ".github/workflows/deploy-staging.yml":
           "36d10cd5f855d1510c5f2c6ffced7baf86db3987",

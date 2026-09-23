@@ -10,8 +10,8 @@ supported sandbox service/database checks, and updates the same ticket and
 journal. See progress for local implementation versus merged and live evidence.
 Explicit filtered or full-inbox scopes select whole tickets together, finish
 cheap conflict filtering before expensive combined PR/service checks, and record deferred tickets.
-They can also take one selected no-database-change batch through protected fake
-staging, locked npm builds and artifacts, matching built-output E2E, protected
+They can also take one selected no-database-change batch through PR-based fake
+staging with Coordinator-checked CI, locked npm builds and artifacts, matching built-output E2E, protected
 fake production, and another matching E2E. The current working tree applies the
 same engine to real product repositories and pinned existing workflows; it has
 offline tests but no merge or live product acceptance. Passing sandbox checks
@@ -97,7 +97,7 @@ Existing limits stay unchanged until they are separately discussed.
   batches, and one database-changing ticket alone.
   Its service/database section owns the small programs, temporary MySQL baseline,
   declared-versus-observed database answer, ordered steps, retry/stop evidence,
-  and cleanup. It also owns the protected fake staging/E2E/production release
+  and cleanup. It also owns the fake staging/E2E/protected production release
   sequence, its dated live acceptance, and sandbox environment restoration
   acceptance. Keep the shared Coordinator logic and
   explicit profile boundary; sandbox actions never enable real deployment. Check progress for local
@@ -108,7 +108,7 @@ Existing limits stay unchanged until they are separately discussed.
   bundle identical to its source, verify its fixed branch/commit, and preserve
   service, batch, and release attempts in the v7 journal before dispatch.
   Publish generated runtime changes to test `main` first, then merge that history
-  into protected `1a-staging`; never create unrelated lookalike runtime commits
+  into test `1a-staging` through a PR; never create unrelated lookalike runtime commits
   on both branches. Keep trial and environment integration commits distinct so
   checks cannot be reused across stages.
 - `docs/design.md` and the full process diagram contain the agreed execution

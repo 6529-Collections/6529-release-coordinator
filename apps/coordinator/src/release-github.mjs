@@ -9,7 +9,7 @@ import {
   verifyReleaseReport
 } from "./release-contract.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
-import { effectiveRequiredChecks } from "./github-checks.mjs";
+import { effectiveAllChecks } from "./github-checks.mjs";
 import { integrationCommitInput } from "./release-plan.mjs";
 import { activeWorkflowRunStatuses } from "./release-state.mjs";
 import { runEvent } from "./run-log.mjs";
@@ -23,6 +23,32 @@ const positive = (value) => Number.isSafeInteger(value) && value > 0;
 const branch = (record) =>
   `codex/release-${record.release_id}-${record.step.environment}-${record.step.role}${record.step.recovery ? "-restore" : ""}`;
 const target = (runtime, environment) => runtime.branches[environment];
+
+export function integrationGateChecks(
+  checks,
+  commit,
+  expectedNames,
+  requireGitHub
+) {
+  const latest = effectiveAllChecks(checks, commit);
+  const required = latest.filter((check) => check.isRequired === true);
+  const nameOf = (check) => check.name ?? check.context;
+  const configured = latest.filter((check) =>
+    expectedNames.includes(nameOf(check))
+  );
+  const missing = expectedNames.filter(
+    (name) =>
+      !configured.some(
+        (check) =>
+          nameOf(check) === name &&
+          (!requireGitHub || check.isRequired === true)
+      )
+  );
+  return {
+    checks: [...new Set([...required, ...configured])],
+    missing
+  };
+}
 
 export function createReleaseGitHub({
   profile,
@@ -45,6 +71,8 @@ export function createReleaseGitHub({
   const integrationChecks = (role) =>
     runtime.repositories[role].integrationChecks ??
     (runtimeProfile === "sandbox" ? ["Sandbox check"] : []);
+  const stagingIntegrationChecks = (role) =>
+    runtime.repositories[role].stagingIntegrationChecks ?? [];
   serviceAssert(
     ["sandbox", "real"].includes(profile?.name) &&
       runtimeProfile === profile.name &&
@@ -63,7 +91,9 @@ export function createReleaseGitHub({
               )
           ) &&
           Array.isArray(integrationChecks(role)) &&
-          integrationChecks(role).length > 0
+          integrationChecks(role).length > 0 &&
+          Array.isArray(stagingIntegrationChecks(role)) &&
+          stagingIntegrationChecks(role).length > 0
         );
       }),
     "release-runtime",
@@ -228,19 +258,29 @@ export function createReleaseGitHub({
         "release-ownership",
         "Sandbox integration PR changed while checks ran."
       );
-      const required = effectiveRequiredChecks(
+      const isProduction = record.step.environment === "prod";
+      const expectedChecks = isProduction
+        ? integrationChecks(role)
+        : stagingIntegrationChecks(role);
+      const gate = integrationGateChecks(
         observed.checks,
-        record.integration_commit ?? candidate.commit
+        record.integration_commit ?? candidate.commit,
+        expectedChecks,
+        isProduction
       );
-      const expectedChecks = integrationChecks(role);
-      serviceAssert(
-        expectedChecks.every((name) =>
-          required.some((check) => check.name === name)
-        ),
-        "release-checks",
-        "The protected branch no longer requires every configured integration check."
-      );
-      const pending = required.some((check) =>
+      if (gate.missing.length > 0) {
+        if (poll + 1 < polls) {
+          await wait(pollMs, { signal });
+          continue;
+        }
+        throw new ServiceError(
+          "release-checks",
+          isProduction
+            ? "The protected main branch no longer requires every configured integration check."
+            : `A configured staging integration check did not appear: ${gate.missing.join(", ")}.`
+        );
+      }
+      const pending = gate.checks.some((check) =>
         check.__typename === "CheckRun"
           ? check.status !== "COMPLETED"
           : check.state === "PENDING"
@@ -250,7 +290,7 @@ export function createReleaseGitHub({
           observed.mergeable === "MERGEABLE" &&
           (profile.name !== "real" ||
             ["CLEAN", "UNSTABLE"].includes(observed.mergeStateStatus)) &&
-          required.every((check) =>
+          gate.checks.every((check) =>
             check.__typename === "CheckRun"
               ? check.conclusion === "SUCCESS"
               : check.state === "SUCCESS"
@@ -630,6 +670,11 @@ export function createReleaseGitHub({
       }
       record.actor ??= actor;
       record.target_branch ??= targetBranch;
+      serviceAssert(
+        record.target_branch === targetBranch,
+        "release-state",
+        `${releaseLabel} integration destination changed.`
+      );
       record.branch ??= branch(record);
       record.body ??= record.step.recovery
         ? `${sandbox ? "Sandbox" : "Product"} restoration for failed release ${record.release_id}\n\nRestore ${record.step.environment} tree ${candidate.tree}`

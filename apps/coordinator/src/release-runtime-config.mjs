@@ -21,10 +21,12 @@ export const sandboxReleaseRuntime = Object.freeze({
   repositories: Object.freeze({
     backend: Object.freeze({
       integrationChecks: Object.freeze(["Sandbox check"]),
+      stagingIntegrationChecks: Object.freeze(["Sandbox check"]),
       files
     }),
     frontend: Object.freeze({
       integrationChecks: Object.freeze(["Sandbox check"]),
+      stagingIntegrationChecks: Object.freeze(["Sandbox check"]),
       files
     })
   })

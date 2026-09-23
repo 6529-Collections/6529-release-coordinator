@@ -339,6 +339,8 @@ export function createProductWorkflowReleaseGitHub({
           ) &&
           Array.isArray(repository.integrationChecks) &&
           repository.integrationChecks.length > 0 &&
+          Array.isArray(repository.stagingIntegrationChecks) &&
+          repository.stagingIntegrationChecks.length > 0 &&
           repository.workflows &&
           Object.values(repository.workflows).every(
             (workflow) =>

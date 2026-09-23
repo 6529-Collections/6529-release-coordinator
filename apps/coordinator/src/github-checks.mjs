@@ -34,12 +34,12 @@ function startedAt(check) {
 // several runs of one workflow/check on that commit. Workflow run/attempt
 // numbers identify those retries without grouping a same-named check from a
 // different workflow. Missing or ambiguous identity retains every result.
-export function effectiveRequiredChecks(checks, expectedCommit) {
+function effectiveChecks(checks, expectedCommit, requiredOnly) {
   if (!sha(expectedCommit))
-    throw new TypeError("Required checks need one exact commit.");
+    throw new TypeError("Checks need one exact commit.");
   const groups = new Map();
   for (const [index, check] of checks
-    .filter((value) => value.isRequired === true)
+    .filter((value) => !requiredOnly || value.isRequired === true)
     .entries()) {
     const attempt =
       check.__typename === "CheckRun"
@@ -80,4 +80,12 @@ export function effectiveRequiredChecks(checks, expectedCommit) {
       ? [latest[0].check]
       : group.map(({ check }) => check);
   });
+}
+
+export function effectiveAllChecks(checks, expectedCommit) {
+  return effectiveChecks(checks, expectedCommit, false);
+}
+
+export function effectiveRequiredChecks(checks, expectedCommit) {
+  return effectiveChecks(checks, expectedCommit, true);
 }

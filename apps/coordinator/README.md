@@ -2,9 +2,10 @@
 
 This private workspace runs manually on your machine and exits. `inbox:run`
 checks requests, rehearses suitable exact PRs, runs supported sandbox service
-checks in GitHub Actions, and updates tickets with reasons and evidence. An
-sandbox run can also take one selected visible batch through protected fake
-staging and production, locked npm builds, short-lived GitHub artifacts, and
+checks in GitHub Actions, and updates tickets with reasons and evidence. A
+sandbox run can also take one selected visible batch through PR-based fake
+staging with a Coordinator-checked status and protected fake production, locked
+npm builds, short-lived GitHub artifacts, and
 E2E against the built backend/frontend HTTP boundary. Select `sandbox` or `real`
 explicitly.
 The merged source also supports one database-changing sandbox ticket on
@@ -14,8 +15,8 @@ no-database-change fake-production failures, and deploys the sample monitoring
 package for a production ticket that selects operational monitoring. See
 [progress](../../docs/progress.md) for the live test and delivery evidence.
 Start with [Run the ticket workflow](#run-the-ticket-workflow) below.
-No persistent Coordinator server or timer is started. Real product release
-adapters are not configured.
+No persistent Coordinator server or timer is started. The real product adapter
+in PR #218 has offline tests but no live product release proof.
 
 `inbox:read` and `readiness:check` remain read-only diagnostics. The
 [ticket rules](../../docs/inbox-processing.md) define labels, ownership, reasons,

@@ -643,7 +643,7 @@ alone. The known paused-process overlap case remains outside automatic recovery.
 | -------------------------------------------------- | -------------------------------------------------------------------- |
 | Accepted request and trusted submission proof      | Issue plus verified central workflow evidence                        |
 | Queue, phase, ownership and attempts               | Profile-specific GitHub journal and verified archived records        |
-| PR head, destination refs, reviews and required CI | GitHub                                                               |
+| PR head, destination refs, reviews and CI results   | GitHub                                                               |
 | Built/deployed code identity                       | Existing workflow evidence plus actual runtime/service version proof |
 | Whether that deployed combination passed           | Required E2E and health results matched to its versions              |
 
@@ -655,8 +655,14 @@ The execution identity and permissions still need verification before building
 that adapter; journal ownership is not permission to merge.
 
 Freeze exact PR heads and destination commits. Finish cheap elimination before
-expensive combined PR checks. Re-read refs and required checks immediately before
-normal protected merges and verify each result afterward. If a destination
+expensive combined PR checks. Re-read refs and applicable checks immediately before
+normal PR merges and verify each result afterward. The real `1a-staging` branches
+are not protected: the Coordinator itself requires the configured checks that
+actually run there (currently DCO and Snyk) to pass on the exact integration
+commit, even though GitHub calls them optional. It does not claim the main-only
+backend build or frontend app checks ran before staging. The test repositories'
+`1a-staging` branches model this optional-check gate; their `main` branches and
+the product `main` branches keep GitHub-enforced requirements. If a destination
 moved, recompute and obtain evidence for the changed combination. Never force
 an old tree over somebody else's work, or claim a client-side check makes two
 GitHub repository merges atomic.
