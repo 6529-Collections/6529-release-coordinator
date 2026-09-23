@@ -105,6 +105,7 @@ function directHarness(
     conclusion = "success",
     concurrentRuns = [],
     priorRuns = [],
+    jobStatuses = [],
     mutateManifest,
     mutateRun,
     profile = sandboxProfile
@@ -112,6 +113,7 @@ function directHarness(
 ) {
   const calls = [];
   let dispatched = false;
+  let jobReads = 0;
   const runtime =
     profile.name === "real"
       ? realProductWorkflowRuntime
@@ -148,7 +150,8 @@ function directHarness(
     if (
       endpoint.includes("/actions/runs/") &&
       endpoint.endsWith("/jobs?per_page=100")
-    )
+    ) {
+      const status = jobStatuses[jobReads++] ?? "completed";
       return apiResponse("200 OK", {
         total_count: descriptor.jobs.length,
         jobs: descriptor.jobs.map((name, index) => ({
@@ -156,11 +159,16 @@ function directHarness(
           name,
           run_id: run.id,
           head_sha: run.head_sha,
-          status: "completed",
+          status,
           conclusion:
-            conclusion === "failure" && index === 0 ? "failure" : "success"
+            status !== "completed"
+              ? null
+              : conclusion === "failure" && index === 0
+                ? "failure"
+                : "success"
         }))
       });
+    }
     if (
       endpoint.includes("/actions/runs/") &&
       endpoint.endsWith("/artifacts?per_page=100")
@@ -262,7 +270,10 @@ test("product workflow contract dispatches staging services and monitoring from 
     unit: "transactionsProcessingLoop",
     jobs: ["Build and deploy transactionsProcessingLoop to staging"]
   };
-  const backend = directHarness(backendDescriptor, backendOperation);
+  const backend = directHarness(backendDescriptor, backendOperation, {
+    // GitHub can expose a completed run before its jobs endpoint catches up.
+    jobStatuses: ["in_progress", "completed"]
+  });
   const backendResult = await backend.client.run({
     record: backend.record,
     actor,
@@ -281,6 +292,15 @@ test("product workflow contract dispatches staging services and monitoring from 
     service: "transactionsProcessingLoop",
     expected_source_sha: commits.backend
   });
+  assert.equal(
+    backend.calls.filter((call) => call.endpoint.endsWith("/jobs?per_page=100"))
+      .length,
+    2
+  );
+  assert.equal(
+    backend.calls.filter((call) => call.method === "POST").length,
+    1
+  );
 
   const monitoringOperation = makeReleaseOperation({
     release_id: "33333333-3333-4333-8333-333333333333",

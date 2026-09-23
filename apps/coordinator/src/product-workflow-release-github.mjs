@@ -655,34 +655,46 @@ export function createProductWorkflowReleaseGitHub({
   }
 
   async function jobsFor(role, run, descriptor) {
-    const list = (
-      await call(
-        role,
-        "GET",
-        `/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`
-      )
-    ).data;
     const expected = expectedJobs(descriptor, runtime);
     const required = new Set(expected.required);
+    for (let poll = 0; poll < polls; poll++) {
+      const list = (
+        await call(
+          role,
+          "GET",
+          `/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`
+        )
+      ).data;
+      serviceAssert(
+        Number.isSafeInteger(list.total_count) &&
+          list.total_count === list.jobs?.length &&
+          (!expected.exact || list.total_count === expected.required.length) &&
+          expected.required.every((name) =>
+            list.jobs.some((job) => job.name === name)
+          ) &&
+          list.jobs.every(
+            (job) =>
+              (!expected.exact || required.has(job.name)) &&
+              job.run_id === run.id &&
+              job.head_sha === run.head_sha &&
+              ["queued", "in_progress", "completed"].includes(job.status)
+          ) &&
+          new Set(list.jobs.map((job) => job.name)).size === list.jobs.length,
+        "release-workflow",
+        "The product-shaped workflow job set is incomplete or changed."
+      );
+      if (list.jobs.every((job) => job.status === "completed"))
+        return list.jobs.filter((job) => required.has(job.name));
+      // GitHub can report the run completed while its jobs endpoint still
+      // reports an in-progress job. Re-read only this exact run; never infer
+      // success from the run-level conclusion or dispatch another workflow.
+      if (poll + 1 < polls) await wait(pollMs, { signal });
+    }
     serviceAssert(
-      Number.isSafeInteger(list.total_count) &&
-        list.total_count === list.jobs?.length &&
-        (!expected.exact || list.total_count === expected.required.length) &&
-        expected.required.every((name) =>
-          list.jobs.some((job) => job.name === name)
-        ) &&
-        list.jobs.every(
-          (job) =>
-            (!expected.exact || required.has(job.name)) &&
-            job.run_id === run.id &&
-            job.head_sha === run.head_sha &&
-            job.status === "completed"
-        ) &&
-        new Set(list.jobs.map((job) => job.name)).size === list.jobs.length,
+      false,
       "release-workflow",
-      "The product-shaped workflow job set is incomplete or changed."
+      "The product-shaped workflow jobs did not settle after the run completed."
     );
-    return list.jobs.filter((job) => required.has(job.name));
   }
 
   async function readDeploymentArtifact(run, descriptor) {
