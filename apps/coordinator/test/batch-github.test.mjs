@@ -33,6 +33,39 @@ test("temporary PR writer saves exact identity, verifies checks, and only remove
   );
 });
 
+test("real trial checks bind the exact head tree and base without trusting mergeability", async () => {
+  const f = fixture({ profile: realProfile });
+  assert.equal(
+    (await f.client.identity("backend", f.record.base)).workflow_id,
+    null
+  );
+  await f.client.open(f.record, f.patch, f.save);
+  assert.equal(
+    f.calls.find(
+      (call) => call.method === "POST" && call.path === "/git/commits"
+    ).body.author.email,
+    "456+tester@users.noreply.github.com"
+  );
+  f.gate.mergeable = "UNKNOWN";
+  f.gate.mergeStateStatus = "BLOCKED";
+  const result = await f.client.result(f.record);
+  assert.equal(result.status, "passed");
+  f.tested.tree.sha = "f".repeat(40);
+  await assert.rejects(f.client.result(f.record), /saved exact tested tree/u);
+});
+
+test("an archived product repository cannot start a real trial", async () => {
+  const f = fixture({ profile: realProfile, archived: true });
+  await assert.rejects(
+    f.client.identity("backend", f.record.base),
+    /Product repository access/u
+  );
+  assert.equal(
+    f.calls.some((call) => call.method === "POST"),
+    false
+  );
+});
+
 test("each sandbox repository uses its own trusted build workflow", async () => {
   for (const role of ["backend", "frontend"]) {
     const f = fixture({ role });

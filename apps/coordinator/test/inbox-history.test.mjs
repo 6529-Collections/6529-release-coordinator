@@ -23,6 +23,10 @@ import { fixture } from "./processing-fixture.mjs";
 
 const writer = (f, workflow = inboxWorkflow) =>
   createJournal(f.api, sandboxProfile, { workflow });
+const inboxScope = () => ({
+  selection: { mode: "inbox", issue_numbers: [], actor_login: null },
+  close_test: false
+});
 const currentBatch = (f) =>
   f.file(Object.values(f.state().history.batches)[0].path).record;
 function presented(ticket, change) {
@@ -48,7 +52,7 @@ async function activeCopy(h) {
   const { state, run } = await journal.acquire(
     await h.f.identity(),
     undefined,
-    {}
+    inboxScope()
   );
   const record = currentBatch(h.f);
   state.batches[record.fingerprint] = structuredClone(record);
@@ -64,7 +68,11 @@ test("completed batches leave the working file; ordinary saves preserve archives
   const archive = h.f.file(ref.path);
   const original = structuredClone(archive.record);
   const j = writer(h.f);
-  const { state, run } = await j.acquire(await h.f.identity(), undefined, {});
+  const { state, run } = await j.acquire(
+    await h.f.identity(),
+    undefined,
+    inboxScope()
+  );
   assert.equal(
     h.f.calls.filter((c) => c.path.startsWith("/contents/history/")).length,
     1,
@@ -128,7 +136,7 @@ test("journal and archive remain readable when GitHub omits large file contents"
   const { state, run } = await journal.acquire(
     await h.f.identity(),
     undefined,
-    {}
+    inboxScope()
   );
   const identity = Object.keys(state.history.batches)[0];
   assert.equal(
@@ -169,7 +177,7 @@ test("omitted contents cannot use a blob with a different identity", async () =>
     createJournal(api, sandboxProfile, { workflow: inboxWorkflow }).acquire(
       await h.f.identity(),
       undefined,
-      {}
+      inboxScope()
     ),
     /blob differs from its pinned file/u
   );
@@ -207,7 +215,7 @@ test("omitted contents cannot trust self-consistent but false blob metadata", as
     createJournal(api, sandboxProfile, { workflow: inboxWorkflow }).acquire(
       await h.f.identity(),
       undefined,
-      {}
+      inboxScope()
     ),
     /content differs from its pinned blob/u
   );
@@ -255,7 +263,11 @@ test("more than 100 completed batches archive without resetting search budgets o
   assert.equal(Object.keys(h.f.state().history.batches).length, 102);
   assert.deepEqual(h.f.state().batches, { [pending.fingerprint]: pending });
   const later = writer(h.f);
-  const next = await later.acquire(await h.f.identity(), undefined, {});
+  const next = await later.acquire(
+    await h.f.identity(),
+    undefined,
+    inboxScope()
+  );
   const loaded = await later.loadHistory(
     next.state,
     next.run,
@@ -343,7 +355,11 @@ for (const failure of ["missing", "changed", "profile", "summary"]) {
     const journal = createJournal(selectedApi, sandboxProfile, {
       workflow: inboxWorkflow
     });
-    const acquired = await journal.acquire(await h.f.identity(), undefined, {});
+    const acquired = await journal.acquire(
+      await h.f.identity(),
+      undefined,
+      inboxScope()
+    );
     const identity = Object.keys(acquired.state.history.batches)[0];
     await assert.rejects(
       journal.loadHistory(acquired.state, acquired.run, "batches", identity),
@@ -573,7 +589,7 @@ test("competing compaction cannot replace another writer's state or discard its 
   assert.deepEqual(h.f.state().batches[record.fingerprint], record);
 });
 
-for (const legacyWorkflow of ["inbox-run-v4", "inbox-run-v5"])
+for (const legacyWorkflow of ["inbox-run-v4", "inbox-run-v5", "inbox-run-v6"])
   test(`${legacyWorkflow} migration preserves full history and fences the old writer before writes`, async () => {
     const h = await completed(),
       record = currentBatch(h.f);

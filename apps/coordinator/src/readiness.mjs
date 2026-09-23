@@ -306,15 +306,15 @@ function inspectOperationalDeployments(request, checks, profile) {
   );
   if (!selected.length) return;
   if (profile.name !== "sandbox") {
+    // This check establishes that the requested operation has a supported
+    // product workflow. Only the later release run can prove deployment.
     checks.push(
       check(
         "operational_deployments",
-        "unknown",
-        "Operational monitoring is recorded in this request, but the Coordinator cannot deploy it or verify its target health yet.",
+        "pass",
+        "The selected product monitoring workflow is supported. Deployment and target health have not run.",
         {
-          selected,
-          action:
-            "Use the existing operational monitoring workflow until the Coordinator deployment adapter is implemented."
+          selected
         }
       )
     );

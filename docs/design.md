@@ -1,12 +1,12 @@
-# Proposed release execution design
+# Release execution design and implementation
 
-**Real product execution remains a design.** The local app verifies intake,
-inspects readiness, organizes tickets, rehearses merges, and runs supported
-sandbox checks. An unscoped sandbox run now moves one selected
-no-database-change batch through protected test staging and, after matching E2E,
-protected test production. One verified database-changing sandbox ticket can run
-alone. It has no real product adapter or authorization. See
-[progress](./progress.md) for that boundary.
+The sandbox execution path is merged and live-tested. The current working tree
+now uses the same Coordinator engine for real repositories: profile configuration
+selects product identities, required checks, workflow pins and evidence rules,
+while the shared planner/executor keeps the same batching, staging-before-production
+order and database recovery decision. The real adapter has offline coverage but
+has not been merged or exercised in a live product release. See
+[progress](./progress.md) for that evidence boundary.
 The [agreed execution direction](#agreed-execution-direction-september-11)
 and [process diagram](../release-coordinator-process.html) describe the same
 September 11 decisions. The sandbox implementation exercises their order; it is
@@ -17,9 +17,10 @@ not evidence that product release execution is available.
 The implemented smaller stage is [inbox processing](./inbox-processing.md): central
 intake defaults, clear ticket statuses and reasons, submitter ownership,
 recorded decisions, and migration of existing tickets. `inbox:run` now joins
-initial inspection, local rehearsal, supported sandbox service checks, and
-ticket updates in one manual process. Unscoped sandbox runs also own the test
-release lane through completion or explicit recovery.
+initial inspection, local rehearsal, profile-specific batch/release execution,
+supported sandbox service checks, and ticket updates in one manual process. A
+filtered scope only limits the visible inbox; it does not replace the normal
+release rules.
 See progress for local, merge, and runtime evidence.
 
 The current intake boundary excludes requests whose PRs are all already merged:
@@ -27,7 +28,7 @@ processing closes them with `already-merged`, without claiming deployment.
 A verified merged PR plus an open or unverified companion keeps the request open
 for a scope decision; missing evidence alone can remain waiting. Deploying already
 merged work uses the existing authorized product release process; a dedicated
-deployment-only request mode is not implemented. A future worker must record
+deployment-only request mode is not implemented. The release executor must record
 execution ownership before merging and keep responsibility afterward. Its own
 merge must not trigger this intake closure rule. Inbox receipt acceptance and
 ticket processing are not execution ownership.
@@ -35,11 +36,11 @@ ticket processing are not execution ownership.
 That document owns the first-processing contract. Schema `0.000002` preserves
 the existing application input and adds recording for operational monitoring;
 the read-only commands remain. `inbox:run` combines inspection, rehearsal, supported
-sandbox checks, and Issue updates. It does not authorize release execution.
+sandbox checks, and Issue updates. A rehearsal result does not authorize release
+execution; the selected profile's saved batch and release plan own mutations.
 Keep the existing GitHub journal and manual operation. A separate database,
 heartbeat, dashboard and automatic takeover are not prerequisites for the next
-step. The sandbox release lane is stored under today's per-command inbox lock;
-real execution remains absent.
+step. The release lane is stored under today's per-command profile journal lock.
 
 <a id="next-step-v01-run-logging"></a>
 
@@ -137,14 +138,14 @@ journal, selection and check logic with controlled GitHub responses. The trial
 cases also prepare real temporary Git repositories. These are local tests, not
 new live GitHub acceptance.
 
-| Case | Required result |
-| --- | --- |
-| Normal run | Ordered start/result events identify the run, relevant tickets/attempts, elapsed steps and final outcome in terminal and saved log. |
-| Failure or lost response | Verified failure and unknown outcome are distinct; an attempted operation is never logged as confirmed success. |
-| Main changes during checks | Name the changed repository and both commits, reject stale proof, and report verified cleanup or remaining resources accurately. |
+| Case                             | Required result                                                                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Normal run                       | Ordered start/result events identify the run, relevant tickets/attempts, elapsed steps and final outcome in terminal and saved log.        |
+| Failure or lost response         | Verified failure and unknown outcome are distinct; an attempted operation is never logged as confirmed success.                            |
+| Main changes during checks       | Name the changed repository and both commits, reject stale proof, and report verified cleanup or remaining resources accurately.           |
 | Interruption and explicit resume | Preserve earlier events and attempt IDs, mark the resume, and use journal reconciliation; a missing final event never authorizes takeover. |
-| Storage and output | Separate profiles/inboxes outside checkouts, report the path and any write failure, and preserve parseable `--json` stdout. |
-| Sensitive output | Useful step/errors remain visible without credentials, raw workflow output or request-body dumps. |
+| Storage and output               | Separate profiles/inboxes outside checkouts, report the path and any write failure, and preserve parseable `--json` stdout.                |
+| Sensitive output                 | Useful step/errors remain visible without credentials, raw workflow output or request-body dumps.                                          |
 
 This bounded step requires no request-schema change, consumer integration update,
 package publication,
@@ -163,15 +164,14 @@ with separate evidence for conflicts, CI/review blockers, and changing inputs.
 
 The original profiled engine and unified command are merged and have live
 sandbox proof. The command uses fresh reports to update the same ticket, with
-distinct passed/blocked/unknown/stale outcomes. Real-project live acceptance remains
-outstanding. See [progress](./progress.md) for exact implementation, test, and
-merge evidence. Git rehearsal changes no product branches and runs no builds
-or deployments; the sandbox service extension below runs application tests.
+distinct passed/blocked/unknown/stale outcomes. Real-project live acceptance
+remains outstanding. See [progress](./progress.md) for exact implementation,
+test, and merge evidence. Git rehearsal itself changes no shared branches and
+runs no deployments; a selected batch enters the separate release phase.
 
-This scope requires explicit destinations and one documented merge method.
-It does not implement the agreed real release lane, timing of `main` changes, or
-build policy below. The ticket contract now owns rehearsal outcomes; later release
-execution still requires its own decisions and evidence.
+This rehearsal scope requires explicit destinations and one documented merge
+method. The release phase separately owns protected shared-branch changes,
+workflow dispatch and matching E2E evidence.
 
 <a id="next-bounded-stage-sandbox-services-and-database"></a>
 
@@ -186,8 +186,8 @@ The real backend's catalog, sequential deployment instructions, database handler
 and existing temporary-MySQL tests inform this example; the guide records pinned
 sources. The local Coordinator inspects the sample database definitions and
 runs the sample service checks through a pinned GitHub workflow. The controlled
-local and live cases have their expected results recorded in progress; real
-execution remains unimplemented.
+local and live cases have their expected results recorded in progress; the
+current real adapter has offline tests but no live product acceptance.
 
 Keep one `inbox:run` workflow and shared decision logic. Sandbox actions
 operate on isolated temporary resources, with exact service versions and results
@@ -197,20 +197,21 @@ evidence holds execution. Preserve failures, partial effects, and safe retry
 decisions in the same ticket's history without claiming release completion.
 
 The shared profile selects configuration and available actions, not permissions.
-Real execution adapters remain absent. Testing the order and data behavior in
-sandbox does not implement the real lane, merge timing, builds, production database
-inspection, or deployment/recovery rules. The later batch stage still starts
-with requests without database changes.
+The real adapter uses the same release sequence with product repositories and
+pinned workflows. Its local tests do not prove product merge timing, builds,
+database behavior, deployments, or recovery in a live environment.
 
 <a id="proposed-batch-testing-and-selection"></a>
+
 ## Batch testing and selection
 
 **Sandbox implementation, September 10, 2026.** See [progress](./progress.md)
-for local checks versus live acceptance and source delivery. An unscoped sandbox
-`inbox:run` now selects and tests whole tickets together. `--issue NUMBER` keeps
-the existing one-ticket service/database path. Real mode remains inspection and
-Git rehearsal only. No manual plan, extra batch command, product merge or release
-permission is introduced.
+for local checks versus live acceptance and source delivery. A sandbox
+`inbox:run` selects and tests the visible whole tickets together. The visibility
+may be the complete inbox or a guarded list of Issue numbers from one verified
+actor; it does not change batch, database, target, or release policy. The real
+profile uses the same batch and release sequence; it has offline tests only.
+No manual plan, extra batch command or independent release permission is introduced.
 
 ### Cheap elimination before expensive checks
 
@@ -313,7 +314,7 @@ input/configuration or a resolved interrupted attempt is needed for new evidence
 
 ### Journal, temporary PRs and recovery
 
-`inbox-run-v6` preserves earlier ticket, service and v4/v5 batch history, including
+`inbox-run-v7` preserves earlier ticket, service and v4/v5/v6 batch history, including
 inputs, attempts, budgets, intermediate Git results, exact temporary PR identities,
 service attempts, results and cleanup. Older writers reject the marker. A saved
 selection remains fixed on resume; newly arriving tickets wait for a later run.
@@ -342,9 +343,10 @@ v1 evidence can never enter the release sequence.
 labels and submitter-facing reasons. The [acceptance matrix](./merge-rehearsal-testing.md#planned-batch-acceptance)
 records expected cases and the dated evidence distinguishes local tests from live
 GitHub proof. Database-changing batches, cross-ticket dependency declarations,
-real application execution and deployment remain future work. The current local
-branch supports one database-changing sandbox ticket alone; combining two such
-tickets remains deferred.
+real application execution was not part of that original batch milestone. The
+current working tree extends the bounded selection to the real profile and still
+supports only one database-changing ticket alone; combining two such tickets
+remains deferred.
 
 ### Deferred: links between separate tickets
 
@@ -378,15 +380,15 @@ the current rejection behavior, not proof of this future feature.
 These decisions replace the conflicting August written and visual drafts. The
 current command implements them only against the pinned sandbox repositories.
 
-| Question | Agreed rule |
-| --- | --- |
-| How many releases progress at once? | One batch from selection through staging, production, or completed recovery. Later requests may arrive and ordinary PR CI may run, but the next release does not start. |
-| When does `main` change? | After staging E2E passes and production is authorized. Merge the selected exact PR versions through normal protected Git merges. |
-| What builds reach production? | Existing product workflows build separately for staging and production. Reuse their settings; no portable-build or environment-variable redesign. |
-| What gates production? | Successful staging deployment/version/health checks and completed successful required E2E for the recorded deployed versions. Failed E2E fails the release attempt; missing, cancelled, skipped-required, or uncertain results cannot pass. |
-| What happens after failure? | Stop advancement. After shared state changed, recover the recorded batch; never split it as a recovery shortcut. Database-changing or uncertain releases require a person. |
-| How does automatic rollback work? | Only for confirmed no-database-change releases: new commits undo the failed batch, required checks run, and ordinary deployment Actions rebuild and deploy the restored code. Verify recovery before releasing the lane. |
-| Where does state live? | Continue using the profile's GitHub inbox journal. Keep active records complete; archive finished records in the same repository and read them when needed. The v6 sandbox writer adds exact release operations to the v5 storage model; [live release acceptance](./testing/release-sequence-2026-09-11.md) verifies closeout and a clear lock. |
+| Question                            | Agreed rule                                                                                                                                                                                                                                                                                                                                      |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| How many releases progress at once? | One batch from selection through staging, production, or completed recovery. Later requests may arrive and ordinary PR CI may run, but the next release does not start.                                                                                                                                                                          |
+| When does `main` change?            | After staging E2E passes and production is authorized. Merge the selected exact PR versions through normal protected Git merges.                                                                                                                                                                                                                 |
+| What builds reach production?       | Existing product workflows build separately for staging and production. Reuse their settings; no portable-build or environment-variable redesign.                                                                                                                                                                                                |
+| What gates production?              | Successful staging deployment/version/health checks and completed successful required E2E for the recorded deployed versions. Failed E2E fails the release attempt; missing, cancelled, skipped-required, or uncertain results cannot pass.                                                                                                      |
+| What happens after failure?         | Stop advancement. After shared state changed, recover the recorded batch; never split it as a recovery shortcut. Database-changing or uncertain releases require a person.                                                                                                                                                                       |
+| How does automatic rollback work?   | Only for confirmed no-database-change releases: new commits undo the failed batch, required checks run, and ordinary deployment Actions rebuild and deploy the restored code. Verify recovery before releasing the lane.                                                                                                                         |
+| Where does state live?              | Continue using the profile's GitHub inbox journal. Keep active records complete; archive finished records in the same repository and read them when needed. The v6 sandbox writer adds exact release operations to the v5 storage model; [live release acceptance](./testing/release-sequence-2026-09-11.md) verifies closeout and a clear lock. |
 
 The Coordinator owns selection, ordering, authorized merges/dispatch, waiting,
 evidence matching, ticket outcomes and recovery decisions. Product repositories
@@ -475,8 +477,9 @@ the newer composition. The failed guard changes no environment, so the
 revalidation, not a source revert. Adapter tests must cover the exact input,
 refuse an omitted or malformed input on the Coordinator path, repeat the final
 ref read after every wait, and treat a workflow source mismatch as a stop before
-accepting any build. This closes the source race inside the workflow, but it does
-not build or authorize the real adapter and it is not deployment proof.
+accepting any build. This closes the source race inside the workflow. The current
+real adapter implements these checks, but its offline tests are not deployment
+proof.
 
 ## Core rule: one release lane
 
@@ -523,8 +526,9 @@ Cross-ticket links and database-changing multi-ticket batches remain deferred.
 
 ### GitHub-only sandbox builds
 
-This sandbox layer keeps the existing real GitHub PRs and protected
-`1a-staging`/`main` merges, but replaces direct source-module release checks with
+This sandbox layer keeps real GitHub PRs and protected `main` merges. Staging
+merges use PRs whose checks the Coordinator gates itself, matching the product
+branches. It replaces direct source-module release checks with
 actual npm build output. Each test repository is a small locked npm project.
 Its ordinary PR check installs from the lockfile, runs its existing meaningful
 checks, builds a `dist` package and uploads that package as a GitHub Actions
@@ -535,7 +539,7 @@ input is limited to 12,000 bytes. These bounds fit the deliberately tiny test
 programs and limit untrusted artifact reads. They are not limits for future real
 frontend or backend builds, which will stay owned by the product workflows.
 
-Runtime updates reach test `main` first. A later protected PR merges that main
+Runtime updates reach test `main` first. A later PR merges that main
 history into `1a-staging`. Independent lookalike commits on both branches are
 invalid setup because they can make a later release integration conflict. Each
 trial, staging integration and production integration also gets a distinct
@@ -580,14 +584,14 @@ flowchart LR
     CLI --> INBOX[Verified GitHub Issue inbox]
     INBOX --> IP[inbox:run - checks and batch selection]
     IP --> J[(Profile-specific GitHub journal)]
-    IP -->|sandbox only| SW[One selected fake release]
-    SW --> SSTG[Protected fake staging]
+    IP -->|sandbox profile| SW[One selected fake release]
+    SW --> SSTG[Coordinator-checked fake staging]
     SSTG --> SE2E[Build exact commits and test built outputs]
     SE2E -->|production target| SPROD[Protected fake production]
     SPROD --> PE2E[Build exact commits and test built outputs]
     PE2E --> J
-    IP -. future real adapter .-> W[One real release]
-    W --> GH[Normal protected product merges]
+    IP -->|real profile| W[One real release]
+    W --> GH[PR merges; main stays protected]
     W --> BE[Existing backend Actions]
     W --> FE[Existing frontend Actions]
     BE --> STG[Real staging]
@@ -598,9 +602,10 @@ flowchart LR
     J --> INBOX
 ```
 
-The solid sandbox path is implemented and live tested. The dotted real adapter
-and product path remain an execution design. Fake staging and temporary MySQL do
-not prove a real deployment or rollback.
+Both paths use one implementation. The sandbox path is merged and live-tested;
+the real path is locally implemented and offline-tested only. Fake staging and
+temporary MySQL do not prove a real deployment or rollback, and no product
+mutation was used to validate the real adapter.
 
 ## Where inbox and queue state live
 
@@ -635,13 +640,13 @@ Explicit resume after the old process stops reuses those identities and checks
 remote truth. It does not trust browser state, local logs or a success message
 alone. The known paused-process overlap case remains outside automatic recovery.
 
-| Fact | Source of truth |
-| --- | --- |
-| Accepted request and trusted submission proof | Issue plus verified central workflow evidence |
-| Queue, phase, ownership and attempts | Profile-specific GitHub journal and verified archived records |
-| PR head, destination refs, reviews and required CI | GitHub |
-| Built/deployed code identity | Existing workflow evidence plus actual runtime/service version proof |
-| Whether that deployed combination passed | Required E2E and health results matched to its versions |
+| Fact                                               | Source of truth                                                      |
+| -------------------------------------------------- | -------------------------------------------------------------------- |
+| Accepted request and trusted submission proof      | Issue plus verified central workflow evidence                        |
+| Queue, phase, ownership and attempts               | Profile-specific GitHub journal and verified archived records        |
+| PR head, destination refs, reviews and CI results   | GitHub                                                               |
+| Built/deployed code identity                       | Existing workflow evidence plus actual runtime/service version proof |
+| Whether that deployed combination passed           | Required E2E and health results matched to its versions              |
 
 ## How shared branches are changed
 
@@ -651,8 +656,14 @@ The execution identity and permissions still need verification before building
 that adapter; journal ownership is not permission to merge.
 
 Freeze exact PR heads and destination commits. Finish cheap elimination before
-expensive combined PR checks. Re-read refs and required checks immediately before
-normal protected merges and verify each result afterward. If a destination
+expensive combined PR checks. Re-read refs and applicable checks immediately before
+normal PR merges and verify each result afterward. The real `1a-staging` branches
+are not protected: the Coordinator itself requires the configured checks that
+actually run there (currently DCO and Snyk) to pass on the exact integration
+commit, even though GitHub calls them optional. It does not claim the main-only
+backend build or frontend app checks ran before staging. The test repositories'
+`1a-staging` branches model this optional-check gate; their `main` branches and
+the product `main` branches keep GitHub-enforced requirements. If a destination
 moved, recompute and obtain evidence for the changed combination. Never force
 an old tree over somebody else's work, or claim a client-side check makes two
 GitHub repository merges atomic.
@@ -687,14 +698,14 @@ intake to close a worker-owned request merely because that worker merged its PRs
 
 ## Operational monitoring
 
-**Recording is implemented for both profiles; sandbox deployment is
-implemented; real deployment is deferred.** Operational monitoring is code under
+**Recording and adapter support are implemented for both profiles; only sandbox
+deployment has live acceptance.** Operational monitoring is code under
 the backend repository, but it is not an application service in the backend
 service catalog. Schema `0.000002` therefore records it as
 `operational_deployments: ["monitoring"]` rather than inventing a service name.
-The real profile verifies the saved request and inspects its exact PR, then
-keeps the ticket waiting because no real adapter can dispatch the monitoring
-workflow or verify the installed target.
+The real profile verifies the saved request and exact PR, then the production
+release plan dispatches the pinned monitoring workflow for both environments
+from the exact merged backend `main` commit.
 
 The real backend's `Deploy operational monitoring` workflow takes an
 environment (`staging` or `prod`) and a full commit SHA, and refuses any commit
@@ -725,11 +736,11 @@ deploy step. The sandbox service stage needs the complete sample application,
 so a monitoring-only sandbox request waits; the sample monitoring deploys inside
 a complete sandbox ticket.
 
-A future real adapter should call the existing workflow with the exact merged
-commit and environment, bind the run to that commit, and verify the deployed
-monitoring target on the AWS side, which the sandbox cannot model. It extends
-the release sequence; it does not build a new monitoring platform or put
-monitoring into the application service catalog.
+The real adapter calls the existing workflow with the exact merged commit and
+environment and binds the accepted GitHub run to that commit. It does not build
+a new monitoring platform or put monitoring into the application service
+catalog. A separate AWS target-health readback is still not implemented; the
+current evidence boundary is the successful pinned product workflow run.
 
 ## Staging
 
@@ -773,8 +784,8 @@ how the apps receive configuration.
    working deployed version; services may have different prior versions.
 3. Recheck the destination compositions, selected PRs and required gates. Changed
    bases or scope require fresh matching combined evidence before proceeding.
-4. Merge backend changes into `main`. When selected and the adapter exists,
-   deploy and verify operational monitoring from that `main` commit, for
+4. Merge backend changes into `main`. When selected, deploy and verify
+   operational monitoring from that `main` commit, for
    `staging` and then `prod`, first. Then dispatch `Deploy a service` with
    `environment=prod`, one selected application service at a time in dependency
    order.
@@ -790,8 +801,7 @@ how the apps receive configuration.
    actual frontend version in the release record's deployed-version evidence from
    the trusted runtime-version contract selected under
    [Remaining integration decisions](#remaining-integration-decisions), not a
-   staging or `main` ref, and do not claim the guard ran. That contract must be
-   chosen and verified before the real adapter is implemented. Preserve existing
+   staging or `main` ref, and do not claim the guard ran. Preserve existing
    release-note grouping. Any mismatch ends the attempt. Save it as
    [`status:action-needed`](./inbox-processing.md#status-labels) with
    [`reason:release-failed`](./inbox-processing.md#reason-and-scope-labels), keep
@@ -802,7 +812,7 @@ how the apps receive configuration.
    configured required production-safe E2E results.
 7. Save the result before closing the successful release and freeing its lane.
    Building a new gradual-rollout or monitoring platform is outside this step;
-   calling the existing operational-monitoring workflow is the future adapter.
+   the adapter calls the existing operational-monitoring workflow.
 
 ## Recovery path
 
@@ -820,8 +830,10 @@ delivered; [progress](./progress.md) owns the delivery record. When the failed
 release had deployed sample monitoring, restoration redeploys it for both
 monitoring environments from the restored test `main` commit as an ordinary
 deploy step, so the installed sample monitoring matches the restored code.
-The original failed release and ticket stay failed. Real-product adapters and
-rollback remain design work.
+The original failed release and ticket stay failed. The current real adapter
+uses this same source-revert and ordinary redeploy plan for confirmed
+no-database-change failures, but that recovery has offline proof only. Database
+changes and uncertain effects always stop for a person.
 
 Recovery starts only after shared refs or an environment changed and the release
 later failed. Before any mutation, failure simply holds/fails the candidate and
@@ -870,9 +882,8 @@ sequence after its temporary MySQL check passes. It never restores staging
 automatically after that release fails. The fake environment does not have a
 persistent database: its built-output checks use the same identified sample
 change, while temporary MySQL owns the actual database-effect test. Real database
-inspection/execution and database-changing multi-ticket batches remain deferred.
-When real execution is built,
-reuse the backend's selected database service (which may require deploying and
+inspection and database-changing multi-ticket batches remain deferred. The real
+adapter reuses the backend's selected database service (which may require deploying and
 invoking `dbMigrationsLoop`), verify its effects before dependents and never repeat
 a one-off change merely because a response was lost. Database-changing releases
 never roll back automatically. Temporary MySQL cleanup is not real recovery proof.
@@ -944,7 +955,7 @@ release notes rather than creating parallel implementations.
 - Explicit production continuation evidence and protection against a worker's own
   merged PRs being retired by intake.
 - The real operational-monitoring adapter: dispatching `Deploy operational
-  monitoring` with the exact merged `main` commit and environment, finding and
+monitoring` with the exact merged `main` commit and environment, finding and
   binding its run without an operation identity input, respecting the
   `monitoring-*` GitHub Environment protections, and verifying the deployed
   monitoring target on the AWS side rather than through a build artifact.

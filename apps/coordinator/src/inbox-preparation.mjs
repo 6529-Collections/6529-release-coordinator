@@ -4,6 +4,7 @@ import { decideTicket } from "./inbox-policy.mjs";
 import { coordinateTicket, canRehearse } from "./inbox-rehearsal.mjs";
 import { digest, receiptHash } from "./inbox-journal.mjs";
 import { response, labelNames, terminal } from "./ticket-presentation.mjs";
+import { filterInboxRequests } from "./inbox-selection.mjs";
 const latest = (ticket) => ticket?.transitions.at(-1);
 const isNumber = (value) => Number.isSafeInteger(value) && value > 0;
 
@@ -35,7 +36,7 @@ export async function scanRunTickets({
   now,
   profile,
   run,
-  issueNumber,
+  selection,
   state,
   batching,
   journal,
@@ -51,20 +52,39 @@ export async function scanRunTickets({
     },
     () => loadInbox({ get, now, profile })
   );
+  const visibleRequests = selection.legacy_single
+    ? inbox.requests.filter((entry) =>
+        selection.issue_numbers.includes(entry.issue_number)
+      )
+    : filterInboxRequests(inbox.requests, selection, { exact: false });
   const numbers =
     run.ticket_numbers ??
-    (issueNumber
-      ? [issueNumber]
+    (selection.mode === "filtered"
+      ? selection.legacy_single
+        ? selection.issue_numbers
+        : [
+            ...visibleRequests.map((entry) => entry.issue_number),
+            ...selection.issue_numbers.filter(
+              (number) =>
+                !visibleRequests.some((entry) => entry.issue_number === number)
+            )
+          ]
       : [
           ...new Set([
             ...inbox.requests.map((entry) => entry.issue_number),
             ...Object.keys(state.tickets).map(Number)
           ])
         ].sort((a, b) => a - b));
-  if (batching && !run.ticket_numbers) {
+  if ((batching || selection.mode === "filtered") && !run.ticket_numbers) {
     run.ticket_numbers = numbers;
     state.lock.ticket_numbers = numbers;
-    await journal.save(state, run, "save complete batch scan selection");
+    await journal.save(
+      state,
+      run,
+      selection.mode === "filtered"
+        ? "save filtered inbox selection"
+        : "save complete batch scan selection"
+    );
   }
   const entries = new Map();
   const issues = new Map();
@@ -85,30 +105,52 @@ export async function scanRunTickets({
     )
       throw new Error(`Issue #${number} is not a release request.`);
     issues.set(number, issue);
-    entries.set(
-      number,
-      await loggedStep(
-        {
-          step: "ticket.intake",
-          issue_number: number,
-          message: "Verify this ticket's immutable request and receipt."
-        },
-        () => inspect(issue, { get, profile }),
-        (entry) => ({
-          outcome: entry.status === "valid" ? "succeeded" : "unknown",
-          result_status: entry.status
-        })
-      )
+    const entry = await loggedStep(
+      {
+        step: "ticket.intake",
+        issue_number: number,
+        message: "Verify this ticket's immutable request and receipt."
+      },
+      () => inspect(issue, { get, profile }),
+      (entry) => ({
+        outcome: entry.status === "valid" ? "succeeded" : "unknown",
+        result_status: entry.status
+      })
     );
+    if (
+      selection.mode === "filtered" &&
+      !selection.legacy_single &&
+      (entry.status !== "valid" ||
+        entry.github_actor?.login?.toLowerCase() !== selection.actor_login)
+    )
+      throw new Error(
+        `Issue #${number} no longer matches the saved actor filter.`
+      );
+    entries.set(number, entry);
+  }
+  if (selection.mode === "filtered" && !selection.legacy_single) {
+    const actors = new Set(
+      [...entries.values()].map((entry) => entry.github_actor?.id)
+    );
+    if (actors.size !== 1 || actors.has(undefined))
+      throw new Error(
+        "The filtered Issues no longer have one verified submitter account."
+      );
   }
   const all = new Map(
-    inbox.requests.map((entry) => [entry.issue_number, entry])
+    visibleRequests.map((entry) => [entry.issue_number, entry])
   );
   for (const [number, entry] of entries) all.set(number, entry);
-  // A second, scoped read must not erase duplicate-request evidence found by
-  // the full reader; include journal identities even after label removal.
+  // Reapply duplicate-request policy inside the selected virtual inbox and
+  // include journal identities even after label removal.
   const counts = new Map();
-  for (const entry of all.values())
+  const identities = new Map(
+    (selection.mode === "filtered" ? visibleRequests : inbox.requests).map(
+      (entry) => [entry.issue_number, entry]
+    )
+  );
+  for (const [number, entry] of entries) identities.set(number, entry);
+  for (const entry of identities.values())
     if (entry.request)
       counts.set(
         entry.request.request_id,

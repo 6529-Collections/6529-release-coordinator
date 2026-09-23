@@ -71,7 +71,11 @@ const issueWrites = (f) =>
   );
 async function invoke(
   f,
-  { args = ["--issue", "1", "--json"], ...options } = {}
+  {
+    args = ["--issue", "1", "--actor", "trusted-user", "--json"],
+    env = {},
+    ...options
+  } = {}
 ) {
   let output = "";
   const logRoot = await mkdtemp(path.join(tmpdir(), "coordinator-log-test-"));
@@ -79,7 +83,11 @@ async function invoke(
     const code = await runInboxRunCli(args, {
       logRoot,
       stderr: () => {},
-      env: { RELEASE_COORDINATOR_PROFILE: f.profile.name },
+      env: {
+        RELEASE_COORDINATOR_PROFILE: f.profile.name,
+        RELEASE_COORDINATOR_SCOPE: "filtered",
+        ...env
+      },
       client: { identity: f.identity, request: f.api },
       get: f.get,
       github: f.github,
@@ -100,9 +108,10 @@ async function invoke(
       // This suite isolates the existing Git/ticket stage. Service integration
       // has its own complete application fixtures and workflow-adapter tests.
       services: null,
+      batch: null,
       ...options
     });
-    return { code, report: JSON.parse(output) };
+    return { code, report: output ? JSON.parse(output) : null };
   } finally {
     await rm(logRoot, { recursive: true, force: true });
   }
@@ -313,6 +322,8 @@ test("obvious outdated, merged, failing-check, draft, and unverified requests sk
     const f = fixture();
     change(f);
     const { report } = await invoke(f, {
+      args: ["--json"],
+      env: { RELEASE_COORDINATOR_SCOPE: "inbox" },
       plan: async () => assert.fail("must not plan"),
       rehearse: async () => assert.fail("must skip")
     });
@@ -322,7 +333,7 @@ test("obvious outdated, merged, failing-check, draft, and unverified requests sk
   }
 });
 
-test("monitoring-only intake is checked but cannot enter rehearsal or execution", async () => {
+test("monitoring-only intake can enter the same rehearsal path", async () => {
   const f = fixture();
   f.request.schema_version = "0.000002";
   f.request.release_parts[0].id = "monitoring";
@@ -331,13 +342,14 @@ test("monitoring-only intake is checked but cannot enter rehearsal or execution"
   sync(f);
 
   const { report } = await invoke(f, {
-    plan: async () => assert.fail("must not plan"),
-    rehearse: async () => assert.fail("must not rehearse")
+    rehearse: async (entry, plan, { profile }) =>
+      fakeReport(entry, plan, profile),
+    executeReleaseSequence: async () =>
+      assert.fail("monitoring-only rehearsal must not execute a release")
   });
 
   assert.equal(report.requests[0].status, "waiting");
-  assert.equal(report.requests[0].rehearsal.status, "not-run");
-  assert.ok(report.requests[0].reasons.includes("coordinator-incomplete"));
+  assert.equal(report.requests[0].rehearsal.status, "passed");
   assert.equal(report.release_authorized, false);
 });
 
@@ -615,6 +627,15 @@ test("profile, scope, report-file and old-command validation fails before reads 
     });
     assert.equal(result.code, 2);
   }
+  for (const value of [undefined, "", "Filtered", "typo"]) {
+    const result = await invoke(f, {
+      env: { RELEASE_COORDINATOR_SCOPE: value },
+      get: never,
+      run: never
+    });
+    assert.equal(result.code, 2);
+    assert.match(JSON.stringify(result.report), /RELEASE_COORDINATOR_SCOPE/u);
+  }
   const sandbox = fixture(sandboxProfile);
   for (const value of ["", " "]) {
     const result = await invoke(sandbox, {
@@ -631,6 +652,38 @@ test("profile, scope, report-file and old-command validation fails before reads 
       /must be generic or product-workflows/u
     );
   }
+  for (const [args, scope] of [
+    [["--issue", "1", "--json"], "filtered"],
+    [["--actor", "trusted-user", "--json"], "filtered"],
+    [["--issue", "1", "--actor", "trusted-user", "--json"], "inbox"],
+    [
+      ["--issue", "1", "--issue", "1", "--actor", "trusted-user", "--json"],
+      "filtered"
+    ]
+  ]) {
+    const result = await invoke(f, {
+      args,
+      env: { RELEASE_COORDINATOR_SCOPE: scope },
+      get: never,
+      run: never
+    });
+    assert.equal(result.code, 2);
+  }
+  let parsed;
+  const accepted = await invoke(f, {
+    args: ["--issue", "2", "--issue", "1", "--actor", "TRUSTED-USER", "--json"],
+    run: async (options) => {
+      parsed = options;
+      return {
+        run_id: "33333333-3333-4333-8333-333333333333",
+        requests: []
+      };
+    }
+  });
+  assert.equal(accepted.code, 0);
+  assert.deepEqual(parsed.issueNumbers, [2, 1]);
+  assert.equal(parsed.actorLogin, "TRUSTED-USER");
+  assert.equal(parsed.selectionMode, "filtered");
   for (const args of [
     ["--issue", "1", "--plan", "x"],
     ["--manifest", "x"],
@@ -797,19 +850,20 @@ test("legacy service verification uses its saved plan and still detects destinat
   assert.equal(f.state().lock, null);
 });
 
-test("the sandbox release client receives the command's stop signal", async () => {
+test("the profile release client receives the command's stop signal", async () => {
   const f = fixture(sandboxProfile);
   const controller = new AbortController();
   const clients = [];
   let executed = 0;
   const result = await invoke(f, {
     args: ["--json"],
+    env: { RELEASE_COORDINATOR_SCOPE: "inbox" },
     signal: controller.signal,
     createReleaseClient: (options) => {
       clients.push(options);
       return { fake: true };
     },
-    executeSandboxRelease: async ({ client, signal }) => {
+    executeReleaseSequence: async ({ client, signal }) => {
       executed++;
       assert.equal(client.fake, true);
       assert.equal(signal, controller.signal);
@@ -863,6 +917,7 @@ test("one inbox scan generates a separate saved plan for each suitable ticket", 
   const rehearsed = [];
   const result = await invoke(f, {
     args: ["--json"],
+    env: { RELEASE_COORDINATOR_SCOPE: "inbox" },
     run: (options) =>
       processInbox({
         ...options,

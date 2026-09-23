@@ -359,6 +359,7 @@ export async function readInbox({
     if (group.length < 2) continue;
     for (const entry of group) {
       entry.status = "invalid";
+      entry.duplicate_issue_numbers = group.map((item) => item.issue_number);
       entry.errors.push(
         `The same request ID appears in multiple open Issues: ${group.map((item) => `#${item.issue_number}`).join(", ")}.`
       );
@@ -432,7 +433,7 @@ export function formatReport(report) {
         }
         if (part.operational_deployments?.length)
           lines.push(
-            `    Operational deployments: ${part.operational_deployments.join(", ")} (recorded; only the sandbox deploys it, inside a complete sample ticket)`
+            `    Operational deployments: ${part.operational_deployments.join(", ")} (recorded; this read does not prove deployment)`
           );
       }
     }

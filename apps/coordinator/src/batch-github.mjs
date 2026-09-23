@@ -1,9 +1,12 @@
 import { executeGitHub } from "./coordinator-github.mjs";
 import { createRehearsalGitHub } from "./rehearsal-github.mjs";
 import { readServiceLogs } from "./service-github.mjs";
-import { sandboxProfile } from "./profiles.mjs";
 import { assertDestination } from "./input-stability.mjs";
-import { batchPolicy, trustedBatchPolicy } from "./batch-plan.mjs";
+import {
+  batchPolicy,
+  batchPolicyProfile,
+  trustedBatchPolicy
+} from "./batch-plan.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { serviceFiles } from "./service-contract.mjs";
 import { releaseMonitoringPaths } from "./release-contract.mjs";
@@ -22,7 +25,7 @@ export function createBatchGitHub({
   profile,
   execute = executeGitHub,
   logs = readServiceLogs,
-  gates = createRehearsalGitHub(sandboxProfile),
+  gates = createRehearsalGitHub(profile),
   guard = async () => {},
   policy = batchPolicy
 } = {}) {
@@ -42,9 +45,9 @@ export function createBatchGitHub({
     ? "##[group]Run npm test"
     : "##[group]Run node scripts/check.mjs";
   serviceAssert(
-    profile === sandboxProfile,
+    batchPolicyProfile(policy) === profile?.name,
     "batch-profile",
-    "Temporary batch PRs require the sandbox profile."
+    `Temporary batch PRs require the ${batchPolicyProfile(policy)} profile.`
   );
   async function call(role, method, suffix, body, allowed = [200]) {
     serviceAssert(
@@ -102,7 +105,11 @@ export function createBatchGitHub({
         sha(record.base) &&
         sha(record.tree) &&
         (!record.commit || sha(record.commit)) &&
-        positive(Number(record.actor?.id)),
+        positive(Number(record.actor?.id)) &&
+        (profile.name !== "real" ||
+          /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u.test(
+            record.actor?.login ?? ""
+          )),
       "batch-ownership",
       "The saved temporary PR identity is invalid."
     );
@@ -150,6 +157,37 @@ export function createBatchGitHub({
       );
       const repo = (await call(role, "GET", "")).data;
       const actor = (await call(role, "GET", "user")).data;
+      if (profile.name === "real") {
+        const pinned = policy.workflow_blobs?.[role];
+        serviceAssert(
+          repo.id === profile.repositories[role].id &&
+            repo.full_name === profile.repositories[role].full_name &&
+            repo.private === false &&
+            repo.archived === false &&
+            repo.permissions?.push === true &&
+            positive(actor.id) &&
+            Array.isArray(policy.required_checks?.[role]) &&
+            policy.required_checks[role].length > 0 &&
+            pinned &&
+            Object.keys(pinned).length > 0,
+          "batch-runtime",
+          "Product repository access or required-check configuration changed."
+        );
+        for (const [path, blob] of Object.entries(pinned)) {
+          const file = (
+            await call(role, "GET", `/contents/${path}?ref=${base}`)
+          ).data;
+          serviceAssert(
+            file?.type === "file" && file.path === path && file.sha === blob,
+            "batch-runtime",
+            "A pinned product PR workflow changed."
+          );
+        }
+        return {
+          actor: { id: String(actor.id), login: actor.login },
+          workflow_id: null
+        };
+      }
       const workflow = (
         await call(
           role,
@@ -194,24 +232,31 @@ export function createBatchGitHub({
       serviceAssert(
         Array.isArray(patch) &&
           patch.length > 0 &&
-          patch.length <= 40 &&
+          (profile.name === "real" || patch.length <= 40) &&
           patch.every(
             (file) =>
-              /^(?:src\/[a-zA-Z0-9_./-]+|ops\/monitoring\/[a-zA-Z0-9_./-]+\.json|docs\/[a-zA-Z0-9_./-]+\.md|README\.md|shared\.txt)$/u.test(
-                file.path ?? ""
-              ) &&
-              !file.path.includes("..") &&
-              (serviceFiles[record.role].includes(file.path) ||
-                (record.role === "backend" &&
-                  releaseMonitoringPaths.includes(file.path)) ||
-                file.path === "README.md" ||
-                file.path === "shared.txt" ||
-                file.path.startsWith("docs/")) &&
+              typeof file.path === "string" &&
+              file.path.length > 0 &&
+              !file.path.startsWith("/") &&
+              !file.path.split("/").some((part) => !part || part === "..") &&
+              (profile.name === "real" ||
+                (/^(?:src\/[a-zA-Z0-9_./-]+|ops\/monitoring\/[a-zA-Z0-9_./-]+\.json|docs\/[a-zA-Z0-9_./-]+\.md|README\.md|shared\.txt)$/u.test(
+                  file.path
+                ) &&
+                  (serviceFiles[record.role].includes(file.path) ||
+                    (record.role === "backend" &&
+                      releaseMonitoringPaths.includes(file.path)) ||
+                    file.path === "README.md" ||
+                    file.path === "shared.txt" ||
+                    file.path.startsWith("docs/")))) &&
               ["100644", "100755"].includes(file.mode) &&
               file.type === "blob" &&
-              (file.sha === null ||
-                (typeof file.content === "string" &&
-                  Buffer.byteLength(file.content) <= 12_000))
+              (profile.name === "real"
+                ? (file.sha === null || sha(file.sha)) &&
+                  !Object.hasOwn(file, "content")
+                : file.sha === null ||
+                  (typeof file.content === "string" &&
+                    Buffer.byteLength(file.content) <= 12_000))
           ),
         "batch-patch",
         "Only the supported sample patch can enter a temporary PR."
@@ -241,7 +286,10 @@ export function createBatchGitHub({
         );
         const author = {
           name: "6529 Coordinator batch trial",
-          email: "coordinator@example.invalid",
+          email:
+            profile.name === "real"
+              ? `${record.actor.id}+${record.actor.login}@users.noreply.github.com`
+              : "coordinator@example.invalid",
           date: record.created_at
         };
         const commit = (
@@ -360,7 +408,82 @@ export function createBatchGitHub({
         record,
         { closed }
       );
-      if (!closed && !sha(pr.merge_commit_sha)) return null;
+      if (profile.name === "sandbox" && !closed && !sha(pr.merge_commit_sha))
+        return null;
+      if (profile.name === "real") {
+        const tested = (
+          await call(record.role, "GET", `/git/commits/${record.commit}`)
+        ).data;
+        serviceAssert(
+          tested.sha === record.commit &&
+            tested.tree?.sha === record.tree &&
+            tested.parents?.length === 1 &&
+            tested.parents[0].sha === record.base,
+          "batch-check-inputs",
+          "The product PR head is not the saved exact tested tree on its saved base."
+        );
+        const observed = await gates.pullRequest(record.role, record.number);
+        serviceAssert(
+          observed.headRefOid === record.commit &&
+            observed.baseRefOid === record.base &&
+            observed.headRefName === record.branch &&
+            observed.state === (closed ? "CLOSED" : "OPEN"),
+          "batch-stale",
+          "Temporary product PR changed during result verification.",
+          "stale"
+        );
+        const required = effectiveRequiredChecks(
+          observed.checks,
+          record.commit
+        );
+        const expected = policy.required_checks[record.role];
+        serviceAssert(
+          expected.every((name) =>
+            required.some((check) => check.name === name)
+          ),
+          "batch-checks",
+          "A configured product PR check is absent or no longer required."
+        );
+        if (
+          required.some((check) =>
+            check.__typename === "CheckRun"
+              ? check.status !== "COMPLETED"
+              : check.state === "PENDING"
+          )
+        )
+          return null;
+        // A trial PR is checked, then closed without merging. Its exact head
+        // is a child of the saved, still-current base, so GitHub's asynchronous
+        // mergeability summary is not evidence for this check. The later
+        // protected integration PR has its own merge gate.
+        const passed = required.every((check) =>
+          check.__typename === "CheckRun"
+            ? check.conclusion === "SUCCESS"
+            : check.state === "SUCCESS"
+        );
+        await unchanged(record);
+        return {
+          status: passed ? "passed" : "unknown",
+          kind: passed ? "checks" : "evidence",
+          role: record.role,
+          pr: record.url,
+          workflow: null,
+          commit: record.commit,
+          tree: record.tree,
+          base: record.base,
+          workflow_id: null,
+          checks: required.map((check) => ({
+            name: check.name,
+            status:
+              check.__typename === "CheckRun" ? check.status : check.state,
+            conclusion:
+              check.__typename === "CheckRun" ? check.conclusion : check.state
+          })),
+          message: passed
+            ? "Exact combined product PR checks passed."
+            : "Product PR checks did not all pass; no code failure was inferred."
+        };
+      }
       const list = (
         await call(
           record.role,

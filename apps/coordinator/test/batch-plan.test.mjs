@@ -1,10 +1,15 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  batchPolicyForProfile,
+  batchPolicyProfile,
   earlierElapsedBatchPolicy,
   previousBatchPolicy,
+  realBatchPolicy,
+  realServicePlan,
   trustedBatchPolicy
 } from "../src/batch-plan.mjs";
+import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 
 test("the exact earlier v2 policy remains readable after its workflow changed", () => {
   assert.equal(
@@ -33,5 +38,79 @@ test("the exact earlier v3 policy remains readable after build checks changed", 
   assert.throws(
     () => trustedBatchPolicy(changed),
     /not a trusted Coordinator policy/u
+  );
+});
+
+test("the selected profile chooses one exact trusted batch policy", () => {
+  assert.equal(
+    batchPolicyProfile(batchPolicyForProfile(sandboxProfile)),
+    "sandbox"
+  );
+  assert.equal(batchPolicyForProfile(realProfile), realBatchPolicy);
+  assert.equal(batchPolicyProfile(realBatchPolicy), "real");
+  assert.equal(
+    trustedBatchPolicy(structuredClone(realBatchPolicy)),
+    realBatchPolicy
+  );
+
+  const changed = structuredClone(realBatchPolicy);
+  changed.required_checks.backend.push("invented");
+  assert.throws(
+    () => trustedBatchPolicy(changed),
+    /not a trusted Coordinator policy/u
+  );
+});
+
+test("a frontend-only product batch has no backend service catalog to require", () => {
+  const plan = { batch: { profile: "real", tickets: [1] } };
+  const report = {
+    input_hash: "a".repeat(64),
+    repositories: [{ role: "frontend", checks: [] }]
+  };
+  const items = [{ entry: { request: { database_change: "no" } } }];
+  const servicePlan = realServicePlan(plan, report, items);
+  assert.deepEqual(servicePlan.steps, []);
+  assert.equal(servicePlan.database.observed, "no");
+});
+
+test("a product backend batch requires the exact combined catalog graph", () => {
+  const plan = { batch: { profile: "real", tickets: [1] } };
+  const report = {
+    input_hash: "a".repeat(64),
+    repositories: [
+      {
+        role: "backend",
+        final_tree: "b".repeat(40),
+        merges: [{ commit: "c".repeat(40) }],
+        catalog: {
+          commit: "c".repeat(40),
+          tree: "b".repeat(40),
+          blob_sha: "d".repeat(40)
+        },
+        checks: []
+      }
+    ]
+  };
+  const items = [{ entry: { request: { database_change: "no" } } }];
+  assert.throws(
+    () => realServicePlan(plan, report, items),
+    /exact product backend catalog/u
+  );
+  report.repositories[0].checks.push({
+    id: "combined_services",
+    status: "pass",
+    evidence: {
+      status: "pass",
+      order: ["backend/api"],
+      edges: []
+    }
+  });
+  assert.deepEqual(realServicePlan(plan, report, items).steps, [
+    { role: "backend", unit: "api", depends_on: [] }
+  ]);
+  report.repositories[0].catalog.tree = "e".repeat(40);
+  assert.throws(
+    () => realServicePlan(plan, report, items),
+    /exact product backend catalog/u
   );
 });

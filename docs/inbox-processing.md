@@ -5,15 +5,18 @@ sequence implemented and tested by September 11, 2026.** See
 [progress](./progress.md) for test and rollout evidence. Submit a request, then
 run one explicit command to inspect its ticket, rehearse suitable exact PRs,
 run supported sandbox service checks, and record the result on that same ticket.
-An unscoped sandbox run can continue one selected no-database-change batch through
+A sandbox run can continue one selected no-database-change batch through
 protected fake staging and production. It also selects one verified
-database-changing ticket alone. Real product execution remains separate.
+database-changing ticket alone. Real product evidence remains separate from
+sandbox evidence.
+The current working tree applies the same ticket/batch engine to the real
+repositories and existing product workflows; it has offline proof only.
 
 This document owns the ticket states, labels, reasons, and first-processing
 rules. [Progress](./progress.md) owns dated implementation and live evidence.
 [The app guide](../apps/coordinator/README.md) owns commands that actually exist.
-[The execution design](./design.md) describes the implemented sandbox subset and
-later real-product release work.
+[The execution design](./design.md) describes the live-tested sandbox path and
+the locally implemented real-product path.
 
 ## Goal and boundary
 
@@ -28,24 +31,27 @@ active inbox with a recorded reason. Other requests that need evidence stay
 visible. Closing a ticket never silently claims that a release happened.
 
 The scope is intake defaults, ticket inspection, local merge rehearsal, supported
-sandbox service/database checks, sandbox batch execution, status updates,
-decision history, and migration of existing tickets. Public consumers remain on
+sandbox service/database checks, profile-specific batch/release execution,
+status updates, decision history, and migration of existing tickets. Public consumers remain on
 CLI `0.0.5` and schema `0.000002`, including recording for operational
 monitoring. Frontend and backend pin that exact public version. Existing
 `0.000001` requests from older clients remain valid. The sandbox deploys the
 sample monitoring package inside a complete sandbox ticket after the production
-merge into test `main`; the real adapter is still future work.
+merge into test `main`. The real adapter pins and dispatches the existing product
+monitoring workflow in the same production-stage order.
 
 One ticket contains one submitted release request. That request can name
-frontend PRs, backend PRs, or both. A scoped `inbox:run --issue NUMBER` handles
-only that ticket. An unscoped sandbox run can select several separate,
-self-contained tickets and test their exact PR changes together as one batch.
+frontend PRs, backend PRs, or both. A filtered `inbox:run` accepts one or more
+Issue numbers and one verified submitter login; those Issues are the complete
+inbox visible to that run. Full-inbox scope exposes every available ticket.
+Either profile and scope can select several separate, self-contained visible
+tickets and test their exact PR changes together as one batch.
 It never splits a ticket or merges the submitters' source PRs during selection.
 Cross-ticket dependency declarations and database-changing multi-ticket batches
 are still unsupported.
 
-The one-ticket rehearsal only merges in temporary local repositories. An unscoped
-sandbox run may merge its selected candidate into the protected branches of the
+The per-ticket rehearsal only merges in temporary local repositories. A sandbox
+run may merge its selected candidate into the protected branches of the
 two fake repositories and run their test Actions. Product merges, builds,
 deployments, and rollback remain later work. No sandbox ticket status or label
 authorizes them. The [agreed release rules](./design.md#agreed-execution-direction-september-11)
@@ -55,17 +61,36 @@ ordering and ownership rules without product access.
 
 ## Responsibility and commands
 
-| Part | Responsibility after implementation |
-| --- | --- |
-| Public CLI | Continue sending the existing exact request. It does not supply trusted identity, lifecycle status, or release authorization. |
-| Central submission workflow and Issue-creation helper | Verify the request, identify the GitHub submitter, and create a consistently organized ticket. Preserve an existing ticket on a retry. |
-| `inbox:read` and `readiness:check` | Remain read-only. Share the inspection logic with processing, but never apply Issue changes. |
-| `inbox:run` | Inspect tickets, generate plans from tickets and configured destinations, rehearse exact PRs, and apply the saved ticket presentation. An unscoped sandbox run also selects a batch and runs its fake release sequence. Run manually and exit. |
+| Part                                                  | Responsibility after implementation                                                                                                                                                                                                          |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Public CLI                                            | Continue sending the existing exact request. It does not supply trusted identity, lifecycle status, or release authorization.                                                                                                                |
+| Central submission workflow and Issue-creation helper | Verify the request, identify the GitHub submitter, and create a consistently organized ticket. Preserve an existing ticket on a retry.                                                                                                       |
+| `inbox:read` and `readiness:check`                    | Remain read-only. Share the inspection logic with processing, but never apply Issue changes.                                                                                                                                                 |
+| `inbox:run`                                           | Select either a guarded Issue/actor subset or the complete inbox, generate plans, rehearse exact PRs, and apply the saved ticket presentation. A sandbox run also selects a batch and runs its fake release sequence. Run manually and exit. |
 
-The write command is `inbox:run`. It requires an explicit sandbox/real profile.
+The write command is `inbox:run`. It requires an explicit sandbox/real profile
+and an explicit filtered/full inbox scope.
 The command automatically creates a separate plan for each suitable ticket. Its
 [command guide](../apps/coordinator/README.md#run-the-ticket-workflow)
 describes GitHub writes, selection, and recovery. It is not a background service.
+
+### Inbox selection guard
+
+`RELEASE_COORDINATOR_PROFILE=sandbox|real` selects the trusted repositories.
+`RELEASE_COORDINATOR_SCOPE=filtered|inbox` independently selects visibility.
+`filtered` requires at least one `--issue NUMBER` and exactly one
+`--actor LOGIN`; all named Issues must be open, verified requests whose intake
+receipt records that login. `inbox` accepts neither filter and exposes the whole
+profile inbox. An unknown or incomplete selection stops without fallback.
+
+Selection is not release policy. Once the visible set is created, the existing
+rules decide conflicts, batches, database isolation, target order and execution.
+Tickets outside a filtered selection are absent: they cannot join a batch, cause
+an overlap, or be written. A previously unfinished release outside the filter is
+the safety exception: the run stops instead of adopting it or starting a second
+release. The canonical mode, sorted Issue list and lower-case actor login are
+saved in the run lock. Resume reuses that saved selection and
+cannot broaden it; the operator supplies only the same scope mode and run ID.
 
 Older workflow revisions create `release-request`, `pending`, and target labels
 with the request UUID as title. The updated workflow creates the defaults below;
@@ -102,14 +127,14 @@ Use exactly one Coordinator `status:*` label per ticket. These are ticket
 lifecycle states, distinct from the read-only report's `valid`, `blocked`, and
 `unknown` observations.
 
-| Label | Meaning | GitHub Issue state |
-| --- | --- | --- |
-| `status:received` | Accepted and awaiting first inspection. | Open |
-| `status:waiting` | Waiting for checks, evidence, or missing Coordinator capability. The next action owner is stated. | Open |
-| `status:action-needed` | A named person or team must make a specific correction or decision. | Open |
-| `status:eligible` | Initial inspection found a candidate for further release checks. This is not release readiness or deployment approval. | Open |
-| `status:completed` | Successful release of this exact request to its target is supported by verified evidence. | Closed |
-| `status:closed` | Retired without claiming successful release. At least one closure reason is required. | Closed |
+| Label                  | Meaning                                                                                                                | GitHub Issue state |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `status:received`      | Accepted and awaiting first inspection.                                                                                | Open               |
+| `status:waiting`       | Waiting for checks, evidence, or missing Coordinator capability. The next action owner is stated.                      | Open               |
+| `status:action-needed` | A named person or team must make a specific correction or decision.                                                    | Open               |
+| `status:eligible`      | Initial inspection found a candidate for further release checks. This is not release readiness or deployment approval. | Open               |
+| `status:completed`     | Successful release of this exact request to its target is supported by verified evidence.                              | Closed             |
+| `status:closed`        | Retired without claiming successful release. At least one closure reason is required.                                  | Closed             |
 
 Received tickets move to the state justified by inspection. Waiting and
 action-needed tickets are reassessed on later runs and may become eligible or
@@ -128,33 +153,33 @@ reasons from the current labels while keeping them in decision history. Waiting,
 action-needed, and closed tickets need at least one reason and a plain-language
 explanation. Reasons are not permissions.
 
-| Reason | Typical action |
-| --- | --- |
-| `reason:outdated-commit` | Retire a verified request whose requested commit no longer matches its PR. Include requested and observed commits. |
-| `reason:already-merged` | Retire a verified request when all its exact PRs were already merged before Coordinator execution. A verified merged PR plus an open or unverified companion keeps the request action-needed for a scope decision. Unverified evidence alone does not trigger this reason. Deployment is not verified or claimed. |
-| `reason:checks-pending` | Wait for required checks; recheck on the next processing run. |
-| `reason:checks-failed` | Identify the failed required checks and the person who can fix them. |
-| `reason:merge-conflict` | Identify the PR/base evidence and the correction needed. |
-| `reason:review-required` | State the review requirement or requested changes and who needs to respond. |
-| `reason:invalid-dependencies` | Explain missing parts, unknown services, unsupported target, or ordering cycles. Ask for a corrected request. |
-| `reason:request-unverified` | Keep the ticket visible when intake proof cannot be verified. Route contradictory records to maintainers; temporary API/log failures may wait. |
-| `reason:deployment-unverified` | Obtain proof for the exact code, selected scope, and target. Merged PRs alone are insufficient. |
-| `reason:prerequisite-unverified` | Obtain the required deployed state of an omitted prerequisite; do not add or deploy a service automatically. |
-| `reason:coordinator-incomplete` | Name the missing Coordinator capability. The action belongs to Coordinator maintainers, not automatically to the submitter. |
-| `reason:overlapping-requests` | Explain which requests overlap and what decision is needed. Do not select the newest by timestamp. |
-| `reason:merge-plan-required` | Historical manual-plan reason, retained only to read old decisions; no longer emitted. |
-| `reason:merge-plan-invalid` | Resolve a request/order that the Coordinator cannot turn into a valid rehearsal plan. |
-| `reason:merge-plan-unavailable` | Restore the configured destination or missing GitHub evidence so the Coordinator can prepare its plan. |
-| `reason:rehearsal-blocked` | Resolve the recorded combined conflict or other stable rehearsal blocker. |
-| `reason:rehearsal-unverified` | Restore missing evidence or report storage, then rerun. |
-| `reason:rehearsal-stale` | Inspect changed inputs, refresh the plan where appropriate, then rerun. |
-| `reason:batch-target-deferred` | Keep the complete ticket queued for a later run because the current batch uses the other release target. |
-| `reason:release-completed` | The exact release plan reached its requested target and every matching check passed. Close the ticket as completed. |
-| `reason:release-failed` | A confirmed release step failed after execution began. Stop later steps and hand the saved partial state to a person. |
-| `reason:release-unverified` | The selected release is unfinished or its effect is uncertain. Keep the ticket waiting and reconcile the saved operation before retrying. |
-| `reason:cancelled` | Close after an authorized cancellation is recorded. |
-| `reason:replaced` | Close with an explicit replacement request link and recorded replacement decision. |
-| `reason:test` | Close a confirmed test after its purpose is complete. Editable title text alone does not establish this. |
+| Reason                           | Typical action                                                                                                                                                                                                                                                                                                    |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `reason:outdated-commit`         | Retire a verified request whose requested commit no longer matches its PR. Include requested and observed commits.                                                                                                                                                                                                |
+| `reason:already-merged`          | Retire a verified request when all its exact PRs were already merged before Coordinator execution. A verified merged PR plus an open or unverified companion keeps the request action-needed for a scope decision. Unverified evidence alone does not trigger this reason. Deployment is not verified or claimed. |
+| `reason:checks-pending`          | Wait for required checks; recheck on the next processing run.                                                                                                                                                                                                                                                     |
+| `reason:checks-failed`           | Identify the failed required checks and the person who can fix them.                                                                                                                                                                                                                                              |
+| `reason:merge-conflict`          | Identify the PR/base evidence and the correction needed.                                                                                                                                                                                                                                                          |
+| `reason:review-required`         | State the review requirement or requested changes and who needs to respond.                                                                                                                                                                                                                                       |
+| `reason:invalid-dependencies`    | Explain missing parts, unknown services, unsupported target, or ordering cycles. Ask for a corrected request.                                                                                                                                                                                                     |
+| `reason:request-unverified`      | Keep the ticket visible when intake proof cannot be verified. Route contradictory records to maintainers; temporary API/log failures may wait.                                                                                                                                                                    |
+| `reason:deployment-unverified`   | Obtain proof for the exact code, selected scope, and target. Merged PRs alone are insufficient.                                                                                                                                                                                                                   |
+| `reason:prerequisite-unverified` | Obtain the required deployed state of an omitted prerequisite; do not add or deploy a service automatically.                                                                                                                                                                                                      |
+| `reason:coordinator-incomplete`  | Name the missing Coordinator capability. The action belongs to Coordinator maintainers, not automatically to the submitter.                                                                                                                                                                                       |
+| `reason:overlapping-requests`    | Explain which requests overlap and what decision is needed. Do not select the newest by timestamp.                                                                                                                                                                                                                |
+| `reason:merge-plan-required`     | Historical manual-plan reason, retained only to read old decisions; no longer emitted.                                                                                                                                                                                                                            |
+| `reason:merge-plan-invalid`      | Resolve a request/order that the Coordinator cannot turn into a valid rehearsal plan.                                                                                                                                                                                                                             |
+| `reason:merge-plan-unavailable`  | Restore the configured destination or missing GitHub evidence so the Coordinator can prepare its plan.                                                                                                                                                                                                            |
+| `reason:rehearsal-blocked`       | Resolve the recorded combined conflict or other stable rehearsal blocker.                                                                                                                                                                                                                                         |
+| `reason:rehearsal-unverified`    | Restore missing evidence or report storage, then rerun.                                                                                                                                                                                                                                                           |
+| `reason:rehearsal-stale`         | Inspect changed inputs, refresh the plan where appropriate, then rerun.                                                                                                                                                                                                                                           |
+| `reason:batch-target-deferred`   | Keep the complete ticket queued for a later run because the current batch uses the other release target.                                                                                                                                                                                                          |
+| `reason:release-completed`       | The exact release plan reached its requested target and every matching check passed. Close the ticket as completed.                                                                                                                                                                                               |
+| `reason:release-failed`          | A confirmed release step failed after execution began. Stop later steps and hand the saved partial state to a person.                                                                                                                                                                                             |
+| `reason:release-unverified`      | The selected release is unfinished or its effect is uncertain. Keep the ticket waiting and reconcile the saved operation before retrying.                                                                                                                                                                         |
+| `reason:cancelled`               | Close after an authorized cancellation is recorded.                                                                                                                                                                                                                                                               |
+| `reason:replaced`                | Close with an explicit replacement request link and recorded replacement decision.                                                                                                                                                                                                                                |
+| `reason:test`                    | Close a confirmed test after its purpose is complete. Editable title text alone does not establish this.                                                                                                                                                                                                          |
 
 Retain the existing `release-request` and `target:staging` /
 `target:production` labels. Add `component:frontend` and/or
@@ -180,20 +205,20 @@ gets `merge-plan-invalid`; unavailable configuration/evidence gets
 
 For nonterminal tickets, use one managed outcome label, separate from lifecycle:
 
-| Label | Meaning |
-| --- | --- |
-| `rehearsal:not-run` | Initial evidence or an invalid generated plan prevented rehearsal. |
-| `rehearsal:passed` | Exact planned merges and observed gates passed; cleanup and report saving succeeded. |
-| `rehearsal:blocked` | Stable evidence demonstrates a conflict or another blocker. |
-| `rehearsal:unknown` | Evidence, cleanup, or report saving could not be verified. |
-| `rehearsal:stale` | Inputs changed during the rehearsal. |
+| Label               | Meaning                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------ |
+| `rehearsal:not-run` | Initial evidence or an invalid generated plan prevented rehearsal.                   |
+| `rehearsal:passed`  | Exact planned merges and observed gates passed; cleanup and report saving succeeded. |
+| `rehearsal:blocked` | Stable evidence demonstrates a conflict or another blocker.                          |
+| `rehearsal:unknown` | Evidence, cleanup, or report saving could not be verified.                           |
+| `rehearsal:stale`   | Inputs changed during the rehearsal.                                                 |
 
 The single maintained comment shows findings, exact destinations, resulting
 trees, and the plan fingerprint. A blocked rehearsal is action-needed; unknown
 or stale evidence waits. Passing rehearsal alone still waits for release
-evidence. A scoped run never produces completed status. An unscoped sandbox run
-may continue to its separately recorded release sequence; the rehearsal result
-itself does not claim a tested build or authorize a real release.
+evidence. Either profile may continue to its separately recorded release
+sequence; only complete matching release evidence can produce completed status.
+The rehearsal result itself does not claim a tested build or deployment.
 
 Only freshly generated reports enter this policy. Reverify the receipt before
 and after rehearsal, recheck PRs/destinations, and save the report before recording
@@ -214,7 +239,7 @@ its lock; explicit resume uses the stored plan and fresh evidence.
 [one-ticket sandbox stage](./merge-rehearsal-testing.md#service-and-database-acceptance)
 comes before batching. Reuse the managed comment, submitter ownership, and
 decision history and original request/receipt. The sandbox writer uses
-`inbox-run-v6` (service attempts were introduced in v3); older writers must stop. The journal's `service_attempts` map saves
+`inbox-run-v7` (service attempts were introduced in v3); older writers must stop. The journal's `service_attempts` map saves
 exact plans and attempts before dispatch; finished results remain available for
 retries through the history index.
 
@@ -224,13 +249,13 @@ Managed labels are `services:not-run`, `services:passed`, `services:blocked`,
 `service-checks-unverified`, and `service-checks-stale`. These describe sandbox
 checks separately from Git rehearsal and any release outcome.
 
-| Evidence | Presentation and next action |
-| --- | --- |
-| Sandbox service/database/integration checks pass | Keep the ticket open and waiting for future release capability. Show the exact tested versions and sample outcomes separately from `rehearsal:passed`; never claim real deployment or completion. |
-| Database answer or inspection is unknown | Wait with the missing fact and its owner. The current unresolved classification goes to Coordinator maintainers for reconciliation, including obtaining requester clarification. No dependent execution starts. |
-| Declared `no` contradicts a verified database change | Action-needed for a corrected request. Show the declaration, changed files, observed database change, and submitter action without altering the receipt. |
-| A database or service check has an attributable program failure | Action-needed with the exact step, versions, expected/actual result, and correction owner. Preserve any partial database effect and which dependents did not start. |
-| Runner failure, timeout, unknown prior effect, or missing version/prerequisite proof | Wait with evidence and a bounded retry or reconciliation action owned by the responsible maintainer. Do not blame the submitter's code without support. |
+| Evidence                                                                             | Presentation and next action                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sandbox service/database/integration checks pass                                     | Record this stage separately from `rehearsal:passed`; it is not real deployment evidence by itself. The same run may continue only if the ticket is selected into a saved profile release plan.                 |
+| Database answer or inspection is unknown                                             | Wait with the missing fact and its owner. The current unresolved classification goes to Coordinator maintainers for reconciliation, including obtaining requester clarification. No dependent execution starts. |
+| Declared `no` contradicts a verified database change                                 | Action-needed for a corrected request. Show the declaration, changed files, observed database change, and submitter action without altering the receipt.                                                        |
+| A database or service check has an attributable program failure                      | Action-needed with the exact step, versions, expected/actual result, and correction owner. Preserve any partial database effect and which dependents did not start.                                             |
+| Runner failure, timeout, unknown prior effect, or missing version/prerequisite proof | Wait with evidence and a bounded retry or reconciliation action owned by the responsible maintainer. Do not blame the submitter's code without support.                                                         |
 
 Show the attempted service order, database declaration and inspection result,
 per-step outcomes, data/integration assertions, workflow/report links, cleanup,
@@ -246,10 +271,11 @@ would require a person; temporary-resource cleanup is not successful recovery.
 
 ## Batch ticket outcomes
 
-**Implemented for unscoped sandbox runs; see [progress](./progress.md) for evidence.**
+**Implemented for sandbox runs; see [progress](./progress.md) for evidence.**
 The [batch-selection policy](./design.md#proposed-batch-testing-and-selection)
 finishes cheap intake, scope, database and Git filtering before new combined
-PR/service checks. `--issue` retains one-ticket handling. Batching supports
+PR/service checks. Inbox scope only controls which tickets are visible; filtered
+and full-inbox scope use the same batching rules. Batching supports
 self-contained staging or production requests with verified no-database-change
 scope. One verified database-changing ticket can use the same sandbox release
 sequence alone. Older suitable tickets take priority; other tickets wait while
@@ -257,7 +283,7 @@ that ticket is selected. A batch contains only one target.
 Cross-ticket dependency declarations remain future work; inseparable changes
 must be submitted as one complete ticket.
 
-`inbox-run-v6` preserves the batch history introduced in v4 and archives completed
+`inbox-run-v7` preserves the batch history introduced in v4 and archives completed
 details without rewriting prior decisions or attempt identities. New managed labels are `batch:passed`, `batch:blocked`, `batch:waiting`,
 `batch:unknown` and `batch:stale`. Reasons are `batch-selected`,
 `batch-ticket-failed`, `batch-incompatible`, `batch-limit`, `batch-deferred` and
@@ -288,8 +314,8 @@ does not deploy monitoring, and its completion comment says that the sample
 backend deploys monitoring only from test `main`. A monitoring-only sandbox
 request has no sample services to check, so it waits with
 `reason:coordinator-incomplete` and the action to submit the change inside a
-complete sandbox ticket. Real-profile monitoring requests keep waiting for the
-real adapter.
+complete sandbox ticket. The real adapter can select the existing monitoring
+workflow, but that path has offline tests only and no live product acceptance.
 For a database-changing ticket, a failed release step leaves the ticket open
 with `reason:release-failed` and Coordinator-maintainer ownership. Automatic
 restoration is not attempted; a person inspects the recorded step and affected
@@ -310,14 +336,14 @@ ticket and any inseparable dependency group together. Selection or a passing
 batch test never means completed; only the matching saved release sequence can
 support that sandbox completion.
 
-| Evidence for exclusion | Proposed ticket state and next action |
-| --- | --- |
-| A specific required check, code failure, internal/base conflict, or invalid scope is attributable to this ticket | `status:action-needed`; name the exact blocker, evidence, and person/team who can correct it. Fixed code or scope requires a new request. |
-| A and B pass separately but fail together | Leave the excluded independent ticket `status:waiting`; link the chosen candidate, the incompatible request(s), exact versions, and failing attempt. Do not claim either ticket is individually broken. |
-| A request needs another excluded request | `status:waiting`; name the dependency and keep the required group together. |
-| Testing stopped at its time/attempt limit without a conclusive result | `status:waiting`; say that investigation is incomplete and the Coordinator owns the next attempt. |
-| A runner, GitHub read, baseline test, or result verification failed | Usually `status:waiting`; state the infrastructure/evidence problem and bounded retry. If a known correction needs a person, route action-needed to the responsible maintainer, not automatically the submitter. |
-| An inseparable group is incompatible and cannot be divided | `status:action-needed` for a named correction or scope decision; explain the group evidence and any uncertainty about attribution. Never guess one culprit. |
+| Evidence for exclusion                                                                                           | Proposed ticket state and next action                                                                                                                                                                            |
+| ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A specific required check, code failure, internal/base conflict, or invalid scope is attributable to this ticket | `status:action-needed`; name the exact blocker, evidence, and person/team who can correct it. Fixed code or scope requires a new request.                                                                        |
+| A and B pass separately but fail together                                                                        | Leave the excluded independent ticket `status:waiting`; link the chosen candidate, the incompatible request(s), exact versions, and failing attempt. Do not claim either ticket is individually broken.          |
+| A request needs another excluded request                                                                         | `status:waiting`; name the dependency and keep the required group together.                                                                                                                                      |
+| Testing stopped at its time/attempt limit without a conclusive result                                            | `status:waiting`; say that investigation is incomplete and the Coordinator owns the next attempt.                                                                                                                |
+| A runner, GitHub read, baseline test, or result verification failed                                              | Usually `status:waiting`; state the infrastructure/evidence problem and bounded retry. If a known correction needs a person, route action-needed to the responsible maintainer, not automatically the submitter. |
+| An inseparable group is incompatible and cannot be divided                                                       | `status:action-needed` for a named correction or scope decision; explain the group evidence and any uncertainty about attribution. Never guess one culprit.                                                      |
 
 After the selected release finishes, reassess deferred requests against the
 actual current base. In the A/B case, once A is in `main`, B includes A through
@@ -355,15 +381,15 @@ For example, before any real merge:
 Maintain one recognizable Coordinator status comment per ticket. Use stable
 identity for that comment, not a search for arbitrary matching text. Show:
 
-| Field | Content |
-| --- | --- |
-| Status | The current state in plain language. |
-| Why | Each unresolved reason, tied to the affected PR, part, or service. |
-| Next action | A concrete action; say when the next processing run can recheck automatically. |
-| Action owner | Coordinator, Coordinator maintainers, submitter, or a named reviewer/operator. |
-| Submitter action | Exactly what the submitter needs to do, or explicitly none. |
-| Evidence | Relevant request, PR, checks, workflow/deployment links, exact commits, and target. |
-| Last decision | Time and the person or trusted process responsible for the latest meaningful change. |
+| Field            | Content                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------ |
+| Status           | The current state in plain language.                                                 |
+| Why              | Each unresolved reason, tied to the affected PR, part, or service.                   |
+| Next action      | A concrete action; say when the next processing run can recheck automatically.       |
+| Action owner     | Coordinator, Coordinator maintainers, submitter, or a named reviewer/operator.       |
+| Submitter action | Exactly what the submitter needs to do, or explicitly none.                          |
+| Evidence         | Relevant request, PR, checks, workflow/deployment links, exact commits, and target.  |
+| Last decision    | Time and the person or trusted process responsible for the latest meaningful change. |
 
 Example for backend ticket #13 under the already-merged policy, if a fresh
 inspection still verifies its exact PR as merged:
@@ -530,8 +556,9 @@ its first attempt is different: it legitimately has no prior record yet. Resumin
 that initial gap may create its first attempt; a referenced but missing archive
 always stops processing, including when the batch inputs are unchanged.
 
-`workflow: "inbox-run-v6"` fences older writers before they can drop release or
-archive files. The first authorized v6 run upgrades a legacy/v1/v2/v3/v4/v5 journal under its
+`workflow: "inbox-run-v7"` fences older writers before they can drop release or
+archive files or widen a saved Issue filter. The first authorized v7 run upgrades
+a legacy/v1/v2/v3/v4/v5/v6 journal under its
 lock, preserving receipts, transitions, plans, original results and resume scope.
 Cleanup and presentation obligations must still finish before details move out
 of the active file. Profile separation and stop-before-resume are unchanged.
@@ -598,13 +625,13 @@ replacement, completion, and terminal corrections remain reserved; no commands
 for those actions exist yet. No test is inferred from editable request/title text.
 
 The combined workflow uses policy `2026-09-10.2`. It upgrades the journal to
-`workflow: "inbox-run-v6"` without changing prior decisions or service identities;
-legacy/v1/v2/v3/v4/v5 journals upgrade on an authorized write. Older
+`workflow: "inbox-run-v7"` without changing prior decisions or service identities;
+legacy/v1/v2/v3/v4/v5/v6 journals upgrade on an authorized write. Older
 checkouts reject this field before writes, even if a pass adds no new reason.
 Once that marker is recorded, use a checkout supporting the combined workflow. Older processors reject unknown reasons and stop safely;
 update the checkout rather than rewriting history. No public CLI upgrade is needed.
 
-`status:eligible` remains reserved. The v6 sandbox executor may write
+`status:eligible` remains reserved. The v7 sandbox executor may write
 `status:completed` only from its own matching saved release. Unknown earlier real
 release outcomes or unsupported execution ownership still produce
 `reason:coordinator-incomplete`. This inbox journal proves its own dispositions;

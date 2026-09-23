@@ -848,7 +848,7 @@ test("a combined frontend/backend request keeps backend prerequisites before fro
   );
 });
 
-test("checks a monitoring PR but does not fetch an application service catalog", async () => {
+test("accepts the pinned monitoring workflow without fetching an application service catalog", async () => {
   const f = fixture();
   f.request.schema_version = "0.000002";
   f.request.release_parts[0].id = "monitoring";
@@ -857,8 +857,12 @@ test("checks a monitoring PR but does not fetch an application service catalog",
 
   const result = await inspectReadiness(f.entry, f);
   const operational = getCheck(result, "operational_deployments");
-  assert.equal(operational.status, "unknown");
-  assert.match(operational.message, /cannot deploy it/);
+  assert.equal(operational.status, "pass");
+  assert.match(
+    operational.message,
+    /product monitoring workflow is supported/u
+  );
+  assert.match(operational.message, /target health have not run/u);
   assert.deepEqual(f.calls, [
     ["pr", repo, 10],
     ["pr", repo, 10]

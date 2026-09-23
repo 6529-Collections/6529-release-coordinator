@@ -795,6 +795,7 @@ const adapterRuntime = {
     ["backend", "frontend"].map((role, index) => [
       role,
       {
+        stagingIntegrationChecks: ["Sandbox check"],
         files: Object.fromEntries(
           [
             ".github/workflows/sandbox-release.yml",

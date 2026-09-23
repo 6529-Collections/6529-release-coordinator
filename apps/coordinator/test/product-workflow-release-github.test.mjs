@@ -13,7 +13,8 @@ import {
 } from "../src/product-workflow-contract.mjs";
 import { createProductWorkflowReleaseGitHub } from "../src/product-workflow-release-github.mjs";
 import { productWorkflowRuntime } from "../src/product-workflow-runtime-config.mjs";
-import { sandboxProfile } from "../src/profiles.mjs";
+import { makeProfileReleaseOperation } from "../src/profile-release-contract.mjs";
+import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 
 const apiResponse = (status, data) =>
   `HTTP/2 ${status} Result\nContent-Type: application/json\n\n${data === undefined ? "" : JSON.stringify(data)}`;
@@ -824,6 +825,11 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     created_at: "2026-09-21T16:00:00.000Z",
     updated_at: "2026-09-21T16:01:00.000Z"
   };
+  const listedWrapper = {
+    ...wrapper,
+    status: "in_progress",
+    conclusion: null
+  };
   const e2eRun = {
     ...wrapper,
     id: 604,
@@ -835,6 +841,17 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     html_url: "https://example.invalid/runs/604",
     updated_at: "2026-09-21T16:02:00.000Z"
   };
+  const deploymentRun = {
+    ...wrapper,
+    id: 602,
+    head_sha: commits.frontend,
+    head_branch: "1a-staging",
+    event: "push",
+    path: ".github/workflows/deploy-staging.yml",
+    display_title: "Staging deployment",
+    workflow_id: savedRuntime.frontend.workflows.stagingDeploy.workflow_id,
+    created_at: "2026-09-21T15:59:00.000Z"
+  };
   const automaticQueries = [];
   const execute = async (args) => {
     const endpoint = args[args.indexOf("--method") + 2];
@@ -844,11 +861,15 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
       const role = repositoryRole(endpoint);
       return apiResponse("200 OK", { object: { sha: commits[role] } });
     }
+    if (endpoint.endsWith(`/actions/runs/${deploymentRun.id}`))
+      return apiResponse("200 OK", deploymentRun);
+    if (endpoint.endsWith(`/actions/runs/${wrapper.id}`))
+      return apiResponse("200 OK", wrapper);
     if (endpoint.includes("staging-e2e-dispatch.yml/runs?")) {
       automaticQueries.push(endpoint);
       return apiResponse("200 OK", {
         total_count: 1,
-        workflow_runs: [wrapper]
+        workflow_runs: [listedWrapper]
       });
     }
     if (endpoint.includes("staging-e2e.yml/runs?")) {
@@ -885,7 +906,7 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
             run_id: e2eRun.id,
             head_sha: e2eRun.head_sha,
             status: "completed",
-            conclusion: "success"
+            conclusion: e2eRun.conclusion
           }
         ]
       });
@@ -895,7 +916,7 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     profile: sandboxProfile,
     execute,
     base: {},
-    polls: 1,
+    polls: 2,
     wait: async () => {}
   });
   const steps = [
@@ -938,17 +959,19 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
       }
     }
   };
-  const record = {
+  const makeRecord = () => ({
     id: e2eOperation.operation_id,
     release_id: releaseId,
     step: steps[2],
     state: "prepared",
     actor,
-    created_at: "2026-09-21T16:00:00.000Z",
+    // The automatic chain can finish before recovery saves its E2E operation.
+    // It remains valid because it was caused by the exact saved deployment.
+    created_at: "2026-09-21T16:05:00.000Z",
     operation: e2eOperation
-  };
+  });
   const result = await client.run({
-    record,
+    record: makeRecord(),
     actor,
     runtime: savedRuntime,
     operations,
@@ -963,20 +986,34 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
   assert.equal(result.report.deployments.frontend.run_id, 602);
   assert.equal(result.report.report_hash, undefined);
   assert.equal(result.report_hash, releaseHash(result.report));
-  assert.equal(automaticQueries.length, 2);
-  for (const [endpoint, event, expectedActor] of [
-    [automaticQueries[0], "workflow_run", actor.login],
-    [
-      automaticQueries[1],
-      "workflow_dispatch",
-      productWorkflowRuntime.githubActionsActor.login
-    ]
-  ]) {
+  e2eRun.conclusion = "failure";
+  const failed = await client.run({
+    record: makeRecord(),
+    actor,
+    runtime: savedRuntime,
+    operations,
+    steps,
+    save: async () => {}
+  });
+  assert.equal(failed.status, "failed");
+  assert.deepEqual(failed.report.builds, {});
+  assert.deepEqual(failed.report.deployments, {});
+  assert.equal(automaticQueries.length, 4);
+  for (const [index, endpoint] of automaticQueries.entries()) {
+    const dispatchQuery = index % 2 === 0;
     const query = new URL(`https://example.invalid/${endpoint}`).searchParams;
-    assert.equal(query.get("actor"), expectedActor);
+    assert.equal(
+      query.get("actor"),
+      dispatchQuery
+        ? actor.login
+        : productWorkflowRuntime.githubActionsActor.login
+    );
     assert.equal(query.get("branch"), "main");
-    assert.equal(query.get("created"), ">=2026-09-21T16:00:00.000Z");
-    assert.equal(query.get("event"), event);
+    assert.equal(query.get("created"), ">=2026-09-21T15:59:00.000Z");
+    assert.equal(
+      query.get("event"),
+      dispatchQuery ? "workflow_run" : "workflow_dispatch"
+    );
   }
 });
 
@@ -1122,5 +1159,115 @@ test("reports with product deployment fields cannot route as generic", () => {
   assert.throws(
     () => verifySavedReleaseReport(report, operation),
     /Unknown sandbox release report adapter/u
+  );
+});
+
+test("a real product report trusts the exact workflow run instead of sandbox artifacts", () => {
+  const operation = makeProfileReleaseOperation({
+    profile: "real",
+    release_id: "70707070-7070-4070-8070-707070707070",
+    operation_id: "80808080-8080-4080-8080-808080808080",
+    operation: "deploy",
+    environment: "staging",
+    role: "backend",
+    unit: "transactionsProcessingLoop",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const workflow = ".github/workflows/deploy.yml";
+  const report = {
+    protocol: operation.protocol,
+    profile: "real",
+    adapter: productWorkflowReleaseAdapter,
+    release_id: operation.release_id,
+    operation_id: operation.operation_id,
+    operation_hash: operation.fingerprint,
+    operation: operation.operation,
+    environment: operation.environment,
+    role: operation.role,
+    unit: operation.unit,
+    status: "passed",
+    checks: [{ name: "product-workflow", status: "passed" }],
+    builds: {},
+    deployments: {
+      backend: {
+        role: "backend",
+        environment: "staging",
+        source_commit: commits.backend,
+        unit: operation.unit,
+        workflow,
+        repository: realProfile.repositories.backend.full_name,
+        run_id: 905,
+        run_attempt: 1
+      }
+    },
+    versions: { ...commits },
+    runner: {
+      repository: realProfile.repositories.backend.full_name,
+      run_id: 905,
+      attempt: 1,
+      commit: commits.backend,
+      workflow
+    },
+    completed_at: "2026-09-22T12:00:00.000Z"
+  };
+
+  assert.equal(verifyProductWorkflowReport(report, operation), report);
+  report.deployments.backend.artifact = { id: 1 };
+  assert.throws(
+    () => verifyProductWorkflowReport(report, operation),
+    /does not match its saved operation/u
+  );
+});
+
+test("a failed real E2E is valid without successful deployment entries", () => {
+  const operation = makeProfileReleaseOperation({
+    profile: "real",
+    release_id: "70707070-7070-4070-8070-707070707070",
+    operation_id: "80808080-8080-4080-8080-808080808080",
+    operation: "e2e",
+    environment: "staging",
+    role: null,
+    unit: null,
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const report = {
+    protocol: operation.protocol,
+    profile: "real",
+    adapter: productWorkflowReleaseAdapter,
+    release_id: operation.release_id,
+    operation_id: operation.operation_id,
+    operation_hash: operation.fingerprint,
+    operation: "e2e",
+    environment: "staging",
+    role: null,
+    unit: null,
+    status: "failed",
+    checks: [{ name: "product-workflow", status: "failed" }],
+    builds: {},
+    deployments: {},
+    versions: { ...commits },
+    runner: {
+      repository: realProfile.repositories.frontend.full_name,
+      run_id: 906,
+      attempt: 1,
+      commit: commits.frontend,
+      workflow: ".github/workflows/staging-e2e.yml"
+    },
+    completed_at: "2026-09-22T12:00:00.000Z"
+  };
+  assert.equal(verifyProductWorkflowReport(report, operation), report);
+  report.deployments.unexpected = {
+    role: "unexpected",
+    environment: "staging",
+    repository: realProfile.repositories.frontend.full_name,
+    run_id: 906,
+    run_attempt: 1,
+    workflow: ".github/workflows/staging-e2e.yml"
+  };
+  assert.throws(
+    () => verifyProductWorkflowReport(report, operation),
+    /does not match its saved operation/u
   );
 });

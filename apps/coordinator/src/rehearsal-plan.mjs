@@ -92,10 +92,6 @@ export function normalizeMergePlan(manifest, profile) {
     "Manifest version, source, or profile does not match sandbox input."
   );
   requireValue(
-    manifest.source !== "verified-batch" || profile.name === "sandbox",
-    "Batch trials are restricted to the sandbox."
-  );
-  requireValue(
     typeof manifest.case_id === "string" &&
       /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/u.test(manifest.case_id),
     "Invalid test case ID."
@@ -147,7 +143,7 @@ export function normalizeMergePlan(manifest, profile) {
       );
     }
     if (backend) {
-      list(repo.deploy_units, 1, 64);
+      list(repo.deploy_units, 0, 64);
       list(repo.deploy_dependencies, 0, 128);
       requireValue(
         repo.deploy_units.every(unitName) &&

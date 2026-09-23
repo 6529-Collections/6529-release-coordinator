@@ -62,7 +62,10 @@ async function cli(h, root, options = {}) {
   let output = "",
     terminal = "";
   const code = await runInboxRunCli(options.args ?? ["--json"], {
-    env: { RELEASE_COORDINATOR_PROFILE: "sandbox" },
+    env: {
+      RELEASE_COORDINATOR_PROFILE: "sandbox",
+      RELEASE_COORDINATOR_SCOPE: "inbox"
+    },
     logRoot: root,
     get: h.f.get,
     client: { identity: h.f.identity, request: h.f.api },

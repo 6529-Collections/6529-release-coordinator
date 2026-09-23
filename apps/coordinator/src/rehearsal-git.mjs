@@ -17,6 +17,7 @@ export async function createRehearsalGit({
   // Test-only dependency injection; no manifest/CLI option can enable file remotes.
   fixtureRemotes,
   repositories = sandboxRepositories,
+  candidatePatchMode = "sandbox",
   authentication = async () => null,
   maxStorageBytes = 128 * 1024 * 1024
 } = {}) {
@@ -237,10 +238,23 @@ export async function createRehearsalGit({
               );
             if (filename.split("/").at(-1) === ".gitattributes") {
               const value = await blob(commit, filename);
+              const active = value.text
+                .split(/\r?\n/u)
+                .map((line) => line.trim())
+                .filter((line) => line && !line.startsWith("#"));
+              const safeProductAttributes = active.every((line) =>
+                line
+                  .split(/\s+/u)
+                  .slice(1)
+                  .every((attribute) =>
+                    /^(?:-?text|binary|eol=(?:lf|crlf)|linguist-generated=true)$/u.test(
+                      attribute
+                    )
+                  )
+              );
               if (
-                value.text
-                  .split(/\r?\n/u)
-                  .some((line) => line.trim() && !line.trim().startsWith("#"))
+                active.length &&
+                (candidatePatchMode === "sandbox" || !safeProductAttributes)
               ) {
                 throw new RehearsalError(
                   "unsupported_attributes",
@@ -272,7 +286,7 @@ export async function createRehearsalGit({
               !isSha(base) ||
               !isSha(commit) ||
               !Array.isArray(names) ||
-              names.length > 40
+              (candidatePatchMode === "sandbox" && names.length > 40)
             )
               throw new RehearsalError(
                 "invalid_snapshot",
@@ -280,17 +294,29 @@ export async function createRehearsalGit({
               );
             const patch = [];
             for (const name of names) {
+              if (
+                candidatePatchMode === "real" &&
+                (!name ||
+                  name.startsWith("/") ||
+                  name.includes("\u0000") ||
+                  name.split("/").some((part) => !part || part === ".."))
+              )
+                throw new RehearsalError(
+                  "invalid_snapshot",
+                  "Candidate patch contains an invalid product path."
+                );
               // The sample monitoring package is candidate-changeable only
               // through its four bounded JSON files, and only in the backend.
               const monitoring =
                 repo.role === "backend" &&
                 releaseMonitoringPaths.includes(name);
               if (
-                (!/^(?:src\/[a-zA-Z0-9_./-]+|docs\/[a-zA-Z0-9_./-]+\.md|README\.md|shared\.txt)$/u.test(
-                  name
-                ) &&
+                (candidatePatchMode === "sandbox" &&
+                  !/^(?:src\/[a-zA-Z0-9_./-]+|docs\/[a-zA-Z0-9_./-]+\.md|README\.md|shared\.txt)$/u.test(
+                    name
+                  ) &&
                   !monitoring) ||
-                name.includes("..")
+                (candidatePatchMode === "sandbox" && name.includes(".."))
               )
                 throw new RehearsalError(
                   "invalid_snapshot",
@@ -299,9 +325,18 @@ export async function createRehearsalGit({
               const entry = (await git(cwd, ["ls-tree", commit, "--", name]))
                 .stdout;
               if (!entry) {
+                const baseEntry = (
+                  await git(cwd, ["ls-tree", base, "--", name])
+                ).stdout;
+                const baseMode = baseEntry.split(" ")[0];
+                if (!baseEntry || !["100644", "100755"].includes(baseMode))
+                  throw new RehearsalError(
+                    "unsupported_tree",
+                    "Deleted candidate paths must be regular files."
+                  );
                 patch.push({
                   path: name,
-                  mode: "100644",
+                  mode: baseMode,
                   type: "blob",
                   sha: null
                 });
@@ -314,6 +349,15 @@ export async function createRehearsalGit({
                   "Candidate patches require regular files."
                 );
               const file = await blob(commit, name);
+              if (candidatePatchMode === "real") {
+                patch.push({
+                  path: name,
+                  mode,
+                  type: "blob",
+                  sha: file.sha
+                });
+                continue;
+              }
               if (
                 Buffer.byteLength(file.text) > 12_000 ||
                 file.text.includes("\u0000")
@@ -377,6 +421,7 @@ export async function createRehearsalGit({
               await git(cwd, [
                 "diff",
                 "--no-ext-diff",
+                "--no-renames",
                 "--name-only",
                 "-z",
                 base,

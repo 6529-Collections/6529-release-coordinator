@@ -2,7 +2,6 @@ import { setTimeout as delay } from "node:timers/promises";
 import { executeGitHub } from "./coordinator-github.mjs";
 import { createRehearsalGitHub } from "./rehearsal-github.mjs";
 import { readServiceLogs } from "./service-github.mjs";
-import { sandboxProfile } from "./profiles.mjs";
 import { sandboxReleaseRuntime } from "./release-runtime-config.mjs";
 import {
   releaseHash,
@@ -10,7 +9,7 @@ import {
   verifyReleaseReport
 } from "./release-contract.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
-import { effectiveRequiredChecks } from "./github-checks.mjs";
+import { effectiveAllChecks } from "./github-checks.mjs";
 import { integrationCommitInput } from "./release-plan.mjs";
 import { activeWorkflowRunStatuses } from "./release-state.mjs";
 import { runEvent } from "./run-log.mjs";
@@ -21,49 +20,90 @@ const uuid = (value) =>
     value ?? ""
   );
 const positive = (value) => Number.isSafeInteger(value) && value > 0;
-const runtimePaths = Object.freeze([
-  ".github/workflows/sandbox-release.yml",
-  "coordinator/src/release-contract.mjs",
-  "coordinator/sandbox/application-build.mjs",
-  "coordinator/sandbox/release-run.mjs"
-]);
 const branch = (record) =>
   `codex/release-${record.release_id}-${record.step.environment}-${record.step.role}${record.step.recovery ? "-restore" : ""}`;
 const target = (runtime, environment) => runtime.branches[environment];
+
+export function integrationGateChecks(
+  checks,
+  commit,
+  expectedNames,
+  requireGitHub
+) {
+  const latest = effectiveAllChecks(checks, commit);
+  const required = latest.filter((check) => check.isRequired === true);
+  const nameOf = (check) => check.name ?? check.context;
+  const configured = latest.filter((check) =>
+    expectedNames.includes(nameOf(check))
+  );
+  const missing = expectedNames.filter(
+    (name) =>
+      !configured.some(
+        (check) =>
+          nameOf(check) === name &&
+          (!requireGitHub || check.isRequired === true)
+      )
+  );
+  return {
+    checks: [...new Set([...required, ...configured])],
+    missing
+  };
+}
 
 export function createReleaseGitHub({
   profile,
   runtime = sandboxReleaseRuntime,
   execute = executeGitHub,
   logs = readServiceLogs,
-  gates = createRehearsalGitHub(sandboxProfile),
+  gates = createRehearsalGitHub(profile),
   signal,
   wait = (ms, options) => delay(ms, undefined, options),
   now = () => new Date(),
   polls = 60,
   pollMs = 10_000
 } = {}) {
+  const runtimeProfile =
+    runtime.profile ??
+    (runtime.workflow === "sandbox-release.yml" ? "sandbox" : null);
+  const sandbox = runtimeProfile === "sandbox";
+  const releaseLabel = sandbox ? "Sandbox release" : "Product release";
+  const environmentLabel = sandbox ? "sandbox" : "product";
+  const integrationChecks = (role) =>
+    runtime.repositories[role].integrationChecks ??
+    (runtimeProfile === "sandbox" ? ["Sandbox check"] : []);
+  const stagingIntegrationChecks = (role) =>
+    runtime.repositories[role].stagingIntegrationChecks ?? [];
   serviceAssert(
-    profile === sandboxProfile &&
-      runtime.workflow === "sandbox-release.yml" &&
+    ["sandbox", "real"].includes(profile?.name) &&
+      runtimeProfile === profile.name &&
       runtime.branches?.staging === "1a-staging" &&
       runtime.branches?.prod === "main" &&
       ["backend", "frontend"].every((role) => {
         const files = runtime.repositories?.[role]?.files;
         return (
           files &&
-          Object.keys(files).length === runtimePaths.length &&
-          runtimePaths.every((path) => /^[0-9a-f]{40}$/u.test(files[path]))
+          Object.keys(files).length > 0 &&
+          Object.values(files).every(
+            (value) =>
+              sha(value) ||
+              ["staging", "prod"].every((environment) =>
+                sha(value?.[environment])
+              )
+          ) &&
+          Array.isArray(integrationChecks(role)) &&
+          integrationChecks(role).length > 0 &&
+          Array.isArray(stagingIntegrationChecks(role)) &&
+          stagingIntegrationChecks(role).length > 0
         );
       }),
     "release-runtime",
-    "The pinned sandbox release runtime is unavailable; real repositories are never a fallback."
+    "The pinned release runtime is unavailable; a different profile is never a fallback."
   );
   async function call(role, method, suffix, body, allowed = [200]) {
     serviceAssert(
       ["backend", "frontend"].includes(role),
       "release-github",
-      "Invalid sandbox release repository role."
+      `Invalid ${environmentLabel} release repository role.`
     );
     const prefix = `repos/${profile.repositories[role].full_name}`;
     const args = [
@@ -102,28 +142,29 @@ export function createReleaseGitHub({
     serviceAssert(
       allowed.includes(status),
       "release-github",
-      `Sandbox release GitHub operation returned HTTP ${status}.`
+      `${releaseLabel} GitHub operation returned HTTP ${status}.`
     );
     return { status, data };
   }
   async function ref(role, name, allowed = [200]) {
     return call(role, "GET", `/git/ref/heads/${name}`, undefined, allowed);
   }
-  async function verifyRuntime(role, commit) {
+  async function verifyRuntime(role, commit, environment) {
     serviceAssert(
       sha(commit),
       "release-runtime",
-      "The sandbox release runtime commit is invalid."
+      `The ${environmentLabel} release runtime commit is invalid.`
     );
-    for (const path of runtimePaths) {
+    for (const [path, expected] of Object.entries(
+      runtime.repositories[role].files
+    )) {
       const file = (await call(role, "GET", `/contents/${path}?ref=${commit}`))
         .data;
+      const pinned = sha(expected) ? expected : expected?.[environment];
       serviceAssert(
-        file?.type === "file" &&
-          file.path === path &&
-          file.sha === runtime.repositories[role].files[path],
+        file?.type === "file" && file.path === path && file.sha === pinned,
         "release-runtime",
-        "A pinned sandbox release runtime file changed."
+        `A pinned ${environmentLabel} release runtime file changed.`
       );
     }
   }
@@ -133,7 +174,7 @@ export function createReleaseGitHub({
       serviceAssert(
         current.data?.object?.sha === commit,
         "release-ownership",
-        "The saved sandbox release branch moved; it was not deleted."
+        `The saved ${environmentLabel} release branch moved; it was not deleted.`
       );
       await call(role, "DELETE", `/git/refs/heads/${name}`, undefined, [204]);
     }
@@ -148,14 +189,14 @@ export function createReleaseGitHub({
         serviceAssert(
           observed.data?.object?.sha === commit,
           "release-ownership",
-          "The owned sandbox release branch changed during cleanup."
+          `The owned ${environmentLabel} release branch changed during cleanup.`
         );
       }
       if (attempt < 3) await wait(1000, { signal });
     }
     throw new ServiceError(
       "release-cleanup",
-      "Sandbox release branch cleanup could not be verified twice."
+      `${releaseLabel} branch cleanup could not be verified twice.`
     );
   }
   function verifyPull(
@@ -188,7 +229,7 @@ export function createReleaseGitHub({
           : ["open", ...(allowClosed ? ["closed"] : [])].includes(pr.state) &&
             pr.merged === false),
       "release-ownership",
-      "Sandbox integration PR identity or exact code changed."
+      `${releaseLabel} integration PR identity or exact code changed.`
     );
     return pr;
   }
@@ -217,16 +258,29 @@ export function createReleaseGitHub({
         "release-ownership",
         "Sandbox integration PR changed while checks ran."
       );
-      const required = effectiveRequiredChecks(
+      const isProduction = record.step.environment === "prod";
+      const expectedChecks = isProduction
+        ? integrationChecks(role)
+        : stagingIntegrationChecks(role);
+      const gate = integrationGateChecks(
         observed.checks,
-        record.integration_commit ?? candidate.commit
+        record.integration_commit ?? candidate.commit,
+        expectedChecks,
+        isProduction
       );
-      serviceAssert(
-        required.some((check) => check.name === "Sandbox check"),
-        "release-checks",
-        "The protected sandbox branch no longer requires Sandbox check."
-      );
-      const pending = required.some((check) =>
+      if (gate.missing.length > 0) {
+        if (poll + 1 < polls) {
+          await wait(pollMs, { signal });
+          continue;
+        }
+        throw new ServiceError(
+          "release-checks",
+          isProduction
+            ? "The protected main branch no longer requires every configured integration check."
+            : `A configured staging integration check did not appear: ${gate.missing.join(", ")}.`
+        );
+      }
+      const pending = gate.checks.some((check) =>
         check.__typename === "CheckRun"
           ? check.status !== "COMPLETED"
           : check.state === "PENDING"
@@ -234,7 +288,9 @@ export function createReleaseGitHub({
       if (!pending) {
         const passed =
           observed.mergeable === "MERGEABLE" &&
-          required.every((check) =>
+          (profile.name !== "real" ||
+            ["CLEAN", "UNSTABLE"].includes(observed.mergeStateStatus)) &&
+          gate.checks.every((check) =>
             check.__typename === "CheckRun"
               ? check.conclusion === "SUCCESS"
               : check.state === "SUCCESS"
@@ -546,33 +602,35 @@ export function createReleaseGitHub({
       serviceAssert(
         positive(actor?.id) && /^[A-Za-z0-9-]+(?:\[bot\])?$/u.test(actor.login),
         "release-runtime",
-        "The sandbox release actor is invalid."
+        `The ${environmentLabel} release actor is invalid.`
       );
       const workflows = {};
       const versions = { staging: {}, prod: {} };
       for (const role of ["backend", "frontend"]) {
         const expected = profile.repositories[role];
         const repo = (await call(role, "GET", "")).data;
-        const workflow = (
-          await call(role, "GET", `/actions/workflows/${runtime.workflow}`)
-        ).data;
+        const workflow = runtime.workflow
+          ? (await call(role, "GET", `/actions/workflows/${runtime.workflow}`))
+              .data
+          : null;
         serviceAssert(
           repo.id === expected.id &&
             repo.full_name === expected.full_name &&
             repo.private === false &&
             repo.permissions?.push === true &&
-            workflow.path === `.github/workflows/${runtime.workflow}` &&
-            workflow.state === "active" &&
-            positive(workflow.id),
+            (!runtime.workflow ||
+              (workflow.path === `.github/workflows/${runtime.workflow}` &&
+                workflow.state === "active" &&
+                positive(workflow.id))),
           "release-runtime",
-          "Sandbox release repository, access or pinned workflow changed."
+          `${releaseLabel} repository, access or pinned workflow changed.`
         );
-        workflows[role] = { workflow_id: workflow.id };
+        workflows[role] = runtime.workflow ? { workflow_id: workflow.id } : {};
         for (const environment of ["staging", "prod"]) {
           const commit = (await ref(role, target(runtime, environment))).data
             .object.sha;
           versions[environment][role] = commit;
-          await verifyRuntime(role, commit);
+          await verifyRuntime(role, commit, environment);
         }
       }
       return {
@@ -592,7 +650,7 @@ export function createReleaseGitHub({
           uuid(record.release_id) &&
           actor?.id,
         "release-input",
-        "Invalid sandbox integration input."
+        `Invalid ${environmentLabel} integration input.`
       );
       const targetBranch = target(runtime, record.step.environment);
       const startingState = record.state;
@@ -601,7 +659,7 @@ export function createReleaseGitHub({
         serviceAssert(
           current.data?.object?.sha === expectedBase,
           "release-stale",
-          `Sandbox ${record.step.environment} changed after the release started.`
+          `${sandbox ? "Sandbox" : "Product"} ${record.step.environment} changed after the release started.`
         );
         return {
           status: "passed",
@@ -612,10 +670,15 @@ export function createReleaseGitHub({
       }
       record.actor ??= actor;
       record.target_branch ??= targetBranch;
+      serviceAssert(
+        record.target_branch === targetBranch,
+        "release-state",
+        `${releaseLabel} integration destination changed.`
+      );
       record.branch ??= branch(record);
       record.body ??= record.step.recovery
-        ? `Sandbox restoration for failed release ${record.release_id}\n\nRestore ${record.step.environment} tree ${candidate.tree}`
-        : `Sandbox release ${record.release_id}\n\nBatch: ${candidate.tree}`;
+        ? `${sandbox ? "Sandbox" : "Product"} restoration for failed release ${record.release_id}\n\nRestore ${record.step.environment} tree ${candidate.tree}`
+        : `${releaseLabel} ${record.release_id}\n\nBatch: ${candidate.tree}`;
       if (!record.base) {
         record.base = (await ref(role, targetBranch)).data.object.sha;
         serviceAssert(
@@ -623,14 +686,14 @@ export function createReleaseGitHub({
             (record.step.environment !== "prod" ||
               record.base === candidate.base),
           "release-stale",
-          `Sandbox ${record.step.environment} changed after this release captured its starting version.`
+          `${sandbox ? "Sandbox" : "Product"} ${record.step.environment} changed after this release captured its starting version.`
         );
         await save();
       } else if (!["cleaning", "merging", "merged"].includes(record.state)) {
         serviceAssert(
           (await ref(role, targetBranch)).data.object.sha === record.base,
           "release-stale",
-          `Sandbox ${record.step.environment} changed before integration.`
+          `${sandbox ? "Sandbox" : "Product"} ${record.step.environment} changed before integration.`
         );
       }
       if (record.state === "cleaning")
@@ -661,7 +724,7 @@ export function createReleaseGitHub({
           JSON.stringify(record.integration_input) ===
             JSON.stringify(commitInput),
         "release-state",
-        "Sandbox integration commit input changed."
+        `${releaseLabel} integration commit input changed.`
       );
       const created = (
         await call(
@@ -678,13 +741,13 @@ export function createReleaseGitHub({
           created.parents?.length === 1 &&
           created.parents[0].sha === candidate.commit,
         "release-ownership",
-        "GitHub did not create the exact sandbox integration commit."
+        `GitHub did not create the exact ${environmentLabel} integration commit.`
       );
       if (record.integration_commit)
         serviceAssert(
           record.integration_commit === created.sha,
           "release-ownership",
-          "Sandbox integration commit changed across retries."
+          `${releaseLabel} integration commit changed across retries.`
         );
       else {
         record.integration_commit = created.sha;
@@ -700,7 +763,7 @@ export function createReleaseGitHub({
           observedCommit.parents?.length === 1 &&
           observedCommit.parents[0].sha === candidate.commit,
         "release-ownership",
-        "Sandbox integration commit no longer contains the exact candidate tree."
+        `${releaseLabel} integration commit no longer contains the exact candidate tree.`
       );
       const integrationCommit = record.integration_commit;
       const resumedMerged = record.state === "merged";
@@ -721,7 +784,7 @@ export function createReleaseGitHub({
         serviceAssert(
           current.data?.object?.sha === integrationCommit,
           "release-ownership",
-          "Sandbox release branch does not name the exact integration commit."
+          `${releaseLabel} branch does not name the exact integration commit.`
         );
       }
       let pr;
@@ -746,8 +809,8 @@ export function createReleaseGitHub({
               "/pulls",
               {
                 title: record.step.recovery
-                  ? `Restore sandbox ${record.step.environment} after ${record.release_id}`
-                  : `Sandbox ${record.step.environment} release ${record.release_id}`,
+                  ? `Restore ${environmentLabel} ${record.step.environment} after ${record.release_id}`
+                  : `${sandbox ? "Sandbox" : "Product"} ${record.step.environment} release ${record.release_id}`,
                 head: record.branch,
                 base: targetBranch,
                 body: record.body
@@ -771,7 +834,8 @@ export function createReleaseGitHub({
           await save();
           return cleanupFailedPull(role, record, candidate, save);
         }
-        await waitForQuietWorkflow(role, record, save, "merge");
+        if (runtime.workflow)
+          await waitForQuietWorkflow(role, record, save, "merge");
         pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
         verifyPull(pr, record, candidate);
         serviceAssert(
@@ -796,8 +860,8 @@ export function createReleaseGitHub({
           `/pulls/${record.number}/merge`,
           {
             commit_title: record.step.recovery
-              ? `Restore sandbox ${record.step.environment} after ${record.release_id}`
-              : `Sandbox ${record.step.environment} release ${record.release_id}`,
+              ? `Restore ${environmentLabel} ${record.step.environment} after ${record.release_id}`
+              : `${sandbox ? "Sandbox" : "Product"} ${record.step.environment} release ${record.release_id}`,
             commit_message: record.step.recovery
               ? `Restore ${record.step.environment} tree ${candidate.tree}`
               : `Exact selected candidate ${candidate.commit}`,
@@ -824,7 +888,7 @@ export function createReleaseGitHub({
           merged.parents?.some((parent) => parent.sha === record.base) &&
           merged.parents?.some((parent) => parent.sha === integrationCommit),
         "release-merge",
-        "The sandbox environment does not contain the exact checked merge."
+        `The ${environmentLabel} environment does not contain the exact checked merge.`
       );
       record.state = "merged";
       await save();
@@ -848,7 +912,7 @@ export function createReleaseGitHub({
           sha(restoreTo) &&
           sha(expectedBase),
         "release-recovery",
-        "Invalid sandbox restoration target."
+        `Invalid ${environmentLabel} restoration target.`
       );
       const role = record.step.role;
       const environment = record.step.environment;
@@ -859,7 +923,7 @@ export function createReleaseGitHub({
         "release-ownership",
         "Restoration branch or destination changed."
       );
-      await verifyRuntime(role, restoreTo);
+      await verifyRuntime(role, restoreTo, environment);
       const old = (await call(role, "GET", `/git/commits/${restoreTo}`)).data;
       serviceAssert(
         old?.sha === restoreTo && sha(old.tree?.sha),
@@ -893,7 +957,7 @@ export function createReleaseGitHub({
       serviceAssert(
         result.status !== "passed" || result.tree === record.restore_tree,
         "release-recovery",
-        "Restored sandbox branch does not match its saved source tree."
+        `Restored ${environmentLabel} branch does not match its saved source tree.`
       );
       return result;
     },
@@ -918,7 +982,7 @@ export function createReleaseGitHub({
           serviceAssert(
             observed[environment][role] === expected,
             "release-recovery-moved",
-            "Sandbox environment moved before restoration was confirmed."
+            `${sandbox ? "Sandbox" : "Product"} environment moved before restoration was confirmed.`
           );
           const commit = (await call(role, "GET", `/git/commits/${expected}`))
             .data;
@@ -927,7 +991,7 @@ export function createReleaseGitHub({
               sha(commit.tree?.sha) &&
               (!expectedTree || commit.tree.sha === expectedTree),
             "release-recovery-moved",
-            "Restored sandbox tree differs from the saved source."
+            `Restored ${environmentLabel} tree differs from the saved source.`
           );
           observed.trees[environment][role] = commit.tree.sha;
         }
@@ -953,7 +1017,7 @@ export function createReleaseGitHub({
           observed.staging[role] === versions[role] &&
             observed.prod[role] === prodVersions[role],
           "release-recovery-moved",
-          "Sandbox staging or test main moved before restoration was confirmed."
+          `${sandbox ? "Sandbox staging or test main" : "Product staging or main"} moved before restoration was confirmed.`
         );
         const commit = (
           await call(role, "GET", `/git/commits/${versions[role]}`)
@@ -970,6 +1034,11 @@ export function createReleaseGitHub({
       return observed;
     },
     async run({ record, actor, save }) {
+      serviceAssert(
+        runtime.workflow === "sandbox-release.yml",
+        "release-runtime",
+        "The generic release runner is available only for its pinned sandbox workflow."
+      );
       const operation = validateReleaseOperation(record.operation);
       const role = operation.operation === "e2e" ? "backend" : operation.role;
       const workflowId = record.workflow_id ?? record.runtime?.workflow_id;
@@ -978,7 +1047,11 @@ export function createReleaseGitHub({
         "release-state",
         "Release operation lacks saved actor or workflow identity."
       );
-      await verifyRuntime(role, operation[`${role}_commit`]);
+      await verifyRuntime(
+        role,
+        operation[`${role}_commit`],
+        operation.environment
+      );
       const verifyPinnedRefs = async (stage) => {
         for (const sourceRole of ["backend", "frontend"]) {
           const current = (

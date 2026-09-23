@@ -3,7 +3,10 @@ import test from "node:test";
 import { fixture } from "./processing-fixture.mjs";
 import { processInbox } from "../src/inbox-processor.mjs";
 import { createJournal, validateJournal } from "../src/inbox-journal.mjs";
-import { saveOrganizedReleaseRequestIssue } from "../src/ticket-presentation.mjs";
+import {
+  saveOrganizedReleaseRequestIssue,
+  statusComment
+} from "../src/ticket-presentation.mjs";
 import { createCoordinatorGitHub } from "../src/coordinator-github.mjs";
 import { runInboxRunCli } from "../src/inbox-run-cli.mjs";
 import { readInbox } from "../src/inbox-reader.mjs";
@@ -18,7 +21,13 @@ const issueWrites = (f) =>
     (call) => call.method !== "GET" && !call.path.startsWith("/git/")
   );
 const processOne = (f, extra = {}) =>
-  processInbox({ ...f, issueNumber: 1, ...extra });
+  processInbox({
+    ...f,
+    selectionMode: "filtered",
+    issueNumbers: [1],
+    actorLogin: "trusted-user",
+    ...extra
+  });
 const intake = (f) => ({
   request: f.request,
   actor: f.actor.login,
@@ -34,6 +43,33 @@ const saveFixtureRequest = (f) => {
     checksum: releaseRequestChecksum(f.request)
   });
 };
+
+test("legacy sandbox release comments keep their sandbox label", () => {
+  const body = statusComment({
+    decision: {
+      status: "completed",
+      next_action: "None",
+      action_owner: "none",
+      submitter_action: "None",
+      reasons: [],
+      batch: {
+        status: "passed",
+        message: "Completed",
+        release: { status: "passed", message: "Completed" }
+      }
+    },
+    actor: { id: 456, login: "tester" },
+    at: "2026-09-23T00:00:00.000Z",
+    submitter: null,
+    request: null,
+    number: 1,
+    marker: "11111111-1111-4111-8111-111111111111",
+    assignment: "assigned",
+    profile: "sandbox"
+  });
+  assert.match(body, /Sandbox release: passed/u);
+  assert.doesNotMatch(body, /Real-profile release/u);
+});
 
 test("new intake creates readable scope, received status, verified assignment, and one separate comment", async () => {
   const f = fixture();
@@ -205,7 +241,7 @@ for (const [name, change, status] of [
   test(`${name} stays visible without product reads, assignment, or closure`, async () => {
     const f = fixture();
     change(f);
-    await processOne(f);
+    await processInbox(f);
     assert.equal(f.issue.state, "open");
     assert.ok(f.issue.labels.includes(`status:${status}`));
     assert.ok(f.issue.labels.includes("reason:request-unverified"));
@@ -238,7 +274,7 @@ test("already merged code closes without claiming deployment and preserves its r
   );
   assert.match(f.comments[0].body, /aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/);
   const writes = issueWrites(f).length;
-  await processOne(f);
+  await processInbox(f);
   const saved = await saveOrganizedReleaseRequestIssue(intake(f));
   assert.equal(saved.issue.created, false);
   assert.equal(issueWrites(f).length, writes);
@@ -320,7 +356,7 @@ for (const [name, change] of [
     const f = fixture();
     f.pr.state = "MERGED";
     change(f);
-    await processOne(f);
+    await processInbox(f);
     assert.equal(f.issue.state, "open");
     assert.ok(!f.issue.labels.includes("reason:already-merged"));
     assert.equal(
@@ -430,7 +466,7 @@ test("an active intake workflow finishes its own setup before the processor can 
   const f = fixture();
   f.run.status = "in_progress";
   f.run.conclusion = null;
-  const report = await processOne(f);
+  const report = await processInbox(f);
   assert.equal(report.requests[0].status, "intake-running");
   assert.equal(issueWrites(f).length, 0);
   assert.equal(f.productCalls.length, 0);
@@ -494,8 +530,15 @@ test("overlap is explained without choosing the newest or replacing either reque
   const other = structuredClone(entry);
   other.issue_number = 2;
   other.request.request_id = "33333333-3333-4333-8333-333333333333";
-  await processOne(f, {
-    loadInbox: async () => ({ requests: [entry, other] })
+  f.issues.push({
+    ...structuredClone(f.issue),
+    id: 1002,
+    number: 2
+  });
+  await processInbox({
+    ...f,
+    loadInbox: async () => ({ requests: [entry, other] }),
+    inspect: async (issue) => (issue.number === 1 ? entry : other)
   });
   assert.ok(f.issue.labels.includes("reason:overlapping-requests"));
   assert.equal(f.issue.state, "open");
@@ -599,7 +642,7 @@ test("a lost close response resumes and verifies the explicit test disposition",
   assert.equal(f.state().tickets[1].transitions.length, 1);
   assert.equal(f.state().lock, null);
   const writes = issueWrites(f).length;
-  await processOne(f);
+  await processInbox(f);
   assert.equal(issueWrites(f).length, writes);
 });
 
@@ -764,10 +807,11 @@ test("journal rejects a lost-response readback with another lock token", async (
 test("an already closed legacy test is not reopened, reset, or invented as completed", async () => {
   const f = fixture();
   f.issue.state = "closed";
-  const result = await processOne(f);
-  assert.equal(result.requests[0].applied, false);
+  const result = await processInbox(f);
+  assert.deepEqual(result.requests, []);
   assert.equal(issueWrites(f).length, 0);
   assert.deepEqual(f.state().tickets, {});
+  assert.deepEqual(f.comments, []);
   assert.equal(f.issue.state, "closed");
 });
 

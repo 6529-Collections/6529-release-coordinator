@@ -115,21 +115,124 @@ test("a database-changing ticket waits while the older no-change ticket releases
   assert.ok(h.f.issues[1].labels.includes("reason:batch-deferred"));
 });
 
-test("an explicit issue keeps the single-ticket path and cannot silently expand into a batch", async () => {
-  const h = harness();
-  let calls = 0;
+test("filtered Issues become the complete visible inbox before normal batching", async () => {
+  const h = harness(3);
   const result = await processInbox({
     ...h.options,
-    issueNumber: 1,
-    batch: async () => assert.fail("single-ticket selection must stay scoped"),
-    services: async ({ decision }) => {
-      calls++;
-      return { decision, result: { status: "not-run", message: "Fixture" } };
+    selectionMode: "filtered",
+    issueNumbers: [1, 3],
+    actorLogin: "trusted-user"
+  });
+  assert.deepEqual(result.batch.selected, [1, 3]);
+  assert.deepEqual(
+    result.requests.map((request) => request.issue_number),
+    [1, 3]
+  );
+  assert.equal(h.f.issues[0].state, "closed");
+  assert.equal(h.f.issues[1].state, "open");
+  assert.deepEqual(h.f.issues[1].labels, [
+    "release-request",
+    "pending",
+    "target:staging",
+    "user-note"
+  ]);
+  assert.equal(h.f.issues[2].state, "closed");
+});
+
+test("a filtered mixed database inbox keeps the normal database isolation rule", async () => {
+  const h = harness(3, { databaseTickets: [1] });
+  const result = await processInbox({
+    ...h.options,
+    selectionMode: "filtered",
+    issueNumbers: [1, 2],
+    actorLogin: "trusted-user"
+  });
+  assert.deepEqual(result.batch.selected, [1]);
+  assert.equal(h.f.issues[0].state, "closed");
+  assert.ok(h.f.issues[1].labels.includes("reason:batch-deferred"));
+  assert.equal(h.f.issues[2].state, "open");
+});
+
+test("a filtered actor mismatch stops before acquiring the journal", async () => {
+  const h = harness();
+  await assert.rejects(
+    processInbox({
+      ...h.options,
+      selectionMode: "filtered",
+      issueNumbers: [1],
+      actorLogin: "another-user"
+    }),
+    /available verified request from the selected actor/u
+  );
+  assert.equal(h.f.head, null);
+  assert.equal(h.f.comments.length, 0);
+});
+
+test("a duplicate request outside the filtered inbox cannot block a selected ticket", async () => {
+  const h = harness();
+  h.samples[1].entry.request.request_id = h.samples[0].entry.request.request_id;
+  for (const sample of h.samples) {
+    sample.entry.status = "invalid";
+    sample.entry.duplicate_issue_numbers = [1, 2];
+    sample.entry.errors = [
+      "The same request ID appears in multiple open Issues: #1, #2."
+    ];
+  }
+  const result = await processInbox({
+    ...h.options,
+    selectionMode: "filtered",
+    issueNumbers: [1],
+    actorLogin: "trusted-user",
+    inspect: async (issue) => {
+      const entry = structuredClone(h.samples[issue.number - 1].entry);
+      entry.status = "valid";
+      entry.errors = [];
+      return entry;
     }
   });
-  assert.equal(result.requests.length, 1);
-  assert.equal(calls, 1);
-  assert.equal(result.batch, undefined);
+  assert.deepEqual(result.batch.selected, [1]);
+  assert.equal(h.f.issues[0].state, "closed");
+  assert.equal(h.f.issues[1].state, "open");
+});
+
+test("two selected Issues with one request ID stop before journal or release writes", async () => {
+  const h = harness();
+  h.samples[1].entry.request.request_id = h.samples[0].entry.request.request_id;
+  for (const sample of h.samples) {
+    sample.entry.status = "invalid";
+    sample.entry.duplicate_issue_numbers = [1, 2];
+    sample.entry.errors = [
+      "The same request ID appears in multiple open Issues: #1, #2."
+    ];
+  }
+  await assert.rejects(
+    processInbox({
+      ...h.options,
+      selectionMode: "filtered",
+      issueNumbers: [1, 2],
+      actorLogin: "trusted-user"
+    }),
+    /available verified request from the selected actor/u
+  );
+  assert.equal(h.f.head, null);
+  assert.equal(h.dispatches(), 0);
+  assert.deepEqual(h.f.comments, []);
+});
+
+test("filtered tickets with one login but different verified actor IDs stop", async () => {
+  const h = harness();
+  h.samples[1].entry.github_actor.id = 987654;
+  await assert.rejects(
+    processInbox({
+      ...h.options,
+      selectionMode: "filtered",
+      issueNumbers: [1, 2],
+      actorLogin: "trusted-user"
+    }),
+    /available verified request from the selected actor/u
+  );
+  assert.equal(h.f.head, null);
+  assert.equal(h.dispatches(), 0);
 });
 
 for (const exclusion of ["unsupported", "limit"]) {

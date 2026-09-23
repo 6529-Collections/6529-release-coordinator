@@ -271,6 +271,7 @@ test("SD-07: a lost dispatch response is reconciled once and unchanged retries r
   const state = {
     schema: 1,
     repository: "6529-Collections/release-coordinator-test-inbox",
+    profile: serviceFixture().profile.name,
     revision: 1,
     workflow: inboxWorkflow,
     tickets: {},

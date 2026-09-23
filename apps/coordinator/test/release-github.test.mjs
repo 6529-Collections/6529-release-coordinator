@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createReleaseGitHub } from "../src/release-github.mjs";
+import {
+  createReleaseGitHub,
+  integrationGateChecks
+} from "../src/release-github.mjs";
 import {
   makeReleaseBuild,
   makeReleaseOperation,
@@ -17,6 +20,7 @@ const runtime = {
   branches: { staging: "1a-staging", prod: "main" },
   repositories: {
     backend: {
+      stagingIntegrationChecks: ["Sandbox check"],
       files: {
         ".github/workflows/sandbox-release.yml": "a".repeat(40),
         "coordinator/src/release-contract.mjs": "b".repeat(40),
@@ -25,6 +29,7 @@ const runtime = {
       }
     },
     frontend: {
+      stagingIntegrationChecks: ["Sandbox check"],
       files: {
         ".github/workflows/sandbox-release.yml": "d".repeat(40),
         "coordinator/src/release-contract.mjs": "e".repeat(40),
@@ -34,6 +39,52 @@ const runtime = {
     }
   }
 };
+
+test("staging gates optional product checks while main still requires GitHub enforcement", () => {
+  const commit = "a".repeat(40);
+  const checks = [
+    {
+      __typename: "CheckRun",
+      name: "DCO",
+      isRequired: false,
+      status: "COMPLETED",
+      conclusion: "SUCCESS"
+    },
+    {
+      __typename: "StatusContext",
+      context: "security/snyk (6529)",
+      isRequired: false,
+      state: "SUCCESS"
+    },
+    {
+      __typename: "CheckRun",
+      name: "Other required check",
+      isRequired: true,
+      status: "COMPLETED",
+      conclusion: "SUCCESS"
+    }
+  ];
+  const selected = integrationGateChecks(
+    checks,
+    commit,
+    ["DCO", "security/snyk (6529)"],
+    false
+  );
+  assert.deepEqual(selected.checks, [checks[2], checks[0], checks[1]]);
+  assert.deepEqual(selected.missing, []);
+  assert.deepEqual(
+    integrationGateChecks(checks, commit, ["DCO"], true).missing,
+    ["DCO"]
+  );
+  assert.deepEqual(
+    integrationGateChecks(checks, commit, ["Missing check"], false).missing,
+    ["Missing check"]
+  );
+  assert.deepEqual(
+    integrationGateChecks(checks, commit, ["Other required check"], true),
+    { checks: [checks[2]], missing: [] }
+  );
+});
 
 function runtimeFile(endpoint, changed = false) {
   const role = endpoint.includes("release-coordinator-test-frontend")
@@ -566,7 +617,7 @@ test("integration uses a unique checked commit with the exact candidate tree", a
             {
               __typename: "CheckRun",
               id: "new-check",
-              isRequired: true,
+              isRequired: false,
               name: "Sandbox check",
               status: "COMPLETED",
               conclusion: "SUCCESS",
@@ -1333,7 +1384,7 @@ test("owned branch cleanup requires two consecutive missing reads", async () => 
         checks: [
           {
             __typename: "CheckRun",
-            isRequired: true,
+            isRequired: false,
             name: "Sandbox check",
             status: "COMPLETED",
             conclusion: "FAILURE"

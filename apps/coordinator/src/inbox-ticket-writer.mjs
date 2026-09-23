@@ -45,6 +45,7 @@ async function applyTicket({
   ticket,
   number,
   actor,
+  profile,
   verifyClosure,
   signal
 }) {
@@ -123,7 +124,8 @@ async function applyTicket({
     request,
     number,
     marker: ticket.comment.marker,
-    assignment
+    assignment,
+    profile: profile.name
   });
   if (!comment) {
     comment = await response(
@@ -306,6 +308,7 @@ export async function presentRunTicket(
         ticket,
         number,
         actor,
+        profile,
         signal,
         verifyClosure: async () => {
           if (recordedTerminal || closeTest) return;
@@ -326,7 +329,7 @@ export async function presentRunTicket(
                 "completed"
             )
               throw new Error(
-                "Saved sandbox release evidence changed before closure."
+                `Saved ${profile.name} release evidence changed before closure.`
               );
             return;
           }

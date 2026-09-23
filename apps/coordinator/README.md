@@ -2,9 +2,10 @@
 
 This private workspace runs manually on your machine and exits. `inbox:run`
 checks requests, rehearses suitable exact PRs, runs supported sandbox service
-checks in GitHub Actions, and updates tickets with reasons and evidence. An
-unscoped sandbox run can also take one selected batch through protected fake
-staging and production, locked npm builds, short-lived GitHub artifacts, and
+checks in GitHub Actions, and updates tickets with reasons and evidence. A
+sandbox run can also take one selected visible batch through PR-based fake
+staging with a Coordinator-checked status and protected fake production, locked
+npm builds, short-lived GitHub artifacts, and
 E2E against the built backend/frontend HTTP boundary. Select `sandbox` or `real`
 explicitly.
 The merged source also supports one database-changing sandbox ticket on
@@ -14,8 +15,8 @@ no-database-change fake-production failures, and deploys the sample monitoring
 package for a production ticket that selects operational monitoring. See
 [progress](../../docs/progress.md) for the live test and delivery evidence.
 Start with [Run the ticket workflow](#run-the-ticket-workflow) below.
-No persistent Coordinator server or timer is started. Real product release
-adapters are not configured.
+No persistent Coordinator server or timer is started. The real product adapter
+in PR #218 has offline tests but no live product release proof.
 
 `inbox:read` and `readiness:check` remain read-only diagnostics. The
 [ticket rules](../../docs/inbox-processing.md) define labels, ownership, reasons,
@@ -74,17 +75,17 @@ it does not require the legacy `pending` label.
 
 ## Results
 
-| Status | Meaning |
-| --- | --- |
-| `valid` | The saved request matches its schema, checksum, and expected workflow evidence. |
-| `invalid` | The saved record is malformed, contradictory, duplicated, or differs from the workflow evidence. |
+| Status       | Meaning                                                                                              |
+| ------------ | ---------------------------------------------------------------------------------------------------- |
+| `valid`      | The saved request matches its schema, checksum, and expected workflow evidence.                      |
+| `invalid`    | The saved record is malformed, contradictory, duplicated, or differs from the workflow evidence.     |
 | `unverified` | Evidence cannot be obtained or uniquely confirmed, or the latest workflow attempt has not succeeded. |
 
-| Exit code | Meaning |
-| --- | --- |
-| `0` | Every selected record is valid, or a successful scan found no open request Issues. |
-| `1` | At least one record is invalid or unverified. |
-| `2` | The Issue listing failed or command options were invalid. No complete inbox report is claimed. |
+| Exit code | Meaning                                                                                        |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| `0`       | Every selected record is valid, or a successful scan found no open request Issues.             |
+| `1`       | At least one record is invalid or unverified.                                                  |
+| `2`       | The Issue listing failed or command options were invalid. No complete inbox report is claimed. |
 
 An authentication, network, rate-limit, unexpected-response, or later-page
 failure never becomes an empty inbox. A workflow read failure is reported on
@@ -161,15 +162,14 @@ it checks:
    replaced as unknown because this reader has no verified release-outcome source. Issue closure, labels, PR merge state, and newer requests cannot
    substitute for that history.
 
-A recorded operational-monitoring selection gets its own check. In the real
-profile it is unknown: the PR checks above still run, but the Coordinator does
-not fetch the application service catalog for a monitoring-only request and
-cannot claim deployment or target health, so the ticket stays waiting until a
-real adapter exists. In the sandbox it passes for a complete sample ticket; the
+A recorded operational-monitoring selection gets its own check. It passes only
+because the Coordinator pins the existing monitoring workflow as a supported
+release operation; it still does not claim deployment or target health before
+that operation runs. A monitoring-only request does not need the application
+service catalog. In the sandbox, the
 sample monitoring deploys after the production merge into test `main`, and a
-staging request records that it does not deploy monitoring. A monitoring-only
-sandbox request waits because the service stage needs the complete sample
-application.
+staging request records that it does not deploy monitoring. The real profile
+uses the same order with the product monitoring workflow.
 
 An omitted catalog prerequisite stays **unknown** until there is proof that its
 required state already runs in the requested environment. The checker does not
@@ -204,8 +204,9 @@ this checker does not implement them.
 
 The [profiled inbox guide](../../docs/profiled-inbox-testing.md) owns the shared
 configuration, request formats, submission command, separate journals/reports,
-and one-ticket rehearsal plan. `request:submit` and `inbox:run` require
-`RELEASE_COORDINATOR_PROFILE=sandbox` or `real`. Read-only inbox/readiness
+and automatic ticket plans. `request:submit` requires
+`RELEASE_COORDINATOR_PROFILE=sandbox` or `real`; `inbox:run` additionally requires
+`RELEASE_COORDINATOR_SCOPE=filtered` or `inbox`. Read-only inbox/readiness
 commands retain their real default and honor an explicit profile.
 The installed npm CLI keeps its existing real-only behavior.
 
@@ -232,15 +233,15 @@ commands are removed.
 
 The private JSON manifest has these fields (not the public release-request schema):
 
-| Field | Meaning |
-| --- | --- |
-| `schema_version`, `source`, `profile` | Exact values `"1"`, `"test-manifest"`, `"sandbox"`. |
-| `case_id`, `target` | A short case identifier and `staging` or `production` for dependency observations. |
-| `repositories` | One or two unique frontend/backend roles, in explicit dependency order. |
-| Repository `role`, `depends_on` | `frontend` or `backend`; dependencies must name earlier roles. Names, IDs, and expected visibility come from the trusted profile. |
-| Repository `destination` | Explicit `branch` and full 40-character `commit`; no inferred staging branch. |
-| Repository `pull_requests` | Ordered list of `{number, branch, commit}` records with exact commits. At most ten per repository. |
-| Backend `deploy_units`, `deploy_dependencies` | Selected service names and additional `{before, after}` edges. Both fields are required for backend. |
+| Field                                         | Meaning                                                                                                                           |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `schema_version`, `source`, `profile`         | Exact values `"1"`, `"test-manifest"`, `"sandbox"`.                                                                               |
+| `case_id`, `target`                           | A short case identifier and `staging` or `production` for dependency observations.                                                |
+| `repositories`                                | One or two unique frontend/backend roles, in explicit dependency order.                                                           |
+| Repository `role`, `depends_on`               | `frontend` or `backend`; dependencies must name earlier roles. Names, IDs, and expected visibility come from the trusted profile. |
+| Repository `destination`                      | Explicit `branch` and full 40-character `commit`; no inferred staging branch.                                                     |
+| Repository `pull_requests`                    | Ordered list of `{number, branch, commit}` records with exact commits. At most ten per repository.                                |
+| Backend `deploy_units`, `deploy_dependencies` | Selected service names and additional `{before, after}` edges. Both fields are required for backend.                              |
 
 Unknown fields, duplicates, unsafe refs, invalid dependency order, and manifests
 over 64 KiB are rejected. No repository URL, credential, arbitrary API request,
@@ -255,12 +256,12 @@ the combined backend catalog, observation changes, cleanup, and
 `release_authorized: false`. CI on individual PRs does not prove the combined
 tree was tested. Gates for one base branch do not prove another destination.
 
-| Exit | Result |
-| --- | --- |
-| `0` | All requested rehearsal observations passed for this exact snapshot. |
-| `1` | Stable evidence demonstrates a blocker. |
-| `2` | Unknown evidence, invalid input, or an operational/report/cleanup failure. |
-| `3` | PR, destination, checks, reviews, or state changed during the run. |
+| Exit | Result                                                                     |
+| ---- | -------------------------------------------------------------------------- |
+| `0`  | All requested rehearsal observations passed for this exact snapshot.       |
+| `1`  | Stable evidence demonstrates a blocker.                                    |
+| `2`  | Unknown evidence, invalid input, or an operational/report/cleanup failure. |
+| `3`  | PR, destination, checks, reviews, or state changed during the run.         |
 
 The shared runner saves JSON and readable text under
 `.release-coordinator/merge-rehearsal/<profile>/<run-id>/` in this checkout.
@@ -312,10 +313,12 @@ CLI path. Live evidence is dated separately in the progress record.
 
 `inbox:run` **writes to the selected GitHub inbox**. It requires an authenticated
 inbox writer with Issue and contents write access, plus read access to the
-selected PR repositories. Inspect and rehearse one specified ticket:
+selected PR repositories. Choose repositories and the visible inbox separately.
+For a guarded set of one or more Issues:
 
 ```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --json
+RELEASE_COORDINATOR_PROFILE=sandbox RELEASE_COORDINATOR_SCOPE=filtered \
+  npm run inbox:run -- --issue 101 --issue 104 --actor GITHUB_LOGIN --json
 ```
 
 Use `real` for the real configuration with a real receipt. The command verifies
@@ -330,20 +333,29 @@ and preserves PR order inside each ticket part. It keeps all requested parts,
 PR versions, and backend services. See
 [automatic planning](../../docs/profiled-inbox-testing.md#automatic-plan-for-each-ticket).
 
+`--actor` is the verified submitter login stored by the intake workflow, not the
+editable Issue author or text. Every named Issue must be an open, valid request
+from that actor. If any Issue is missing, invalid, closed, or belongs to a
+different actor, the command stops before acquiring the journal lock. Repeating
+`--issue` changes only what this run can see. The visible tickets then use the
+ordinary conflict, batch, database, target, staging, production, and recovery
+rules.
+
 Initial blockers skip planning/rehearsal. Missing destination configuration or
 GitHub evidence gets `reason:merge-plan-unavailable`; an impossible generated
 scope/order gets `reason:merge-plan-invalid`. The comment explains what failed.
 A pass adds `rehearsal:passed`, with exact destinations and resulting trees.
-A scoped one-ticket run still waits because Git success alone does not prove
-application behavior or deployment. To run the full sandbox batch and fake
-release sequence, omit `--issue`; a database-changing ticket is selected alone.
+Both profiles then use their exact profile-specific batch and release policy.
+Git rehearsal by itself does not prove application behavior or deployment. A
+database-changing ticket is selected alone.
 Conflicts, unknown evidence, and changed
 inputs retain their separate rehearsal reasons. Saved reports cannot be imported.
 
-Omit the ticket selector to process all selected tickets through the same flow:
+Use complete-inbox scope to expose every available ticket in the selected profile:
 
 ```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
+RELEASE_COORDINATOR_PROFILE=sandbox RELEASE_COORDINATOR_SCOPE=inbox \
+  npm run inbox:run -- --json
 ```
 
 Sandbox runs first inspect and rehearse each ticket, then test suitable whole
@@ -356,8 +368,8 @@ workflow mirrors. Set
 default adapter explicitly. This setting is sandbox-only. Its selected value is
 saved in the run's journal scope, and resume must use that exact value. A saved
 run from before adapter identities existed is treated as `generic` and requires
-that explicit setting before it can resume. Real runs retain individual ticket
-plans and Git rehearsals. Use
+that explicit setting before it can resume. Real always selects the
+`product-workflows` adapter and ignores the sandbox-only fallback setting. Use
 `npm run --silent inbox:run` to suppress npm's banner for JSON.
 
 For a complete supported sandbox ticket, the same command continues through
@@ -395,25 +407,31 @@ starts after a runner is assigned. A queue delay can therefore make the command
 exit `2` while its workflow is still pending. Re-run the same ticket to reconcile
 that saved attempt; do not dispatch a replacement workflow. A wait is not evidence
 that the requested code failed.
-`real` retains inspection/Git rehearsal and reports services as `not-run`.
+`real` reports the sandbox-only sample service stage as `not-run`. Its selected
+backend units are instead deployed through the pinned product workflow during
+the release sequence.
 
 [Combining tickets](../../docs/design.md#proposed-batch-testing-and-selection)
-is now the default for an unscoped **sandbox** run:
+is the normal behavior after either profile's inbox is selected:
 
 ```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
+RELEASE_COORDINATOR_PROFILE=sandbox RELEASE_COORDINATOR_SCOPE=inbox \
+  npm run inbox:run -- --json
 ```
 
 The command completes cheap intake/scope/database and Git conflict filtering
-before creating temporary PRs for normal required CI, then runs the combined
-sample services. Each ticket must be self-contained and target one staging or
-production environment. A no-database-change group may contain several tickets;
-a verified database-changing ticket runs alone. Inseparable work belongs in one ticket;
+before creating temporary PRs for the selected profile's normal required CI.
+Sandbox then runs the combined sample services; real uses the verified ticket
+scope and existing product workflows rather than the sample-service harness.
+Each ticket must be self-contained and target one staging or production
+environment. A no-database-change group may contain several tickets; a verified
+database-changing ticket runs alone. Inseparable work belongs in one ticket;
 cross-ticket dependency declarations are not supported yet.
 
-The account also needs contents/PR write access to both sample repositories.
-Only owned `codex/batch-trial-<UUID>` PRs/branches are created and cleaned up; source
-PRs and main are not changed. Limits are 10 tickets, 10 PRs per repository,
+The account also needs contents/PR write access to both selected repositories.
+Only owned `codex/batch-trial-<UUID>` PRs/branches are created and cleaned up at
+this stage; source PRs and shared branches are not changed. Limits are 10 tickets,
+10 PRs per repository,
 40 combined Git attempts and 12 candidate check rounds. There is no elapsed-time
 cutoff. Pending or interrupted attempts retain the inbox lock and their owned
 identities for explicit `--resume`; stop the previous process first. Completed
@@ -423,7 +441,8 @@ proof stops reuse.
 
 `batch:passed` means that exact selected group passed. Excluded tickets remain
 visible with `batch:waiting` or `batch:blocked`, reasons and links. A+B failing
-does not mark both tickets broken. A batch pass authorizes no real release.
+does not mark both tickets broken. A batch pass is input to the saved release
+plan; it is not itself deployment evidence.
 
 For the selected sandbox batch, the command saves one release identity and then
 runs these steps in order for each required environment:
@@ -475,8 +494,17 @@ After the final required E2E and owned-branch cleanup, selected tickets receive
 `status:completed` and `reason:release-completed` and close. This records only the
 fake sandbox result. The
 [live acceptance report](../../docs/testing/release-sequence-2026-09-11.md)
-lists every operation and the recoveries tested. Choosing `real` never creates a
-release client or changes a product repository.
+lists every sandbox operation and the recoveries tested.
+
+For `real`, the same executor creates protected integration PRs against
+`1a-staging` and, for production requests, `main`; waits for the pinned product
+workflow locks; deploys the requested backend units; deploys frontend; and waits
+for matching product E2E. Production frontend dispatch always supplies the exact
+verified `main` commit as `expected_source_sha`. A production monitoring request
+deploys monitoring for `staging` and `prod` from the merged backend `main` commit
+before application production deployments. The adapter saves exact workflow run
+and attempt evidence rather than sandbox artifacts. This path has offline test
+coverage but no live product release evidence yet.
 
 The default selection is every open `release-request` Issue plus ticket IDs
 already recorded in the journal, even if someone removed their labels. Both
@@ -500,15 +528,15 @@ If deployment is still needed, use the existing authorized release process.
 Resubmitting the same merged PR leads to the same closure. Missing proof stays
 visible. Required-check failures, conflicts, and invalid dependencies identify
 a correction for the submitter. Missing Coordinator capabilities belong to its
-maintainers. The sandbox executor may also emit completed from its matching saved
-release. Eligible and completion from earlier or real release history remain
-reserved. Real mode never calls a merge or deploy API.
+maintainers. The profile executor may emit completed only from its matching saved
+release evidence. Completion from unrelated or earlier release history remains
+reserved.
 
-This rule applies only before this Coordinator owns a sandbox release. Receipt
+This rule applies only before this Coordinator owns a release. Receipt
 acceptance and ordinary ticket inspection do not take execution responsibility.
-The sandbox sequence records its execution inside the selected batch before it
+The release sequence records its execution inside the selected batch before it
 merges anything and keeps that ownership until completion or a human handoff.
-Unsupported or real ownership fields in the journal stop the processor before writes.
+Unsupported ownership fields in the journal stop the processor before writes.
 
 Submitters can use GitHub's assignee filter. Where assignment is unavailable,
 the status comment preserves the verified login/ID and points to:
@@ -526,7 +554,8 @@ assignable-user list. Assignment failure does not lose an accepted request.
 An operator may explicitly retire **their own verified test request**:
 
 ```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --close-test
+RELEASE_COORDINATOR_PROFILE=sandbox RELEASE_COORDINATOR_SCOPE=filtered \
+  npm run inbox:run -- --issue NUMBER --actor GITHUB_LOGIN --close-test
 ```
 
 This records `status:closed` and `reason:test`, without a successful-release claim.
@@ -542,7 +571,7 @@ independent commit history. **Never merge it into main, delete it, or force-push
 it.** It is runtime state, not a source branch. See the
 [storage and trust contract](../../docs/inbox-processing.md#storage-and-trusted-writers).
 
-The v6 writer archives finished details when a run releases its lock after
+The v7 writer retains the v6 archive behavior: finished details move when a run releases its lock after
 successful ticket presentation and verified cleanup. Active work stays complete;
 exact repeats load old details on demand and recheck remote evidence. The former
 100-batch and 1,000-service lifetime caps are removed; per-search budgets remain.
@@ -551,8 +580,8 @@ See [history storage](../../docs/inbox-processing.md#history-storage) and the
 Do not delete records or reset attempt budgets.
 
 Policy `2026-09-10.2` generates Git, sandbox service, batch, and release plans
-internally. The journal marker is `workflow: "inbox-run-v6"`. First use upgrades
-a legacy/v1/v2/v3/v4/v5 journal under its lock, preserving decisions, attempt
+internally. The journal marker is `workflow: "inbox-run-v7"`. First use upgrades
+a legacy/v1/v2/v3/v4/v5/v6 journal under its lock, preserving decisions, attempt
 IDs, budgets, interrupted scope, and archives. Older writers reject the marker before changes.
 Keep it and history intact. Read-only diagnostics and the public CLI do not change.
 
@@ -570,7 +599,8 @@ process on its original machine**, ensure no request is still in flight, and wai
 at least 60 seconds before using the reported ID:
 
 ```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --resume RUN_ID
+RELEASE_COORDINATOR_PROFILE=sandbox RELEASE_COORDINATOR_SCOPE=filtered \
+  npm run inbox:run -- --resume RUN_ID
 ```
 
 Resume preserves the stored Issue selection, action, and already saved plans,
@@ -583,25 +613,28 @@ An active saved release is different: resume verifies and reuses its completed
 matching operations so a lost response or ticket-write failure does not deploy
 the same step twice. A run stopped while waiting for someone else's workflow run
 has dispatched nothing; resume simply waits again.
-Do not combine `--resume` with `--issue` or `--close-test`. It does not process
-other tickets from a scoped test. There is no automatic timeout, lock stealing,
+Do not combine `--resume` with `--issue`, `--actor`, or `--close-test`. The scope
+must match the saved run, and the saved Issue/actor filter is reused rather than
+supplied again. It does not process tickets outside that saved filter. There is
+no automatic timeout, lock stealing,
 or background retry. Never resume while another copy may still be running.
 GitHub Issues do not offer a multi-operation transaction; the journal makes
 partial application explicit and recoverable, not atomic. A maintainer must
 investigate edited receipts, deleted/ambiguous status comments, manual closure
 without known disposition, or externally rewritten state before proceeding.
 
-| Exit | Ticket workflow result |
-| --- | --- |
-| `0` | All selected tickets have verified presentation and are closed/preserved, or an unscoped sandbox release reached its requested target and completed its ticket writes. A scoped passing rehearsal may still be waiting. |
-| `1` | A selected ticket has a blocker, a failed sandbox service/release check, or awaits initial evidence. |
-| `2` | Usage error, unavailable planning evidence, unknown rehearsal, unverified presentation, or interrupted/partial processing. |
-| `3` | Rehearsal evidence changed during the run; no current pass is claimed. |
+| Exit | Ticket workflow result                                                                                                                                |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `0`  | All selected tickets have verified presentation and are closed/preserved, or a profile release reached its requested target and completed its writes. |
+| `1`  | A selected ticket has a blocker, a failed service/release check, or awaits initial evidence.                                                          |
+| `2`  | Usage error, unavailable planning evidence, unknown rehearsal, unverified presentation, or interrupted/partial processing.                            |
+| `3`  | Rehearsal evidence changed during the run; no current pass is claimed.                                                                                |
 
 Code 2 takes precedence, then 3, then 1. Help makes no GitHub calls. A failure
 report does not claim all prior writes were rolled back. A pass is an observation
 of exact inputs. Sandbox completion records what happened only in the fake
-repositories; it is not release authorization or a reservation of product branches.
+repositories. Real completion requires saved product workflow evidence. The
+real path has not yet been accepted by a live product run.
 
 ### Run logs
 

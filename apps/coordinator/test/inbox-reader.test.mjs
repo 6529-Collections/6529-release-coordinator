@@ -192,10 +192,7 @@ test("shows a monitoring-only request as recorded but not deployable", async () 
 
   const output = formatReport(await readInbox(github(data)));
   assert.match(output, /Operational deployments: monitoring/);
-  assert.match(
-    output,
-    /recorded; only the sandbox deploys it, inside a complete sample ticket/
-  );
+  assert.match(output, /recorded; this read does not prove deployment/);
 });
 
 for (const [name, mutate, expected] of [
@@ -587,8 +584,10 @@ test("duplicate request IDs are reported together rather than choosing a release
     invalid: 2,
     unverified: 0
   });
-  for (const entry of report.requests)
+  for (const entry of report.requests) {
     assert.match(entry.errors.join(" "), /multiple open Issues: #10, #11/);
+    assert.deepEqual(entry.duplicate_issue_numbers, [10, 11]);
+  }
 });
 
 test("listing errors, unexpected responses and repeating pages never report an empty inbox", async () => {

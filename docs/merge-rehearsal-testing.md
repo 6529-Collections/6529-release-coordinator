@@ -17,6 +17,15 @@ The v6 release sequence also has
 Each stage's evidence is separate from the original MR milestone.
 Documentation alone is not permission to execute external changes.
 
+As of September 23, test `1a-staging` no longer has branch protection, matching
+the real staging branches. `Sandbox check` still runs on test staging PRs, but
+the Coordinator checks its result itself even though GitHub marks it optional.
+The test `main` and `rehearsal-target` check requirements remain in place.
+Earlier reports of protected staging acceptance describe the rules in force
+at the time; they do not prove a release after this settings change. The
+Coordinator implementation and current evidence are indexed in
+[progress](./progress.md).
+
 ## What we will prove
 
 This section records the original merge-only milestone. The implemented

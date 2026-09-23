@@ -1,16 +1,17 @@
 import {
   serviceHash,
   serviceAssert,
-  validateServicePlan,
   verifyServiceReport
 } from "./service-contract.mjs";
 import { validateReleaseExecution } from "./release-state.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
 import {
   databaseBatchPolicies,
+  batchPolicyProfile,
   isReleaseBatchPolicy,
   operationalBatchPolicies,
-  trustedBatchPolicy
+  trustedBatchPolicy,
+  validateBatchServicePlan
 } from "./batch-plan.mjs";
 
 const hash = (value) => /^[0-9a-f]{64}$/u.test(value ?? "");
@@ -23,7 +24,7 @@ const validOperationalDeployments = (value) =>
   new Set(value).size === value.length;
 export function validateBatchHistory(batches, profile) {
   serviceAssert(
-    profile.name === "sandbox" &&
+    ["sandbox", "real"].includes(profile.name) &&
       batches &&
       typeof batches === "object" &&
       !Array.isArray(batches),
@@ -49,8 +50,10 @@ export function validateBatchHistory(batches, profile) {
           "sandbox-batch-v3",
           "sandbox-batch-v4",
           "sandbox-batch-v5",
-          "sandbox-batch-v6"
+          "sandbox-batch-v6",
+          "real-batch-v1"
         ].includes(batch.policy?.version) &&
+        batchPolicyProfile(batch.policy) === profile.name &&
         key === serviceHash({ inputs: batch.inputs, policy: batch.policy }) &&
         Number.isFinite(created) &&
         validLegacyDeadline &&
@@ -70,7 +73,7 @@ export function validateBatchHistory(batches, profile) {
             Number.isSafeInteger(number) &&
             number > 0 &&
             (!i || number > numbers[i - 1]) &&
-            batch.inputs[i].input?.profile === "sandbox" &&
+            batch.inputs[i].input?.profile === profile.name &&
             batch.inputs[i].input.inbox?.issue_number === number &&
             batch.inputs[i].input.inbox.repository_id === profile.inbox.id &&
             (batch.policy.version === "sandbox-batch-v1" ||
@@ -120,7 +123,7 @@ export function validateBatchHistory(batches, profile) {
       identities.add(attempt.id);
       attempts.add(key);
       if (attempt.result?.service_plan)
-        validateServicePlan(attempt.result.service_plan);
+        validateBatchServicePlan(attempt.result.service_plan, profile.name);
       if (attempt.progress) {
         const progress = attempt.progress;
         const prepared = batch.attempts.find(
@@ -161,7 +164,7 @@ export function validateBatchHistory(batches, profile) {
             "batch-state",
             "Invalid saved batch service attempt."
           );
-          validateServicePlan(service.plan);
+          validateBatchServicePlan(service.plan, profile.name);
           if (service.result)
             verifyServiceReport(
               service.result.report,
@@ -197,10 +200,11 @@ export function validateBatchHistory(batches, profile) {
               progress.prs.length > 0 &&
               progress.result &&
               serviceHash(progress.result) === serviceHash(attempt.result) &&
-              progress.service_attempts.candidate?.result?.report?.status ===
-                "passed" &&
-              progress.service_attempts.candidate.plan_hash ===
-                prepared.service_plan?.fingerprint &&
+              (profile.name === "real" ||
+                (progress.service_attempts.candidate?.result?.report?.status ===
+                  "passed" &&
+                  progress.service_attempts.candidate.plan_hash ===
+                    prepared.service_plan?.fingerprint)) &&
               progress.prs.length ===
                 prepared.publications.filter((repo) => repo.patch.length)
                   .length &&

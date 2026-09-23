@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { isReleaseBatchPolicy } from "./batch-plan.mjs";
+import { batchPolicyProfile, isReleaseBatchPolicy } from "./batch-plan.mjs";
 import {
-  makeReleaseOperation,
   releaseBackendUnits,
   releaseHash,
   releaseMonitoringEnvironments,
   releaseMonitoringUnit
 } from "./release-contract.mjs";
+import { makeProfileReleaseOperation } from "./profile-release-contract.mjs";
 import { databaseBatchPolicies } from "./batch-plan.mjs";
 import { serviceAssert } from "./service-contract.mjs";
 import {
@@ -36,10 +36,8 @@ export function selectedPreparation(batch) {
     "The selected batch has no exact passing and cleaned candidate."
   );
   const commits = Object.fromEntries(
-    ["backend", "frontend"].map((role) => {
-      const publication = prepared.publications.find(
-        (value) => value.role === role
-      );
+    prepared.publications.map((publication) => {
+      const role = publication.role;
       const trial = check.progress.prs.find((value) => value.role === role);
       const savedCandidate = batch.execution?.plan?.candidates?.[role];
       const savedLegacyUnchanged =
@@ -82,7 +80,7 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
       batch.status === "finished" &&
       batch.selected.length > 0,
     "release-input",
-    "Only a selected release-capable sandbox batch can enter release execution."
+    "Only a selected release-capable batch can enter release execution."
   );
   const targets = [
     ...new Set(
@@ -97,6 +95,7 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
     "A release batch must have one shared target."
   );
   const { prepared, commits } = selectedPreparation(batch);
+  const profile = batchPolicyProfile(batch.policy);
   const database = prepared.service_plan.database;
   serviceAssert(
     ["no", "yes"].includes(database?.declared) &&
@@ -115,7 +114,7 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
               step.role === "backend" && step.unit === "dbMigrationsLoop"
           ))),
     "release-input",
-    "A database-changing sandbox release needs one verified ticket and its database service."
+    "A database-changing release needs one verified ticket and its database service."
   );
   const releaseId = nextUuid();
   serviceAssert(uuid(releaseId), "release-input", "Invalid release identity.");
@@ -126,13 +125,14 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
   );
   const steps = [];
   for (const environment of releaseEnvironmentsForTarget(targets[0])) {
-    steps.push({
-      id: `${environment}:integrate:backend`,
-      kind: "integrate",
-      environment,
-      role: "backend"
-    });
-    // The sample backend deploys monitoring only from test main, for both
+    if (commits.backend)
+      steps.push({
+        id: `${environment}:integrate:backend`,
+        kind: "integrate",
+        environment,
+        role: "backend"
+      });
+    // Monitoring deploys only from the selected profile's main branch, for both
     // monitoring environments, before any production application change.
     if (monitoring && environment === "prod")
       for (const monitoringEnvironment of releaseMonitoringEnvironments)
@@ -144,23 +144,19 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
           unit: releaseMonitoringUnit,
           monitoring_environment: monitoringEnvironment
         });
-    steps.push({
-      id: `${environment}:integrate:frontend`,
-      kind: "integrate",
-      environment,
-      role: "frontend"
-    });
     // Execution later keeps these steps in their declared dependency order,
     // but backend always completes before frontend is exposed.
     for (const step of prepared.service_plan.steps.filter(
       (value) => value.role === "backend"
     )) {
       serviceAssert(
-        releaseBackendUnits.includes(step.unit),
+        profile === "sandbox"
+          ? releaseBackendUnits.includes(step.unit)
+          : /^[A-Za-z][A-Za-z0-9_-]{0,119}$/u.test(step.unit),
         "release-input",
-        "The sandbox release plan contains an unsupported backend unit."
+        `The ${profile} release plan contains an unsupported backend unit.`
       );
-      steps.splice(steps.length - 1, 0, {
+      steps.push({
         id: `${environment}:deploy:backend:${step.unit}`,
         kind: "deploy",
         environment,
@@ -168,6 +164,13 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
         unit: step.unit
       });
     }
+    if (commits.frontend)
+      steps.push({
+        id: `${environment}:integrate:frontend`,
+        kind: "integrate",
+        environment,
+        role: "frontend"
+      });
     steps.push({
       id: `${environment}:deploy:frontend:frontend`,
       kind: "deploy",
@@ -187,11 +190,11 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
       (step) => step.kind !== "monitoring" || step.environment === "prod"
     ),
     "release-input",
-    "Sample monitoring deploys only in the prod stage, from test main."
+    `${profile === "sandbox" ? "Sample" : "Product"} monitoring deploys only in the prod stage, from ${profile === "sandbox" ? "test main" : "main"}.`
   );
   const contents = {
     version: 1,
-    profile: "sandbox",
+    profile,
     release_id: releaseId,
     batch_fingerprint: batch.fingerprint,
     target: targets[0],
@@ -354,15 +357,32 @@ export function validateRecoveryPlan(plan, execution, batch) {
 }
 
 export function integrationCommitInput(record, candidate) {
+  const profile = record.profile ?? record.operation?.profile ?? "sandbox";
+  serviceAssert(
+    profile !== "real" ||
+      (Number.isSafeInteger(Number(record.actor?.id)) &&
+        Number(record.actor.id) > 0 &&
+        /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u.test(
+          record.actor?.login ?? ""
+        )),
+    "release-identity",
+    "The product integration commit needs the verified GitHub actor."
+  );
   const signature = {
-    name: "Coordinator sandbox",
-    email: "rehearsal@example.invalid",
+    name:
+      profile === "sandbox"
+        ? "Coordinator sandbox"
+        : "6529 Release Coordinator",
+    email:
+      profile === "real"
+        ? `${record.actor.id}+${record.actor.login}@users.noreply.github.com`
+        : "rehearsal@example.invalid",
     date: record.created_at
   };
   return {
     message: record.step.recovery
-      ? `Sandbox ${record.step.environment} restoration for ${record.release_id}\n\nRestore ${record.restore_to} after ${candidate.commit}`
-      : `Sandbox ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
+      ? `${profile === "sandbox" ? "Sandbox" : "Product"} ${record.step.environment} restoration for ${record.release_id}\n\nRestore ${record.restore_to} after ${candidate.commit}`
+      : `${profile === "sandbox" ? "Sandbox" : "Product"} ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
     tree: candidate.tree,
     parents: [candidate.commit],
     author: signature,
@@ -371,7 +391,8 @@ export function integrationCommitInput(record, candidate) {
 }
 
 export function operationForStep(plan, step, versions, operationId) {
-  return makeReleaseOperation({
+  return makeProfileReleaseOperation({
+    profile: plan.profile,
     release_id: plan.release_id,
     operation_id: operationId,
     operation: step.kind,

@@ -1,22 +1,25 @@
 # 6529 Release Coordinator
 
 The Coordinator is being built to handle releases across the frontend and
-backend. **Request intake is live. One local command now checks a ticket,
-rehearses its suitable PRs, runs supported sandbox service/database checks,
-and updates that same ticket with the result. An unscoped sandbox run can now
+backend. **Request intake is live. One local command now checks either a guarded
+set of Issues or the whole inbox, rehearses suitable PRs, runs supported sandbox
+service/database checks, and updates those same tickets with the result. A
+sandbox run can now
 move one selected no-database-change batch through protected test staging,
 product-shaped deployment workflow mirrors, matching E2E against the built
 backend and frontend, and protected test production.
-The merged source also lets one verified database-changing sandbox
-ticket take that path alone; see progress for local versus live proof.
-Sandbox and real profiles share the same intake and selection code. Real product
-release execution and rollback are not built yet.**
+The merged source also lets one verified database-changing sandbox ticket take
+that path alone. The current working tree extends that same Coordinator engine
+to the real repositories and their existing deployment/E2E workflows. This real
+adapter has offline tests but has not been merged or exercised in a live product
+release yet; see progress for the evidence boundary.**
 
 Operational-monitoring release requests are recorded and labelled, and their
 exact PRs are checked. The sandbox deploys a sample monitoring package for a
 complete production ticket after the merge into test `main`, before the
-production application deployments; real-profile monitoring tickets keep
-waiting because no real monitoring deployment or health verification exists.
+production application deployments. The real adapter calls the existing backend
+monitoring workflow from the exact merged `main` commit in the same order; that
+path is implemented locally but has no live product acceptance yet.
 
 The public CLI creates a request, validates it, saves local records, and submits
 it to a central GitHub workflow. The workflow saves one public Issue and returns
@@ -30,13 +33,14 @@ work are tracked in [Progress and next steps](./docs/progress.md).
 
 ## Run the ticket workflow
 
-Use one command with an explicit profile and ticket:
+Use one command with an explicit repository profile and inbox scope:
 
 Sandbox service checks require GitHub CLI 2.97.0 or later; see the
 [command requirements](./apps/coordinator/README.md#run-the-ticket-workflow).
 
 ```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --json
+RELEASE_COORDINATOR_PROFILE=sandbox RELEASE_COORDINATOR_SCOPE=filtered \
+  npm run inbox:run -- --issue 101 --issue 104 --actor GITHUB_LOGIN --json
 ```
 
 The local controller runs this sequence, then exits:
@@ -47,9 +51,22 @@ The local controller runs this sequence, then exits:
 4. For a complete supported sandbox ticket, run the database, worker, API, and frontend checks on an isolated GitHub Actions runner.
 5. Save the results and update the same ticket's labels, status comment, and decision history.
 
-Without `--issue`, a selected sandbox batch continues in dependency order through
-protected test staging. A production-target request continues to protected test
-`main` only after matching staging E2E passes. Every integration PR, workflow
+The Issue numbers are the complete inbox visible to this run. Every one must be
+an open, verified release request submitted by `GITHUB_LOGIN`; otherwise the run
+stops before taking the journal lock. After that guard, the normal Coordinator
+logic applies. Compatible no-database-change tickets can batch, while a verified
+database-changing ticket is still selected alone.
+
+To expose the complete selected-profile inbox instead, use:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=sandbox RELEASE_COORDINATOR_SCOPE=inbox \
+  npm run inbox:run -- --json
+```
+
+A selected batch continues in dependency order through its configured staging
+branches. A production-target request continues to its configured `main`
+branches only after matching staging E2E passes. Every integration PR, workflow
 operation, exact commit pair and result is saved before the ticket is completed.
 Each fake environment builds from its exact commit, uploads a short-lived GitHub
 Actions artifact, and runs E2E through the built backend and frontend HTTP
@@ -58,7 +75,7 @@ runner files at the exact fake environment commit before dispatch. Trial,
 staging and production PRs use separate commit IDs, so one PR's checks cannot be
 reused as another stage's evidence.
 
-A passing one-ticket rehearsal adds `rehearsal:passed`. A selected unscoped
+A passing rehearsal adds `rehearsal:passed`. A selected
 sandbox batch completes only after its required test release sequence passes.
 Sandbox application results have their own `services:*` label; no product deployment occurs. Conflicts and missing evidence
 get visible reasons and next actions. Repeating unchanged work rechecks the facts
@@ -68,10 +85,14 @@ The ticket already supplies the exact PRs, services, target, and dependencies.
 The Coordinator creates the rehearsal plan itself. Both profiles currently test
 against each repository's current `main`; this does not change `main` or choose
 a deployment policy. See the [profiled inbox guide](./docs/profiled-inbox-testing.md).
-Omit `--issue` to process the inbox. Sandbox runs first check each ticket, then
-test suitable whole tickets together through the bounded batch flow below.
-Real runs retain individual ticket plans and Git rehearsals. These rehearsals
-do not merge source PRs into `main`.
+Use `RELEASE_COORDINATOR_SCOPE=inbox` to process the complete inbox. Sandbox runs
+first check each visible ticket, then test suitable whole tickets together through
+the bounded batch flow below. `filtered` changes only visibility; it does not
+switch off batching, database isolation, target ordering, or release rules.
+Real runs use the same batching, database isolation, release order and recovery
+decisions, but their adapter targets the product repositories and existing
+product workflows. A rehearsal alone never changes a shared branch; release
+mutations begin only after the exact selected batch passes its required checks.
 
 `inbox:run` replaces the old `inbox:process` and `merge:rehearse` commands; those
 entry points have been removed. `inbox:read` and `readiness:check` remain read-only
@@ -119,16 +140,18 @@ target does not connect to the real product's staging database. The
 owns runtime pins, tests and limits. [Progress](./docs/progress.md) distinguishes
 local implementation from merged code and live acceptance. The one-ticket
 acceptance cases have passed; [PR #45](https://github.com/6529-Collections/6529-release-coordinator/pull/45)
-tracks source delivery, review, and CI. Real execution adapters remain absent; switching
-profiles does not enable deployment.
+tracks source delivery, review, and CI. The real profile deliberately skips this
+sample harness; its selected backend units run later through the product release
+adapter. That adapter has offline tests but no live acceptance yet.
 
 ## Test a batch of sandbox tickets
 
-Without `--issue`, sandbox `inbox:run` now finishes cheap ticket, scope, database
+Sandbox `inbox:run` now finishes cheap ticket, scope, database
 and Git checks first, then runs normal PR checks on a compatible group's combined
-code using temporary PRs. Combined service checks follow. `--issue NUMBER` keeps
-the one-ticket service/database path. There is no extra full run per ticket by
-default. Confirmed test failures can divide the group within fixed limits; the
+code using temporary PRs. Combined service checks follow. `filtered` scope can
+name one or several Issues; they become the complete candidate inbox and then use
+this same behavior. There is no extra full run per ticket by default. Confirmed
+test failures can divide the group within fixed limits; the
 final selected combination must itself pass. The merged implementation selects
 one database-changing ticket alone, after its exact temporary MySQL check passes.
 Staging requests stop
@@ -226,27 +249,28 @@ and an exact repeat passed from merged source; see
 
 ## Documentation map
 
-| Need | Document |
-| --- | --- |
-| What has shipped, what is local, and what comes next | [Progress](./docs/progress.md) |
-| Read live and saved run logs, including interruptions and cleanup | [Run logging](./docs/design.md#next-step-v01-run-logging) |
-| Check changes to this repository before merging | [Repository code checks](./docs/code-checks.md) |
-| Create or submit a request with the installed CLI | [CLI guide](./packages/release-request/README.md) |
-| Inspect saved requests and current readiness evidence | [Local Coordinator guide](./apps/coordinator/README.md) |
-| Understand the ticket workflow, labels, reasons, and migration | [Inbox processing guide](./docs/inbox-processing.md) |
-| Select sandbox or real, submit a request, and run its ticket workflow | [Profiled inbox guide](./docs/profiled-inbox-testing.md) |
-| Understand the sandbox merge, service, batch, and release test matrix | [Sandbox testing guide](./docs/merge-rehearsal-testing.md) |
-| Review the live fake staging/E2E/production runs | [Initial sequence acceptance](./docs/testing/release-sequence-2026-09-11.md), [build and E2E acceptance](./docs/testing/github-build-e2e-2026-09-15.md) |
-| Understand the implemented one-ticket service/database checks and evidence | [Service and database acceptance](./docs/merge-rehearsal-testing.md#service-and-database-acceptance) |
-| Review sandbox batching, limits, and excluded-ticket handling | [Batch design](./docs/design.md#proposed-batch-testing-and-selection) |
-| Understand request fields and validation limits | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
-| See the implemented request and inspection path | [Intake diagram](./release-coordinator-architecture.html) |
-| Review agreed release rules and remaining integration work | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html) |
-| Publish or adopt an exact package version | [Publishing guide](./docs/npm-publishing.md) |
-| Read completed migration/review evidence | [Migration history](./docs/history/npm-migration.md) |
+| Need                                                                       | Document                                                                                                                                                                              |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| What has shipped, what is local, and what comes next                       | [Progress](./docs/progress.md)                                                                                                                                                        |
+| Read live and saved run logs, including interruptions and cleanup          | [Run logging](./docs/design.md#next-step-v01-run-logging)                                                                                                                             |
+| Check changes to this repository before merging                            | [Repository code checks](./docs/code-checks.md)                                                                                                                                       |
+| Create or submit a request with the installed CLI                          | [CLI guide](./packages/release-request/README.md)                                                                                                                                     |
+| Inspect saved requests and current readiness evidence                      | [Local Coordinator guide](./apps/coordinator/README.md)                                                                                                                               |
+| Understand the ticket workflow, labels, reasons, and migration             | [Inbox processing guide](./docs/inbox-processing.md)                                                                                                                                  |
+| Select sandbox or real, submit a request, and run its ticket workflow      | [Profiled inbox guide](./docs/profiled-inbox-testing.md)                                                                                                                              |
+| Understand the sandbox merge, service, batch, and release test matrix      | [Sandbox testing guide](./docs/merge-rehearsal-testing.md)                                                                                                                            |
+| Review the live fake staging/E2E/production runs                           | [Initial sequence acceptance](./docs/testing/release-sequence-2026-09-11.md), [build and E2E acceptance](./docs/testing/github-build-e2e-2026-09-15.md)                               |
+| Understand the implemented one-ticket service/database checks and evidence | [Service and database acceptance](./docs/merge-rehearsal-testing.md#service-and-database-acceptance)                                                                                  |
+| Review sandbox batching, limits, and excluded-ticket handling              | [Batch design](./docs/design.md#proposed-batch-testing-and-selection)                                                                                                                 |
+| Understand request fields and validation limits                            | [Field guide](./release-request-schema.md), [JSON Schema](./packages/release-request/release-request.schema.json), [example](./packages/release-request/release-request.example.json) |
+| See the implemented request and inspection path                            | [Intake diagram](./release-coordinator-architecture.html)                                                                                                                             |
+| Review agreed release rules and remaining integration work                 | [Design](./docs/design.md), [process diagram](./release-coordinator-process.html)                                                                                                     |
+| Publish or adopt an exact package version                                  | [Publishing guide](./docs/npm-publishing.md)                                                                                                                                          |
+| Read completed migration/review evidence                                   | [Migration history](./docs/history/npm-migration.md)                                                                                                                                  |
 
-The design and process diagram reflect the September 11 decisions and mark the
-implemented sandbox subset separately from the future real-product adapters.
+The design and process diagram reflect the September 11 decisions, the
+live-tested sandbox subset, and the locally implemented but not yet live-tested
+real-product adapter.
 Implementation and acceptance evidence remain separate in progress.
 
 ## Code and ownership

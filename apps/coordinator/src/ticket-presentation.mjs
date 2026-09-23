@@ -229,7 +229,8 @@ export function statusComment({
   request,
   number,
   marker,
-  assignment
+  assignment,
+  profile = "real"
 }) {
   const lines = [
     `<!-- 6529-coordinator-status:${marker} -->`,
@@ -337,7 +338,7 @@ export function statusComment({
     }
     if (batch.release) {
       lines.push(
-        `Sandbox release: ${prose(batch.release.status)}. ${prose(batch.release.message)}`
+        `${(batch.release.profile ?? profile) === "sandbox" ? "Sandbox" : "Real-profile"} release: ${prose(batch.release.status)}. ${prose(batch.release.message)}`
       );
       for (const operation of batch.release.operations ?? [])
         lines.push(
@@ -369,9 +370,11 @@ export function statusComment({
     "",
     `**Last meaningful decision:** ${at}; ${prose(actor.login)} (GitHub ID ${actor.id}).`,
     "",
-    decision.status === "completed"
-      ? "This records sandbox-only release evidence. It authorizes no real merge or deployment."
-      : "This ticket status does not authorize a real merge or deployment."
+    decision.status === "completed" && profile === "real"
+      ? "This records a completed real-profile release with saved operation evidence."
+      : decision.status === "completed"
+        ? "This records sandbox-only release evidence. It authorizes no real merge or deployment."
+        : "This ticket status does not prove a completed real release."
   );
   const body = lines.join("\n");
   if (body.length > 60_000)

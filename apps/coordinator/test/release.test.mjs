@@ -30,6 +30,33 @@ import { elapsedBatchPolicy, legacyBatchPolicy } from "../src/batch-plan.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
 import { buildApplication } from "../sandbox/application-build.mjs";
+
+test("product integration commits use the verified GitHub actor identity", () => {
+  const record = {
+    profile: "real",
+    actor: { id: "456", login: "tester" },
+    created_at: "2026-09-23T00:00:00.000Z",
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: { environment: "staging" }
+  };
+  const input = integrationCommitInput(record, {
+    commit: "a".repeat(40),
+    tree: "b".repeat(40)
+  });
+  assert.equal(input.author.email, "456+tester@users.noreply.github.com");
+  assert.deepEqual(input.committer, input.author);
+  assert.throws(
+    () =>
+      integrationCommitInput(
+        { ...record, actor: null },
+        {
+          commit: "a".repeat(40),
+          tree: "b".repeat(40)
+        }
+      ),
+    /verified GitHub actor/u
+  );
+});
 import { harness } from "./inbox-batch-harness.mjs";
 import {
   isReleaseRequestTarget,
