@@ -526,8 +526,9 @@ Cross-ticket links and database-changing multi-ticket batches remain deferred.
 
 ### GitHub-only sandbox builds
 
-This sandbox layer keeps the existing real GitHub PRs and protected
-`1a-staging`/`main` merges, but replaces direct source-module release checks with
+This sandbox layer keeps real GitHub PRs and protected `main` merges. Staging
+merges use PRs whose checks the Coordinator gates itself, matching the product
+branches. It replaces direct source-module release checks with
 actual npm build output. Each test repository is a small locked npm project.
 Its ordinary PR check installs from the lockfile, runs its existing meaningful
 checks, builds a `dist` package and uploads that package as a GitHub Actions
@@ -538,7 +539,7 @@ input is limited to 12,000 bytes. These bounds fit the deliberately tiny test
 programs and limit untrusted artifact reads. They are not limits for future real
 frontend or backend builds, which will stay owned by the product workflows.
 
-Runtime updates reach test `main` first. A later protected PR merges that main
+Runtime updates reach test `main` first. A later PR merges that main
 history into `1a-staging`. Independent lookalike commits on both branches are
 invalid setup because they can make a later release integration conflict. Each
 trial, staging integration and production integration also gets a distinct
@@ -584,13 +585,13 @@ flowchart LR
     INBOX --> IP[inbox:run - checks and batch selection]
     IP --> J[(Profile-specific GitHub journal)]
     IP -->|sandbox profile| SW[One selected fake release]
-    SW --> SSTG[Protected fake staging]
+    SW --> SSTG[Coordinator-checked fake staging]
     SSTG --> SE2E[Build exact commits and test built outputs]
     SE2E -->|production target| SPROD[Protected fake production]
     SPROD --> PE2E[Build exact commits and test built outputs]
     PE2E --> J
     IP -->|real profile| W[One real release]
-    W --> GH[Normal protected product merges]
+    W --> GH[PR merges; main stays protected]
     W --> BE[Existing backend Actions]
     W --> FE[Existing frontend Actions]
     BE --> STG[Real staging]
