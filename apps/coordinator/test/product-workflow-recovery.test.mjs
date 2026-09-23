@@ -111,7 +111,7 @@ function recoveryDispatch(operation, step, { block = false } = {}) {
   };
 }
 
-test("recovery keeps restored staging services on 1a-staging and restored staging monitoring on main", async () => {
+test("recovery keeps restored staging services and monitoring on 1a-staging", async () => {
   const releaseId = "11111111-1111-4111-8111-111111111111";
   const backendOperation = makeReleaseOperation({
     release_id: releaseId,
@@ -155,7 +155,7 @@ test("recovery keeps restored staging services on 1a-staging and restored stagin
     release_id: releaseId,
     operation_id: "33333333-3333-4333-8333-333333333333",
     operation: "monitoring",
-    environment: "prod",
+    environment: "staging",
     role: "backend",
     unit: "monitoring",
     monitoring_environment: "staging",
@@ -163,9 +163,9 @@ test("recovery keeps restored staging services on 1a-staging and restored stagin
     frontend_commit: commits.frontend
   });
   const monitoring = recoveryDispatch(monitoringOperation, {
-    id: "restore:prod:monitoring:staging",
+    id: "restore:staging:monitoring:staging",
     kind: "monitoring",
-    environment: "prod",
+    environment: "staging",
     role: "backend",
     unit: "monitoring",
     monitoring_environment: "staging"
@@ -177,9 +177,8 @@ test("recovery keeps restored staging services on 1a-staging and restored stagin
   const monitoringRequest = monitoring.calls.find(
     (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
   );
-  assert.equal(monitoringRequest.body.ref, "main");
+  assert.equal(monitoringRequest.body.ref, "1a-staging");
   assert.deepEqual(monitoringRequest.body.inputs, {
-    environment: "staging",
-    commit_sha: commits.backend
+    environment: "staging"
   });
 });

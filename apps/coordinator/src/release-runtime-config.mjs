@@ -5,11 +5,11 @@ const files = Object.freeze({
   ".github/workflows/sandbox-release.yml":
     "ca25d499abecd68d3281076c1019ca95ac06fcab",
   "coordinator/src/release-contract.mjs":
-    "a7d0b50cd600f1836486f5c998a1a334d07618c0",
+    "f11d31f10d867b832b18248fb18adfc86b2375fe",
   "coordinator/sandbox/application-build.mjs":
     "33f8374059515a6deaa5a151b3450cf49888023e",
   "coordinator/sandbox/release-run.mjs":
-    "23fc3a3cf903f0d036a2d07f5988b036b9cb9e54"
+    "ed0658a1ce719411614cc35366dbf84e6dcae796"
 });
 
 export const sandboxReleaseRuntime = Object.freeze({

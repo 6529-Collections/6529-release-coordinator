@@ -74,7 +74,10 @@ export function selectedPreparation(batch) {
   return { prepared, check, commits };
 }
 
-export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
+export function makeReleasePlan(
+  batch,
+  { uuid: nextUuid = randomUUID, version = 2 } = {}
+) {
   serviceAssert(
     isReleaseBatchPolicy(batch.policy) &&
       batch.status === "finished" &&
@@ -96,6 +99,11 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
   );
   const { prepared, commits } = selectedPreparation(batch);
   const profile = batchPolicyProfile(batch.policy);
+  serviceAssert(
+    [1, 2].includes(version),
+    "release-input",
+    "Unsupported release plan version."
+  );
   const database = prepared.service_plan.database;
   serviceAssert(
     ["no", "yes"].includes(database?.declared) &&
@@ -132,12 +140,18 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
         environment,
         role: "backend"
       });
-    // Monitoring deploys only from the selected profile's main branch, for both
-    // monitoring environments, before any production application change.
-    if (monitoring && environment === "prod")
-      for (const monitoringEnvironment of releaseMonitoringEnvironments)
+    // Version 1 keeps saved releases readable. New releases deploy monitoring
+    // from the branch matching each environment, after that backend merge.
+    const monitoringEnvironments =
+      version === 1
+        ? environment === "prod"
+          ? releaseMonitoringEnvironments
+          : []
+        : [environment];
+    if (monitoring)
+      for (const monitoringEnvironment of monitoringEnvironments)
         steps.push({
-          id: `prod:monitoring:${monitoringEnvironment}`,
+          id: `${environment}:monitoring:${monitoringEnvironment}`,
           kind: "monitoring",
           environment,
           role: "backend",
@@ -187,13 +201,17 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
   }
   serviceAssert(
     steps.every(
-      (step) => step.kind !== "monitoring" || step.environment === "prod"
+      (step) =>
+        step.kind !== "monitoring" ||
+        (version === 1
+          ? step.environment === "prod"
+          : step.environment === step.monitoring_environment)
     ),
     "release-input",
-    `${profile === "sandbox" ? "Sample" : "Product"} monitoring deploys only in the prod stage, from ${profile === "sandbox" ? "test main" : "main"}.`
+    "Monitoring must use the branch matching its release environment."
   );
   const contents = {
-    version: 1,
+    version,
     profile,
     release_id: releaseId,
     batch_fingerprint: batch.fingerprint,
@@ -207,7 +225,10 @@ export function makeReleasePlan(batch, { uuid: nextUuid = randomUUID } = {}) {
 
 export function validateReleasePlan(plan, batch) {
   const { fingerprint, ...contents } = plan ?? {};
-  const expected = makeReleasePlan(batch, { uuid: () => plan?.release_id });
+  const expected = makeReleasePlan(batch, {
+    uuid: () => plan?.release_id,
+    version: plan?.version
+  });
   serviceAssert(
     releaseHash(contents) === fingerprint &&
       releaseHash(expected) === releaseHash(plan),

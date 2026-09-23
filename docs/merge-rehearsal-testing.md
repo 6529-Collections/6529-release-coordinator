@@ -456,7 +456,7 @@ Release Bus architecture. Recheck product adapters before any future real use.
 
 The generic `sandbox-release.yml` remains available as an explicit fallback.
 Frontend test PR #92 and backend test PR #100 merged a second interface whose
-outside shape matches the current product workflows:
+outside shape matched the product contracts understood on September 21:
 workflow filenames and names, dispatch inputs, staging/main branch rules,
 concurrency groups, canonical deploy job names, and the successful deploy run ID
 passed into frontend E2E. Static contract checks keep those required names visible
@@ -467,9 +467,13 @@ small sample package and uploads exact fake deployment evidence; frontend E2E
 downloads evidence from the selected deploy run, verifies its source identity,
 and executes the built sample output. No product credentials or targets are
 present. The daily production canary schedule is outside the Coordinator contract
-and is not copied. The real workflow inputs were compared with the proposed test
-workflows on September 21; future drift must be checked again before real adapter
-work.
+and is not copied. The September 23 readback found one incorrect assumption in
+the earlier comparison: real staging monitoring dispatches from `1a-staging`,
+accepts only `environment`, and deploys the run's `github.sha`. The published
+test workflow still requires `commit_sha` and runs both monitoring targets from
+`main`. The correction passed local Coordinator checks and test-mirror static
+checks; Docker-backed sample checks remain for GitHub CI. It has not yet merged
+into the published test branches.
 
 The source PRs are merged, and the
 [September 21 live acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md)
@@ -489,10 +493,9 @@ adapter satisfied every condition below:
 - it records equivalent journal operations and stops at the same boundaries;
 - it independently completes one full success-path live acceptance;
 - it independently completes one controlled-failure recovery live acceptance;
-- both its contract-test suite and its recovery-test suite independently assert
-  that monitoring staging dispatches from backend `main`, ordinary staging
-  services dispatch from `1a-staging`, and recovery preserves that branch-source
-  distinction.
+- both its contract-test suite and its recovery-test suite independently asserted
+  the then-implemented monitoring-from-`main` behavior. That historical gate is
+  not acceptance of the corrected product contract.
 
 Save the success-path record as `adapter-success-path-YYYY-MM-DD.md` and the
 controlled-failure recovery record as `adapter-recovery-YYYY-MM-DD.md` under
@@ -504,9 +507,15 @@ complete staging and production sequence. The
 [recovery record](./testing/adapter-recovery-2026-09-21.md) covers a confirmed
 monitoring failure, production-first restoration, staging restoration, matching
 deploy/E2E proof and explicit resume without duplicate dispatch. Separate
-contract and recovery tests assert that monitoring uses backend `main`, ordinary
-staging services use `1a-staging`, and recovery preserves the distinction. The
+contract and recovery tests asserted that monitoring used backend `main`, ordinary
+staging services used `1a-staging`, and recovery preserved the distinction. The
 generic client remains a selectable fallback; it is not the default.
+
+The corrected contract needs fresh sandbox acceptance: staging monitoring from
+test `1a-staging` before staging applications, production monitoring from test
+`main` before production applications, both matching run commits, and controlled
+failures/restoration in each environment. Earlier live runs remain historical
+proof of the older sequence, not proof of this one.
 
 ### Small executable example
 
@@ -883,26 +892,28 @@ builds the package on every PR. Only those four candidate files may change in a
 release PR; the package's own manifest, lockfile and scripts are fixture
 configuration.
 
-The pinned `sandbox-release.yml` serializes runs per environment through the
+The published `sandbox-release.yml` serializes runs per environment through the
 `sandbox-release-<environment>` concurrency group with `cancel-in-progress:
 false`, the same shape as the real deploy workflows; the sandbox reads the
 environment from the contract-validated operation JSON rather than a declared
 input. It handles a `monitoring`
 operation: it builds
 the package at the exact backend commit, uploads
-`sandbox-build-<operation>-monitoring`, and the pinned runner refuses any
+`sandbox-build-<operation>-monitoring`, and the published runner refuses any
 dispatch whose ref is not test `main`, verifies the built template against its
 manifest, honours the controlled switch, and records the installed template
 (environment, source commit, template, SHA-256) in its report. The Coordinator
 verifies that report, then reads GitHub's artifact list for the run and accepts
 the result only when the named artifact exists, is not expired, belongs to that
-run and carries the same digest. Both steps use the prod release stage, whose
-dispatch branch is test `main`, and run before the production application
-deployments. Restoration after a production-stage failure redeploys monitoring
-from the restored commit.
+run and carries the same digest. In the earlier live sequence, both monitoring
+steps used the prod release stage and test `main`. The local correction makes
+the runner require the branch matching the operation environment; it has no
+new live acceptance. Restoration must redeploy monitoring from each restored
+environment branch.
 
-The same rules below remain the acceptance contract for future sandbox changes
-and the real-product adapters. A sandbox pass is not permission or proof of a
+The rows below record the earlier acceptance. The corrected monitoring branch
+contract above supersedes their monitoring source/order requirements for new
+acceptance. A sandbox pass is not permission or proof of a
 real deployment. See the [execution design](./design.md#agreed-execution-direction-september-11).
 
 | Case | Required outcome and current proof |

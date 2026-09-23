@@ -166,10 +166,11 @@ A recorded operational-monitoring selection gets its own check. It passes only
 because the Coordinator pins the existing monitoring workflow as a supported
 release operation; it still does not claim deployment or target health before
 that operation runs. A monitoring-only request does not need the application
-service catalog. In the sandbox, the
-sample monitoring deploys after the production merge into test `main`, and a
-staging request records that it does not deploy monitoring. The real profile
-uses the same order with the product monitoring workflow.
+service catalog. In this working tree, a staging request plans monitoring from
+`1a-staging` before staging application deployments. A production request also
+plans monitoring from `main` before production application deployments. This
+branch-aligned change is not yet published to the test repositories or accepted
+live in the products.
 
 An omitted catalog prerequisite stays **unknown** until there is proof that its
 required state already runs in the requested environment. The checker does not
@@ -458,9 +459,9 @@ sequence on test `main`, but only after matching staging E2E passes. Each
 operation is saved before it starts and verified against its release ID, input
 hash, actor, repository, the adapter's pinned workflow/runtime files at the
 exact source commit, run/attempt, environment, and exact code. When the batch
-selects operational monitoring, the production stage deploys the sample
-monitoring package for `staging` and then `prod` from the merged test `main`
-commit before the production application deployments; each result must carry
+selects operational monitoring, this working tree deploys the sample package
+from test `1a-staging` before staging applications and from test `main` before
+production applications; each result must carry
 the installed template bound to its build and GitHub's matching artifact
 record. The request target
 `production` has one fixed mapping: `staging` first, then `prod`; `prod` is never
@@ -469,7 +470,8 @@ a no-database-change failure after either test environment changed, the command
 uses checked undo PRs to restore the affected branches to their saved trees and
 reruns their normal build/E2E sequence. A fake-production failure restores test
 `main` first, then staging; both environments are read back before recording
-recovery, and any sample monitoring is redeployed from the restored commit. The
+recovery, and any sample monitoring is redeployed from the matching restored
+environment commit. The
 original release remains failed and needs a person. Database
 changes or uncertain effects stop without automatic restoration. An uncertain
 effect keeps the lock for explicit resume. Completed matching operations are
@@ -500,9 +502,10 @@ For `real`, the same executor creates protected integration PRs against
 `1a-staging` and, for production requests, `main`; waits for the pinned product
 workflow locks; deploys the requested backend units; deploys frontend; and waits
 for matching product E2E. Production frontend dispatch always supplies the exact
-verified `main` commit as `expected_source_sha`. A production monitoring request
-deploys monitoring for `staging` and `prod` from the merged backend `main` commit
-before application production deployments. The adapter saves exact workflow run
+verified `main` commit as `expected_source_sha`. Monitoring uses the same
+staging-then-production order as the sandbox plan: `1a-staging` for staging,
+`main` for production, and only the existing `environment` workflow input.
+The adapter saves exact workflow run
 and attempt evidence rather than sandbox artifacts. This path has offline test
 coverage but no live product release evidence yet.
 

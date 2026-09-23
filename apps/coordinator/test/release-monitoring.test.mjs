@@ -11,7 +11,9 @@ import {
 } from "../src/release-execution.mjs";
 import {
   integrationCommitInput,
-  operationForStep
+  makeReleasePlan,
+  operationForStep,
+  validateReleasePlan
 } from "../src/release-plan.mjs";
 import { validateReleaseExecution } from "../src/release-state.mjs";
 import { validateBatchHistory } from "../src/batch-state.mjs";
@@ -256,15 +258,16 @@ const execute = (batch, options) =>
 
 // ---------------------------------------------------------------- contract
 
-test("a monitoring operation belongs to the prod stage and names its monitoring environment", () => {
+test("monitoring operations name their target and accept new staging and saved v1 shapes", () => {
   const operation = monitoringOperation();
   assert.equal(operation.monitoring_environment, "staging");
   assert.doesNotThrow(() => validateReleaseOperation(operation));
+  assert.doesNotThrow(() => monitoringOperation({ environment: "staging" }));
   assert.doesNotThrow(() =>
     monitoringOperation({ monitoring_environment: "prod" })
   );
   for (const overrides of [
-    { environment: "staging" },
+    { environment: "staging", monitoring_environment: "prod" },
     { unit: "worker" },
     { role: "frontend" },
     { monitoring_environment: "test" },
@@ -445,7 +448,7 @@ test("the sample monitoring build generates from the catalog and rejects a stale
   }
 });
 
-test("the sample runner installs monitoring only from test main and binds the installed template", async () => {
+test("the sample runner uses the operation's branch and binds the installed template", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "sandbox-monitoring-"));
   try {
     const { manifest } = await monitoringCandidate(root);
@@ -474,6 +477,16 @@ test("the sample runner installs monitoring only from test main and binds the in
         (file) => file.path === "monitoring-staging.json"
       ).sha256
     });
+    const currentStaging = await runSandboxReleaseOperation(
+      monitoringOperation({ environment: "staging" }),
+      {
+        root,
+        runner,
+        outcomes: monitoringOutcome(),
+        ref: "refs/heads/1a-staging"
+      }
+    );
+    assert.equal(currentStaging.status, "passed");
     const staging = await runSandboxReleaseOperation(monitoringOperation(), {
       root,
       runner,
@@ -559,13 +572,14 @@ test("a missing or failed monitoring build is a failed monitoring result before 
 
 // ------------------------------------------------------- plan and release
 
-test("monitoring deploys after the test-main merge and before production application deployments", async () => {
+test("monitoring deploys from each environment after its backend merge", async () => {
   const batch = await monitoringBatch();
   const calls = [];
   const execution = await execute(batch, { client: client(calls) });
   assert.equal(execution.status, "completed");
   assert.deepEqual(calls, [
     "staging:integrate:backend",
+    "staging:monitoring:staging",
     "staging:deploy:backend:dbMigrationsLoop",
     "staging:deploy:backend:worker",
     "staging:deploy:backend:api",
@@ -573,7 +587,6 @@ test("monitoring deploys after the test-main merge and before production applica
     "staging:deploy:frontend:frontend",
     "staging:e2e",
     "prod:integrate:backend",
-    "prod:monitoring:staging",
     "prod:monitoring:prod",
     "prod:deploy:backend:dbMigrationsLoop",
     "prod:deploy:backend:worker",
@@ -582,14 +595,15 @@ test("monitoring deploys after the test-main merge and before production applica
     "prod:deploy:frontend:frontend",
     "prod:e2e"
   ]);
-  const operation = execution.operations["prod:monitoring:staging"].operation;
+  const operation =
+    execution.operations["staging:monitoring:staging"].operation;
   assert.equal(operation.operation, "monitoring");
-  assert.equal(operation.environment, "prod");
+  assert.equal(operation.environment, "staging");
   assert.equal(operation.unit, "monitoring");
   assert.equal(operation.monitoring_environment, "staging");
   assert.equal(
     operation.backend_commit,
-    execution.operations["prod:integrate:backend"].result.commit
+    execution.operations["staging:integrate:backend"].result.commit
   );
   assert.equal(
     execution.operations["prod:monitoring:prod"].result.report.installed
@@ -598,12 +612,27 @@ test("monitoring deploys after the test-main merge and before production applica
   );
   assert.match(
     releaseTicketResult(batch, 1).message,
-    /deployed for staging and production/u
+    /deployed from staging to staging and from main to production/u
   );
   assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
 });
 
-test("a staging release records that monitoring waits for production and saves the v6 inputs", async () => {
+test("saved v1 monitoring plans keep their original step order and fingerprint", async () => {
+  const batch = await monitoringBatch();
+  const plan = makeReleasePlan(batch, {
+    uuid: () => ids.release_id,
+    version: 1
+  });
+  assert.deepEqual(
+    plan.steps
+      .filter((step) => step.kind === "monitoring")
+      .map((step) => step.id),
+    ["prod:monitoring:staging", "prod:monitoring:prod"]
+  );
+  assert.equal(validateReleasePlan(plan, batch), plan);
+});
+
+test("a staging release deploys staging monitoring and saves the v6 inputs", async () => {
   const h = harness(1, { monitoringTickets: [1] });
   await processInbox(h.options);
   const reference = Object.values(h.f.state().history.batches)[0];
@@ -611,11 +640,13 @@ test("a staging release records that monitoring waits for production and saves t
   assert.equal(batch.policy.version, "sandbox-batch-v6");
   assert.deepEqual(batch.inputs[0].operational_deployments, ["monitoring"]);
   assert.equal(batch.execution.status, "completed");
-  assert.equal(
-    batch.execution.plan.steps.some((step) => step.kind === "monitoring"),
-    false
+  assert.deepEqual(
+    batch.execution.plan.steps
+      .filter((step) => step.kind === "monitoring")
+      .map((step) => step.id),
+    ["staging:monitoring:staging"]
   );
-  assert.match(releaseTicketResult(batch, 1).message, /not deployed/u);
+  assert.match(releaseTicketResult(batch, 1).message, /deployed from staging/u);
   assert.doesNotThrow(() =>
     validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile)
   );
@@ -642,25 +673,46 @@ test("a staging release records that monitoring waits for production and saves t
   }
 });
 
-test("a failed monitoring deployment stops before production application deployments and restores both environments", async () => {
+test("a failed staging monitoring deployment restores staging before any application deploy", async () => {
+  const batch = await monitoringBatch({ target: "staging" });
+  const calls = [];
+  const execution = await execute(batch, {
+    client: client(calls, { failStep: "staging:monitoring:staging" })
+  });
+  assert.equal(execution.status, "needs-human");
+  assert.equal(execution.recovery.plan.version, 1);
+  assert.equal(execution.recovery.status, "completed");
+  assert.deepEqual(calls.slice(0, 2), [
+    "staging:integrate:backend",
+    "staging:monitoring:staging"
+  ]);
+  assert.ok(!calls.some((step) => step.startsWith("prod:")));
+  assert.deepEqual(
+    calls.filter((step) => step.startsWith("restore:")).slice(0, 2),
+    ["restore:staging:integrate:backend", "restore:staging:monitoring:staging"]
+  );
+  assert.equal(calls.at(-1), "verify:restored-staging");
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+});
+
+test("a failed production monitoring deployment restores both environments and their monitoring", async () => {
   const batch = await monitoringBatch();
   const calls = [];
   const execution = await execute(batch, {
-    client: client(calls, { failStep: "prod:monitoring:staging" })
+    client: client(calls, { failStep: "prod:monitoring:prod" })
   });
   assert.equal(execution.status, "needs-human");
   assert.equal(execution.recovery.plan.version, 2);
   assert.equal(execution.recovery.status, "completed");
-  const failedAt = calls.indexOf("prod:monitoring:staging");
+  const failedAt = calls.indexOf("prod:monitoring:prod");
   assert.ok(failedAt > 0);
   assert.ok(
     calls.slice(0, failedAt).every((step) => !step.startsWith("prod:deploy:"))
   );
-  assert.equal(calls.includes("prod:monitoring:prod"), false);
+  assert.ok(calls.includes("staging:monitoring:staging"));
   const restore = calls.filter((step) => step.startsWith("restore:"));
-  assert.deepEqual(restore.slice(0, 3), [
+  assert.deepEqual(restore.slice(0, 2), [
     "restore:prod:integrate:backend",
-    "restore:prod:monitoring:staging",
     "restore:prod:monitoring:prod"
   ]);
   for (const step of [
@@ -668,6 +720,7 @@ test("a failed monitoring deployment stops before production application deploym
     "restore:prod:e2e",
     "restore:staging:integrate:backend",
     "restore:staging:integrate:frontend",
+    "restore:staging:monitoring:staging",
     "restore:staging:e2e"
   ])
     assert.ok(restore.includes(step), step);
@@ -677,16 +730,18 @@ test("a failed monitoring deployment stops before production application deploym
   );
   assert.equal(calls.at(-1), "verify:restored-environments");
   assert.equal(releaseTicketResult(batch, 1).code, "release-failed");
-  assert.match(execution.message, /prod:monitoring:staging failed/u);
+  assert.match(execution.message, /prod:monitoring:prod failed/u);
   for (const environment of ["staging", "prod"]) {
     const restored =
-      execution.recovery.operations[`restore:prod:monitoring:${environment}`];
+      execution.recovery.operations[
+        `restore:${environment}:monitoring:${environment}`
+      ];
     assert.doesNotThrow(() => validateReleaseOperation(restored.operation));
     assert.equal(restored.operation.monitoring_environment, environment);
-    assert.equal(restored.operation.environment, "prod");
+    assert.equal(restored.operation.environment, environment);
     assert.equal(
       restored.operation.backend_commit,
-      execution.recovery.versions.prod.backend
+      execution.recovery.versions[environment].backend
     );
   }
   assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
@@ -701,9 +756,9 @@ test("an interrupted monitoring deployment resumes without dispatching the finis
     }),
     /interrupted/u
   );
-  assert.ok(first.includes("prod:monitoring:staging"));
+  assert.ok(first.includes("staging:monitoring:staging"));
   assert.equal(
-    batch.execution.operations["prod:monitoring:staging"].result.status,
+    batch.execution.operations["staging:monitoring:staging"].result.status,
     "passed"
   );
   const second = [];
@@ -1028,13 +1083,13 @@ const readinessGitHub = () => ({
 const operationalCheck = (result) =>
   result.checks.find((item) => item.id === "operational_deployments");
 
-test("sandbox readiness accepts monitoring inside a complete ticket and explains the staging boundary", async () => {
+test("sandbox readiness accepts monitoring inside a complete ticket and explains both branches", async () => {
   const staging = await inspectReadiness(sandboxEntry(), {
     github: readinessGitHub(),
     profile: sandboxProfile
   });
   assert.equal(operationalCheck(staging).status, "pass");
-  assert.match(operationalCheck(staging).message, /does not deploy it/u);
+  assert.match(operationalCheck(staging).message, /from test staging/u);
   const production = await inspectReadiness(
     sandboxEntry({ target: "production" }),
     { github: readinessGitHub(), profile: sandboxProfile }
@@ -1042,7 +1097,7 @@ test("sandbox readiness accepts monitoring inside a complete ticket and explains
   assert.equal(operationalCheck(production).status, "pass");
   assert.match(
     operationalCheck(production).message,
-    /before the production application deployments/u
+    /from test main before production applications/u
   );
   assert.equal(production.release_authorized, false);
 });

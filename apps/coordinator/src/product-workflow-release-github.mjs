@@ -180,25 +180,28 @@ function artifactName(descriptor, runId) {
 function directDescriptor(operation, sourceChanged, runtime) {
   const backendWorkflow = runtime.repositories.backend.workflows;
   const frontendWorkflow = runtime.repositories.frontend.workflows;
-  if (operation.operation === "monitoring")
+  if (operation.operation === "monitoring") {
+    serviceAssert(
+      operation.environment === operation.monitoring_environment,
+      "release-recovery",
+      "An unfinished monitoring operation uses the former branch contract; a person must inspect it before resume."
+    );
     return {
       kind: "monitoring",
       role: "backend",
       buildRole: "monitoring",
       environment: operation.monitoring_environment,
-      sourceEnvironment: "prod",
+      sourceEnvironment: operation.environment,
       sourceCommit: operation.backend_commit,
       workflowKey: "monitoring",
       workflow: backendWorkflow.monitoring.file,
       event: "workflow_dispatch",
       title: "Deploy operational monitoring",
-      ref: runtime.branches.prod,
+      ref: branch(runtime, operation.environment),
       unit: null,
-      inputs: {
-        environment: operation.monitoring_environment,
-        commit_sha: operation.backend_commit
-      }
+      inputs: { environment: operation.monitoring_environment }
     };
+  }
   if (operation.role === "backend") {
     const configuredUnit =
       runtime.repositories.backend.deployUnits === "identity"
@@ -592,6 +595,13 @@ export function createProductWorkflowReleaseGitHub({
 
   function verifyDirectRun(run, descriptor, workflowIdentity, actor, record) {
     const repository = profile.repositories[descriptor.role];
+    if (descriptor.kind === "monitoring")
+      serviceAssert(
+        run.head_sha === descriptor.sourceCommit &&
+          run.head_branch === descriptor.ref,
+        "release-source-mismatch",
+        `Monitoring run ${run.id} used ${run.head_branch}@${run.head_sha}, not the approved ${descriptor.ref}@${descriptor.sourceCommit}. It may already have deployed; stop for a person.`
+      );
     serviceAssert(
       positive(run?.id) &&
         run.repository?.id === repository.id &&
@@ -618,11 +628,14 @@ export function createProductWorkflowReleaseGitHub({
     const runs = await listRuns(descriptor.role, descriptor.workflow, {
       event: descriptor.event,
       branch: descriptor.ref,
-      head_sha: descriptor.sourceCommit
+      ...(descriptor.kind === "monitoring"
+        ? { created: `>=${record.created_at}` }
+        : { head_sha: descriptor.sourceCommit })
     });
     const matches = runs.filter(
       (run) =>
-        run.head_sha === descriptor.sourceCommit &&
+        (descriptor.kind === "monitoring" ||
+          run.head_sha === descriptor.sourceCommit) &&
         (descriptor.event === "push" ||
           Date.parse(run.created_at) >= Date.parse(record.created_at)) &&
         (!descriptor.title || run.display_title === descriptor.title) &&
@@ -855,7 +868,9 @@ export function createProductWorkflowReleaseGitHub({
       const boundaryQuery = new URLSearchParams({
         branch: descriptor.ref,
         event: descriptor.event,
-        head_sha: descriptor.sourceCommit,
+        ...(descriptor.kind === "monitoring"
+          ? {}
+          : { head_sha: descriptor.sourceCommit }),
         per_page: "1"
       });
       // GitHub returns workflow runs newest-first, so one exact candidate is

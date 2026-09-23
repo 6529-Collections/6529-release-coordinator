@@ -342,8 +342,8 @@ function inspectOperationalDeployments(request, checks, profile) {
       "operational_deployments",
       "pass",
       request.target === "production"
-        ? "Operational monitoring is selected. The sandbox deploys it for staging and production from the merged test main commit before the production application deployments."
-        : "Operational monitoring is selected. A staging release does not deploy it: the sample backend deploys monitoring only from test main, so it deploys with the production release of this change.",
+        ? "Operational monitoring is selected. The sandbox deploys it from test staging before staging applications, then from test main before production applications."
+        : "Operational monitoring is selected. The sandbox deploys it from test staging before staging applications.",
       { selected }
     )
   );

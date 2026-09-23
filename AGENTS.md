@@ -19,10 +19,12 @@ never authorize or prove the real path.
 One verified database-changing ticket can use the sandbox release path alone;
 a failure then stops for a person without automatic restoration. The merged
 source also restores changed test `main` and staging branches after a confirmed
-no-database-change fake-production failure. The merged source deploys a sample
-monitoring package for a production ticket that selects operational monitoring,
-after the test-main merge and before production application deployments; the
-sample backend deploys monitoring only from test `main`, like the real one.
+no-database-change fake-production failure. The published sandbox monitoring
+workflow still uses test `main` for both environments. The implementation branch
+aligns the Coordinator and test mirror with the real backend: staging monitoring
+uses `1a-staging`, and production monitoring uses `main`. Offline Coordinator
+checks pass; GitHub checks, merge and live sandbox acceptance remain separate.
+See `docs/design.md` and `docs/progress.md` before treating this as delivered.
 Check progress for live proof.
 
 It is intended to coordinate releases across:
