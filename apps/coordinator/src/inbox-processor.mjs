@@ -11,15 +11,20 @@ import {
 } from "./inbox-preparation.mjs";
 import { presentRunTicket } from "./inbox-ticket-writer.mjs";
 import { serviceAssert } from "./service-contract.mjs";
-
-const isNumber = (value) => Number.isSafeInteger(value) && value > 0;
+import {
+  createInboxSelection,
+  filterInboxRequests,
+  readInboxSelection
+} from "./inbox-selection.mjs";
 
 export async function processInbox({
   api,
   identity,
   get,
   github,
-  issueNumber,
+  selectionMode,
+  issueNumbers = [],
+  actorLogin,
   closeTest = false,
   resume,
   rehearsal,
@@ -38,24 +43,38 @@ export async function processInbox({
   inspect = inspectIssue,
   observe = inspectReadiness
 }) {
-  if (issueNumber !== undefined && !isNumber(issueNumber))
-    throw new Error("Issue number must be a positive integer.");
-  if (closeTest && !issueNumber)
+  const requestedSelection = resume
+    ? undefined
+    : createInboxSelection(selectionMode ?? "inbox", issueNumbers, actorLogin);
+  if (
+    closeTest &&
+    (requestedSelection?.mode !== "filtered" ||
+      requestedSelection.issue_numbers.length !== 1)
+  )
     throw new Error("Test closure requires one explicit Issue number.");
   signal?.throwIfAborted();
+  if (requestedSelection?.mode === "filtered") {
+    const inbox = await loggedStep(
+      {
+        step: "inbox.selection",
+        message: "Verify the filtered inbox Issues and trusted actor."
+      },
+      () => loadInbox({ get, now, profile })
+    );
+    filterInboxRequests(inbox.requests, requestedSelection);
+  }
   const actor = await loggedStep(
     { step: "operator.identity", message: "Verify the acting GitHub account." },
     identity
   );
-  const scope =
-    resume && issueNumber === undefined && !closeTest
-      ? undefined
-      : {
-          issue_number: issueNumber ?? null,
-          close_test: closeTest,
-          ...(rehearsal ? { workflow: inboxWorkflow } : {}),
-          ...(releaseAdapter ? { release_adapter: releaseAdapter } : {})
-        };
+  const scope = resume
+    ? undefined
+    : {
+        selection: requestedSelection,
+        close_test: closeTest,
+        ...(rehearsal ? { workflow: inboxWorkflow } : {}),
+        ...(releaseAdapter ? { release_adapter: releaseAdapter } : {})
+      };
   const { state, run } = await loggedStep(
     { step: "journal.acquire", message: "Acquire the inbox journal lock." },
     () => journal.acquire(actor, resume, scope)
@@ -66,31 +85,36 @@ export async function processInbox({
       state.lock?.scope &&
       typeof state.lock.scope === "object" &&
       !Array.isArray(state.lock.scope) &&
-      (run.scope.issue_number === null || isNumber(run.scope.issue_number)) &&
       typeof run.scope.close_test === "boolean",
     "run-scope",
     "The saved inbox run has no valid Issue selection or action."
   );
+  const selection = readInboxSelection(run.scope);
+  serviceAssert(
+    !resume || selectionMode === undefined || selection.mode === selectionMode,
+    "run-scope",
+    `Resume requires RELEASE_COORDINATOR_SCOPE=${selection.mode}.`
+  );
   if (releaseAdapter) {
-    const savedAdapter = run.scope.release_adapter ?? "generic";
+    const savedAdapter =
+      run.scope.release_adapter ??
+      (profile.name === "sandbox" ? "generic" : releaseAdapter);
     serviceAssert(
       savedAdapter === releaseAdapter,
       "release-adapter",
-      `Resume requires the saved sandbox release adapter ${savedAdapter}.`
+      `Resume requires the saved ${profile.name === "sandbox" ? "sandbox " : ""}release adapter ${savedAdapter}.`
     );
     if (resume && run.scope.release_adapter === undefined) {
       run.scope.release_adapter = savedAdapter;
       state.lock.scope.release_adapter = savedAdapter;
-      await journal.save(state, run, "record legacy sandbox release adapter");
+      await journal.save(state, run, "record legacy release adapter");
     }
   }
-  issueNumber = run.scope.issue_number ?? undefined;
   closeTest = run.scope.close_test;
   const results = [];
   const batching =
     batch &&
-    profile.name === "sandbox" &&
-    !issueNumber &&
+    !selection.legacy_single &&
     !closeTest &&
     ["inbox-run-v4", inboxWorkflow].includes(run.scope.workflow);
   let batchResult;
@@ -98,9 +122,9 @@ export async function processInbox({
   try {
     if (batching && !run.batch_fingerprint) {
       serviceAssert(
-        run.scope.issue_number === null && run.scope.close_test === false,
+        !selection.legacy_single && run.scope.close_test === false,
         "batch-scope",
-        "Only an unscoped sandbox run can continue an unfinished release."
+        "Only a normal inbox selection can continue an unfinished release."
       );
       const active = Object.values(state.batches ?? {}).filter(
         (record) =>
@@ -113,13 +137,21 @@ export async function processInbox({
             ))
       );
       if (active.length > 1)
-        throw new Error("More than one unfinished sandbox release exists.");
+        throw new Error("More than one unfinished release exists.");
       if (active.length === 1) {
+        serviceAssert(
+          selection.mode === "inbox" ||
+            active[0].inputs.every((input) =>
+              selection.issue_numbers.includes(input.number)
+            ),
+          "batch-scope",
+          "An unfinished release exists outside the filtered inbox selection."
+        );
         run.batch_fingerprint = active[0].fingerprint;
         run.ticket_numbers = active[0].inputs.map(({ number }) => number);
         state.lock.batch_fingerprint = run.batch_fingerprint;
         state.lock.ticket_numbers = structuredClone(run.ticket_numbers);
-        await journal.save(state, run, "continue unfinished sandbox release");
+        await journal.save(state, run, "continue unfinished release");
       }
     }
     const scanned = await scanRunTickets({
@@ -128,7 +160,7 @@ export async function processInbox({
       now,
       profile,
       run,
-      issueNumber,
+      selection,
       state,
       batching,
       journal,
@@ -217,6 +249,7 @@ export async function processInbox({
       repository: profile.inbox.full_name,
       run_id: run.run_id,
       checked_at: now().toISOString(),
+      release_executed: batchResult?.release_executed === true,
       release_authorized: false,
       requests: results,
       ...(batchResult ? { batch: batchResult } : {})

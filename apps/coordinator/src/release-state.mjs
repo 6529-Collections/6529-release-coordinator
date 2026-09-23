@@ -1,4 +1,4 @@
-import { validateReleaseOperation } from "./release-contract.mjs";
+import { validateProfileReleaseOperation } from "./profile-release-contract.mjs";
 import { verifySavedReleaseReport } from "./product-workflow-contract.mjs";
 import {
   integrationCommitInput,
@@ -79,7 +79,7 @@ export function validateReleaseExecution(execution, batch) {
         Number.isFinite(Date.parse(execution.completed_at))) &&
       typeof execution.message === "string",
     "release-state",
-    "Invalid sandbox release execution state."
+    `Invalid ${execution?.plan?.profile === "real" ? "product" : "sandbox"} release execution state.`
   );
   validateReleasePlan(execution.plan, batch);
   if (execution.status !== "prepared")
@@ -115,7 +115,7 @@ export function validateReleaseExecution(execution, batch) {
         ].includes(record.state) &&
         Number.isFinite(Date.parse(record.created_at)),
       "release-state",
-      "Invalid or repeated sandbox release step state."
+      `Invalid or repeated ${execution.plan.profile === "real" ? "product" : "sandbox"} release step state.`
     );
     ids.add(record.id);
     validateWaitedFor(record);
@@ -169,7 +169,7 @@ export function validateReleaseExecution(execution, batch) {
         "Completed release check lacks its exact operation or report."
       );
     if (record.operation) {
-      validateReleaseOperation(record.operation);
+      validateProfileReleaseOperation(record.operation);
       serviceAssert(
         record.operation.operation_id === record.id &&
           record.operation.release_id === execution.plan.release_id,
@@ -352,7 +352,7 @@ function validateRecovery(execution, batch, ids) {
         );
     } else {
       if (record.operation) {
-        validateReleaseOperation(record.operation);
+        validateProfileReleaseOperation(record.operation);
         serviceAssert(
           serviceHash(record.operation) ===
             serviceHash(

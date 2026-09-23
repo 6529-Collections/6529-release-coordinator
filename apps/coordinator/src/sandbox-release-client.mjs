@@ -26,3 +26,22 @@ export function createSandboxReleaseGitHub({ adapter, ...options } = {}) {
   client.releaseAdapter = selected;
   return client;
 }
+
+export function selectReleaseAdapter(profile, value) {
+  if (profile?.name === "real") return "product-workflows";
+  return selectSandboxReleaseAdapter(value);
+}
+
+export function createProfileReleaseGitHub({
+  adapter,
+  profile,
+  ...options
+} = {}) {
+  const selected = selectReleaseAdapter(profile, adapter);
+  const client =
+    selected === "product-workflows"
+      ? createProductWorkflowReleaseGitHub({ ...options, profile })
+      : createReleaseGitHub({ ...options, profile });
+  client.releaseAdapter = selected;
+  return client;
+}

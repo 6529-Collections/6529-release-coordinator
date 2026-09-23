@@ -267,8 +267,8 @@ export function createRunLog({
               : "failed",
         message:
           exitCode === 0
-            ? "Run finished with verified results; no release is authorized."
-            : "Run stopped or left unresolved work; no release is authorized.",
+            ? "Run finished with verified results."
+            : "Run stopped or left unresolved work.",
         exit_code: exitCode,
         duration_ms: Math.max(0, now().getTime() - started),
         remaining,

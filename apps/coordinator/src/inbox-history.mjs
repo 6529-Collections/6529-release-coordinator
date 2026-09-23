@@ -42,11 +42,13 @@ export function validateServiceHistory(attempts, profile) {
 export function validateHistoryReferences(history, profile) {
   if (
     !object(history) ||
-    profile.name !== "sandbox" ||
+    !["sandbox", "real"].includes(profile.name) ||
     Object.keys(history).some((kind) => !["batches", "services"].includes(kind))
   )
     throw new Error("Invalid history index or profile.");
   for (const [kind, entries] of Object.entries(history)) {
+    if (kind === "services" && profile.name !== "sandbox")
+      throw new Error("Real profile cannot own sandbox service history.");
     if (!object(entries)) throw new Error("Invalid history index.");
     for (const [identity, ref] of Object.entries(entries)) {
       if (

@@ -3,11 +3,16 @@ import {
   releaseBuildRoles,
   releaseBuildSourceRole,
   validateReleaseBuild,
-  validateReleaseOperation,
   verifyReleaseReport
 } from "./release-contract.mjs";
+import { validateProfileReleaseOperation } from "./profile-release-contract.mjs";
+import {
+  productWorkflowAdapter,
+  productWorkflowRuntimeForProfile
+} from "./product-workflow-runtime-config.mjs";
 
-export const productWorkflowReleaseAdapter = "product-workflow-mirror-v1";
+export const productWorkflowReleaseAdapter = productWorkflowAdapter;
+export const legacyProductWorkflowReleaseAdapter = "product-workflow-mirror-v1";
 
 const object = (value) =>
   value && typeof value === "object" && !Array.isArray(value);
@@ -17,13 +22,14 @@ const hash = (value) =>
   typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
 const positive = (value) => Number.isSafeInteger(value) && value > 0;
 
-function expectedWorkflow(role, operation) {
+function expectedWorkflow(role, operation, runtime) {
   if (role === "monitoring")
-    return ".github/workflows/deploy-operational-monitoring.yml";
-  if (role === "backend") return ".github/workflows/deploy.yml";
-  return operation.environment === "staging"
-    ? ".github/workflows/deploy-staging.yml"
-    : ".github/workflows/build-upload-deploy-prod.yml";
+    return `.github/workflows/${runtime.repositories.backend.workflows.monitoring.file}`;
+  if (role === "backend")
+    return `.github/workflows/${runtime.repositories.backend.workflows.deploy.file}`;
+  const key =
+    operation.environment === "staging" ? "stagingDeploy" : "prodDeploy";
+  return `.github/workflows/${runtime.repositories.frontend.workflows[key].file}`;
 }
 
 function artifactName(role, deployment) {
@@ -34,7 +40,7 @@ function artifactName(role, deployment) {
   return `fake-${deployment.environment === "prod" ? "production" : "staging"}-deployment-${deployment.run_id}`;
 }
 
-function deploymentsMatch(report, operation, requiredRoles) {
+function deploymentsMatch(report, operation, requiredRoles, runtime) {
   if (!object(report.deployments)) return false;
   const entries = Object.entries(report.deployments);
   if (
@@ -44,7 +50,7 @@ function deploymentsMatch(report, operation, requiredRoles) {
         role === "monitoring"
           ? operation.monitoring_environment
           : operation.environment;
-      return !(
+      const common =
         requiredRoles.includes(role) &&
         object(deployment) &&
         deployment.role === role &&
@@ -52,11 +58,18 @@ function deploymentsMatch(report, operation, requiredRoles) {
         deployment.source_commit === operation[`${sourceRole}_commit`] &&
         (role === "backend"
           ? typeof deployment.unit === "string" &&
-            /^[A-Za-z][A-Za-z0-9]{0,80}$/u.test(deployment.unit)
+            /^[A-Za-z][A-Za-z0-9_-]{0,119}$/u.test(deployment.unit)
           : deployment.unit === null) &&
-        deployment.workflow === expectedWorkflow(role, operation) &&
+        deployment.workflow === expectedWorkflow(role, operation, runtime) &&
         typeof deployment.repository === "string" &&
-        positive(deployment.run_id) &&
+        positive(deployment.run_id);
+      if (!common) return true;
+      if (operation.profile === "real")
+        return (
+          !positive(deployment.run_attempt) ||
+          Object.hasOwn(deployment, "artifact")
+        );
+      return !(
         object(deployment.artifact) &&
         positive(deployment.artifact.id) &&
         deployment.artifact.name === artifactName(role, deployment) &&
@@ -65,8 +78,6 @@ function deploymentsMatch(report, operation, requiredRoles) {
     })
   )
     return false;
-  // A failed workflow can stop before it creates an artifact. Validate every
-  // deployment it did report, but require the complete role set only on pass.
   return (
     report.status !== "passed" ||
     (entries.length === requiredRoles.length &&
@@ -79,6 +90,7 @@ function installedMatches(report, operation) {
     return !Object.hasOwn(report, "installed");
   if (report.status !== "passed")
     return report.installed === null || report.installed === undefined;
+  if (operation.profile === "real") return !Object.hasOwn(report, "installed");
   const template = monitoringTemplate(operation.monitoring_environment);
   const file = report.builds?.monitoring?.manifest?.files?.find(
     (value) => value.path === template
@@ -95,13 +107,15 @@ function installedMatches(report, operation) {
 }
 
 export function verifyProductWorkflowReport(report, operation) {
-  validateReleaseOperation(operation);
-  const requiredRoles = releaseBuildRoles(operation);
+  validateProfileReleaseOperation(operation);
+  const runtime = productWorkflowRuntimeForProfile({ name: operation.profile });
+  const requiredRoles =
+    operation.profile === "real" && operation.operation === "e2e"
+      ? Object.keys(report?.deployments ?? {})
+      : releaseBuildRoles(operation);
   const buildEntries = object(report?.builds)
     ? Object.entries(report.builds)
     : [];
-  // Like deployments, failed workflows may legitimately have no build yet.
-  // Every supplied build is still validated and bound to supplied deployment.
   const buildsValid = buildEntries.every(([role, build]) => {
     try {
       const deployment = report.deployments?.[role];
@@ -125,16 +139,26 @@ export function verifyProductWorkflowReport(report, operation) {
   });
   const runnerWorkflow =
     operation.operation === "e2e"
-      ? `.github/workflows/${operation.environment === "staging" ? "staging-e2e.yml" : "production-e2e.yml"}`
+      ? `.github/workflows/${
+          runtime.repositories.frontend.workflows[
+            operation.environment === "staging" ? "stagingE2e" : "prodE2e"
+          ].file
+        }`
       : expectedWorkflow(
           operation.operation === "monitoring" ? "monitoring" : operation.role,
-          operation
+          operation,
+          runtime
         );
   if (
     !object(report) ||
     report.protocol !== operation.protocol ||
-    report.profile !== "sandbox" ||
-    report.adapter !== productWorkflowReleaseAdapter ||
+    report.profile !== operation.profile ||
+    ![
+      productWorkflowReleaseAdapter,
+      ...(operation.profile === "sandbox"
+        ? [legacyProductWorkflowReleaseAdapter]
+        : [])
+    ].includes(report.adapter) ||
     report.release_id !== operation.release_id ||
     report.operation_id !== operation.operation_id ||
     report.operation_hash !== operation.fingerprint ||
@@ -152,11 +176,16 @@ export function verifyProductWorkflowReport(report, operation) {
         !["passed", "failed"].includes(check.status)
     ) ||
     !object(report.builds) ||
+    (operation.profile === "real" &&
+      operation.operation === "e2e" &&
+      !requiredRoles.includes("frontend")) ||
     !buildsValid ||
-    !deploymentsMatch(report, operation, requiredRoles) ||
-    (report.status === "passed" &&
+    !deploymentsMatch(report, operation, requiredRoles, runtime) ||
+    (operation.profile === "sandbox" &&
+      report.status === "passed" &&
       (buildEntries.length !== requiredRoles.length ||
         requiredRoles.some((role) => !report.builds[role]))) ||
+    (operation.profile === "real" && buildEntries.length !== 0) ||
     !installedMatches(report, operation) ||
     !object(report.versions) ||
     report.versions.backend !== operation.backend_commit ||
@@ -174,18 +203,25 @@ export function verifyProductWorkflowReport(report, operation) {
       !report.checks.some((check) => check.status === "failed"))
   )
     throw new Error(
-      "Product-shaped sandbox report does not match its saved operation."
+      "Product workflow report does not match its saved operation."
     );
   return report;
 }
 
 export function verifySavedReleaseReport(report, operation) {
-  if (report?.adapter === productWorkflowReleaseAdapter)
+  if (
+    [
+      productWorkflowReleaseAdapter,
+      legacyProductWorkflowReleaseAdapter
+    ].includes(report?.adapter)
+  )
     return verifyProductWorkflowReport(report, operation);
   if (
     Object.hasOwn(report ?? {}, "adapter") ||
     Object.hasOwn(report ?? {}, "deployments")
   )
-    throw new Error("Unknown sandbox release report adapter.");
+    throw new Error(
+      `Unknown ${operation.profile === "sandbox" ? "sandbox " : ""}release report adapter.`
+    );
   return verifyReleaseReport(report, operation);
 }

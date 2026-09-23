@@ -3,15 +3,17 @@
 Sandbox and real configurations use the same intake, receipt verification,
 readiness, local merge engine, and ticket updates. `inbox:run` joins inspection,
 rehearsal, supported sandbox service/database checks, and presentation into one
-manual run. Unscoped sandbox runs also filter and test complete tickets together,
+manual run. Sandbox runs also filter and test the visible complete tickets together,
 then move one selected no-database-change batch, or one verified database-changing
 ticket alone, through protected fake staging, matching E2E, and protected fake
 production when requested. A production ticket that selects operational
 monitoring also deploys the sample monitoring package for both monitoring
-environments after the test-main merge. `--issue` retains
-one-ticket service/database checks. Real service execution, release ownership,
-release builds, and deployments remain later work. See
-[progress](./progress.md) for local, live sandbox, and remote merge evidence.
+environments after the test-main merge. An Issue/actor filter narrows the visible
+inbox but does not select a special one-ticket workflow. The current working tree
+uses that same engine for real batch selection, release ownership, protected
+integration PRs and the existing product deployment/E2E workflows. It has
+offline tests but no live product release acceptance or merge evidence yet. See
+[progress](./progress.md) for the exact boundary.
 
 ## Trusted configuration
 
@@ -19,19 +21,19 @@ release builds, and deployments remain later work. See
 selects a name, never supplies a repository URL, numeric ID, workflow path, or
 credential through a request. An unknown name stops without falling back.
 
-| Setting | `sandbox` | `real` |
-| --- | --- | --- |
-| Inbox | `6529-Collections/release-coordinator-test-inbox`, ID `1362580376` | `6529-Collections/6529-release-coordinator`, ID `1346244762` |
-| Frontend PRs | `release-coordinator-test-frontend`, ID `1362504370` | `6529seize-frontend`, ID `579004979` |
-| Backend PRs | `release-coordinator-test-backend`, ID `1362505082` | `6529seize-backend`, ID `579003578` |
-| Submission workflow | `submit-release-request.yml` on inbox `main` | Same workflow name/ref in the real inbox |
-| Receipt checks | Selected inbox, successful workflow/attempt, request checksum, ticket number and GitHub actor | Same checks |
-| State journal | `codex/inbox-state` in the test inbox repository | Existing state branch in the real inbox repository |
-| Rehearsal destination | Current `main` of each selected test repository | Current `main` of each selected product repository |
-| Service/database checks | Fixed, pinned workflow in the test backend; temporary MySQL and sample programs | Not implemented; services are reported as `not-run` |
-| Release sequence | Protected `1a-staging` and `main` integration PRs plus pinned product-shaped backend, monitoring, frontend and E2E workflow mirrors; the old generic fake workflow is an explicit fallback | Not implemented; no real merge or deployment adapter is configured |
-| Local submissions | `.release-coordinator/profiles/sandbox/submissions/` | `.release-coordinator/profiles/real/submissions/` |
-| Rehearsal reports | `.release-coordinator/merge-rehearsal/sandbox/` | `.release-coordinator/merge-rehearsal/real/` |
+| Setting                 | `sandbox`                                                                                                                                                                                  | `real`                                                                                                                                                            |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inbox                   | `6529-Collections/release-coordinator-test-inbox`, ID `1362580376`                                                                                                                         | `6529-Collections/6529-release-coordinator`, ID `1346244762`                                                                                                      |
+| Frontend PRs            | `release-coordinator-test-frontend`, ID `1362504370`                                                                                                                                       | `6529seize-frontend`, ID `579004979`                                                                                                                              |
+| Backend PRs             | `release-coordinator-test-backend`, ID `1362505082`                                                                                                                                        | `6529seize-backend`, ID `579003578`                                                                                                                               |
+| Submission workflow     | `submit-release-request.yml` on inbox `main`                                                                                                                                               | Same workflow name/ref in the real inbox                                                                                                                          |
+| Receipt checks          | Selected inbox, successful workflow/attempt, request checksum, ticket number and GitHub actor                                                                                              | Same checks                                                                                                                                                       |
+| State journal           | `codex/inbox-state` in the test inbox repository                                                                                                                                           | Existing state branch in the real inbox repository                                                                                                                |
+| Rehearsal destination   | Current `main` of each selected test repository                                                                                                                                            | Current `main` of each selected product repository                                                                                                                |
+| Service/database checks | Fixed, pinned workflow in the test backend; temporary MySQL and sample programs                                                                                                            | No sample precheck or live database inspection; the request's verified declaration controls isolation, and selected units run through the product deploy workflow |
+| Release sequence        | Protected `1a-staging` and `main` integration PRs plus pinned product-shaped backend, monitoring, frontend and E2E workflow mirrors; the old generic fake workflow is an explicit fallback | Same Coordinator sequence against product `1a-staging`/`main` and pinned existing backend, monitoring, frontend and E2E workflows; offline-tested only            |
+| Local submissions       | `.release-coordinator/profiles/sandbox/submissions/`                                                                                                                                       | `.release-coordinator/profiles/real/submissions/`                                                                                                                 |
+| Rehearsal reports       | `.release-coordinator/merge-rehearsal/sandbox/`                                                                                                                                            | `.release-coordinator/merge-rehearsal/real/`                                                                                                                      |
 
 All pinned repositories are public. Live inbox commands verify inbox numeric
 identity and visibility. The rehearsal GitHub adapter binds each PR and source
@@ -43,9 +45,10 @@ mirrors after their success and recovery acceptance. Set
 `RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER=generic` only to select the old
 generic `sandbox-release.yml` test client deliberately. The other accepted value
 is `product-workflows`. The variable is validated only for `sandbox`; it cannot
-add a release executor to `real`. New sandbox runs save the selected adapter in
-their journal scope. Explicit resume must name the same adapter; a pre-adapter
-saved run is treated as `generic` and cannot silently switch to the new default.
+change the real adapter. Real always selects `product-workflows` and ignores the
+sandbox-only fallback setting. New runs save the selected adapter in their journal scope.
+Explicit resume must name the same adapter; a pre-adapter sandbox run is treated
+as `generic` and cannot silently switch to the new default.
 
 The test inbox holds only a workflow wrapper and README. The wrapper checks out
 an exact Coordinator commit and executes the shared intake implementation.
@@ -67,7 +70,8 @@ describe a new request.
 RELEASE_COORDINATOR_PROFILE=sandbox npm run request:submit -- --input REQUEST_JSON --json
 RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:read -- --json
 RELEASE_COORDINATOR_PROFILE=sandbox npm run readiness:check -- --json
-RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --issue NUMBER --json
+RELEASE_COORDINATOR_PROFILE=sandbox RELEASE_COORDINATOR_SCOPE=filtered \
+  npm run inbox:run -- --issue 101 --issue 104 --actor GITHUB_LOGIN --json
 ```
 
 `request:submit` explicitly dispatches intake and waits up to five minutes for
@@ -89,31 +93,43 @@ The installed public npm CLI `0.0.5` retains the real-only behavior of the
 public submission path. The profile-aware submission command belongs to the
 private Coordinator workspace and is not part of the published package.
 
-`request:submit` and `inbox:run` require an explicit profile. The read-only
+`request:submit` requires an explicit profile. `inbox:run` requires both an
+explicit profile and an explicit scope. The read-only
 `inbox:read` and `readiness:check` retain their real default and honor an explicit
 sandbox profile. `--help` performs no reads or writes.
 
-`inbox:run --issue NUMBER` verifies and inspects the ticket, skips rehearsal for
-initial blockers, and otherwise creates a plan and tries its exact PRs locally.
-It saves the generated plan in the journal before starting Git, then saves the
-report before publishing the result in the same ticket's comment and labels.
-A pass adds `rehearsal:passed`; a scoped one-ticket run stays waiting. A combined
-conflict adds `reason:rehearsal-blocked`. Unknown and changed evidence get
-distinct reasons. A pass never authorizes a real release.
+`RELEASE_COORDINATOR_SCOPE=filtered` requires one or more repeated `--issue`
+values plus `--actor`. The actor is the verified submitter recorded by intake.
+Every named Issue must currently be an open, valid request from that actor. The
+command stops before taking the journal lock if any named Issue fails that guard.
+Those Issues then become the complete inbox visible to the run. Outside tickets
+cannot overlap, join, defer, or otherwise influence the selected set. If a
+different ticket already owns unfinished release work, the filtered run stops;
+it neither adopts that ticket nor starts a concurrent release.
 
-Omit the ticket number to process all selected tickets:
+`RELEASE_COORDINATOR_SCOPE=inbox` accepts no Issue or actor filter and exposes the
+complete selected-profile inbox. After either selection, the Coordinator follows
+the same normal logic: it skips initial blockers, creates plans, tries exact PRs,
+applies profile-specific batching and database isolation, and uses the ordinary target and
+release order. It saves the generated plans and immutable selection in the
+journal before expensive work. A pass adds `rehearsal:passed`. A combined
+conflict adds `reason:rehearsal-blocked`. Unknown and changed evidence get
+distinct reasons. A rehearsal pass alone is never deployment evidence.
+
+Expose the complete inbox with:
 
 ```sh
-RELEASE_COORDINATOR_PROFILE=sandbox npm run inbox:run -- --json
+RELEASE_COORDINATOR_PROFILE=sandbox RELEASE_COORDINATOR_SCOPE=inbox \
+  npm run inbox:run -- --json
 ```
 
 Every suitable ticket first gets its own generated plan and Git rehearsal.
-Unscoped sandbox runs then test compatible whole tickets together. The selected
-batch continues through its saved sandbox release plan. A staging request stops
-after matching staging E2E; a production request repeats the protected sequence
-on test `main` only after that E2E passes. Real runs retain individual Git
-rehearsals and never receive a release executor. The old manual plan input and
-separate processing/rehearsal commands have been removed. Diagnostics stay read-only.
+Both profiles then test compatible visible tickets together. The selected batch
+continues through its saved profile release plan. A staging request stops after
+matching staging E2E; a production request repeats the protected sequence on
+the selected profile's `main` only after that E2E passes. The old manual plan
+input and separate processing/rehearsal commands have been removed. Diagnostics
+stay read-only.
 
 ## Automatic plan for each ticket
 
@@ -150,8 +166,9 @@ Starting a new run captures current destination commits. See the
 
 Plans remain internal evidence: the journal stores the ticket/request binding,
 exact PR order and destinations; full reports record their resulting trees.
-The journal's `inbox-run-v6` marker prevents older writers from overwriting the
-run format or discarding archived history. See [history storage](./inbox-processing.md#history-storage)
+The journal's `inbox-run-v7` marker prevents older writers from widening or
+overwriting the saved inbox selection. It preserves earlier run data and archived
+history. See [history storage](./inbox-processing.md#history-storage)
 for active records, archive validation and migration evidence. On explicit
 resume, a legacy interrupted v1 batch uses its saved targetless identity and
 pinned v1 check policy only to reconcile and clean already-started exact work.
@@ -191,10 +208,11 @@ real-profile tests are not real-system runtime proof.
 The local `inbox:run` implementation includes tested
 [one-ticket service/database acceptance](./merge-rehearsal-testing.md#service-and-database-acceptance).
 See progress for Coordinator source delivery, separate local/live evidence,
-and merged sample setup. Unscoped sandbox runs now add
+and merged sample setup. Sandbox runs also add
 [bounded batching](./design.md#proposed-batch-testing-and-selection), with cheap
 elimination before expensive combined checks and durable temporary PR ownership.
-The batch writer is sandbox-only; choosing `real` does not enable it.
+The real policy uses the same bounded selection with the product repositories'
+pinned required checks; it does not run the sandbox sample-service workflow.
 The same repositories, test inbox,
 exact-input bindings and automatically generated plans are retained.
 
@@ -209,10 +227,11 @@ in separate restricted containers. MySQL is a separate owned container. The
 trusted adapter mediates reads/writes and checks expected data. The workflow has
 read-only repository permission and no inbox/product credentials in candidates.
 
-The shared profile still selects capabilities, not permissions. `real` keeps
-inspection and Git rehearsal; its service result is `not-run`. Real deployment,
-database inspection and recovery adapters remain absent. No environment switch
-can transfer sandbox proof or enable AWS deployment.
+The shared profile still selects capabilities, not permissions. `real` keeps the
+sandbox sample-service result as `not-run`, then uses the selected real backend
+units in the product release sequence. There is no real database inspection and
+database-changing failures always stop for a person. No profile switch transfers
+sandbox proof: the real path must collect its own product workflow evidence.
 
 Service evidence is kept in the sandbox journal's `service_attempts` and local
 `.release-coordinator/service-checks/sandbox/` reports, bound to both exact product
@@ -221,7 +240,7 @@ The public request schema and npm package are unchanged.
 
 ## Sandbox release sequence
 
-The unscoped sandbox command creates one exact release plan from the selected
+The sandbox command creates one exact release plan from the selected
 passing batch. For each required environment it integrates backend first, runs
 `dbMigrationsLoop`, `worker`, and `api` in order, integrates frontend, runs the
 frontend workflow, and then waits for an E2E result tied to that exact backend

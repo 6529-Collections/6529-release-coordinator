@@ -1,8 +1,8 @@
-import { sandboxProfile } from "./profiles.mjs";
 import { runEvent } from "./run-log.mjs";
 import { buildServicePlan } from "./service-plan.mjs";
 import {
-  batchPolicy,
+  batchPolicyForProfile,
+  batchPolicyProfile,
   databaseBatchPolicies,
   legacyBatchPolicy,
   isReleaseBatchPolicy,
@@ -30,7 +30,7 @@ export function batchDecision(decision, result) {
     result.status === "blocked"
       ? "Correct the specific recorded blocker and submit a new request for changed code."
       : result.status === "passed"
-        ? "Continue the saved sandbox release sequence. This batch pass authorizes no real release."
+        ? "Continue the saved release sequence for the selected profile."
         : "Reassess this whole ticket when the recorded dependency, compatibility, limit or evidence condition changes.";
   next.reasons = next.reasons.filter((reason) => reason.code !== result.code);
   next.reasons.push({
@@ -65,14 +65,14 @@ function releasedDecision(decision, result) {
     code: result.code,
     message: result.message,
     action: completed
-      ? "No further action is required for this sandbox request."
+      ? "No further action is required for this release request."
       : waiting
         ? "Recheck the saved batch and release evidence before continuing."
         : result.execution?.recovery?.status === "completed"
-          ? "The affected sandbox branches were restored. Inspect the failed release before submitting changed code."
+          ? "The affected branches were restored. Inspect the failed release before submitting changed code."
           : result.execution?.message?.includes("changes the database")
             ? "A person must inspect the database-changing release and staging state before another release."
-            : "Inspect the affected sandbox environments and failed release before another release starts.",
+            : "Inspect the affected environments and failed release before another release starts.",
     owner: completed ? "None" : "Coordinator maintainers"
   };
   next.reasons.push(reason);
@@ -86,6 +86,7 @@ function releasedDecision(decision, result) {
     evidence: Array.isArray(batch.evidence) ? batch.evidence : [],
     release: {
       id: result.execution?.plan?.release_id,
+      profile: result.execution?.plan?.profile,
       status: result.execution?.status,
       target: result.execution?.plan?.target,
       message: result.execution?.message,
@@ -124,13 +125,19 @@ export async function coordinateInboxBatch({
   release
 }) {
   serviceAssert(
-    profile === sandboxProfile,
+    ["sandbox", "real"].includes(profile?.name),
     "batch-profile",
-    "Batch execution requires the sandbox profile."
+    "Batch execution requires a configured profile."
   );
   const active = run.batch_fingerprint
     ? await loadBatch(run.batch_fingerprint)
     : null;
+  const candidatePolicy = active?.policy ?? batchPolicyForProfile(profile);
+  serviceAssert(
+    batchPolicyProfile(candidatePolicy) === profile.name,
+    "batch-profile",
+    "The saved batch policy belongs to a different profile."
+  );
   if (isReleaseBatchPolicy(active?.policy) && active.status === "finished") {
     if (
       active.selected.length &&
@@ -170,6 +177,7 @@ export async function coordinateInboxBatch({
         (active.selected.length ? "release-unverified" : "no-candidate"),
       selected: active.selected,
       release: active.execution ?? null,
+      release_executed: active.execution?.status === "completed",
       release_authorized: false
     };
   }
@@ -305,7 +313,7 @@ export async function coordinateInboxBatch({
         status: "waiting",
         code: "batch-unsupported",
         message:
-          "A staging or production ticket needs a verified yes/no database answer before sandbox release selection."
+          "A staging or production ticket needs a verified yes/no database answer before release selection."
       };
     } else if (selectedTarget && item.entry.request.target !== selectedTarget) {
       result = {
@@ -330,13 +338,14 @@ export async function coordinateInboxBatch({
       try {
         // Source/database/catalog inspection is cheap. It must happen for all
         // tickets before any batch PR or service workflow is created.
-        buildServicePlan(
-          item.entry,
-          item.coordinated.report,
-          profile,
-          batchPolicy.runtime,
-          { allowProduction: true }
-        );
+        if (profile.name === "sandbox")
+          buildServicePlan(
+            item.entry,
+            item.coordinated.report,
+            profile,
+            candidatePolicy.runtime,
+            { allowProduction: true }
+          );
         const counts = Object.fromEntries(
           item.input.repositories.map((repo) => [
             repo.role,
@@ -344,10 +353,11 @@ export async function coordinateInboxBatch({
           ])
         );
         if (
-          suitable.length >= batchPolicy.max_tickets ||
+          suitable.length >= candidatePolicy.max_tickets ||
           Object.keys(counts).some(
             (role) =>
-              totals[role] + counts[role] > batchPolicy.max_prs_per_repository
+              totals[role] + counts[role] >
+              candidatePolicy.max_prs_per_repository
           )
         ) {
           result = {
@@ -401,7 +411,7 @@ export async function coordinateInboxBatch({
   });
   if (!suitable.length && !run.batch_fingerprint)
     return { status: "no-candidate", selected: [], release_authorized: false };
-  const policy = active?.policy ?? batchPolicy;
+  const policy = candidatePolicy;
   const inputs = suitable.map((item) => ({
     number: item.entry.issue_number,
     target: item.entry.request.target,
@@ -505,6 +515,7 @@ export async function coordinateInboxBatch({
     })),
     stop: batch.stop ?? null,
     release: batch.execution ?? null,
+    release_executed: batch.execution?.status === "completed",
     release_authorized: false
   };
 }

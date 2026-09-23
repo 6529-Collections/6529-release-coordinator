@@ -309,12 +309,10 @@ function inspectOperationalDeployments(request, checks, profile) {
     checks.push(
       check(
         "operational_deployments",
-        "unknown",
-        "Operational monitoring is recorded in this request, but the Coordinator cannot deploy it or verify its target health yet.",
+        "pass",
+        "Operational monitoring is recorded and will use the pinned product monitoring workflow from main.",
         {
-          selected,
-          action:
-            "Use the existing operational monitoring workflow until the Coordinator deployment adapter is implemented."
+          selected
         }
       )
     );

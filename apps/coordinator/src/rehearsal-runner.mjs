@@ -150,6 +150,7 @@ export async function runMergePlan(
     revision = codeRevision,
     signal,
     captureRepository,
+    candidatePatchMode = "sandbox",
     timeout = 180_000
   } = {}
 ) {
@@ -166,7 +167,11 @@ export async function runMergePlan(
       captureRepository,
       revision: await revision(),
       createGit: (options) =>
-        createRehearsalGit({ ...options, repositories: profile.repositories })
+        createRehearsalGit({
+          ...options,
+          repositories: profile.repositories,
+          candidatePatchMode
+        })
     });
     if (plan.inbox) {
       report.inbox = plan.inbox;

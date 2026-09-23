@@ -13,15 +13,18 @@ const files = Object.freeze({
 });
 
 export const sandboxReleaseRuntime = Object.freeze({
+  profile: "sandbox",
   workflow: "sandbox-release.yml",
   job: "Sandbox release",
   step: "Run sandbox release operation",
   branches: Object.freeze({ staging: "1a-staging", prod: "main" }),
   repositories: Object.freeze({
     backend: Object.freeze({
+      integrationChecks: Object.freeze(["Sandbox check"]),
       files
     }),
     frontend: Object.freeze({
+      integrationChecks: Object.freeze(["Sandbox check"]),
       files
     })
   })

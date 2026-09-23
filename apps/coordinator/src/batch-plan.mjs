@@ -6,9 +6,14 @@ import {
   captureServiceSource,
   servicePlanFromSources
 } from "./service-plan.mjs";
-import { serviceAssert, serviceHash } from "./service-contract.mjs";
+import {
+  serviceAssert,
+  serviceHash,
+  validateServicePlan
+} from "./service-contract.mjs";
 import { sandboxServiceRuntime } from "./service-runtime-config.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
+import { realProductWorkflowRuntime } from "./product-workflow-runtime-config.mjs";
 
 const elapsedBatchPolicyBase = {
   max_tickets: 10,
@@ -88,11 +93,58 @@ export const batchPolicy = Object.freeze({
   })
 });
 
+// The product profile uses the same bounded candidate search and exact-tree
+// PR rehearsal. Product repositories supply their own required PR checks, so
+// there is no sandbox-only service workflow or sample artifact contract here.
+export const realBatchPolicy = Object.freeze({
+  max_tickets: commonBatchPolicy.max_tickets,
+  max_prs_per_repository: commonBatchPolicy.max_prs_per_repository,
+  max_git_attempts: commonBatchPolicy.max_git_attempts,
+  max_check_attempts: commonBatchPolicy.max_check_attempts,
+  priority: commonBatchPolicy.priority,
+  dependencies: commonBatchPolicy.dependencies,
+  version: "real-batch-v1",
+  profile: "real",
+  required_checks: Object.freeze({
+    backend: Object.freeze(["Build backend and API"]),
+    frontend: Object.freeze([
+      "DCO",
+      "security/snyk (6529)",
+      "Plan risk and security checks",
+      "Installed app checks",
+      "Debt ratchet"
+    ])
+  }),
+  workflow_blobs: Object.freeze({
+    backend: Object.freeze({
+      ".github/workflows/on-pull-request.yml":
+        "9e5b5c526c2aa5150b89b06fe218de41b9c0d719"
+    }),
+    frontend: Object.freeze({
+      ".github/workflows/app-pr-ci.yml":
+        "874b4eb0070101202d0d3eda081d5e616e87cabd",
+      ".github/workflows/debt-ratchet.yml":
+        "8de45e342ad45535577299b089d64e11601e9e4d"
+    })
+  })
+});
+
 export const databaseBatchPolicies = Object.freeze([
   databaseBatchPolicy.version,
-  batchPolicy.version
+  batchPolicy.version,
+  realBatchPolicy.version
 ]);
-export const operationalBatchPolicies = Object.freeze([batchPolicy.version]);
+export const operationalBatchPolicies = Object.freeze([
+  batchPolicy.version,
+  realBatchPolicy.version
+]);
+
+export const batchPolicyProfile = (policy) =>
+  policy?.profile ??
+  (String(policy?.version ?? "").startsWith("sandbox-") ? "sandbox" : null);
+
+export const batchPolicyForProfile = (profile) =>
+  profile?.name === "real" ? realBatchPolicy : batchPolicy;
 
 // One sorted list per ticket, from its request parts or a saved batch input.
 export const requestedOperationalDeployments = (request) =>
@@ -112,7 +164,8 @@ export function isReleaseBatchPolicy(policy) {
     previousBatchPolicy.version,
     priorBatchPolicy.version,
     databaseBatchPolicy.version,
-    batchPolicy.version
+    batchPolicy.version,
+    realBatchPolicy.version
   ].includes(policy?.version);
 }
 
@@ -124,7 +177,8 @@ export function trustedBatchPolicy(policy) {
     previousBatchPolicy,
     priorBatchPolicy,
     databaseBatchPolicy,
-    batchPolicy
+    batchPolicy,
+    realBatchPolicy
   ].find(
     (candidate) =>
       candidate.version === policy?.version &&
@@ -145,11 +199,11 @@ export function batchMergePlan(
 ) {
   trustedBatchPolicy(policy);
   serviceAssert(
-    profile === sandboxProfile &&
+    batchPolicyProfile(policy) === profile?.name &&
       items.length > 0 &&
       items.length <= policy.max_tickets,
     "batch-scope",
-    "Batch trials require whole sandbox tickets within the configured limit."
+    `Batch trials require whole ${batchPolicyProfile(policy)} tickets within the configured limit.`
   );
   const targets = [...new Set(items.map((item) => item.entry.request.target))];
   const databases = items.map((item) => item.entry.request.database_change);
@@ -162,7 +216,7 @@ export function batchMergePlan(
     databases.every((value) => ["no", "yes"].includes(value)) &&
       (!databases.includes("yes") || items.length === 1),
     "batch-unsupported",
-    "A database-changing sandbox release must contain exactly one whole ticket."
+    `A database-changing ${profile.name === "sandbox" ? "sandbox " : ""}release must contain exactly one whole ticket.`
   );
   const bindings = [],
     repos = new Map();
@@ -243,7 +297,23 @@ export async function prepareBatch(
     ...options,
     profile,
     signal,
+    candidatePatchMode: profile.name,
     captureRepository: async (workspace, repo, commit) => {
+      if (profile.name === "real") {
+        const changedPaths = await workspace.changedPaths(
+          repo.destination.commit,
+          commit
+        );
+        return {
+          base_tree: await workspace.tree(repo.destination.commit),
+          changed_paths: changedPaths,
+          patch: await workspace.patch(
+            repo.destination.commit,
+            commit,
+            changedPaths
+          )
+        };
+      }
       const source = await captureServiceSource(workspace, repo, commit);
       if (!source.error) {
         source.base_tree = await workspace.tree(repo.destination.commit);
@@ -284,6 +354,20 @@ export async function prepareBatch(
     tree: repo.final_tree,
     patch: repo.service_source.patch
   }));
+  if (profile.name === "real")
+    for (const publication of publications) {
+      const pinned = [
+        ...Object.keys(policy.workflow_blobs[publication.role]),
+        ...Object.keys(
+          realProductWorkflowRuntime.repositories[publication.role].files
+        )
+      ];
+      serviceAssert(
+        publication.patch.every((file) => !pinned.includes(file.path)),
+        "batch-runtime",
+        "A candidate changes the workflow used to verify its own product PR."
+      );
+    }
   if (!publications.some((repo) => repo.patch.length))
     return {
       status: "unknown",
@@ -293,15 +377,18 @@ export async function prepareBatch(
       report_file: report.report_file
     };
   for (const repo of report.repositories) delete repo.service_source.patch;
-  const servicePlan = servicePlanFromSources({
-    request: {
-      ...plan.dependency_request,
-      database_change: items[0].entry.request.database_change
-    },
-    binding: plan.batch,
-    report,
-    runtime: policy.runtime
-  });
+  const servicePlan =
+    profile.name === "sandbox"
+      ? servicePlanFromSources({
+          request: {
+            ...plan.dependency_request,
+            database_change: items[0].entry.request.database_change
+          },
+          binding: plan.batch,
+          report,
+          runtime: policy.runtime
+        })
+      : realServicePlan(plan, report, items);
   return {
     status: "passed",
     kind: "prepared",
@@ -312,4 +399,63 @@ export async function prepareBatch(
     publications,
     report_file: report.report_file
   };
+}
+
+function realServicePlan(plan, report, items) {
+  const graph = report.repositories
+    .flatMap((repository) => repository.checks)
+    .find((check) => check.id === "combined_services")?.evidence;
+  serviceAssert(
+    graph?.status === "pass" && Array.isArray(graph.order),
+    "invalid-services",
+    "The exact product backend catalog did not confirm the requested deployment order."
+  );
+  const declared = items[0].entry.request.database_change;
+  serviceAssert(
+    ["yes", "no"].includes(declared),
+    "database-unverified",
+    "The product request needs a verified yes/no database answer."
+  );
+  const steps = graph.order.map((node) => {
+    const unit = node.split("/").at(-1);
+    return {
+      unit,
+      role: unit === "frontend" ? "frontend" : "backend",
+      depends_on: graph.edges
+        .filter((edge) => edge.after === node)
+        .map((edge) => edge.before.split("/").at(-1))
+    };
+  });
+  const contents = {
+    protocol: "product-services-v1",
+    profile: "real",
+    binding: plan.batch,
+    rehearsal_input_hash: report.input_hash,
+    database: { declared, observed: declared },
+    steps
+  };
+  return { ...contents, fingerprint: serviceHash(contents) };
+}
+
+export function validateBatchServicePlan(plan, profileName) {
+  if (profileName === "sandbox") return validateServicePlan(plan);
+  const { fingerprint, ...contents } = plan ?? {};
+  serviceAssert(
+    profileName === "real" &&
+      plan?.protocol === "product-services-v1" &&
+      plan.profile === "real" &&
+      serviceHash(contents) === fingerprint &&
+      ["yes", "no"].includes(plan.database?.declared) &&
+      plan.database.declared === plan.database.observed &&
+      Array.isArray(plan.steps) &&
+      plan.steps.every(
+        (step) =>
+          ["backend", "frontend"].includes(step.role) &&
+          /^[A-Za-z][A-Za-z0-9_-]{0,119}$/u.test(step.unit) &&
+          Array.isArray(step.depends_on)
+      ),
+    "batch-state",
+    "Invalid product release preparation."
+  );
+  return plan;
 }

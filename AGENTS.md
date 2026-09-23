@@ -8,12 +8,14 @@ read-only readiness observations, and one manual `inbox:run` workflow are
 implemented. That workflow inspects tickets, rehearses suitable exact PRs, runs
 supported sandbox service/database checks, and updates the same ticket and
 journal. See progress for local implementation versus merged and live evidence.
-Unscoped sandbox runs select whole tickets together, finish cheap conflict
-filtering before expensive combined PR/service checks, and record deferred tickets.
+Explicit filtered or full-inbox scopes select whole tickets together, finish
+cheap conflict filtering before expensive combined PR/service checks, and record deferred tickets.
 They can also take one selected no-database-change batch through protected fake
 staging, locked npm builds and artifacts, matching built-output E2E, protected
-fake production, and another matching E2E. Real product release execution
-remains a design; passing sandbox checks never authorize it.
+fake production, and another matching E2E. The current working tree applies the
+same engine to real product repositories and pinned existing workflows; it has
+offline tests but no merge or live product acceptance. Passing sandbox checks
+never authorize or prove the real path.
 One verified database-changing ticket can use the sandbox release path alone;
 a failure then stops for a person without automatic restoration. The merged
 source also restores changed test `main` and staging branches after a confirmed
@@ -104,7 +106,7 @@ Existing limits stay unchanged until they are separately discussed.
   public schema or production repository allowlist to accommodate test fixtures.
   Documentation is not permission to create external resources. Keep the runtime
   bundle identical to its source, verify its fixed branch/commit, and preserve
-  service, batch, and release attempts in the v6 journal before dispatch.
+  service, batch, and release attempts in the v7 journal before dispatch.
   Publish generated runtime changes to test `main` first, then merge that history
   into protected `1a-staging`; never create unrelated lookalike runtime commits
   on both branches. Keep trial and environment integration commits distinct so
@@ -115,19 +117,20 @@ Existing limits stay unchanged until they are separately discussed.
   Its operational-monitoring section owns the agreed order: monitoring deploys
   only from `main`, after the production merge and before production
   application deployments; the sandbox models it with a sample package.
-  Before each shared-branch merge and workflow dispatch, the sandbox adapter
+  Before each shared-branch merge and workflow dispatch, each profile adapter
   waits without a time limit until the pinned release workflow has no active
   run in the target repository; that no-limit wait is an explicit user decision.
-  Check progress for its live proof and the sandbox workflow lock scope.
-  Product adapters and real-production rollback are not built. Reuse existing product Actions and their
+  Check progress for sandbox live proof and the real adapter's offline-only boundary.
+  The product adapter and no-database-change recovery are implemented locally
+  but have no live product proof. Reuse existing product Actions and their
   environment-specific builds; no configuration redesign or portable artifacts.
   Wait for successful matching staging E2E before production merges into `main`.
   Keep one release active through completion or recovery. Automatic rollback
   requires confirmed no database change, verified revert commits and ordinary
   deploy/check steps; otherwise stop for a person. Its v0.1 logging section owns local
   run diagnostics; logs never replace journal authority or prove a process stopped.
-  Heartbeat and automatic process takeover remain deferred. Real-product release
-  rollback is future work, distinct from process restart. Keep state in the GitHub journal;
+  Heartbeat and automatic process takeover remain deferred. Product release
+  recovery is distinct from process restart. Keep state in the GitHub journal;
   `docs/inbox-processing.md` owns verified archives and v6 migration; preserve
   unfinished work, archive checksums, original attempts and per-run budgets.
   Lifetime record caps are removed; keep sandbox migration evidence separate from
@@ -136,9 +139,9 @@ Existing limits stay unchanged until they are separately discussed.
   search before release mutations: keep tickets/dependencies whole,
   test the final exact combination, and never blame every member of a failed
   group. Batch ticket projections belong in `docs/inbox-processing.md`; planned
-  acceptance cases belong in `docs/merge-rehearsal-testing.md`. These are sandbox
-  requirements for sandbox batching, not real release authorization. The current
-  sandbox adapter and release sequence support self-contained tickets only; cross-ticket dependency
+  acceptance cases belong in `docs/merge-rehearsal-testing.md`. Sandbox evidence
+  is never real release authorization. Both current profile adapters support
+  self-contained tickets only; cross-ticket dependency
   declarations and database-changing multi-ticket batches remain deferred. Keep cheap
   filtering before expensive checks, preserve owned trial cleanup and agreed count budgets.
 - CLI, inbox reader, and readiness usage belong in their package/application

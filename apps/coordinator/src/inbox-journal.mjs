@@ -16,6 +16,7 @@ import {
   rehearsalStatuses,
   batchStatuses
 } from "./ticket-presentation.mjs";
+import { readInboxSelection } from "./inbox-selection.mjs";
 
 function canonical(value) {
   if (Array.isArray(value)) return value.map(canonical);
@@ -35,13 +36,14 @@ export const receiptHash = (issue) =>
   digest({ id: issue.id, number: issue.number, body: issue.body });
 const validSha = (value) =>
   typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
-export const inboxWorkflow = "inbox-run-v6";
+export const inboxWorkflow = "inbox-run-v7";
 const workflows = [
   "inbox-run-v1",
   "inbox-run-v2",
   "inbox-run-v3",
   "inbox-run-v4",
   "inbox-run-v5",
+  "inbox-run-v6",
   inboxWorkflow
 ];
 
@@ -57,6 +59,7 @@ export function validateJournal(state, profile = realProfile) {
         ![
           "schema",
           "repository",
+          "profile",
           "revision",
           "parent",
           "lock",
@@ -70,16 +73,31 @@ export function validateJournal(state, profile = realProfile) {
     (state.workflow !== undefined && !workflows.includes(state.workflow))
   )
     throw new Error("Unsupported or corrupt inbox journal.");
+  if (state.workflow === inboxWorkflow && state.profile !== profile.name)
+    throw new Error("Inbox journal profile does not match its repository.");
   if (
     state.lock &&
     (!state.lock.run_id || !state.lock.token || !state.lock.actor?.id)
   )
     throw new Error("Invalid inbox lock.");
+  if (state.lock && state.workflow === inboxWorkflow) {
+    if (typeof state.lock.scope?.close_test !== "boolean")
+      throw new Error("Invalid inbox lock scope.");
+    try {
+      readInboxSelection(state.lock.scope);
+    } catch {
+      throw new Error("Invalid inbox lock scope.");
+    }
+  }
   if (state.service_attempts !== undefined) {
     if (
-      !["inbox-run-v3", "inbox-run-v4", "inbox-run-v5", inboxWorkflow].includes(
-        state.workflow
-      ) ||
+      ![
+        "inbox-run-v3",
+        "inbox-run-v4",
+        "inbox-run-v5",
+        "inbox-run-v6",
+        inboxWorkflow
+      ].includes(state.workflow) ||
       !state.service_attempts ||
       Array.isArray(state.service_attempts)
     )
@@ -88,13 +106,17 @@ export function validateJournal(state, profile = realProfile) {
   }
   if (state.batches !== undefined) {
     if (
-      !["inbox-run-v4", "inbox-run-v5", inboxWorkflow].includes(state.workflow)
+      !["inbox-run-v4", "inbox-run-v5", "inbox-run-v6", inboxWorkflow].includes(
+        state.workflow
+      )
     )
       throw new Error("Batch history requires the current inbox writer.");
     validateBatchHistory(state.batches, profile);
   }
   if (state.history !== undefined) {
-    if (!["inbox-run-v5", inboxWorkflow].includes(state.workflow))
+    if (
+      !["inbox-run-v5", "inbox-run-v6", inboxWorkflow].includes(state.workflow)
+    )
       throw new Error("Archives require the current inbox writer.");
     validateHistoryReferences(state.history, profile);
   }
@@ -155,16 +177,20 @@ export function validateJournal(state, profile = realProfile) {
             "inbox-run-v3",
             "inbox-run-v4",
             "inbox-run-v5",
+            "inbox-run-v6",
             inboxWorkflow
           ].includes(state.workflow))
       )
         throw new Error("Invalid service decision history.");
       if (
         record.decision.batch &&
-        (!["inbox-run-v4", "inbox-run-v5", inboxWorkflow].includes(
-          state.workflow
-        ) ||
-          profile.name !== "sandbox" ||
+        (![
+          "inbox-run-v4",
+          "inbox-run-v5",
+          "inbox-run-v6",
+          inboxWorkflow
+        ].includes(state.workflow) ||
+          !["sandbox", "real"].includes(profile.name) ||
           !batchStatuses.includes(record.decision.batch.status) ||
           typeof record.decision.batch.message !== "string")
       )
@@ -416,7 +442,8 @@ export function createJournal(
             "inbox-run-v2",
             "inbox-run-v3",
             "inbox-run-v4",
-            "inbox-run-v5"
+            "inbox-run-v5",
+            "inbox-run-v6"
           ].includes(state.workflow) && workflow === inboxWorkflow
         )
       )
@@ -431,8 +458,9 @@ export function createJournal(
         throw new Error("That interrupted run is not the current inbox lock.");
       const savedScope = state.lock?.scope;
       const comparableScope =
-        ["inbox-run-v4", "inbox-run-v5"].includes(savedScope?.workflow) &&
-        workflow === inboxWorkflow
+        ["inbox-run-v4", "inbox-run-v5", "inbox-run-v6"].includes(
+          savedScope?.workflow
+        ) && workflow === inboxWorkflow
           ? { ...savedScope, workflow: inboxWorkflow }
           : savedScope;
       if (resume && scope && digest(scope) !== digest(comparableScope))
@@ -459,7 +487,10 @@ export function createJournal(
       };
       // Older checkouts reject this top-level field before any writes, even
       // when a passing decision has no new reason code. Preserve all history.
-      if (workflow) state.workflow = workflow;
+      if (workflow) {
+        state.workflow = workflow;
+        if (workflow === inboxWorkflow) state.profile = profile.name;
+      }
       state.lock = run;
       await write(state, `${resume ? "resume" : "acquire"} ${run.run_id}`);
       return { run, state: structuredClone(snapshot.state) };

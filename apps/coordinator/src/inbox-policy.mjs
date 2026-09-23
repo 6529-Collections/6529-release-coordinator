@@ -54,9 +54,9 @@ export function decideTicket(
       );
     return finish("closed", reasons);
   }
-  // This processor only organizes intake; it never takes release execution
-  // ownership. The journal rejects unsupported ownership fields. A future
-  // executor must integrate that ownership before reusing automatic closures.
+  // Receipt/readiness processing does not itself take release execution
+  // ownership. The release phase records that ownership in the selected batch
+  // before shared mutations, and automatic closures require matching evidence.
   // filter preserves the same PR objects used by includes below to avoid duplicate reasons.
   const merged = observation.pull_requests.filter(
     (pr) =>

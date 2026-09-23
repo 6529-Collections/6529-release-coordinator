@@ -21,8 +21,8 @@ const requestsMonitoring = (batch) =>
 function monitoringNote(batch, execution) {
   if (!requestsMonitoring(batch)) return "";
   return execution.plan.target === "production"
-    ? " Operational monitoring was deployed for staging and production from the merged test main commit before the production application deployments."
-    : " Operational monitoring in this request was not deployed: the sample backend deploys monitoring only from test main, so it deploys with the production release of this change.";
+    ? ` Operational monitoring was deployed for staging and production from the merged ${execution.plan.profile === "sandbox" ? "test " : ""}main commit before the production application deployments.`
+    : ` Operational monitoring in this request was not deployed: monitoring deploys only from ${execution.plan.profile === "sandbox" ? "test " : ""}main, so it deploys with the production release of this change.`;
 }
 
 export function releaseTicketResult(batch, number) {
@@ -42,7 +42,7 @@ export function releaseTicketResult(batch, number) {
       status: "completed",
       batch_status: "passed",
       code: "release-completed",
-      message: `The exact selected sandbox batch passed ${execution.plan.target === "production" ? "staging and production" : "staging"} deployment checks and matching E2E.${monitoringNote(batch, execution)}`,
+      message: `The exact selected ${execution.plan.profile} batch passed ${execution.plan.target === "production" ? "staging and production" : "staging"} deployment checks and matching E2E.${monitoringNote(batch, execution)}`,
       execution
     };
   if (execution?.status === "needs-human")
@@ -57,7 +57,7 @@ export function releaseTicketResult(batch, number) {
     status: "waiting",
     batch_status: "passed",
     code: "release-unverified",
-    message: "The selected batch has no complete sandbox release result.",
+    message: "The selected batch has no complete release result.",
     execution
   };
 }
@@ -87,7 +87,7 @@ export async function executeRelease({
         versions: {},
         started_at: now().toISOString(),
         completed_at: null,
-        message: "Sandbox release is prepared."
+        message: "Release is prepared."
       };
   validateReleasePlan(execution.plan, batch);
   const databaseChange =
@@ -131,13 +131,14 @@ export async function executeRelease({
         : recovery.versions;
       let result;
       if (step.kind === "integrate") {
+        record.profile ??= execution.plan.profile;
         record.actor ??= execution.actor;
         result = await loggedStep(
           {
             step: "release.restore",
             operation_id: record.id,
             role: step.role,
-            message: `Restore the saved ${step.role} sandbox ${step.environment} tree.`
+            message: `Restore the saved ${step.role} ${execution.plan.profile} ${step.environment} tree.`
           },
           () =>
             client.restore({
@@ -206,7 +207,7 @@ export async function executeRelease({
         recovery.completed_at = now().toISOString();
         execution.status = "needs-human";
         execution.completed_at = recovery.completed_at;
-        execution.message = `${recovery.plan.failed_step} failed. Restoration stopped at ${step.id}; a person must inspect the sandbox environments before another release.`;
+        execution.message = `${recovery.plan.failed_step} failed. Restoration stopped at ${step.id}; a person must inspect the ${execution.plan.profile} environments before another release.`;
         await persist(`restore step ${step.id} failed`);
         return execution;
       }
@@ -241,11 +242,9 @@ export async function executeRelease({
     execution.status = "needs-human";
     execution.completed_at = recovery.completed_at;
     execution.message = productionFailure
-      ? `${recovery.plan.failed_step} failed. Changed test main and staging branches were restored to their saved trees; their matching build and E2E checks passed. The release still needs a person.`
-      : `${recovery.plan.failed_step} failed. Sandbox staging was restored and its matching E2E passed; test production was not changed.`;
-    await persist(
-      `release ${execution.plan.release_id} sandbox restoration completed`
-    );
+      ? `${recovery.plan.failed_step} failed. ${execution.plan.profile === "sandbox" ? "The test main and staging branches" : "The product main and staging branches"} were restored to their saved trees; their matching build and E2E checks passed. The release still needs a person.`
+      : `${recovery.plan.failed_step} failed. staging was restored and its matching E2E passed; production was not changed.`;
+    await persist(`release ${execution.plan.release_id} restoration completed`);
     return execution;
   };
   if (execution.status === "recovering") return restoreEnvironments();
@@ -258,13 +257,13 @@ export async function executeRelease({
         )
       ),
       "release-runtime",
-      "Both exact sandbox repository versions are required in staging and test main before release execution."
+      `Both exact ${execution.plan.profile === "sandbox" ? "sandbox " : ""}repository versions are required in staging and main before release execution.`
     );
     execution.actor = identity.actor;
     execution.runtime = identity.runtime;
     execution.versions = identity.versions;
     execution.status = "running";
-    execution.message = "Sandbox release is running.";
+    execution.message = `${execution.plan.profile === "sandbox" ? "Sandbox" : "Product"} release is running.`;
     await persist(`release ${execution.plan.release_id} started`);
   }
   while (execution.step_index < execution.plan.steps.length) {
@@ -285,13 +284,14 @@ export async function executeRelease({
     const versions = execution.versions[step.environment] ?? {};
     let result;
     if (step.kind === "integrate") {
+      record.profile ??= execution.plan.profile;
       record.actor ??= execution.actor;
       result = await loggedStep(
         {
           step: "release.integrate",
           operation_id: record.id,
           role: step.role,
-          message: `Put the exact ${step.role} candidate on sandbox ${step.environment}.`
+          message: `Put the exact ${step.role} candidate on ${execution.plan.profile} ${step.environment}.`
         },
         () =>
           client.integrate({
@@ -335,8 +335,8 @@ export async function executeRelease({
             step.kind === "e2e"
               ? `Run matching ${step.environment} E2E.`
               : step.kind === "monitoring"
-                ? `Deploy sample monitoring for ${step.monitoring_environment} from test main.`
-                : `Run ${step.role} ${step.unit} sandbox deployment check.`
+                ? `Deploy monitoring for ${step.monitoring_environment} from main.`
+                : `Run ${step.role} ${step.unit} ${execution.plan.profile} deployment check.`
         },
         () =>
           client.run({
@@ -372,14 +372,14 @@ export async function executeRelease({
           started_at: now().toISOString(),
           completed_at: null
         };
-        execution.message = `${step.id} failed. Restoring the saved sandbox environment versions before this run finishes.`;
+        execution.message = `${step.id} failed. Restoring the saved ${execution.plan.profile} environment versions before this run finishes.`;
         await persist(`release step ${step.id} failed; restoration prepared`);
         return restoreEnvironments();
       }
       execution.status = "needs-human";
       execution.message = databaseChange
-        ? `${step.id} failed. This sandbox ticket changes the database. The release stopped without automatic restoration; a person must inspect the ${step.environment} state before another release.`
-        : `${step.id} failed. The sandbox release stopped; no later environment was changed.`;
+        ? `${step.id} failed. This ticket changes the database. The release stopped without automatic restoration; a person must inspect the ${step.environment} state before another release.`
+        : `${step.id} failed. The release stopped; no later environment was changed.`;
       execution.completed_at = now().toISOString();
       await persist(`release step ${step.id} failed`);
       return execution;
@@ -389,8 +389,7 @@ export async function executeRelease({
   }
   execution.status = "completed";
   execution.completed_at = now().toISOString();
-  execution.message =
-    "Every required sandbox deployment and matching E2E passed.";
+  execution.message = "Every required deployment and matching E2E passed.";
   await persist(`release ${execution.plan.release_id} completed`);
   return execution;
 }

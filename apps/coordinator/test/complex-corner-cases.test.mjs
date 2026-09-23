@@ -398,7 +398,12 @@ test("CT-10: lost PR dispatch and cleanup responses reuse original operations", 
 
 test("CT-11: half-applied presentation preserves human additions", async (t) => {
   const f = processingFixture();
-  await processInbox({ ...f, issueNumber: 1 });
+  await processInbox({
+    ...f,
+    selectionMode: "filtered",
+    issueNumbers: [1],
+    actorLogin: "trusted-user"
+  });
   const managed = f.comments[0].id;
   f.required.status = "IN_PROGRESS";
   f.required.conclusion = null;
@@ -414,7 +419,12 @@ test("CT-11: half-applied presentation preserves human additions", async (t) => 
     }
   };
   await assert.rejects(
-    processInbox({ ...f, issueNumber: 1 }),
+    processInbox({
+      ...f,
+      selectionMode: "filtered",
+      issueNumbers: [1],
+      actorLogin: "trusted-user"
+    }),
     /comment update unavailable/
   );
   assert.ok(f.issue.labels.includes("reason:checks-pending"));
@@ -824,7 +834,12 @@ test("CT-19: later pages and an unlabeled journaled ticket cannot disappear", as
     /page unavailable/
   );
   const f = processingFixture();
-  await processInbox({ ...f, issueNumber: 1 });
+  await processInbox({
+    ...f,
+    selectionMode: "filtered",
+    issueNumbers: [1],
+    actorLogin: "trusted-user"
+  });
   f.issue.labels = ["user-note"];
   const again = await processInbox(f);
   assert.equal(again.requests[0].issue_number, 1);

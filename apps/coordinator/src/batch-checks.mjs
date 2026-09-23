@@ -4,7 +4,11 @@ import { createBatchGitHub } from "./batch-github.mjs";
 import { createServiceGitHub } from "./service-github.mjs";
 import { runServiceAttempt } from "./inbox-services.mjs";
 import { servicePlanFromSources } from "./service-plan.mjs";
-import { batchPolicy, trustedBatchPolicy } from "./batch-plan.mjs";
+import {
+  batchPolicy,
+  batchPolicyProfile,
+  trustedBatchPolicy
+} from "./batch-plan.mjs";
 import {
   serviceHash,
   serviceAssert,
@@ -20,12 +24,14 @@ export async function verifySavedBatch(
     guard = async () => {},
     policy = batchPolicy,
     client = createBatchGitHub({ profile, guard, policy }),
-    serviceClient = createServiceGitHub({ profile })
+    serviceClient = profile.name === "sandbox"
+      ? createServiceGitHub({ profile })
+      : null
   } = {}
 ) {
   trustedBatchPolicy(policy);
   serviceAssert(
-    profile === sandboxProfile &&
+    batchPolicyProfile(policy) === profile?.name &&
       state?.prepared_hash === serviceHash(prepared) &&
       state.result &&
       (state.result.status !== "passed" || state.prs.length > 0) &&
@@ -114,7 +120,9 @@ export async function checkBatch(
     profile = sandboxProfile,
     policy = batchPolicy,
     client = createBatchGitHub({ profile, guard, policy }),
-    serviceClient = createServiceGitHub({ profile }),
+    serviceClient = profile.name === "sandbox"
+      ? createServiceGitHub({ profile })
+      : null,
     executeServices = runServiceAttempt,
     wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
     now = () => Date.now(),
@@ -124,9 +132,10 @@ export async function checkBatch(
 ) {
   policy = trustedBatchPolicy(policy);
   serviceAssert(
-    profile === sandboxProfile && prepared.status === "passed",
+    batchPolicyProfile(policy) === profile?.name &&
+      prepared.status === "passed",
     "batch-profile",
-    "Checks need a prepared sandbox batch."
+    "Checks need a prepared batch for the selected profile."
   );
   serviceAssert(
     prepared.publications.some((repo) => repo.patch.length),
@@ -376,6 +385,21 @@ export async function checkBatch(
         checks,
         message: "Required combined PR checks lack complete evidence."
       };
+    } else if (profile.name === "real") {
+      result = checks.every((check) => check.status === "passed")
+        ? {
+            status: "passed",
+            kind: "checks",
+            checks,
+            message: "The exact combined product PR checks passed."
+          }
+        : {
+            status: "unknown",
+            kind: "evidence",
+            checks,
+            message:
+              "Product PR checks did not all pass; the Coordinator did not attribute or split the failure."
+          };
     } else {
       const service = checks.every((check) => check.status === "passed")
         ? await services(prepared.service_plan, "candidate")

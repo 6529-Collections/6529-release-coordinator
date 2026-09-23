@@ -6,15 +6,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import { isDeepStrictEqual } from "node:util";
 import { verifyApplicationBuild } from "../sandbox/application-build.mjs";
 import { executeGitHub } from "./coordinator-github.mjs";
-import {
-  monitoringTemplate,
-  releaseHash,
-  validateReleaseOperation
-} from "./release-contract.mjs";
+import { monitoringTemplate, releaseHash } from "./release-contract.mjs";
+import { validateProfileReleaseOperation } from "./profile-release-contract.mjs";
 import { createReleaseGitHub } from "./release-github.mjs";
 import {
   productWorkflowAdapter,
-  productWorkflowRuntime
+  productWorkflowRuntimeForProfile
 } from "./product-workflow-runtime-config.mjs";
 import {
   productWorkflowReleaseAdapter,
@@ -26,7 +23,6 @@ import {
 } from "./rehearsal-process.mjs";
 import { activeWorkflowRunStatuses } from "./release-state.mjs";
 import { runEvent } from "./run-log.mjs";
-import { sandboxProfile } from "./profiles.mjs";
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
@@ -92,25 +88,83 @@ async function downloadProductArtifact(
   }
 }
 
-function expectedJobs(descriptor) {
+function expectedJobs(descriptor, runtime) {
+  if (runtime.profile === "real") {
+    if (descriptor.kind === "dispatch")
+      return {
+        exact: true,
+        required: [
+          `Dispatch successful ${descriptor.environment === "staging" ? "staging" : "production"} deployment`
+        ]
+      };
+    if (descriptor.kind === "backend")
+      return {
+        exact: true,
+        required: [
+          `Build and deploy ${descriptor.unit} to ${descriptor.environment}`
+        ]
+      };
+    if (descriptor.kind === "monitoring")
+      return { exact: true, required: ["monitoring"] };
+    if (descriptor.kind === "frontend" && descriptor.environment === "staging")
+      return {
+        exact: false,
+        required: [
+          "Build exact staging artifact",
+          "Deploy exact staging artifact"
+        ]
+      };
+    if (descriptor.kind === "frontend")
+      return {
+        exact: false,
+        required: [
+          "Verify expected source commit",
+          "Build exact production artifact / Build exact production artifact",
+          "Resolve production artifact metadata / Resolve uploaded production artifact",
+          "Verify exact production artifact / Verify exact production artifact",
+          "Deploy verified production artifact"
+        ]
+      };
+    if (descriptor.kind === "e2e" && descriptor.environment === "staging")
+      return { exact: false, required: ["Staging E2E packs"] };
+    return { exact: false, required: ["Production read-only E2E packs"] };
+  }
   if (descriptor.kind === "dispatch")
-    return [
-      `Dispatch successful ${descriptor.environment === "staging" ? "staging" : "production"} deployment`
-    ];
+    return {
+      exact: true,
+      required: [
+        `Dispatch successful ${descriptor.environment === "staging" ? "staging" : "production"} deployment`
+      ]
+    };
   if (descriptor.kind === "backend")
-    return [`Build and deploy ${descriptor.unit} to ${descriptor.environment}`];
-  if (descriptor.kind === "monitoring") return ["monitoring"];
+    return {
+      exact: true,
+      required: [
+        `Build and deploy ${descriptor.unit} to ${descriptor.environment}`
+      ]
+    };
+  if (descriptor.kind === "monitoring")
+    return { exact: true, required: ["monitoring"] };
   if (descriptor.kind === "frontend" && descriptor.environment === "staging")
-    return ["Build exact staging artifact", "Deploy exact staging artifact"];
+    return {
+      exact: true,
+      required: [
+        "Build exact staging artifact",
+        "Deploy exact staging artifact"
+      ]
+    };
   if (descriptor.kind === "frontend")
-    return [
-      "Verify expected source commit",
-      "Build exact production artifact",
-      "Deploy verified production artifact"
-    ];
+    return {
+      exact: true,
+      required: [
+        "Verify expected source commit",
+        "Build exact production artifact",
+        "Deploy verified production artifact"
+      ]
+    };
   if (descriptor.kind === "e2e" && descriptor.environment === "staging")
-    return ["Staging E2E packs"];
-  return ["Production read-only E2E packs"];
+    return { exact: true, required: ["Staging E2E packs"] };
+  return { exact: true, required: ["Production read-only E2E packs"] };
 }
 
 function artifactName(descriptor, runId) {
@@ -122,6 +176,8 @@ function artifactName(descriptor, runId) {
 }
 
 function directDescriptor(operation, sourceChanged, runtime) {
+  const backendWorkflow = runtime.repositories.backend.workflows;
+  const frontendWorkflow = runtime.repositories.frontend.workflows;
   if (operation.operation === "monitoring")
     return {
       kind: "monitoring",
@@ -131,17 +187,21 @@ function directDescriptor(operation, sourceChanged, runtime) {
       sourceEnvironment: "prod",
       sourceCommit: operation.backend_commit,
       workflowKey: "monitoring",
-      workflow: "deploy-operational-monitoring.yml",
+      workflow: backendWorkflow.monitoring.file,
       event: "workflow_dispatch",
       title: "Deploy operational monitoring",
-      ref: "main",
+      ref: runtime.branches.prod,
       unit: null,
       inputs: {
         environment: operation.monitoring_environment,
         commit_sha: operation.backend_commit
       }
     };
-  if (operation.role === "backend")
+  if (operation.role === "backend") {
+    const configuredUnit =
+      runtime.repositories.backend.deployUnits === "identity"
+        ? operation.unit
+        : runtime.repositories.backend.deployUnits[operation.unit];
     return {
       kind: "backend",
       role: "backend",
@@ -150,17 +210,18 @@ function directDescriptor(operation, sourceChanged, runtime) {
       sourceEnvironment: operation.environment,
       sourceCommit: operation.backend_commit,
       workflowKey: "deploy",
-      workflow: "deploy.yml",
+      workflow: backendWorkflow.deploy.file,
       event: "workflow_dispatch",
-      title: `Deploy ${runtime.repositories.backend.deployUnits[operation.unit]} to ${operation.environment}`,
-      ref: operation.environment === "staging" ? "1a-staging" : "main",
-      unit: runtime.repositories.backend.deployUnits[operation.unit],
+      title: `Deploy ${configuredUnit} to ${operation.environment}`,
+      ref: branch(runtime, operation.environment),
+      unit: configuredUnit,
       inputs: {
         environment: operation.environment,
-        service: runtime.repositories.backend.deployUnits[operation.unit],
+        service: configuredUnit,
         expected_source_sha: operation.backend_commit
       }
     };
+  }
   const staging = operation.environment === "staging";
   return {
     kind: "frontend",
@@ -170,10 +231,12 @@ function directDescriptor(operation, sourceChanged, runtime) {
     sourceEnvironment: operation.environment,
     sourceCommit: operation.frontend_commit,
     workflowKey: staging ? "stagingDeploy" : "prodDeploy",
-    workflow: staging ? "deploy-staging.yml" : "build-upload-deploy-prod.yml",
+    workflow: staging
+      ? frontendWorkflow.stagingDeploy.file
+      : frontendWorkflow.prodDeploy.file,
     event: staging && sourceChanged ? "push" : "workflow_dispatch",
     title: staging ? null : `Production deploy ${operation.frontend_commit}`,
-    ref: staging ? "1a-staging" : "main",
+    ref: branch(runtime, operation.environment),
     unit: null,
     inputs: staging
       ? {}
@@ -187,6 +250,7 @@ function directDescriptor(operation, sourceChanged, runtime) {
 function integrationChanged(record, operations) {
   const id = `${record.step.id.startsWith("restore:") ? "restore:" : ""}${record.step.environment}:integrate:frontend`;
   const integration = operations?.[id];
+  if (!integration) return false;
   serviceAssert(
     integration?.result?.status === "passed" &&
       ["merge", "unchanged"].includes(integration.result.kind),
@@ -224,18 +288,18 @@ function deploymentDependencies(record, operations, steps) {
     )
     .at(-1)?.saved;
   serviceAssert(
-    frontend?.result?.report && backend?.result?.report,
+    frontend?.result?.report && (!backend || backend?.result?.report),
     "release-state",
     "Matching backend and frontend deployments are required before E2E."
   );
-  for (const saved of [backend, frontend])
+  for (const saved of [backend, frontend].filter(Boolean))
     verifyProductWorkflowReport(saved.result.report, saved.operation);
   return { backend, frontend };
 }
 
 export function createProductWorkflowReleaseGitHub({
   profile,
-  runtime = productWorkflowRuntime,
+  runtime,
   execute = executeGitHub,
   base,
   process = runRehearsalProcess,
@@ -246,22 +310,33 @@ export function createProductWorkflowReleaseGitHub({
   polls = 60,
   pollMs = 10_000
 } = {}) {
+  runtime ??= productWorkflowRuntimeForProfile(profile);
   serviceAssert(
-    profile === sandboxProfile &&
+    ["sandbox", "real"].includes(profile?.name) &&
+      runtime.profile === profile.name &&
       runtime.adapter === productWorkflowAdapter &&
       runtime.adapter === productWorkflowReleaseAdapter &&
       runtime.branches?.staging === "1a-staging" &&
       runtime.branches?.prod === "main" &&
-      ["dbMigrationsLoop", "worker", "api"].every((unit) =>
-        /^[A-Za-z][A-Za-z0-9]{0,80}$/u.test(
-          runtime.repositories?.backend?.deployUnits?.[unit] ?? ""
-        )
-      ) &&
+      (runtime.repositories?.backend?.deployUnits === "identity" ||
+        ["dbMigrationsLoop", "worker", "api"].every((unit) =>
+          /^[A-Za-z][A-Za-z0-9]{0,80}$/u.test(
+            runtime.repositories?.backend?.deployUnits?.[unit] ?? ""
+          )
+        )) &&
       ["backend", "frontend"].every((role) => {
         const repository = runtime.repositories?.[role];
         return (
           repository?.files &&
-          Object.values(repository.files).every(sha) &&
+          Object.values(repository.files).every(
+            (value) =>
+              sha(value) ||
+              ["staging", "prod"].every((environment) =>
+                sha(value?.[environment])
+              )
+          ) &&
+          Array.isArray(repository.integrationChecks) &&
+          repository.integrationChecks.length > 0 &&
           repository.workflows &&
           Object.values(repository.workflows).every(
             (workflow) =>
@@ -271,10 +346,11 @@ export function createProductWorkflowReleaseGitHub({
         );
       }),
     "release-runtime",
-    "The product-shaped sandbox runtime is unavailable; real repositories are never a fallback."
+    "The selected product workflow runtime is unavailable; profiles never fall back."
   );
   base ??= createReleaseGitHub({
     profile,
+    runtime,
     execute,
     signal,
     wait,
@@ -287,7 +363,7 @@ export function createProductWorkflowReleaseGitHub({
     serviceAssert(
       ["backend", "frontend"].includes(role),
       "release-github",
-      "Invalid product-shaped sandbox repository role."
+      "Invalid product workflow repository role."
     );
     const prefix = `repos/${profile.repositories[role].full_name}`;
     const args = [
@@ -326,7 +402,7 @@ export function createProductWorkflowReleaseGitHub({
     serviceAssert(
       allowed.includes(status),
       "release-github",
-      `Product-shaped sandbox GitHub operation returned HTTP ${status}.`
+      `Product workflow GitHub operation returned HTTP ${status}.`
     );
     return { status, data };
   }
@@ -334,7 +410,7 @@ export function createProductWorkflowReleaseGitHub({
   const ref = async (role, name) =>
     (await call(role, "GET", `/git/ref/heads/${name}`)).data.object.sha;
 
-  async function verifyFiles(role, commit) {
+  async function verifyFiles(role, commit, environment) {
     serviceAssert(sha(commit), "release-runtime", "Invalid runtime commit.");
     for (const [file, expected] of Object.entries(
       runtime.repositories[role].files
@@ -342,12 +418,13 @@ export function createProductWorkflowReleaseGitHub({
       const observed = (
         await call(role, "GET", `/contents/${file}?ref=${commit}`)
       ).data;
+      const pinned = sha(expected) ? expected : expected?.[environment];
       serviceAssert(
         observed?.type === "file" &&
           observed.path === file &&
-          observed.sha === expected,
+          observed.sha === pinned,
         "release-runtime",
-        "A pinned product-shaped sandbox workflow or evidence file changed."
+        "A pinned product workflow or evidence file changed."
       );
     }
   }
@@ -505,7 +582,7 @@ export function createProductWorkflowReleaseGitHub({
         (await ref(role, branch(runtime, operation.environment))) ===
           operation[`${role}_commit`],
         "release-stale",
-        `Sandbox ${operation.environment} changed before product-shaped workflow ${stage}.`
+        `${profile.name} ${operation.environment} changed before product workflow ${stage}.`
       );
   }
 
@@ -566,22 +643,27 @@ export function createProductWorkflowReleaseGitHub({
         `/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`
       )
     ).data;
-    const expected = expectedJobs(descriptor);
+    const expected = expectedJobs(descriptor, runtime);
+    const required = new Set(expected.required);
     serviceAssert(
-      list.total_count === expected.length &&
-        list.jobs?.length === expected.length &&
+      Number.isSafeInteger(list.total_count) &&
+        list.total_count === list.jobs?.length &&
+        (!expected.exact || list.total_count === expected.required.length) &&
+        expected.required.every((name) =>
+          list.jobs.some((job) => job.name === name)
+        ) &&
         list.jobs.every(
           (job) =>
-            expected.includes(job.name) &&
+            (!expected.exact || required.has(job.name)) &&
             job.run_id === run.id &&
             job.head_sha === run.head_sha &&
             job.status === "completed"
         ) &&
-        new Set(list.jobs.map((job) => job.name)).size === expected.length,
+        new Set(list.jobs.map((job) => job.name)).size === list.jobs.length,
       "release-workflow",
       "The product-shaped workflow job set is incomplete or changed."
     );
-    return list.jobs;
+    return list.jobs.filter((job) => required.has(job.name));
   }
 
   async function readDeploymentArtifact(run, descriptor) {
@@ -663,7 +745,7 @@ export function createProductWorkflowReleaseGitHub({
   }) {
     return {
       protocol: operation.protocol,
-      profile: "sandbox",
+      profile: profile.name,
       adapter: productWorkflowReleaseAdapter,
       release_id: operation.release_id,
       operation_id: operation.operation_id,
@@ -724,7 +806,11 @@ export function createProductWorkflowReleaseGitHub({
         "release-dispatch-uncertain",
         "A resumed product-shaped dispatch lacks its saved workflow boundary."
       );
-    await verifyFiles(descriptor.role, descriptor.sourceCommit);
+    await verifyFiles(
+      descriptor.role,
+      descriptor.sourceCommit,
+      descriptor.sourceEnvironment
+    );
     let run = record.workflow_run_id
       ? (
           await call(
@@ -843,12 +929,31 @@ export function createProductWorkflowReleaseGitHub({
     await verifyEnvironment(operation, "result acceptance");
     let builds = {},
       deployments = {},
-      installed;
+      installed,
+      evidence;
     if (passed) {
-      const evidence = await readDeploymentArtifact(run, descriptor);
-      builds = { [descriptor.buildRole]: evidence.build };
-      deployments = { [descriptor.buildRole]: evidence.deployment };
-      if (descriptor.kind === "monitoring") {
+      if (runtime.evidence === "sandbox-artifact") {
+        evidence = await readDeploymentArtifact(run, descriptor);
+        builds = { [descriptor.buildRole]: evidence.build };
+        deployments = { [descriptor.buildRole]: evidence.deployment };
+      } else {
+        deployments = {
+          [descriptor.buildRole]: {
+            role: descriptor.buildRole,
+            environment: descriptor.environment,
+            source_commit: descriptor.sourceCommit,
+            unit: descriptor.unit,
+            workflow: `.github/workflows/${descriptor.workflow}`,
+            repository: profile.repositories[descriptor.role].full_name,
+            run_id: run.id,
+            run_attempt: run.run_attempt
+          }
+        };
+      }
+      if (
+        runtime.evidence === "sandbox-artifact" &&
+        descriptor.kind === "monitoring"
+      ) {
         const template = monitoringTemplate(descriptor.environment);
         const templateFile = evidence.build.manifest.files.find(
           (file) => file.path === template
@@ -933,6 +1038,20 @@ export function createProductWorkflowReleaseGitHub({
       "release-state",
       "The matching frontend deployment run is missing before E2E."
     );
+    const deploymentRun = (
+      await call("frontend", "GET", `/actions/runs/${deployRunId}`)
+    ).data;
+    serviceAssert(
+      deploymentRun?.id === deployRunId &&
+        Number.isFinite(Date.parse(deploymentRun.created_at)),
+      "release-workflow",
+      "The matching frontend deployment run has no trusted creation time."
+    );
+    // GitHub starts the automatic E2E chain as soon as the deployment run
+    // completes. The Coordinator may save the E2E operation afterwards, so
+    // using the E2E record time would incorrectly reject an already-finished
+    // chain. The exact saved deployment run is the causal lower boundary.
+    const chainCreatedAt = deploymentRun.created_at;
     const staging = operation.environment === "staging";
     const dispatch = workflow(
       "frontend",
@@ -963,7 +1082,7 @@ export function createProductWorkflowReleaseGitHub({
         dispatchTitle,
         "workflow_run",
         actor,
-        record.created_at
+        chainCreatedAt
       );
       if (dispatchRun?.status === "completed") {
         serviceAssert(
@@ -977,7 +1096,7 @@ export function createProductWorkflowReleaseGitHub({
           e2eTitle,
           "workflow_dispatch",
           runtime.githubActionsActor,
-          record.created_at
+          chainCreatedAt
         );
         if (e2eRun) {
           const changed =
@@ -994,6 +1113,10 @@ export function createProductWorkflowReleaseGitHub({
         }
       }
       if (poll + 1 < polls) await wait(pollMs, { signal });
+      if (dispatchRun?.id)
+        dispatchRun = (
+          await call("frontend", "GET", `/actions/runs/${dispatchRun.id}`)
+        ).data;
       if (record.workflow_run_id)
         e2eRun = (
           await call(
@@ -1017,7 +1140,7 @@ export function createProductWorkflowReleaseGitHub({
           positive(run.run_attempt) &&
           run.path === `.github/workflows/${identity.file}` &&
           run.display_title === title &&
-          Date.parse(run.created_at) >= Date.parse(record.created_at) &&
+          Date.parse(run.created_at) >= Date.parse(chainCreatedAt) &&
           String(run.actor?.id) === expectedActor.id &&
           run.actor?.login === expectedActor.login &&
           run.workflow_id === identity.id &&
@@ -1030,8 +1153,8 @@ export function createProductWorkflowReleaseGitHub({
       "release-workflow",
       "The matching E2E run ended without usable evidence."
     );
-    await verifyFiles("frontend", dispatchRun.head_sha);
-    await verifyFiles("frontend", e2eRun.head_sha);
+    await verifyFiles("frontend", dispatchRun.head_sha, "prod");
+    await verifyFiles("frontend", e2eRun.head_sha, "prod");
     const dispatchJobs = await jobsFor("frontend", dispatchRun, {
       kind: "dispatch",
       environment: operation.environment
@@ -1058,16 +1181,22 @@ export function createProductWorkflowReleaseGitHub({
     );
     await verifyEnvironment(operation, "E2E result acceptance");
     const builds = passed
-      ? {
-          backend: dependencies.backend.result.report.builds.backend,
-          frontend: dependencies.frontend.result.report.builds.frontend
-        }
+      ? Object.fromEntries(
+          Object.values(dependencies)
+            .filter(Boolean)
+            .flatMap((saved) =>
+              Object.entries(saved.result.report.builds ?? {})
+            )
+        )
       : {};
     const deployments = passed
-      ? {
-          backend: dependencies.backend.result.report.deployments.backend,
-          frontend: dependencies.frontend.result.report.deployments.frontend
-        }
+      ? Object.fromEntries(
+          Object.values(dependencies)
+            .filter(Boolean)
+            .flatMap((saved) =>
+              Object.entries(saved.result.report.deployments ?? {})
+            )
+        )
       : {};
     const report = reportFor({
       operation,
@@ -1107,7 +1236,7 @@ export function createProductWorkflowReleaseGitHub({
             repo.private === false &&
             repo.permissions?.push === true,
           "release-runtime",
-          "Product-shaped sandbox repository identity or access changed."
+          "Product workflow repository identity or access changed."
         );
         for (const [key, configured] of Object.entries(
           runtime.repositories[role].workflows
@@ -1121,12 +1250,16 @@ export function createProductWorkflowReleaseGitHub({
               observed.state === "active" &&
               positive(observed.id),
             "release-runtime",
-            "A required product-shaped sandbox workflow changed or is inactive."
+            "A required product workflow changed or is inactive."
           );
           saved[role].workflows[key] = { workflow_id: observed.id };
         }
         for (const environment of ["staging", "prod"])
-          await verifyFiles(role, generic.versions[environment][role]);
+          await verifyFiles(
+            role,
+            generic.versions[environment][role],
+            environment
+          );
       }
       return {
         actor: generic.actor,
@@ -1157,7 +1290,7 @@ export function createProductWorkflowReleaseGitHub({
       operations,
       steps
     }) {
-      const operation = validateReleaseOperation(record.operation);
+      const operation = validateProfileReleaseOperation(record.operation);
       serviceAssert(
         record.actor?.id === actor.id && savedRuntime,
         "release-state",
