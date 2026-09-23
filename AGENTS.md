@@ -21,10 +21,9 @@ a failure then stops for a person without automatic restoration. The merged
 source also restores changed test `main` and staging branches after a confirmed
 no-database-change fake-production failure. The test mirrors now model the real
 backend monitoring branches: staging uses `1a-staging`, production uses `main`.
-Coordinator PR #219 implements that contract and has passed offline checks;
-its full success path and both controlled failure/recovery paths have fresh
-sandbox acceptance. Coordinator source merge and real-product acceptance remain
-separate. See `docs/design.md` and
+Coordinator PR #219 merged that contract after offline checks; its full success
+path and both controlled failure/recovery paths have fresh sandbox acceptance.
+Real-product acceptance remains separate. See `docs/design.md` and
 `docs/progress.md` before treating this as delivered.
 Check progress for live proof.
 

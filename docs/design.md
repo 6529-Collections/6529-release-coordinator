@@ -5,8 +5,8 @@ same Coordinator engine for real repositories: profile configuration
 selects product identities, required checks, workflow pins and evidence rules,
 while the shared planner/executor keeps the same batching, staging-before-production
 order and database recovery decision. The real adapter has offline coverage and
-is merged, but its monitoring dispatch correction is still in PR #219 and no
-live product release has exercised it. See
+is merged. PR #219 merged the monitoring dispatch correction, but no live
+product release has exercised it. See
 [progress](./progress.md) for that evidence boundary.
 The [agreed execution direction](#agreed-execution-direction-september-11)
 and [process diagram](../release-coordinator-process.html) describe the same
@@ -706,13 +706,14 @@ Operational monitoring is code under
 the backend repository, but it is not an application service in the backend
 service catalog. Schema `0.000002` therefore records it as
 `operational_deployments: ["monitoring"]` rather than inventing a service name.
-The Coordinator `main` source still assumes both monitoring environments deploy
-from an exact backend `main` commit supplied as `commit_sha`. That is **not**
+The earlier PR #218 source assumed both monitoring environments deployed from
+an exact backend `main` commit supplied as `commit_sha`. That did **not** match
 the real backend contract. Read back on September 23, the real `Deploy operational monitoring` workflow accepts only
 `environment`; staging must dispatch on `1a-staging`, prod on `main`, and the
 workflow deploys the branch commit GitHub attaches to that run (`github.sha`).
-Coordinator PR #219 and the test mirror PRs #139 (backend) and #127 (frontend)
-change the shared runner and monitoring workflow to use the product contract.
+Merged Coordinator PR #219 and the test mirror PRs #139 (backend) and #127
+(frontend) change the shared runner and monitoring workflow to use the product
+contract.
 The Coordinator's full local check passes. Both test mirrors passed their
 Docker-backed GitHub `Sandbox check` jobs after local Docker timed out and
 merged through protected test `main` and test `1a-staging`. A fresh
@@ -724,8 +725,8 @@ production monitoring failure/recovery passed a fresh causal-time retest on
 ticket #49 after the first run on #48 exposed an early automatic frontend E2E.
 The [dated sandbox acceptance](./testing/monitoring-branch-contract-2026-09-23.md)
 records both paths.
-Coordinator PR #219 is still unmerged, and real-product monitoring still needs
-its own acceptance.
+The Coordinator source is merged; real-product monitoring still needs its own
+acceptance.
 
 **Accepted decision, September 23:** leave the real backend workflow unchanged.
 Adapt the Coordinator so staging monitoring runs from `1a-staging` after the
@@ -881,9 +882,9 @@ when that exact frontend deploy began no earlier than the matching backend
 deploy completed. A green earlier E2E cannot prove the restored combination.
 The original failed release and ticket stay failed. The current real adapter
 uses this same source-revert and ordinary redeploy plan for confirmed
-no-database-change failures, but that recovery has offline proof only and its
-monitoring path still needs the branch-contract correction in PR #219 to merge
-and receive real-product acceptance. Database
+no-database-change failures, but that recovery has offline proof only. Its
+monitoring path includes the merged branch-contract correction and still needs
+real-product acceptance. Database
 changes and uncertain effects always stop for a person.
 
 Recovery starts only after shared refs or an environment changed and the release
