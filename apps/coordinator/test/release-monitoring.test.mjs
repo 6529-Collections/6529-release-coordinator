@@ -630,6 +630,11 @@ test("saved v1 monitoring plans keep their original step order and fingerprint",
     ["prod:monitoring:staging", "prod:monitoring:prod"]
   );
   assert.equal(validateReleasePlan(plan, batch), plan);
+  const v2 = makeReleasePlan(batch, { uuid: () => ids.release_id });
+  assert.throws(
+    () => validateReleasePlan({ ...v2, version: undefined }, batch),
+    /Saved release plan differs from the exact selected batch/u
+  );
 });
 
 test("a staging release deploys staging monitoring and saves the v6 inputs", async () => {

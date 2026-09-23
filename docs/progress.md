@@ -70,14 +70,19 @@ production monitoring on `main`, sends only the existing `environment` input,
 and checks the intended branch commit before dispatch and the resulting run's
 branch/commit afterward. It changes the local test-backend mirror and pinned
 runtime blobs as well. These edits are on implementation branches, not merged
-into Coordinator `main` or published test branches. Local
-`npm run check` passed on September 23: 606 tests passed, three optional Docker
+into Coordinator `main` or published test branches. Coordinator
+[PR #219](https://github.com/6529-Collections/6529-release-coordinator/pull/219)
+is open. Local `npm run check` passed on September 23: 606 tests passed, three optional Docker
 tests skipped, and lint, formatting, documentation, workflow-policy and package
 checks passed. Both test-mirror `npm test` commands passed their static workflow
 contracts but timed out before sample services ran because the local Docker
 daemon was unresponsive; JavaScript syntax and `git diff --check` passed in
-both. GitHub PR checks must run those sample tests. Review the diff, publish the
-mirror through its protected branches, then repeat sandbox
+both. The Docker-backed `Sandbox check` passed on test-backend
+[PR #139](https://github.com/6529-Collections/release-coordinator-test-backend/pull/139)
+and test-frontend
+[PR #127](https://github.com/6529-Collections/release-coordinator-test-frontend/pull/127).
+Complete reviews and merge through protected `main`, publish that history to
+test `1a-staging`, then repeat sandbox
 success/failure/recovery acceptance before testing monitoring live. The real
 backend workflow is unchanged.
 
@@ -85,6 +90,8 @@ The September 23 [accepted branch-tip risk](./design.md#operational-monitoring)
 remains: a branch move between the pre-dispatch check and GitHub's dispatch can
 still deploy a different commit. The local adapter detects a mismatching run
 and stops rather than reporting success; it cannot prevent that deployment.
+If two same-actor monitoring runs appear after dispatch, it also stops rather
+than guessing which one belongs to the release.
 
 PR #218 is merged. After the remaining product-contract findings are fixed and
 verified, perform one deliberately filtered real acceptance with explicitly

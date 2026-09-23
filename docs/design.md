@@ -710,12 +710,11 @@ monitoring environments deploy from an exact backend `main` commit supplied as
 23, the real `Deploy operational monitoring` workflow accepts only
 `environment`; staging must dispatch on `1a-staging`, prod on `main`, and the
 workflow deploys the branch commit GitHub attaches to that run (`github.sha`).
-This working tree changes the Coordinator, its bundled sandbox runner and the
-local test mirror to use the product contract. The Coordinator's full local
-check passes. Both test mirrors passed their static workflow-contract checks,
-but their Docker-backed sample checks timed out while the local Docker daemon
-was unresponsive. GitHub PR checks must run those sample checks; the changes
-have not been merged into the test repositories or received live acceptance.
+Coordinator PR #219 and the test mirror PRs #139 (backend) and #127 (frontend)
+change the shared runner and monitoring workflow to use the product contract.
+The Coordinator's full local check passes. Both test mirrors passed their
+Docker-backed GitHub `Sandbox check` jobs after local Docker timed out. The
+changes have not been merged into the test repositories or received live acceptance.
 The real monitoring path must not be used until those steps are completed.
 
 **Accepted decision, September 23:** leave the real backend workflow unchanged.
@@ -731,6 +730,12 @@ branch between the Coordinator's check and GitHub's dispatch. The user accepts
 that residual timing risk for filtered real release testing. Local code now
 implements the branch and input change, but this is not permission to execute
 a product release.
+
+The dispatch API does not return the new run ID. If another run by the same
+actor appears for the same monitoring workflow and branch in that dispatch
+window, the Coordinator stops for a person instead of guessing which run is
+its own. Filtering only by commit could silently adopt an unrelated run while
+the Coordinator's actual dispatch used a moved branch tip.
 
 The published sandbox implements the earlier both-from-`main` order against a
 sample `ops/monitoring` package in the test backend: hand-edited alarm sources,

@@ -103,6 +103,7 @@ function directHarness(
   {
     boundaryResponse,
     conclusion = "success",
+    concurrentRuns = [],
     priorRuns = [],
     mutateManifest,
     mutateRun,
@@ -185,16 +186,16 @@ function directHarness(
             workflow_runs: priorRuns.slice(0, 1)
           }
         );
-      if (query.has("event"))
+      if (query.has("event")) {
+        const observed =
+          dispatched || descriptor.event === "push"
+            ? [run, ...concurrentRuns]
+            : [];
         return apiResponse("200 OK", {
-          total_count:
-            priorRuns.length +
-            (dispatched || descriptor.event === "push" ? 1 : 0),
-          workflow_runs: [
-            ...(dispatched || descriptor.event === "push" ? [run] : []),
-            ...priorRuns
-          ]
+          total_count: priorRuns.length + observed.length,
+          workflow_runs: [...observed, ...priorRuns]
         });
+      }
       return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
     }
     if (method === "POST" && endpoint.endsWith("/dispatches")) {
@@ -425,6 +426,57 @@ test("a monitoring run from a moved branch tip is detected after dispatch", asyn
       save: async () => {}
     }),
     /may already have deployed; stop for a person/u
+  );
+  assert.ok(
+    harness.calls.some(
+      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+    )
+  );
+});
+
+test("concurrent monitoring runs stop instead of guessing which dispatch is ours", async () => {
+  const operation = makeProfileReleaseOperation({
+    profile: "real",
+    release_id: "abababab-abab-4bab-8bab-abababababab",
+    operation_id: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd",
+    operation: "monitoring",
+    environment: "staging",
+    role: "backend",
+    unit: "monitoring",
+    monitoring_environment: "staging",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "monitoring",
+    role: "backend",
+    buildRole: "monitoring",
+    environment: "staging",
+    sourceCommit: commits.backend,
+    ref: "1a-staging",
+    event: "workflow_dispatch",
+    workflow: "deploy-operational-monitoring.yml",
+    workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
+    title: "Deploy operational monitoring",
+    unit: null,
+    jobs: ["monitoring"]
+  };
+  const concurrent = runFixture(descriptor, { id: 502, profile: realProfile });
+  concurrent.head_sha = "c".repeat(40);
+  const harness = directHarness(descriptor, operation, {
+    profile: realProfile,
+    concurrentRuns: [concurrent]
+  });
+  await assert.rejects(
+    harness.client.run({
+      record: harness.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [harness.record.step],
+      save: async () => {}
+    }),
+    /More than one workflow claims/u
   );
   assert.ok(
     harness.calls.some(

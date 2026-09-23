@@ -471,8 +471,8 @@ and is not copied. The September 23 readback found one incorrect assumption in
 the earlier comparison: real staging monitoring dispatches from `1a-staging`,
 accepts only `environment`, and deploys the run's `github.sha`. The published
 test workflow still requires `commit_sha` and runs both monitoring targets from
-`main`. The correction passed local Coordinator checks and test-mirror static
-checks; Docker-backed sample checks remain for GitHub CI. It has not yet merged
+`main`. The correction passed local Coordinator checks and the Docker-backed
+sample checks on test-backend PR #139 and test-frontend PR #127. It has not yet merged
 into the published test branches.
 
 The source PRs are merged, and the

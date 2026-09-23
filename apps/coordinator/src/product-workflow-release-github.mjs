@@ -642,6 +642,8 @@ export function createProductWorkflowReleaseGitHub({
         String(run.actor?.id) === actor.id &&
         (!record.dispatch_after_run_id || run.id > record.dispatch_after_run_id)
     );
+    // Dispatch returns no run ID. Two same-actor runs in the window cannot be
+    // reliably distinguished, even when only one has the approved commit.
     serviceAssert(
       matches.length <= 1,
       "release-workflow",
