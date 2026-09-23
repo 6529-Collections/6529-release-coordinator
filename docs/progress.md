@@ -44,7 +44,7 @@ both profiles. Only the sandbox version has live acceptance; the real version ha
 not changed a product repository.
 
 After the PR #218 review fixes, `npm run check` passed locally on September 23:
-602 tests ran, 599 passed and the three explicitly Docker-only cases were
+603 tests ran, 600 passed and the three explicitly Docker-only cases were
 skipped. Lint, formatting, documentation, workflow policy and package checks
 also passed. GitHub CI and live product acceptance are separate evidence.
 

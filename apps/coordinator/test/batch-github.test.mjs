@@ -54,6 +54,18 @@ test("real trial checks bind the exact head tree and base without trusting merge
   await assert.rejects(f.client.result(f.record), /saved exact tested tree/u);
 });
 
+test("an archived product repository cannot start a real trial", async () => {
+  const f = fixture({ profile: realProfile, archived: true });
+  await assert.rejects(
+    f.client.identity("backend", f.record.base),
+    /Product repository access/u
+  );
+  assert.equal(
+    f.calls.some((call) => call.method === "POST"),
+    false
+  );
+});
+
 test("each sandbox repository uses its own trusted build workflow", async () => {
   for (const role of ["backend", "frontend"]) {
     const f = fixture({ role });

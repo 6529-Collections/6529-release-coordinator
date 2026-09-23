@@ -6,6 +6,7 @@ export function fixture({
   guard = async () => {},
   after = async () => {},
   role = "backend",
+  archived = false,
   profile = sandboxProfile,
   policy = profile.name === "real" ? realBatchPolicy : batchPolicy
 } = {}) {
@@ -92,7 +93,7 @@ export function fixture({
     let status = 200,
       data;
     if (method === "GET" && path === "")
-      data = { ...repo, permissions: { push: true } };
+      data = { ...repo, archived, permissions: { push: true } };
     else if (path === "user") data = { id: 456, login: "tester" };
     else if (path.startsWith("/contents/")) {
       const filePath = path.slice("/contents/".length).split("?")[0];

@@ -163,6 +163,7 @@ export function createBatchGitHub({
           repo.id === profile.repositories[role].id &&
             repo.full_name === profile.repositories[role].full_name &&
             repo.private === false &&
+            repo.archived === false &&
             repo.permissions?.push === true &&
             positive(actor.id) &&
             Array.isArray(policy.required_checks?.[role]) &&
