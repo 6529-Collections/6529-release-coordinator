@@ -1,11 +1,12 @@
 # Release execution design and implementation
 
-The sandbox execution path is merged and live-tested. The current working tree
-now uses the same Coordinator engine for real repositories: profile configuration
+The sandbox execution path is merged and live-tested. Merged PR #218 uses the
+same Coordinator engine for real repositories: profile configuration
 selects product identities, required checks, workflow pins and evidence rules,
 while the shared planner/executor keeps the same batching, staging-before-production
-order and database recovery decision. The real adapter has offline coverage but
-has not been merged or exercised in a live product release. See
+order and database recovery decision. The real adapter has offline coverage and
+is merged, but its monitoring dispatch correction is still in PR #219 and no
+live product release has exercised it. See
 [progress](./progress.md) for that evidence boundary.
 The [agreed execution direction](#agreed-execution-direction-september-11)
 and [process diagram](../release-coordinator-process.html) describe the same
@@ -640,13 +641,13 @@ Explicit resume after the old process stops reuses those identities and checks
 remote truth. It does not trust browser state, local logs or a success message
 alone. The known paused-process overlap case remains outside automatic recovery.
 
-| Fact                                               | Source of truth                                                      |
-| -------------------------------------------------- | -------------------------------------------------------------------- |
-| Accepted request and trusted submission proof      | Issue plus verified central workflow evidence                        |
-| Queue, phase, ownership and attempts               | Profile-specific GitHub journal and verified archived records        |
-| PR head, destination refs, reviews and CI results   | GitHub                                                               |
-| Built/deployed code identity                       | Existing workflow evidence plus actual runtime/service version proof |
-| Whether that deployed combination passed           | Required E2E and health results matched to its versions              |
+| Fact                                              | Source of truth                                                      |
+| ------------------------------------------------- | -------------------------------------------------------------------- |
+| Accepted request and trusted submission proof     | Issue plus verified central workflow evidence                        |
+| Queue, phase, ownership and attempts              | Profile-specific GitHub journal and verified archived records        |
+| PR head, destination refs, reviews and CI results | GitHub                                                               |
+| Built/deployed code identity                      | Existing workflow evidence plus actual runtime/service version proof |
+| Whether that deployed combination passed          | Required E2E and health results matched to its versions              |
 
 ## How shared branches are changed
 
@@ -698,24 +699,33 @@ intake to close a worker-owned request merely because that worker merged its PRs
 
 ## Operational monitoring
 
-**Recording is implemented for both profiles; only the earlier sandbox monitoring
-deployment has live acceptance. The branch-aligned correction is local only.**
+**Recording is implemented for both profiles. The branch-aligned sandbox
+success path and both controlled failure/recovery paths have live acceptance;
+real-product execution remains separate proof.**
 Operational monitoring is code under
 the backend repository, but it is not an application service in the backend
 service catalog. Schema `0.000002` therefore records it as
 `operational_deployments: ["monitoring"]` rather than inventing a service name.
-The merged Coordinator source and published test-backend mirror assume both
-monitoring environments deploy from an exact backend `main` commit supplied as
-`commit_sha`. That is **not** the real backend contract. Read back on September
-23, the real `Deploy operational monitoring` workflow accepts only
+The Coordinator `main` source still assumes both monitoring environments deploy
+from an exact backend `main` commit supplied as `commit_sha`. That is **not**
+the real backend contract. Read back on September 23, the real `Deploy operational monitoring` workflow accepts only
 `environment`; staging must dispatch on `1a-staging`, prod on `main`, and the
 workflow deploys the branch commit GitHub attaches to that run (`github.sha`).
 Coordinator PR #219 and the test mirror PRs #139 (backend) and #127 (frontend)
 change the shared runner and monitoring workflow to use the product contract.
 The Coordinator's full local check passes. Both test mirrors passed their
-Docker-backed GitHub `Sandbox check` jobs after local Docker timed out. The
-changes have not been merged into the test repositories or received live acceptance.
-The real monitoring path must not be used until those steps are completed.
+Docker-backed GitHub `Sandbox check` jobs after local Docker timed out and
+merged through protected test `main` and test `1a-staging`. A fresh
+[sandbox success path](./testing/monitoring-branch-contract-2026-09-23.md)
+verified staging monitoring on `1a-staging` before staging applications and
+production monitoring on `main` before production applications, each at its
+exact merge commit. Staging monitoring failure/recovery passed on ticket #47;
+production monitoring failure/recovery passed a fresh causal-time retest on
+ticket #49 after the first run on #48 exposed an early automatic frontend E2E.
+The [dated sandbox acceptance](./testing/monitoring-branch-contract-2026-09-23.md)
+records both paths.
+Coordinator PR #219 is still unmerged, and real-product monitoring still needs
+its own acceptance.
 
 **Accepted decision, September 23:** leave the real backend workflow unchanged.
 Adapt the Coordinator so staging monitoring runs from `1a-staging` after the
@@ -736,19 +746,28 @@ actor appears for the same monitoring workflow and branch in that dispatch
 window, the Coordinator stops for a person instead of guessing which run is
 its own. Filtering only by commit could silently adopt an unrelated run while
 the Coordinator's actual dispatch used a moved branch tip.
+GitHub may report a workflow run completed before its job records update. The
+product adapter waits on the already-identified run's exact job set to settle;
+it never treats a run-level success alone as deployment proof or dispatches a
+replacement workflow because of that readback delay. Wrong job identities or
+commits still stop the operation.
 
-The published sandbox implements the earlier both-from-`main` order against a
+The published sandbox now implements the branch-aligned order against a
 sample `ops/monitoring` package in the test backend: hand-edited alarm sources,
 a committed inventory generated
 from the sample service catalog (the build fails when it is stale), and a
 controlled deployment switch. The pinned sandbox release workflow builds the
-package at the exact backend commit, refuses any dispatch that is not on test
-`main`, records the installed template bound to the build manifest, and the
+package at the exact backend branch commit, refuses a branch/environment
+mismatch, records the installed template bound to the build manifest, and the
 Coordinator reads GitHub's own artifact record back before accepting the result.
-A failed monitoring deployment is a confirmed production-stage failure: no
-application deployment has started, and restoration reverts test `main` and
-staging, then redeploys monitoring from the restored commit as an ordinary
-deploy step. The sandbox service stage needs the complete sample application,
+A failed monitoring deployment is a confirmed release-stage failure. Staging
+monitoring failure stops before staging application deployment and restores
+changed staging refs; production monitoring failure stops before production
+application deployment and restores changed production and staging refs.
+Recovery redeploys monitoring from each restored environment branch as an
+ordinary deploy step. This corrected recovery behavior has offline tests and
+fresh sandbox acceptance for both environments. The sandbox service stage needs
+the complete sample application,
 so a monitoring-only sandbox request waits; the sample monitoring deploys inside
 a complete sandbox ticket.
 
@@ -843,13 +862,19 @@ both environment refs and trees are read back before recording recovery. The
 [controlled production-failure run](./testing/fake-production-restoration-2026-09-16.md)
 passed those steps live against the test repositories before that source was
 delivered; [progress](./progress.md) owns the delivery record. When the failed
-release had deployed sample monitoring, restoration redeploys it for both
-monitoring environments from the restored test `main` commit as an ordinary
+release had deployed sample monitoring, restoration redeploys it from each
+restored branch (`1a-staging` for staging, `main` for prod) as an ordinary
 deploy step, so the installed sample monitoring matches the restored code.
+The staging frontend undo merge can automatically start a deploy and E2E before
+the restored backend finishes. Recovery therefore dispatches a fresh frontend
+staging deploy after the ordered backend redeploys, and accepts its E2E only
+when that exact frontend deploy began no earlier than the matching backend
+deploy completed. A green earlier E2E cannot prove the restored combination.
 The original failed release and ticket stay failed. The current real adapter
 uses this same source-revert and ordinary redeploy plan for confirmed
 no-database-change failures, but that recovery has offline proof only and its
-monitoring path still needs the branch-contract correction above. Database
+monitoring path still needs the branch-contract correction in PR #219 to merge
+and receive real-product acceptance. Database
 changes and uncertain effects always stop for a person.
 
 Recovery starts only after shared refs or an environment changed and the release
@@ -971,8 +996,9 @@ release notes rather than creating parallel implementations.
   differ, plus clear human ownership for anything uncertain.
 - Explicit production continuation evidence and protection against a worker's own
   merged PRs being retired by intake.
-- The real operational-monitoring adapter: dispatching `Deploy operational
-  monitoring` with only the environment on the matching staging or prod branch,
+- The real operational-monitoring adapter: dispatching the existing
+  `Deploy operational monitoring` workflow with only the environment on the
+  matching staging or prod branch,
   finding and binding its run without an operation identity input, checking its
   branch and commit against the intended source, respecting the
   `monitoring-*` GitHub Environment protections, and verifying the deployed
