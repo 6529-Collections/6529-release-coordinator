@@ -595,6 +595,9 @@ export function createProductWorkflowReleaseGitHub({
 
   function verifyDirectRun(run, descriptor, workflowIdentity, actor, record) {
     const repository = profile.repositories[descriptor.role];
+    const returnedRunId =
+      positive(record.dispatch_response_run_id) &&
+      record.dispatch_response_run_id === run.id;
     if (descriptor.kind === "monitoring")
       serviceAssert(
         run.head_sha === descriptor.sourceCommit &&
@@ -612,6 +615,7 @@ export function createProductWorkflowReleaseGitHub({
         positive(run.run_attempt) &&
         run.path === `.github/workflows/${descriptor.workflow}` &&
         (descriptor.event === "push" ||
+          returnedRunId ||
           Date.parse(run.created_at) >= Date.parse(record.created_at)) &&
         (!descriptor.title || run.display_title === descriptor.title) &&
         String(run.actor?.id) === actor.id &&
@@ -843,6 +847,15 @@ export function createProductWorkflowReleaseGitHub({
         "release-dispatch-uncertain",
         "A resumed product-shaped dispatch lacks its saved workflow boundary."
       );
+    if (record.dispatch_response_run_id !== undefined)
+      serviceAssert(
+        positive(record.dispatch_response_run_id) &&
+          record.workflow_run_id === record.dispatch_response_run_id &&
+          Number.isSafeInteger(record.dispatch_after_run_id) &&
+          record.dispatch_response_run_id > record.dispatch_after_run_id,
+        "release-state",
+        "The saved direct dispatch run ID or boundary is inconsistent."
+      );
     await verifyFiles(
       descriptor.role,
       descriptor.sourceCommit,
@@ -859,17 +872,14 @@ export function createProductWorkflowReleaseGitHub({
       : ["dispatching", "running"].includes(record.state)
         ? await findDirectRun(descriptor, workflowIdentity, actor, record)
         : null;
-    if (
-      run &&
-      descriptor.event === "workflow_dispatch" &&
-      Date.parse(run.created_at) < Date.parse(record.created_at)
-    ) {
-      delete record.workflow_run_id;
-      delete record.workflow_id;
-      record.state = "prepared";
-      await save();
-      run = null;
-    }
+    serviceAssert(
+      !run ||
+        descriptor.event !== "workflow_dispatch" ||
+        record.dispatch_response_run_id === run.id ||
+        Date.parse(run.created_at) >= Date.parse(record.created_at),
+      "release-dispatch-uncertain",
+      "A saved workflow run predates its dispatch record; do not redispatch it."
+    );
     const automaticPush = descriptor.event === "push";
     if (!run && !automaticPush && record.state !== "running") {
       serviceAssert(
@@ -933,6 +943,7 @@ export function createProductWorkflowReleaseGitHub({
           "GitHub accepted the product workflow dispatch without a usable run ID."
         );
         record.workflow_run_id = dispatched.data.workflow_run_id;
+        record.dispatch_response_run_id = dispatched.data.workflow_run_id;
         record.workflow_id = workflowIdentity.id;
       }
       record.state = "running";

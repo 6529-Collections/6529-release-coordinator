@@ -744,11 +744,15 @@ a product release.
 GitHub's [workflow dispatch API](https://docs.github.com/en/rest/actions/workflows#create-a-workflow-dispatch-event)
 now offers `return_run_details`. The Coordinator requests and saves the returned
 run ID, then still checks that exact run's repository, actor, workflow, branch
-and commit. If GitHub returns the older empty response, the existing bounded
+and commit. That returned ID and the saved pre-dispatch run boundary identify
+the run even when GitHub rounds its creation time to the same second as the
+Coordinator record; resume does not clear the ID or redispatch because of a
+subsecond mismatch. If GitHub returns the older empty response, the existing bounded
 run search remains the fallback. In that fallback, another same-actor run for
 the monitoring workflow and branch makes the Coordinator stop rather than
 guess which run it dispatched. An unusable ID in a claimed detailed response
-also stops with the dispatch unresolved. Filtering only by commit could
+or an older saved fallback run also stops with the dispatch unresolved.
+Filtering only by commit could
 silently adopt an unrelated run while the actual dispatch used a moved branch
 tip.
 GitHub may report a workflow run completed before its job records update. The

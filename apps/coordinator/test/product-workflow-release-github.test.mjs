@@ -519,8 +519,13 @@ test("concurrent monitoring runs require an exact dispatch ID or stop", async ()
   const exact = directHarness(descriptor, operation, {
     profile: realProfile,
     concurrentRuns: [concurrent],
-    returnRunDetails: true
+    returnRunDetails: true,
+    mutateRun: (run) => {
+      // GitHub rounds to seconds; this is the same dispatch second.
+      run.created_at = "2026-09-21T15:59:00Z";
+    }
   });
+  exact.record.created_at = "2026-09-21T15:59:00.789Z";
   const result = await exact.client.run({
     record: exact.record,
     actor,
@@ -530,6 +535,17 @@ test("concurrent monitoring runs require an exact dispatch ID or stop", async ()
     save: async () => {}
   });
   assert.equal(result.status, "passed");
+  assert.equal(exact.record.workflow_run_id, 501);
+  assert.equal(exact.record.dispatch_response_run_id, 501);
+  const resumed = await exact.client.run({
+    record: exact.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {},
+    steps: [exact.record.step],
+    save: async () => {}
+  });
+  assert.equal(resumed.status, "passed");
   assert.equal(exact.record.workflow_run_id, 501);
   assert.equal(exact.calls.filter((call) => call.method === "POST").length, 1);
   const missingId = directHarness(descriptor, operation, {
@@ -549,6 +565,27 @@ test("concurrent monitoring runs require an exact dispatch ID or stop", async ()
     /without a usable run ID/u
   );
   assert.equal(missingId.record.state, "dispatching");
+  const stale = directHarness(descriptor, operation, {
+    profile: realProfile,
+    mutateRun: (run) => {
+      run.created_at = "2026-09-21T15:58:00Z";
+    }
+  });
+  stale.record.state = "running";
+  stale.record.dispatch_after_run_id = 0;
+  stale.record.workflow_run_id = stale.run.id;
+  await assert.rejects(
+    stale.client.run({
+      record: stale.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [stale.record.step],
+      save: async () => {}
+    }),
+    /do not redispatch it/u
+  );
+  assert.equal(stale.calls.filter((call) => call.method === "POST").length, 0);
 });
 
 test("an unfinished v1 monitoring step cannot use the new branch-only workflow", async () => {
