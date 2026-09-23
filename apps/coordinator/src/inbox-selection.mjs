@@ -109,6 +109,8 @@ export function filterInboxRequests(
         entry.status === "valid" &&
         entry.github_actor?.login?.toLowerCase() === selection.actor_login
     );
+  // The intake proof binds each receipt to a numeric GitHub actor ID. Require
+  // all explicitly selected Issues to have that same verified account ID.
   if (
     exact &&
     (visible.length !== allowed.size ||

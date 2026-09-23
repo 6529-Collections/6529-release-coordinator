@@ -77,7 +77,19 @@ test("a product backend batch requires the exact combined catalog graph", () => 
   const plan = { batch: { profile: "real", tickets: [1] } };
   const report = {
     input_hash: "a".repeat(64),
-    repositories: [{ role: "backend", checks: [] }]
+    repositories: [
+      {
+        role: "backend",
+        final_tree: "b".repeat(40),
+        merges: [{ commit: "c".repeat(40) }],
+        catalog: {
+          commit: "c".repeat(40),
+          tree: "b".repeat(40),
+          blob_sha: "d".repeat(40)
+        },
+        checks: []
+      }
+    ]
   };
   const items = [{ entry: { request: { database_change: "no" } } }];
   assert.throws(
@@ -86,6 +98,7 @@ test("a product backend batch requires the exact combined catalog graph", () => 
   );
   report.repositories[0].checks.push({
     id: "combined_services",
+    status: "pass",
     evidence: {
       status: "pass",
       order: ["backend/api"],
@@ -95,4 +108,9 @@ test("a product backend batch requires the exact combined catalog graph", () => 
   assert.deepEqual(realServicePlan(plan, report, items).steps, [
     { role: "backend", unit: "api", depends_on: [] }
   ]);
+  report.repositories[0].catalog.tree = "e".repeat(40);
+  assert.throws(
+    () => realServicePlan(plan, report, items),
+    /exact product backend catalog/u
+  );
 });

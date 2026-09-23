@@ -306,6 +306,8 @@ function inspectOperationalDeployments(request, checks, profile) {
   );
   if (!selected.length) return;
   if (profile.name !== "sandbox") {
+    // This check establishes that the requested operation has a supported
+    // product workflow. Only the later release run can prove deployment.
     checks.push(
       check(
         "operational_deployments",

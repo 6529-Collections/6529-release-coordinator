@@ -1,21 +1,22 @@
 import { createBatchGitHub } from "../src/batch-github.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
-import { batchPolicy } from "../src/batch-plan.mjs";
+import { batchPolicy, realBatchPolicy } from "../src/batch-plan.mjs";
 
 export function fixture({
   guard = async () => {},
   after = async () => {},
   role = "backend",
-  policy = batchPolicy
+  profile = sandboxProfile,
+  policy = profile.name === "real" ? realBatchPolicy : batchPolicy
 } = {}) {
-  const repo = sandboxProfile.repositories[role];
+  const repo = profile.repositories[role];
   const record = {
     role,
     branch: "codex/batch-trial-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     base: "a".repeat(40),
     tree: "b".repeat(40),
     actor: { id: "456", login: "tester" },
-    workflow_id: 101,
+    workflow_id: profile.name === "real" ? null : 101,
     created_at: "2026-09-10T12:00:00.000Z",
     body: "Exact trial marker"
   };
@@ -59,16 +60,24 @@ export function fixture({
     headRefOid: run.head_sha,
     baseRefOid: record.base,
     headRefName: record.branch,
+    mergeable: "MERGEABLE",
+    mergeStateStatus: "CLEAN",
     state: "OPEN",
-    checks: [
-      {
-        __typename: "CheckRun",
-        name: "Sandbox check",
-        isRequired: true,
-        status: "COMPLETED",
-        conclusion: "SUCCESS"
-      }
-    ]
+    checks: (profile.name === "real"
+      ? policy.required_checks[role]
+      : ["Sandbox check"]
+    ).map((name) => ({
+      __typename: "CheckRun",
+      name,
+      isRequired: true,
+      status: "COMPLETED",
+      conclusion: "SUCCESS"
+    }))
+  };
+  const tested = {
+    sha: run.head_sha,
+    tree: { sha: record.tree },
+    parents: [{ sha: record.base }]
   };
   const merge = {
     sha: "d".repeat(40),
@@ -85,15 +94,19 @@ export function fixture({
     if (method === "GET" && path === "")
       data = { ...repo, permissions: { push: true } };
     else if (path === "user") data = { id: 456, login: "tester" };
-    else if (path.startsWith("/contents/"))
+    else if (path.startsWith("/contents/")) {
+      const filePath = path.slice("/contents/".length).split("?")[0];
       data = {
         type: "file",
+        path: filePath,
         sha:
-          typeof policy.workflow_blob === "string"
-            ? policy.workflow_blob
-            : policy.workflow_blob[record.role]
+          profile.name === "real"
+            ? policy.workflow_blobs[role][filePath]
+            : typeof policy.workflow_blob === "string"
+              ? policy.workflow_blob
+              : policy.workflow_blob[record.role]
       };
-    else if (path === "/actions/workflows/sandbox-check.yml")
+    } else if (path === "/actions/workflows/sandbox-check.yml")
       data = {
         id: 101,
         path: ".github/workflows/sandbox-check.yml",
@@ -116,7 +129,8 @@ export function fixture({
         tree: { sha: record.tree },
         parents: [{ sha: record.base }]
       };
-    } else if (path === "/git/refs" && method === "POST") {
+    } else if (path === `/git/commits/${run.head_sha}`) data = tested;
+    else if (path === "/git/refs" && method === "POST") {
       status = 201;
       ref = { object: { sha: body.sha } };
       data = ref;
@@ -158,7 +172,7 @@ export function fixture({
     return `HTTP/2 ${status} OK\r\ncontent-type: application/json\r\n\r\n${data === undefined ? "" : JSON.stringify(data)}`;
   };
   const client = createBatchGitHub({
-    profile: sandboxProfile,
+    profile,
     guard,
     execute,
     gates: { pullRequest: async () => structuredClone(gate) },
@@ -168,7 +182,14 @@ export function fixture({
       '2026-09-10 {"status":"blocked","steps":[{"unit":"api","status":"blocked"}],"errors":[{"code":"service-failed"}],"cleanup":{"status":"removed"}}\n'
   });
   const patch = [
-    { path: "src/api.mjs", mode: "100644", type: "blob", content: "example\n" }
+    {
+      path: "src/api.mjs",
+      mode: "100644",
+      type: "blob",
+      ...(profile.name === "real"
+        ? { sha: "e".repeat(40) }
+        : { content: "example\n" })
+    }
   ];
   const save = async (value) => {
     saved.push(structuredClone(value));
@@ -181,6 +202,7 @@ export function fixture({
     run,
     job,
     gate,
+    tested,
     merge,
     patch,
     save,

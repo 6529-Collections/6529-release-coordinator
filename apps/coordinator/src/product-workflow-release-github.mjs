@@ -116,6 +116,8 @@ function expectedJobs(descriptor, runtime) {
       };
     if (descriptor.kind === "frontend")
       return {
+        // The pinned production workflow can include ancillary/reusable jobs.
+        // These named jobs form the required build-verification-deploy chain.
         exact: false,
         required: [
           "Verify expected source commit",

@@ -105,7 +105,11 @@ export function createBatchGitHub({
         sha(record.base) &&
         sha(record.tree) &&
         (!record.commit || sha(record.commit)) &&
-        positive(Number(record.actor?.id)),
+        positive(Number(record.actor?.id)) &&
+        (profile.name !== "real" ||
+          /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u.test(
+            record.actor?.login ?? ""
+          )),
       "batch-ownership",
       "The saved temporary PR identity is invalid."
     );
@@ -281,7 +285,10 @@ export function createBatchGitHub({
         );
         const author = {
           name: "6529 Coordinator batch trial",
-          email: "coordinator@example.invalid",
+          email:
+            profile.name === "real"
+              ? `${record.actor.id}+${record.actor.login}@users.noreply.github.com`
+              : "coordinator@example.invalid",
           date: record.created_at
         };
         const commit = (
@@ -400,8 +407,20 @@ export function createBatchGitHub({
         record,
         { closed }
       );
-      if (!closed && !sha(pr.merge_commit_sha)) return null;
+      if (profile.name === "sandbox" && !closed && !sha(pr.merge_commit_sha))
+        return null;
       if (profile.name === "real") {
+        const tested = (
+          await call(record.role, "GET", `/git/commits/${record.commit}`)
+        ).data;
+        serviceAssert(
+          tested.sha === record.commit &&
+            tested.tree?.sha === record.tree &&
+            tested.parents?.length === 1 &&
+            tested.parents[0].sha === record.base,
+          "batch-check-inputs",
+          "The product PR head is not the saved exact tested tree on its saved base."
+        );
         const observed = await gates.pullRequest(record.role, record.number);
         serviceAssert(
           observed.headRefOid === record.commit &&
@@ -432,16 +451,15 @@ export function createBatchGitHub({
           )
         )
           return null;
-        // A trial PR is checked, then closed without merging. Its merge-state
-        // summary can be BLOCKED by review requirements; the protected
-        // integration PR is separately gated before an actual merge.
-        const passed =
-          observed.mergeable === "MERGEABLE" &&
-          required.every((check) =>
-            check.__typename === "CheckRun"
-              ? check.conclusion === "SUCCESS"
-              : check.state === "SUCCESS"
-          );
+        // A trial PR is checked, then closed without merging. Its exact head
+        // is a child of the saved, still-current base, so GitHub's asynchronous
+        // mergeability summary is not evidence for this check. The later
+        // protected integration PR has its own merge gate.
+        const passed = required.every((check) =>
+          check.__typename === "CheckRun"
+            ? check.conclusion === "SUCCESS"
+            : check.state === "SUCCESS"
+        );
         await unchanged(record);
         return {
           status: passed ? "passed" : "unknown",

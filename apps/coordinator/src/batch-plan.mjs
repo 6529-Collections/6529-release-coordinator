@@ -407,12 +407,19 @@ export function realServicePlan(plan, report, items) {
   const backend = report.repositories.find(
     (repository) => repository.role === "backend"
   );
-  const graph = backend?.checks.find(
+  const catalogCheck = backend?.checks?.find(
     (check) => check.id === "combined_services"
-  )?.evidence;
+  );
+  const graph = catalogCheck?.evidence;
   if (backend)
     serviceAssert(
-      graph?.status === "pass" &&
+      /^[0-9a-f]{40}$/u.test(backend.catalog?.commit ?? "") &&
+        backend.catalog.commit === backend.merges?.at(-1)?.commit &&
+        /^[0-9a-f]{40}$/u.test(backend.catalog?.tree ?? "") &&
+        backend.catalog.tree === backend.final_tree &&
+        /^[0-9a-f]{40}$/u.test(backend.catalog?.blob_sha ?? "") &&
+        catalogCheck?.status === "pass" &&
+        graph?.status === "pass" &&
         Array.isArray(graph.order) &&
         Array.isArray(graph.edges),
       "invalid-services",
