@@ -69,7 +69,10 @@ export function validateProfileReleaseOperation(value) {
       ? !(
           value.role === "backend" &&
           value.unit === releaseMonitoringUnit &&
-          value.environment === "prod" &&
+          (value.environment === value.monitoring_environment ||
+            // Existing v1 release journals put staging monitoring in prod.
+            (value.environment === "prod" &&
+              value.monitoring_environment === "staging")) &&
           releaseMonitoringEnvironments.includes(value.monitoring_environment)
         )
       : Object.hasOwn(value, "monitoring_environment"))

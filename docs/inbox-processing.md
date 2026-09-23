@@ -304,14 +304,12 @@ remains open with `reason:release-failed`, the original failed step, recovery
 steps, and Coordinator-maintainer ownership. A failed or uncertain undo leaves
 the ticket and environment for a person to inspect.
 A complete sandbox ticket whose backend part selects `operational_deployments:
-["monitoring"]` adds two release steps to a production release,
-`prod:monitoring:staging` and `prod:monitoring:prod`, after the backend merge
-into test `main` and before any production application deployment. A failed
-monitoring deployment is a confirmed failure with no application deployment
-started; the no-database-change restoration above reverts test `main` and
-staging and redeploys monitoring from the restored commit. A staging release
-does not deploy monitoring, and its completion comment says that the sample
-backend deploys monitoring only from test `main`. A monitoring-only sandbox
+["monitoring"]` adds `staging:monitoring:staging` after the staging backend
+merge and, for a production request, `prod:monitoring:prod` after the main
+backend merge. Each runs before that environment's application deployments.
+A confirmed failure stops later forward steps; no-database-change restoration
+redeploys monitoring from the matching restored environment branch. A
+monitoring-only sandbox
 request has no sample services to check, so it waits with
 `reason:coordinator-incomplete` and the action to submit the change inside a
 complete sandbox ticket. The real adapter can select the existing monitoring

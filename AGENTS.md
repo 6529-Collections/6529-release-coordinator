@@ -12,17 +12,20 @@ Explicit filtered or full-inbox scopes select whole tickets together, finish
 cheap conflict filtering before expensive combined PR/service checks, and record deferred tickets.
 They can also take one selected no-database-change batch through PR-based fake
 staging with Coordinator-checked CI, locked npm builds and artifacts, matching built-output E2E, protected
-fake production, and another matching E2E. The current working tree applies the
-same engine to real product repositories and pinned existing workflows; it has
-offline tests but no merge or live product acceptance. Passing sandbox checks
+fake production, and another matching E2E. The merged source applies the
+same engine to real product repositories and pinned existing workflows, but it
+has no live product acceptance. Passing sandbox checks
 never authorize or prove the real path.
 One verified database-changing ticket can use the sandbox release path alone;
 a failure then stops for a person without automatic restoration. The merged
 source also restores changed test `main` and staging branches after a confirmed
-no-database-change fake-production failure. The merged source deploys a sample
-monitoring package for a production ticket that selects operational monitoring,
-after the test-main merge and before production application deployments; the
-sample backend deploys monitoring only from test `main`, like the real one.
+no-database-change fake-production failure. The test mirrors now model the real
+backend monitoring branches: staging uses `1a-staging`, production uses `main`.
+Coordinator PR #219 implements that contract and has passed offline checks;
+its full success path and both controlled failure/recovery paths have fresh
+sandbox acceptance. Coordinator source merge and real-product acceptance remain
+separate. See `docs/design.md` and
+`docs/progress.md` before treating this as delivered.
 Check progress for live proof.
 
 It is intended to coordinate releases across:

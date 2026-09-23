@@ -12,7 +12,10 @@ import {
   verifyProductWorkflowReport
 } from "../src/product-workflow-contract.mjs";
 import { createProductWorkflowReleaseGitHub } from "../src/product-workflow-release-github.mjs";
-import { productWorkflowRuntime } from "../src/product-workflow-runtime-config.mjs";
+import {
+  productWorkflowRuntime,
+  realProductWorkflowRuntime
+} from "../src/product-workflow-runtime-config.mjs";
 import { makeProfileReleaseOperation } from "../src/profile-release-contract.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 
@@ -49,19 +52,18 @@ function build(role, sourceCommit) {
 }
 
 function repositoryRole(endpoint) {
-  return endpoint.includes("release-coordinator-test-frontend")
-    ? "frontend"
-    : "backend";
+  return endpoint.includes("frontend") ? "frontend" : "backend";
 }
 
-function runtimeFile(endpoint) {
+function runtimeFile(endpoint, runtime, environment) {
   const role = repositoryRole(endpoint);
   const file = endpoint.match(/\/contents\/(.+)\?ref=/u)?.[1];
   assert.ok(file);
+  const pinned = runtime.repositories[role].files[file];
   return {
     type: "file",
     path: file,
-    sha: productWorkflowRuntime.repositories[role].files[file]
+    sha: typeof pinned === "string" ? pinned : pinned[environment]
   };
 }
 
@@ -70,10 +72,11 @@ function runFixture(
   {
     id = 501,
     conclusion = "success",
-    createdAt = "2026-09-21T16:00:00.000Z"
+    createdAt = "2026-09-21T16:00:00.000Z",
+    profile = sandboxProfile
   } = {}
 ) {
-  const repository = sandboxProfile.repositories[descriptor.role];
+  const repository = profile.repositories[descriptor.role];
   return {
     id,
     repository: { id: repository.id, full_name: repository.full_name },
@@ -100,13 +103,25 @@ function directHarness(
   {
     boundaryResponse,
     conclusion = "success",
+    concurrentRuns = [],
     priorRuns = [],
-    mutateManifest
+    returnRunDetails = false,
+    dispatchRunId,
+    jobStatuses = [],
+    mutateManifest,
+    mutateRun,
+    profile = sandboxProfile
   } = {}
 ) {
   const calls = [];
   let dispatched = false;
-  const run = runFixture(descriptor, { conclusion });
+  let jobReads = 0;
+  const runtime =
+    profile.name === "real"
+      ? realProductWorkflowRuntime
+      : productWorkflowRuntime;
+  const run = runFixture(descriptor, { conclusion, profile });
+  mutateRun?.(run);
   const manifest = build(descriptor.buildRole, descriptor.sourceCommit);
   mutateManifest?.(manifest);
   const artifact = {
@@ -126,15 +141,21 @@ function directHarness(
     const endpoint = args[args.indexOf("--method") + 2];
     calls.push({ method, endpoint, body });
     if (endpoint.includes("/contents/"))
-      return apiResponse("200 OK", runtimeFile(endpoint));
+      return apiResponse(
+        "200 OK",
+        runtimeFile(endpoint, runtime, operation.environment)
+      );
     if (endpoint.includes("/git/ref/heads/")) {
       const role = repositoryRole(endpoint);
       return apiResponse("200 OK", { object: { sha: commits[role] } });
     }
+    if (method === "GET" && endpoint.endsWith(`/actions/runs/${run.id}`))
+      return apiResponse("200 OK", run);
     if (
       endpoint.includes("/actions/runs/") &&
       endpoint.endsWith("/jobs?per_page=100")
-    )
+    ) {
+      const status = jobStatuses[jobReads++] ?? "completed";
       return apiResponse("200 OK", {
         total_count: descriptor.jobs.length,
         jobs: descriptor.jobs.map((name, index) => ({
@@ -142,11 +163,16 @@ function directHarness(
           name,
           run_id: run.id,
           head_sha: run.head_sha,
-          status: "completed",
+          status,
           conclusion:
-            conclusion === "failure" && index === 0 ? "failure" : "success"
+            status !== "completed"
+              ? null
+              : conclusion === "failure" && index === 0
+                ? "failure"
+                : "success"
         }))
       });
+    }
     if (
       endpoint.includes("/actions/runs/") &&
       endpoint.endsWith("/artifacts?per_page=100")
@@ -172,26 +198,32 @@ function directHarness(
             workflow_runs: priorRuns.slice(0, 1)
           }
         );
-      if (query.has("event"))
+      if (query.has("event")) {
+        const observed =
+          dispatched || descriptor.event === "push"
+            ? [run, ...concurrentRuns]
+            : [];
         return apiResponse("200 OK", {
-          total_count:
-            priorRuns.length +
-            (dispatched || descriptor.event === "push" ? 1 : 0),
-          workflow_runs: [
-            ...(dispatched || descriptor.event === "push" ? [run] : []),
-            ...priorRuns
-          ]
+          total_count: priorRuns.length + observed.length,
+          workflow_runs: [...observed, ...priorRuns]
         });
+      }
       return apiResponse("200 OK", { total_count: 0, workflow_runs: [] });
     }
     if (method === "POST" && endpoint.endsWith("/dispatches")) {
       dispatched = true;
-      return apiResponse("204 No Content");
+      return returnRunDetails
+        ? apiResponse("200 OK", {
+            workflow_run_id: dispatchRunId ?? run.id,
+            run_url: `https://api.github.com/runs/${run.id}`,
+            html_url: run.html_url
+          })
+        : apiResponse("204 No Content");
     }
     throw new Error(`Unexpected ${method} ${endpoint}`);
   };
   const client = createProductWorkflowReleaseGitHub({
-    profile: sandboxProfile,
+    profile,
     execute,
     base: {},
     polls: 2,
@@ -205,7 +237,7 @@ function directHarness(
     step: {
       id:
         operation.operation === "monitoring"
-          ? `prod:monitoring:${operation.monitoring_environment}`
+          ? `${operation.environment}:monitoring:${operation.monitoring_environment}`
           : `${operation.environment}:deploy:${operation.role}:${operation.unit}`,
       kind: operation.operation,
       environment: operation.environment,
@@ -223,7 +255,7 @@ function directHarness(
   return { calls, client, record, run };
 }
 
-test("product workflow contract keeps staging services on 1a-staging and staging monitoring on main", async () => {
+test("product workflow contract dispatches staging services and monitoring from 1a-staging", async () => {
   const backendOperation = makeReleaseOperation({
     release_id: "11111111-1111-4111-8111-111111111111",
     operation_id: "22222222-2222-4222-8222-222222222222",
@@ -248,7 +280,10 @@ test("product workflow contract keeps staging services on 1a-staging and staging
     unit: "transactionsProcessingLoop",
     jobs: ["Build and deploy transactionsProcessingLoop to staging"]
   };
-  const backend = directHarness(backendDescriptor, backendOperation);
+  const backend = directHarness(backendDescriptor, backendOperation, {
+    // GitHub can expose a completed run before its jobs endpoint catches up.
+    jobStatuses: ["in_progress", "completed"]
+  });
   const backendResult = await backend.client.run({
     record: backend.record,
     actor,
@@ -262,17 +297,27 @@ test("product workflow contract keeps staging services on 1a-staging and staging
     (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
   );
   assert.equal(backendDispatch.body.ref, "1a-staging");
+  assert.equal(backendDispatch.body.return_run_details, true);
   assert.deepEqual(backendDispatch.body.inputs, {
     environment: "staging",
     service: "transactionsProcessingLoop",
     expected_source_sha: commits.backend
   });
+  assert.equal(
+    backend.calls.filter((call) => call.endpoint.endsWith("/jobs?per_page=100"))
+      .length,
+    2
+  );
+  assert.equal(
+    backend.calls.filter((call) => call.method === "POST").length,
+    1
+  );
 
   const monitoringOperation = makeReleaseOperation({
     release_id: "33333333-3333-4333-8333-333333333333",
     operation_id: "44444444-4444-4444-8444-444444444444",
     operation: "monitoring",
-    environment: "prod",
+    environment: "staging",
     role: "backend",
     unit: "monitoring",
     monitoring_environment: "staging",
@@ -285,7 +330,7 @@ test("product workflow contract keeps staging services on 1a-staging and staging
     buildRole: "monitoring",
     environment: "staging",
     sourceCommit: commits.backend,
-    ref: "main",
+    ref: "1a-staging",
     event: "workflow_dispatch",
     workflow: "deploy-operational-monitoring.yml",
     workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
@@ -306,15 +351,282 @@ test("product workflow contract keeps staging services on 1a-staging and staging
   const monitoringDispatch = monitoring.calls.find(
     (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
   );
-  assert.equal(monitoringDispatch.body.ref, "main");
+  assert.equal(monitoringDispatch.body.ref, "1a-staging");
   assert.deepEqual(monitoringDispatch.body.inputs, {
-    environment: "staging",
-    commit_sha: commits.backend
+    environment: "staging"
   });
   assert.equal(
     monitoringResult.report.deployments.monitoring.environment,
     "staging"
   );
+});
+
+test("the real monitoring adapter uses each branch and only the existing workflow input", async () => {
+  for (const environment of ["staging", "prod"]) {
+    const ref = environment === "staging" ? "1a-staging" : "main";
+    const operation = makeProfileReleaseOperation({
+      profile: "real",
+      release_id: "91919191-9191-4919-8919-919191919191",
+      operation_id: "92929292-9292-4929-8929-929292929292",
+      operation: "monitoring",
+      environment,
+      role: "backend",
+      unit: "monitoring",
+      monitoring_environment: environment,
+      backend_commit: commits.backend,
+      frontend_commit: commits.frontend
+    });
+    const descriptor = {
+      kind: "monitoring",
+      role: "backend",
+      buildRole: "monitoring",
+      environment,
+      sourceCommit: commits.backend,
+      ref,
+      event: "workflow_dispatch",
+      workflow: "deploy-operational-monitoring.yml",
+      workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
+      title: "Deploy operational monitoring",
+      unit: null,
+      jobs: ["monitoring"]
+    };
+    const harness = directHarness(descriptor, operation, {
+      profile: realProfile
+    });
+    const result = await harness.client.run({
+      record: harness.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [harness.record.step],
+      save: async () => {}
+    });
+    assert.equal(result.status, "passed");
+    const dispatch = harness.calls.find(
+      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+    );
+    assert.deepEqual(dispatch.body, {
+      ref,
+      inputs: { environment },
+      return_run_details: true
+    });
+    assert.equal(result.report.runner.commit, commits.backend);
+    assert.equal(result.report.builds.monitoring, undefined);
+  }
+});
+
+test("a monitoring run from a moved branch tip is detected after dispatch", async () => {
+  const operation = makeProfileReleaseOperation({
+    profile: "real",
+    release_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    operation_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    operation: "monitoring",
+    environment: "staging",
+    role: "backend",
+    unit: "monitoring",
+    monitoring_environment: "staging",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "monitoring",
+    role: "backend",
+    buildRole: "monitoring",
+    environment: "staging",
+    sourceCommit: commits.backend,
+    ref: "1a-staging",
+    event: "workflow_dispatch",
+    workflow: "deploy-operational-monitoring.yml",
+    workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
+    title: "Deploy operational monitoring",
+    unit: null,
+    jobs: ["monitoring"]
+  };
+  const harness = directHarness(descriptor, operation, {
+    profile: realProfile,
+    returnRunDetails: true,
+    mutateRun: (run) => {
+      run.head_sha = "c".repeat(40);
+    }
+  });
+  await assert.rejects(
+    harness.client.run({
+      record: harness.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [harness.record.step],
+      save: async () => {}
+    }),
+    /may already have deployed; stop for a person/u
+  );
+  assert.ok(
+    harness.calls.some(
+      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+    )
+  );
+});
+
+test("concurrent monitoring runs require an exact dispatch ID or stop", async () => {
+  const operation = makeProfileReleaseOperation({
+    profile: "real",
+    release_id: "abababab-abab-4bab-8bab-abababababab",
+    operation_id: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd",
+    operation: "monitoring",
+    environment: "staging",
+    role: "backend",
+    unit: "monitoring",
+    monitoring_environment: "staging",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "monitoring",
+    role: "backend",
+    buildRole: "monitoring",
+    environment: "staging",
+    sourceCommit: commits.backend,
+    ref: "1a-staging",
+    event: "workflow_dispatch",
+    workflow: "deploy-operational-monitoring.yml",
+    workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
+    title: "Deploy operational monitoring",
+    unit: null,
+    jobs: ["monitoring"]
+  };
+  const concurrent = runFixture(descriptor, { id: 502, profile: realProfile });
+  concurrent.head_sha = "c".repeat(40);
+  const harness = directHarness(descriptor, operation, {
+    profile: realProfile,
+    concurrentRuns: [concurrent]
+  });
+  await assert.rejects(
+    harness.client.run({
+      record: harness.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [harness.record.step],
+      save: async () => {}
+    }),
+    /More than one workflow claims/u
+  );
+  assert.ok(
+    harness.calls.some(
+      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+    )
+  );
+  const exact = directHarness(descriptor, operation, {
+    profile: realProfile,
+    concurrentRuns: [concurrent],
+    returnRunDetails: true,
+    mutateRun: (run) => {
+      // GitHub rounds to seconds; this is the same dispatch second.
+      run.created_at = "2026-09-21T15:59:00Z";
+    }
+  });
+  exact.record.created_at = "2026-09-21T15:59:00.789Z";
+  const result = await exact.client.run({
+    record: exact.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {},
+    steps: [exact.record.step],
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(exact.record.workflow_run_id, 501);
+  assert.equal(exact.record.dispatch_response_run_id, 501);
+  const resumed = await exact.client.run({
+    record: exact.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {},
+    steps: [exact.record.step],
+    save: async () => {}
+  });
+  assert.equal(resumed.status, "passed");
+  assert.equal(exact.record.workflow_run_id, 501);
+  assert.equal(exact.calls.filter((call) => call.method === "POST").length, 1);
+  const missingId = directHarness(descriptor, operation, {
+    profile: realProfile,
+    returnRunDetails: true,
+    dispatchRunId: -1
+  });
+  await assert.rejects(
+    missingId.client.run({
+      record: missingId.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [missingId.record.step],
+      save: async () => {}
+    }),
+    /without a usable run ID/u
+  );
+  assert.equal(missingId.record.state, "dispatching");
+  const stale = directHarness(descriptor, operation, {
+    profile: realProfile,
+    mutateRun: (run) => {
+      run.created_at = "2026-09-21T15:58:00Z";
+    }
+  });
+  stale.record.state = "running";
+  stale.record.dispatch_after_run_id = 0;
+  stale.record.workflow_run_id = stale.run.id;
+  await assert.rejects(
+    stale.client.run({
+      record: stale.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [stale.record.step],
+      save: async () => {}
+    }),
+    /do not redispatch it/u
+  );
+  assert.equal(stale.calls.filter((call) => call.method === "POST").length, 0);
+});
+
+test("an unfinished v1 monitoring step cannot use the new branch-only workflow", async () => {
+  const operation = makeReleaseOperation({
+    release_id: "a1a1a1a1-a1a1-41a1-81a1-a1a1a1a1a1a1",
+    operation_id: "b2b2b2b2-b2b2-42b2-82b2-b2b2b2b2b2b2",
+    operation: "monitoring",
+    environment: "prod",
+    role: "backend",
+    unit: "monitoring",
+    monitoring_environment: "staging",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "monitoring",
+    role: "backend",
+    buildRole: "monitoring",
+    environment: "staging",
+    sourceCommit: commits.backend,
+    ref: "main",
+    event: "workflow_dispatch",
+    workflow: "deploy-operational-monitoring.yml",
+    workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
+    title: "Deploy operational monitoring",
+    unit: null,
+    jobs: ["monitoring"]
+  };
+  const harness = directHarness(descriptor, operation);
+  await assert.rejects(
+    harness.client.run({
+      record: harness.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {},
+      steps: [harness.record.step],
+      save: async () => {}
+    }),
+    /former branch contract/u
+  );
+  assert.equal(harness.calls.length, 0);
 });
 
 test("product workflow integration waits for its pinned workflows to become quiet", async () => {
@@ -449,7 +761,7 @@ test("a fresh manual operation cannot adopt an older matching workflow run", asy
         query.get("per_page") === "1" &&
         query.get("event") === descriptor.event &&
         query.get("branch") === descriptor.ref &&
-        query.get("head_sha") === commits.backend
+        !query.has("head_sha")
       );
     }),
     true
@@ -607,12 +919,64 @@ test("a changed staging frontend adopts its automatic push deployment without di
   assert.equal(result.workflow.id, harness.run.id);
 });
 
+test("staging recovery dispatches a fresh frontend deploy after backend recovery", async () => {
+  const operation = makeReleaseOperation({
+    release_id: "12121212-1212-4212-8212-121212121212",
+    operation_id: "34343434-3434-4434-8434-343434343434",
+    operation: "deploy",
+    environment: "staging",
+    role: "frontend",
+    unit: "frontend",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "frontend",
+    role: "frontend",
+    buildRole: "frontend",
+    environment: "staging",
+    sourceCommit: commits.frontend,
+    ref: "1a-staging",
+    event: "workflow_dispatch",
+    workflow: "deploy-staging.yml",
+    workflowId: savedRuntime.frontend.workflows.stagingDeploy.workflow_id,
+    title: null,
+    unit: null,
+    jobs: ["Build exact staging artifact", "Deploy exact staging artifact"]
+  };
+  const harness = directHarness(descriptor, operation);
+  harness.record.step.id = "restore:staging:deploy:frontend:frontend";
+  const result = await harness.client.run({
+    record: harness.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {
+      "restore:staging:integrate:frontend": {
+        result: { status: "passed", kind: "merge" }
+      }
+    },
+    steps: [harness.record.step],
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  const dispatches = harness.calls.filter(
+    (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+  );
+  assert.equal(dispatches.length, 1);
+  assert.deepEqual(dispatches[0].body, {
+    ref: "1a-staging",
+    inputs: {},
+    return_run_details: true
+  });
+  assert.equal(result.workflow.id, harness.run.id);
+});
+
 test("a confirmed product-shaped workflow failure returns failed evidence for recovery", async () => {
   const operation = makeReleaseOperation({
     release_id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
     operation_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     operation: "monitoring",
-    environment: "prod",
+    environment: "staging",
     role: "backend",
     unit: "monitoring",
     monitoring_environment: "staging",
@@ -625,7 +989,7 @@ test("a confirmed product-shaped workflow failure returns failed evidence for re
     buildRole: "monitoring",
     environment: "staging",
     sourceCommit: commits.backend,
-    ref: "main",
+    ref: "1a-staging",
     event: "workflow_dispatch",
     workflow: "deploy-operational-monitoring.yml",
     workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
@@ -664,7 +1028,7 @@ test("a monitoring build without its target template fails with a specific evide
     release_id: "abababab-abab-4bab-8bab-abababababab",
     operation_id: "cdcdcdcd-cdcd-4dcd-8dcd-cdcdcdcdcdcd",
     operation: "monitoring",
-    environment: "prod",
+    environment: "staging",
     role: "backend",
     unit: "monitoring",
     monitoring_environment: "staging",
@@ -677,7 +1041,7 @@ test("a monitoring build without its target template fails with a specific evide
     buildRole: "monitoring",
     environment: "staging",
     sourceCommit: commits.backend,
-    ref: "main",
+    ref: "1a-staging",
     event: "workflow_dispatch",
     workflow: "deploy-operational-monitoring.yml",
     workflowId: savedRuntime.backend.workflows.monitoring.workflow_id,
@@ -754,7 +1118,7 @@ function dependencyReport(operation, role, runId, unit) {
       commit: sourceCommit,
       workflow
     },
-    completed_at: "2026-09-21T16:00:00.000Z"
+    completed_at: "2026-09-21T15:58:00.000Z"
   };
   verifyProductWorkflowReport(report, operation);
   return report;
@@ -856,7 +1220,10 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
   const execute = async (args) => {
     const endpoint = args[args.indexOf("--method") + 2];
     if (endpoint.includes("/contents/"))
-      return apiResponse("200 OK", runtimeFile(endpoint));
+      return apiResponse(
+        "200 OK",
+        runtimeFile(endpoint, productWorkflowRuntime, "staging")
+      );
     if (endpoint.includes("/git/ref/heads/")) {
       const role = repositoryRole(endpoint);
       return apiResponse("200 OK", { object: { sha: commits[role] } });
@@ -998,6 +1365,18 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
   assert.equal(failed.status, "failed");
   assert.deepEqual(failed.report.builds, {});
   assert.deepEqual(failed.report.deployments, {});
+  deploymentRun.created_at = "2026-09-21T15:57:00.000Z";
+  await assert.rejects(
+    client.run({
+      record: makeRecord(),
+      actor,
+      runtime: savedRuntime,
+      operations,
+      steps,
+      save: async () => {}
+    }),
+    /frontend deployment started before the matching backend deployment finished/u
+  );
   assert.equal(automaticQueries.length, 4);
   for (const [index, endpoint] of automaticQueries.entries()) {
     const dispatchQuery = index % 2 === 0;

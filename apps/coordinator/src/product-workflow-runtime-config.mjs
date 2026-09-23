@@ -2,7 +2,7 @@ export const productWorkflowAdapter = "product-workflows-v2";
 
 const sharedFiles = Object.freeze({
   "coordinator/src/release-contract.mjs":
-    "a7d0b50cd600f1836486f5c998a1a334d07618c0",
+    "f11d31f10d867b832b18248fb18adfc86b2375fe",
   "coordinator/sandbox/application-build.mjs":
     "33f8374059515a6deaa5a151b3450cf49888023e"
 });
@@ -29,7 +29,7 @@ export const sandboxProductWorkflowRuntime = Object.freeze({
         ".github/workflows/deploy.yml":
           "f8c8e8f0841998dc833e20fad50661cad71af32c",
         ".github/workflows/deploy-operational-monitoring.yml":
-          "c1a3f6f2bf0b836ef3c7c12f0b09d2609f6deeb3",
+          "e059b1210a5c345b3c546ee1a40a9c911521ecae",
         "scripts/controlled-monitoring-deploy.mjs":
           "0d70ac273e694045880d51fd73fe08c052e0fe78",
         "scripts/fake-deployment-evidence.mjs":

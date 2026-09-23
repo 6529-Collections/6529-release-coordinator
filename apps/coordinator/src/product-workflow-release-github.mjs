@@ -180,25 +180,28 @@ function artifactName(descriptor, runId) {
 function directDescriptor(operation, sourceChanged, runtime) {
   const backendWorkflow = runtime.repositories.backend.workflows;
   const frontendWorkflow = runtime.repositories.frontend.workflows;
-  if (operation.operation === "monitoring")
+  if (operation.operation === "monitoring") {
+    serviceAssert(
+      operation.environment === operation.monitoring_environment,
+      "release-recovery",
+      "An unfinished monitoring operation uses the former branch contract; a person must inspect it before resume."
+    );
     return {
       kind: "monitoring",
       role: "backend",
       buildRole: "monitoring",
       environment: operation.monitoring_environment,
-      sourceEnvironment: "prod",
+      sourceEnvironment: operation.environment,
       sourceCommit: operation.backend_commit,
       workflowKey: "monitoring",
       workflow: backendWorkflow.monitoring.file,
       event: "workflow_dispatch",
       title: "Deploy operational monitoring",
-      ref: runtime.branches.prod,
+      ref: branch(runtime, operation.environment),
       unit: null,
-      inputs: {
-        environment: operation.monitoring_environment,
-        commit_sha: operation.backend_commit
-      }
+      inputs: { environment: operation.monitoring_environment }
     };
+  }
   if (operation.role === "backend") {
     const configuredUnit =
       runtime.repositories.backend.deployUnits === "identity"
@@ -592,6 +595,16 @@ export function createProductWorkflowReleaseGitHub({
 
   function verifyDirectRun(run, descriptor, workflowIdentity, actor, record) {
     const repository = profile.repositories[descriptor.role];
+    const returnedRunId =
+      positive(record.dispatch_response_run_id) &&
+      record.dispatch_response_run_id === run.id;
+    if (descriptor.kind === "monitoring")
+      serviceAssert(
+        run.head_sha === descriptor.sourceCommit &&
+          run.head_branch === descriptor.ref,
+        "release-source-mismatch",
+        `Monitoring run ${run.id} used ${run.head_branch}@${run.head_sha}, not the approved ${descriptor.ref}@${descriptor.sourceCommit}. It may already have deployed; stop for a person.`
+      );
     serviceAssert(
       positive(run?.id) &&
         run.repository?.id === repository.id &&
@@ -602,6 +615,7 @@ export function createProductWorkflowReleaseGitHub({
         positive(run.run_attempt) &&
         run.path === `.github/workflows/${descriptor.workflow}` &&
         (descriptor.event === "push" ||
+          returnedRunId ||
           Date.parse(run.created_at) >= Date.parse(record.created_at)) &&
         (!descriptor.title || run.display_title === descriptor.title) &&
         String(run.actor?.id) === actor.id &&
@@ -618,17 +632,22 @@ export function createProductWorkflowReleaseGitHub({
     const runs = await listRuns(descriptor.role, descriptor.workflow, {
       event: descriptor.event,
       branch: descriptor.ref,
-      head_sha: descriptor.sourceCommit
+      ...(descriptor.kind === "monitoring"
+        ? { created: `>=${record.created_at}` }
+        : { head_sha: descriptor.sourceCommit })
     });
     const matches = runs.filter(
       (run) =>
-        run.head_sha === descriptor.sourceCommit &&
+        (descriptor.kind === "monitoring" ||
+          run.head_sha === descriptor.sourceCommit) &&
         (descriptor.event === "push" ||
           Date.parse(run.created_at) >= Date.parse(record.created_at)) &&
         (!descriptor.title || run.display_title === descriptor.title) &&
         String(run.actor?.id) === actor.id &&
         (!record.dispatch_after_run_id || run.id > record.dispatch_after_run_id)
     );
+    // Dispatch returns no run ID. Two same-actor runs in the window cannot be
+    // reliably distinguished, even when only one has the approved commit.
     serviceAssert(
       matches.length <= 1,
       "release-workflow",
@@ -640,34 +659,46 @@ export function createProductWorkflowReleaseGitHub({
   }
 
   async function jobsFor(role, run, descriptor) {
-    const list = (
-      await call(
-        role,
-        "GET",
-        `/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`
-      )
-    ).data;
     const expected = expectedJobs(descriptor, runtime);
     const required = new Set(expected.required);
+    for (let poll = 0; poll < polls; poll++) {
+      const list = (
+        await call(
+          role,
+          "GET",
+          `/actions/runs/${run.id}/attempts/${run.run_attempt}/jobs?per_page=100`
+        )
+      ).data;
+      serviceAssert(
+        Number.isSafeInteger(list.total_count) &&
+          list.total_count === list.jobs?.length &&
+          (!expected.exact || list.total_count === expected.required.length) &&
+          expected.required.every((name) =>
+            list.jobs.some((job) => job.name === name)
+          ) &&
+          list.jobs.every(
+            (job) =>
+              (!expected.exact || required.has(job.name)) &&
+              job.run_id === run.id &&
+              job.head_sha === run.head_sha &&
+              ["queued", "in_progress", "completed"].includes(job.status)
+          ) &&
+          new Set(list.jobs.map((job) => job.name)).size === list.jobs.length,
+        "release-workflow",
+        "The product-shaped workflow job set is incomplete or changed."
+      );
+      if (list.jobs.every((job) => job.status === "completed"))
+        return list.jobs.filter((job) => required.has(job.name));
+      // GitHub can report the run completed while its jobs endpoint still
+      // reports an in-progress job. Re-read only this exact run; never infer
+      // success from the run-level conclusion or dispatch another workflow.
+      if (poll + 1 < polls) await wait(pollMs, { signal });
+    }
     serviceAssert(
-      Number.isSafeInteger(list.total_count) &&
-        list.total_count === list.jobs?.length &&
-        (!expected.exact || list.total_count === expected.required.length) &&
-        expected.required.every((name) =>
-          list.jobs.some((job) => job.name === name)
-        ) &&
-        list.jobs.every(
-          (job) =>
-            (!expected.exact || required.has(job.name)) &&
-            job.run_id === run.id &&
-            job.head_sha === run.head_sha &&
-            job.status === "completed"
-        ) &&
-        new Set(list.jobs.map((job) => job.name)).size === list.jobs.length,
+      false,
       "release-workflow",
-      "The product-shaped workflow job set is incomplete or changed."
+      "The product-shaped workflow jobs did not settle after the run completed."
     );
-    return list.jobs.filter((job) => required.has(job.name));
   }
 
   async function readDeploymentArtifact(run, descriptor) {
@@ -794,7 +825,13 @@ export function createProductWorkflowReleaseGitHub({
       operation.role === "frontend" && operation.environment === "staging"
         ? integrationChanged(record, operations)
         : false;
-    const descriptor = directDescriptor(operation, sourceChanged, runtime);
+    // Recovery integrates all saved refs before redeploying backend services.
+    // Its frontend staging merge can auto-deploy/E2E too early to prove the
+    // restored backend+frontend combination, so dispatch a fresh deploy after
+    // the ordered backend recovery steps instead of adopting that push run.
+    const useAutomaticPush =
+      sourceChanged && !record.step.id.startsWith("restore:");
+    const descriptor = directDescriptor(operation, useAutomaticPush, runtime);
     const workflowIdentity = workflow(
       descriptor.role,
       descriptor.workflowKey,
@@ -809,6 +846,15 @@ export function createProductWorkflowReleaseGitHub({
           record.dispatch_after_run_id >= 0,
         "release-dispatch-uncertain",
         "A resumed product-shaped dispatch lacks its saved workflow boundary."
+      );
+    if (record.dispatch_response_run_id !== undefined)
+      serviceAssert(
+        positive(record.dispatch_response_run_id) &&
+          record.workflow_run_id === record.dispatch_response_run_id &&
+          Number.isSafeInteger(record.dispatch_after_run_id) &&
+          record.dispatch_response_run_id > record.dispatch_after_run_id,
+        "release-state",
+        "The saved direct dispatch run ID or boundary is inconsistent."
       );
     await verifyFiles(
       descriptor.role,
@@ -826,17 +872,14 @@ export function createProductWorkflowReleaseGitHub({
       : ["dispatching", "running"].includes(record.state)
         ? await findDirectRun(descriptor, workflowIdentity, actor, record)
         : null;
-    if (
-      run &&
-      descriptor.event === "workflow_dispatch" &&
-      Date.parse(run.created_at) < Date.parse(record.created_at)
-    ) {
-      delete record.workflow_run_id;
-      delete record.workflow_id;
-      record.state = "prepared";
-      await save();
-      run = null;
-    }
+    serviceAssert(
+      !run ||
+        descriptor.event !== "workflow_dispatch" ||
+        record.dispatch_response_run_id === run.id ||
+        Date.parse(run.created_at) >= Date.parse(record.created_at),
+      "release-dispatch-uncertain",
+      "A saved workflow run predates its dispatch record; do not redispatch it."
+    );
     const automaticPush = descriptor.event === "push";
     if (!run && !automaticPush && record.state !== "running") {
       serviceAssert(
@@ -855,7 +898,9 @@ export function createProductWorkflowReleaseGitHub({
       const boundaryQuery = new URLSearchParams({
         branch: descriptor.ref,
         event: descriptor.event,
-        head_sha: descriptor.sourceCommit,
+        ...(descriptor.kind === "monitoring"
+          ? {}
+          : { head_sha: descriptor.sourceCommit }),
         per_page: "1"
       });
       // GitHub returns workflow runs newest-first, so one exact candidate is
@@ -880,18 +925,40 @@ export function createProductWorkflowReleaseGitHub({
       record.dispatch_after_run_id = newest.workflow_runs[0]?.id ?? 0;
       record.state = "dispatching";
       await save();
-      await call(
+      const dispatched = await call(
         descriptor.role,
         "POST",
         `/actions/workflows/${descriptor.workflow}/dispatches`,
-        { ref: descriptor.ref, inputs: descriptor.inputs },
-        [204]
+        {
+          ref: descriptor.ref,
+          inputs: descriptor.inputs,
+          return_run_details: true
+        },
+        [200, 204]
       );
+      if (dispatched.status === 200) {
+        serviceAssert(
+          positive(dispatched.data?.workflow_run_id),
+          "release-dispatch-uncertain",
+          "GitHub accepted the product workflow dispatch without a usable run ID."
+        );
+        record.workflow_run_id = dispatched.data.workflow_run_id;
+        record.dispatch_response_run_id = dispatched.data.workflow_run_id;
+        record.workflow_id = workflowIdentity.id;
+      }
       record.state = "running";
       await save();
     }
     for (let poll = 0; poll < polls; poll++) {
-      run ??= await findDirectRun(descriptor, workflowIdentity, actor, record);
+      run ??= record.workflow_run_id
+        ? (
+            await call(
+              descriptor.role,
+              "GET",
+              `/actions/runs/${record.workflow_run_id}`
+            )
+          ).data
+        : await findDirectRun(descriptor, workflowIdentity, actor, record);
       if (run) {
         verifyDirectRun(run, descriptor, workflowIdentity, actor, record);
         const changed =
@@ -1050,6 +1117,16 @@ export function createProductWorkflowReleaseGitHub({
         Number.isFinite(Date.parse(deploymentRun.created_at)),
       "release-workflow",
       "The matching frontend deployment run has no trusted creation time."
+    );
+    const backendCompletedAt =
+      dependencies.backend?.result?.report?.completed_at;
+    serviceAssert(
+      !dependencies.backend ||
+        (Number.isFinite(Date.parse(backendCompletedAt)) &&
+          Date.parse(deploymentRun.created_at) >=
+            Date.parse(backendCompletedAt)),
+      "release-workflow",
+      "The frontend deployment started before the matching backend deployment finished; its E2E cannot prove the final combination."
     );
     // GitHub starts the automatic E2E chain as soon as the deployment run
     // completes. The Coordinator may save the E2E operation afterwards, so

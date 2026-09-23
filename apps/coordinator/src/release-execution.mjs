@@ -20,6 +20,10 @@ const requestsMonitoring = (batch) =>
   );
 function monitoringNote(batch, execution) {
   if (!requestsMonitoring(batch)) return "";
+  if (execution.plan.version === 2)
+    return execution.plan.target === "production"
+      ? " Operational monitoring was deployed from staging to staging and from main to production, before each environment's application deployments."
+      : " Operational monitoring was deployed from staging to staging before its application deployments.";
   return execution.plan.target === "production"
     ? ` Operational monitoring was deployed for staging and production from the merged ${execution.plan.profile === "sandbox" ? "test " : ""}main commit before the production application deployments.`
     : ` Operational monitoring in this request was not deployed: monitoring deploys only from ${execution.plan.profile === "sandbox" ? "test " : ""}main, so it deploys with the production release of this change.`;
@@ -335,7 +339,7 @@ export async function executeRelease({
             step.kind === "e2e"
               ? `Run matching ${step.environment} E2E.`
               : step.kind === "monitoring"
-                ? `Deploy monitoring for ${step.monitoring_environment} from main.`
+                ? `Deploy monitoring for ${step.monitoring_environment} from ${step.environment === "staging" ? "staging" : "main"}.`
                 : `Run ${step.role} ${step.unit} ${execution.plan.profile} deployment check.`
         },
         () =>
