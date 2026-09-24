@@ -669,6 +669,18 @@ moved, recompute and obtain evidence for the changed combination. Never force
 an old tree over somebody else's work, or claim a client-side check makes two
 GitHub repository merges atomic.
 
+For a PR that GitHub marks `BLOCKED` with `REVIEW_REQUIRED`, or with a null
+decision and verified zero reviews, a configured profile may use the acting account's
+PR-only ruleset bypass only after verifying the exact head and current base,
+required successful checks, mergeability, no unresolved review threads, the
+effective rules and current-account bypass entitlement. Recheck before merge
+and record the bypass on the release operation. GitHub applies bypass to a
+whole ruleset, not only to its approval rule, so the Coordinator must audit
+the other known conditions itself and stop on an unrecognized rule. A bypass
+is never implied by account ownership, a profile switch, or a passing sandbox
+test. The September 24 implementation pins only the sandbox rulesets; real
+product bypass remains unconfigured and lacks live acceptance.
+
 Shared `1a-staging` may differ from `main`. Rehearsing only against `main`, as the
 current sandbox does, is insufficient proof for an actual staging merge. Inspect
 staging contents and candidate merge before pushing; frontend staging pushes can

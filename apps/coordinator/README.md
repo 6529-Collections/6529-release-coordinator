@@ -342,6 +342,17 @@ different actor, the command stops before acquiring the journal lock. Repeating
 ordinary conflict, batch, database, target, staging, production, and recovery
 rules.
 
+The sandbox profile pins PR-only approval-bypass rulesets on the two test
+`main` branches. An unapproved PR may continue only if GitHub reports
+`REVIEW_REQUIRED` (or a null decision with verified zero reviews), the acting
+account is eligible on that exact ruleset, all
+required checks pass on the exact commit, and the Coordinator verifies the
+other known merge conditions and records the bypass. This is not `--admin` or
+a general permission to ignore failed checks. The real profile has no bypass
+ruleset pin; a real release still stops for missing review. See the
+[dated sandbox acceptance](../../docs/testing/approval-bypass-2026-09-24.md)
+for settings, proof, and the manual-resume caveat.
+
 Initial blockers skip planning/rehearsal. Missing destination configuration or
 GitHub evidence gets `reason:merge-plan-unavailable`; an impossible generated
 scope/order gets `reason:merge-plan-invalid`. The comment explains what failed.

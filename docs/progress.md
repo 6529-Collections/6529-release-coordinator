@@ -1,7 +1,8 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-23**, against merged Coordinator `main` source
-`9996fdd` ([PR #219](https://github.com/6529-Collections/6529-release-coordinator/pull/219)).
+Last reviewed: **2026-09-24**, against merged Coordinator `main` source
+`9996fdd` ([PR #219](https://github.com/6529-Collections/6529-release-coordinator/pull/219))
+plus local, unmerged approval-bypass changes.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
@@ -29,6 +30,21 @@ PR/CI delivery and live environment proof.
 | Product-shaped test workflow mirror | Merged test workflows build sample code and publish fake deployment evidence while mirroring the existing product workflow interfaces, including branch-aligned monitoring and linked deploy-to-E2E runs.                                           | Original mirror: frontend PR #92 and backend PR #100, with [September 21 acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md). Branch-contract correction: backend PRs #139/#140 and frontend PRs #127/#128, with [September 23 success and recovery acceptance](./testing/monitoring-branch-contract-2026-09-23.md). These are test repositories only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Product-workflow sandbox adapter    | Sandbox release operations use the separate product-shaped backend, monitoring, frontend and E2E workflow mirrors by default; the generic `sandbox-release.yml` client remains an explicit fallback                                                 | The [adapter-selection implementation](../apps/coordinator/src/sandbox-release-client.mjs), including the explicit `RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER=generic` fallback, ships in the same change as this status row. Offline contract and recovery suites cover branch sources, exact runs/artifacts, operation persistence, failures and recovery. The independent [success-path acceptance](./testing/adapter-success-path-2026-09-21.md) completed staging and production, and the independent [controlled-recovery acceptance](./testing/adapter-recovery-2026-09-21.md) stopped on monitoring failure, restored production then staging, reran matching deploys/E2E, and resumed the same journal without duplicate dispatch. The [September 22 profile/scope acceptance](./testing/profile-scope-sandbox-2026-09-22.md) additionally passed fresh one-ticket, two-ticket, solo-database and staging-E2E-failure recovery cases; it exposed and fixed causal-time and running-wrapper reconciliation gaps before same-run recovery completed. All used only test repositories. Delivered to protected Coordinator `main` in PR #218.                                                                                                                                          |
 | Real-profile release adapter        | PR #218 selects product repositories under `RELEASE_COORDINATOR_PROFILE=real` and uses the shared release engine with existing product workflows.                                                                                                   | PR #219 merged the monitoring dispatch correction after offline tests and sandbox success/recovery acceptance, but there is no product execution proof. No product PR, merge, deploy, rollback, or live E2E was performed. Database-changing failures never enter automatic recovery; manual release remains the proven path.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+
+The [September 24 approval-bypass acceptance](./testing/approval-bypass-2026-09-24.md)
+added PR-only review-bypass rules to both test `main` branches without removing
+their required `Sandbox check`. The shared Coordinator code accepts a missing
+approval only when the pinned ruleset says the acting account can bypass,
+the exact PR/base and all required checks pass, and review threads and other
+known gates are clear. A filtered sandbox production ticket (#50) completed
+both unapproved protected-main integration merges, all fake deployments and
+matching E2E; the journal recorded each bypass and released its lock. One
+mid-run journal-lock interruption occurred after staging integration and before
+the protected-main bypass merges; an inspected manual resume continued the
+same run without re-merging completed staging PRs. This run did not exercise
+rollback. These
+code changes are local and unmerged, and the real profile has no bypass
+ruleset pin: no real-product bypass or release has been tested or enabled.
 
 The [September 23 staging check alignment](./testing/staging-check-alignment-2026-09-23.md)
 removed protection from only the two test `1a-staging` branches, matching the
@@ -64,6 +80,13 @@ skipped. Lint, formatting, documentation, workflow policy and package checks
 also passed. GitHub CI and live product acceptance are separate evidence.
 
 ## Next steps
+
+Review and deliver the local approval-bypass code in a Coordinator PR; wait for
+its GitHub checks and review. Keep the real profile's bypass unconfigured until
+the product rules and required checks are separately audited and a filtered
+real-product acceptance is explicitly chosen. The one sandbox journal-lock
+interruption recovered by resume; investigate if it recurs, and do not describe
+this run as uninterrupted proof.
 
 Merged Coordinator [PR #219](https://github.com/6529-Collections/6529-release-coordinator/pull/219)
 dispatches staging monitoring from `1a-staging` and production monitoring from `main`,

@@ -3,6 +3,10 @@ import {
   runRehearsalProcess
 } from "./rehearsal-process.mjs";
 import { isBranch, isSha, RehearsalError } from "./rehearsal-plan.mjs";
+import {
+  approvalBypassEvidence,
+  needsApprovalBypass
+} from "./approval-bypass.mjs";
 
 const query = `query RehearsalPull($owner: String!, $name: String!, $number: Int!, $cursor: String) {
   repository(owner: $owner, name: $name) { pullRequest(number: $number) {
@@ -33,6 +37,27 @@ const query = `query RehearsalPull($owner: String!, $name: String!, $number: Int
 const destinationQuery = `query RehearsalDestination($owner: String!, $name: String!, $ref: String!) {
   repository(owner: $owner, name: $name) { databaseId nameWithOwner isPrivate
     ref(qualifiedName: $ref) { name target { ... on Commit { oid } } }
+  }
+}`;
+const approvalQuery = `query ApprovalBypass($owner: String!, $name: String!, $number: Int!, $ref: String!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    databaseId nameWithOwner isPrivate
+    ref(qualifiedName: $ref) {
+      name target { ... on Commit { oid } }
+      branchProtectionRule {
+        requiredApprovingReviewCount requiresCodeOwnerReviews
+        requiresConversationResolution requiresStatusChecks
+        requiresStrictStatusChecks
+      }
+    }
+    pullRequest(number: $number) {
+      number headRefOid baseRefOid
+      reviews(first: 1) { totalCount }
+      reviewThreads(first: 100, after: $cursor) {
+        pageInfo { hasNextPage endCursor }
+        nodes { isResolved }
+      }
+    }
   }
 }`;
 
@@ -104,7 +129,161 @@ export function createRehearsalGitHub(
       );
     return response.data.repository;
   }
+  async function rest(repo, suffix) {
+    const result = await execute(
+      "gh",
+      [
+        "api",
+        "--hostname",
+        "github.com",
+        "--method",
+        "GET",
+        `repos/${repo.full_name}${suffix}`
+      ],
+      { env: githubEnvironment(), signal }
+    );
+    try {
+      return JSON.parse(result.stdout);
+    } catch {
+      throw new RehearsalError(
+        "github_evidence",
+        "GitHub returned unreadable approval-bypass evidence."
+      );
+    }
+  }
+  async function approvalBypass(role, pr) {
+    const repo = identity(role);
+    if (!repo.approval_bypass_ruleset_id || !needsApprovalBypass(pr))
+      return null;
+    if (!isBranch(pr.baseRefName) || !isSha(pr.headRefOid))
+      throw new RehearsalError(
+        "github_evidence",
+        "Approval-bypass PR identity is incomplete."
+      );
+    const cursors = new Set();
+    let cursor;
+    let protection;
+    let reviewCount;
+    let unresolvedThreads = 0;
+    for (;;) {
+      const result = await graphql(repo, approvalQuery, [
+        "-F",
+        `number=${pr.number}`,
+        "-f",
+        `ref=refs/heads/${pr.baseRefName}`,
+        ...(cursor ? ["-f", `cursor=${cursor}`] : [])
+      ]);
+      verify(result, repo);
+      if (
+        result.ref?.name !== pr.baseRefName ||
+        result.ref.target?.oid !== pr.baseRefOid ||
+        result.pullRequest?.number !== pr.number ||
+        result.pullRequest.headRefOid !== pr.headRefOid ||
+        result.pullRequest.baseRefOid !== pr.baseRefOid
+      )
+        throw new RehearsalError(
+          "moving_pages",
+          "PR or destination moved during approval-bypass verification."
+        );
+      const nextProtection = result.ref.branchProtectionRule;
+      if (
+        protection !== undefined &&
+        JSON.stringify(protection) !== JSON.stringify(nextProtection)
+      )
+        throw new RehearsalError(
+          "moving_pages",
+          "Branch protection changed during approval-bypass verification."
+        );
+      protection = nextProtection;
+      const nextReviewCount = result.pullRequest.reviews?.totalCount;
+      if (
+        !Number.isSafeInteger(nextReviewCount) ||
+        nextReviewCount < 0 ||
+        (reviewCount !== undefined && reviewCount !== nextReviewCount)
+      )
+        throw new RehearsalError(
+          "moving_pages",
+          "PR review count changed during approval-bypass verification."
+        );
+      reviewCount = nextReviewCount;
+      const threads = result.pullRequest.reviewThreads;
+      if (
+        !Array.isArray(threads?.nodes) ||
+        typeof threads.pageInfo?.hasNextPage !== "boolean" ||
+        threads.nodes.some((thread) => typeof thread?.isResolved !== "boolean")
+      )
+        throw new RehearsalError(
+          "github_evidence",
+          "GitHub returned incomplete review-thread evidence."
+        );
+      unresolvedThreads += threads.nodes.filter(
+        (thread) => !thread.isResolved
+      ).length;
+      if (!threads.pageInfo.hasNextPage) break;
+      cursor = threads.pageInfo.endCursor;
+      if (typeof cursor !== "string" || !cursor || cursors.has(cursor))
+        throw new RehearsalError(
+          "github_evidence",
+          "GitHub returned a missing or repeated review-thread cursor."
+        );
+      cursors.add(cursor);
+    }
+    const rules = await rest(
+      repo,
+      `/rules/branches/${encodeURIComponent(pr.baseRefName)}`
+    );
+    const ruleset = await rest(
+      repo,
+      `/rulesets/${repo.approval_bypass_ruleset_id}`
+    );
+    let baseIsAncestor = false;
+    if (
+      rules.some(
+        (rule) =>
+          rule.type === "required_status_checks" &&
+          rule.parameters?.strict_required_status_checks_policy === true
+      ) ||
+      protection?.requiresStrictStatusChecks === true
+    ) {
+      const compare = await rest(
+        repo,
+        `/compare/${pr.baseRefOid}...${pr.headRefOid}?per_page=1`
+      );
+      // Behind/diverged are valid API shapes, but cannot prove ancestry below.
+      if (
+        !isSha(compare?.base_commit?.sha) ||
+        !isSha(compare?.merge_base_commit?.sha) ||
+        !Number.isSafeInteger(compare?.behind_by) ||
+        !["ahead", "identical", "behind", "diverged"].includes(compare?.status)
+      )
+        throw new RehearsalError(
+          "github_evidence",
+          "GitHub returned incomplete branch-ancestry evidence."
+        );
+      baseIsAncestor =
+        compare.base_commit?.sha === pr.baseRefOid &&
+        compare.merge_base_commit?.sha === pr.baseRefOid &&
+        compare.behind_by === 0 &&
+        ["ahead", "identical"].includes(compare.status);
+    }
+    return approvalBypassEvidence({
+      pr,
+      rules,
+      ruleset,
+      branchProtection: protection,
+      unresolvedThreads,
+      reviewCount,
+      baseIsAncestor,
+      rulesetId: repo.approval_bypass_ruleset_id,
+      expectedChecks: repo.required_checks
+    });
+  }
+  async function withApprovalBypass(role, pr) {
+    if (!needsApprovalBypass(pr)) return pr;
+    return { ...pr, approvalBypass: await approvalBypass(role, pr) };
+  }
   return {
+    approvalBypass,
     async destination(role, branch) {
       const repo = identity(role);
       if (!isBranch(branch))
@@ -162,7 +341,8 @@ export function createRehearsalGitHub(
           );
         snapshot = metadata;
         const rollup = commits[0].commit.statusCheckRollup;
-        if (rollup === null && !cursor) return { ...snapshot, checks };
+        if (rollup === null && !cursor)
+          return withApprovalBypass(role, { ...snapshot, checks });
         const connection = rollup?.contexts;
         if (
           !Array.isArray(connection?.nodes) ||
@@ -190,7 +370,8 @@ export function createRehearsalGitHub(
           ids.add(check.id);
           checks.push(check);
         }
-        if (!connection.pageInfo.hasNextPage) return { ...snapshot, checks };
+        if (!connection.pageInfo.hasNextPage)
+          return withApprovalBypass(role, { ...snapshot, checks });
         cursor = connection.pageInfo.endCursor;
         if (typeof cursor !== "string" || !cursor || cursors.has(cursor))
           throw new RehearsalError(

@@ -12,6 +12,7 @@ import {
 } from "./readiness-dependencies.mjs";
 import { catalogPath } from "./readiness-github.mjs";
 import { effectiveRequiredChecks } from "./github-checks.mjs";
+import { hasApprovalBypass } from "./approval-bypass.mjs";
 
 const sha = /^[0-9a-f]{40}$/u;
 const mergeStates = [
@@ -172,7 +173,9 @@ export function inspectPull(
       }
     )
   );
-  const gatePass = open && ["CLEAN", "UNSTABLE"].includes(pr.mergeStateStatus);
+  const bypass = hasApprovalBypass(pr);
+  const gatePass =
+    open && (["CLEAN", "UNSTABLE"].includes(pr.mergeStateStatus) || bypass);
   const gateBlocked =
     open &&
     ["BEHIND", "BLOCKED", "DIRTY", "DRAFT"].includes(pr.mergeStateStatus);
@@ -180,7 +183,10 @@ export function inspectPull(
     check(
       "github_merge_gate",
       gatePass ? "pass" : gateBlocked ? "blocked" : "unknown",
-      `GitHub merge state for the PR base: ${pr.mergeStateStatus}. This is GitHub's summary, not an independent rules audit.`
+      bypass
+        ? "GitHub reports a review block. This account has a verified PR-only ruleset bypass; all other known gates remain independently checked."
+        : `GitHub merge state for the PR base: ${pr.mergeStateStatus}. This is GitHub's summary, not an independent rules audit.`,
+      bypass ? pr.approvalBypass : undefined
     )
   );
 
@@ -202,7 +208,7 @@ export function inspectPull(
       "required_checks",
       requiredStatus,
       requiredStatus === "pass"
-        ? "Reported required checks pass, and GitHub reports a mergeable gate."
+        ? "Reported required checks pass, and GitHub reports a mergeable gate or a verified approval-only bypass."
         : requiredStatus === "blocked"
           ? "At least one required check is failing or unfinished."
           : "Required-check success is not established. Missing checks cannot be inferred from an empty list or a blocked/unknown gate.",
@@ -218,14 +224,18 @@ export function inspectPull(
   checks.push(
     check(
       "reviews",
-      ["CHANGES_REQUESTED", "REVIEW_REQUIRED"].includes(review)
+      review === "CHANGES_REQUESTED" ||
+        (review === "REVIEW_REQUIRED" && !bypass)
         ? "blocked"
-        : review === "APPROVED" || (review === null && gatePass)
+        : review === "APPROVED" || bypass || (review === null && gatePass)
           ? "pass"
           : "unknown",
-      review === null
-        ? "GitHub reports no review decision; only a passing merge gate can establish that no review block is reported."
-        : `GitHub review decision: ${review}.`
+      bypass
+        ? "Required approval is absent; the verified account may bypass this review rule for a PR."
+        : review === null
+          ? "GitHub reports no review decision; only a passing merge gate can establish that no review block is reported."
+          : `GitHub review decision: ${review}.`,
+      bypass ? pr.approvalBypass : undefined
     )
   );
   return checks;

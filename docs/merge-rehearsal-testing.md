@@ -844,6 +844,26 @@ change unless a concrete failure justifies it.
 
 ## Release-sequence acceptance
 
+### Missing-approval bypass mirror
+
+The [September 24 sandbox acceptance](./testing/approval-bypass-2026-09-24.md)
+adds one required review and a PR-only `simo6529` bypass on each test `main`
+branch while preserving the existing app-bound required `Sandbox check`.
+The Coordinator's shared gate verifies the pinned effective ruleset, the
+acting token's eligibility, the exact head and current base, all required
+checks, review threads, and known up-to-date rules. It treats
+`REVIEW_REQUIRED`, or a null review decision with verified zero reviews,
+with otherwise passing evidence as bypassable; requested
+changes, conflicts, missing/failed/pending checks and unrecognized rules stop.
+The successful filtered production-target ticket #50 passed both unapproved
+protected-main integration PRs, the fake deployment sequence and matching
+E2E. A journal-lock interruption required inspected manual resume, so the
+record does not claim an uninterrupted run. A later read-only real-PR probe
+found GitHub can return a null review decision for an unreviewed
+team-required PR; the local gate now requires verified zero reviews in that
+case. This null path has offline and read-only real evidence, but no live
+merge. Real-profile bypass remains unconfigured and untested in execution.
+
 The first sandbox sequence passed live on September 11. One production-target
 ticket moved through protected fake staging, matching E2E, protected fake
 production, and matching E2E. The Coordinator recorded all 14 exact operations,
