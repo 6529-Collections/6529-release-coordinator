@@ -354,7 +354,9 @@ ruleset pin for the backend. The real frontend profile pins its current
 real-release execution proof yet. A PR that GitHub marks `BEHIND` is not
 bypassable. See the
 [dated sandbox acceptance](../../docs/testing/approval-bypass-2026-09-24.md)
-for settings, proof, and the manual-resume caveat.
+for its manual-resume caveat, and the
+[real frontend configuration audit](../../docs/testing/real-frontend-approval-bypass-config-2026-09-24.md)
+for the separately verified product rule and untested execution boundary.
 
 Initial blockers skip planning/rehearsal. Missing destination configuration or
 GitHub evidence gets `reason:merge-plan-unavailable`; an impossible generated

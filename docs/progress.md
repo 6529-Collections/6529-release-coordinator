@@ -45,7 +45,8 @@ same run without re-merging completed staging PRs. This run did not exercise
 rollback. PR #227 merged the shared code. This follow-up pins only the real
 frontend's existing `main` bypass ruleset and required checks; the real
 backend remains unpinned. The configuration does not execute a release, and no
-real-product bypass, merge, deployment, E2E, or rollback has been tested.
+real-product bypass, merge, deployment, E2E, or rollback has been tested. See
+the [read-only product-rule audit](./testing/real-frontend-approval-bypass-config-2026-09-24.md).
 
 The [September 23 staging check alignment](./testing/staging-check-alignment-2026-09-23.md)
 removed protection from only the two test `1a-staging` branches, matching the

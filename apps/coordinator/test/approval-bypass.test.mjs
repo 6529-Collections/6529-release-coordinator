@@ -173,6 +173,7 @@ test("real frontend pins its current ruleset and every enforced check", () => {
   ]);
   const value = {
     ...pr(),
+    headRefName: "codex/double-image",
     reviewDecision: null,
     repository: { nameWithOwner: realRepo.full_name },
     headRepository: { nameWithOwner: realRepo.full_name },
@@ -233,14 +234,29 @@ test("real frontend pins its current ruleset and every enforced check", () => {
   );
   for (const id of ["github_merge_gate", "required_checks", "reviews"])
     assert.equal(results.find((item) => item.id === id).status, "pass", id);
+  const staleTicket = inspectPull(
+    value,
+    { branch: value.headRefName, commit: "c".repeat(40) },
+    "6529seize-frontend",
+    realRepo.full_name
+  );
+  assert.equal(
+    staleTicket.find((item) => item.id === "requested_code").status,
+    "blocked"
+  );
 
-  value.checks[0].status = "IN_PROGRESS";
-  value.checks[0].conclusion = null;
-  assert.equal(approvalBypassEvidence(input), null);
-  value.checks.shift();
-  assert.equal(approvalBypassEvidence(input), null);
-  value.mergeStateStatus = "BEHIND";
-  assert.equal(approvalBypassEvidence(input), null);
+  for (const index of realRepo.required_checks.keys()) {
+    const pending = structuredClone(input);
+    pending.pr.checks[index].status = "IN_PROGRESS";
+    pending.pr.checks[index].conclusion = null;
+    assert.equal(approvalBypassEvidence(pending), null);
+    const missing = structuredClone(input);
+    missing.pr.checks.splice(index, 1);
+    assert.equal(approvalBypassEvidence(missing), null);
+  }
+  const behind = structuredClone(input);
+  behind.pr.mergeStateStatus = "BEHIND";
+  assert.equal(approvalBypassEvidence(behind), null);
 });
 
 test("all ruleset checks and strict up-to-date requirements remain enforced", () => {

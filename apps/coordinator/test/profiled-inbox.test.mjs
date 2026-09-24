@@ -349,6 +349,7 @@ for (const profile of [sandboxProfile, realProfile]) {
     const fixturePullRequest = f.github.pullRequest;
     f.github.pullRequest = async (role, number) => {
       const observed = await fixturePullRequest(role, number);
+      if (profile === sandboxProfile) return observed;
       return {
         ...observed,
         checks: profile.repositories[role].required_checks.map(
