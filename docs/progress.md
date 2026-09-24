@@ -1,8 +1,8 @@
 # Progress and next steps
 
 Last reviewed: **2026-09-24**, against merged Coordinator `main` source
-`9996fdd` ([PR #219](https://github.com/6529-Collections/6529-release-coordinator/pull/219))
-plus local, unmerged approval-bypass changes.
+`5dd9c81` ([PR #227](https://github.com/6529-Collections/6529-release-coordinator/pull/227))
+plus this real-frontend ruleset configuration.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
@@ -42,9 +42,11 @@ matching E2E; the journal recorded each bypass and released its lock. One
 mid-run journal-lock interruption occurred after staging integration and before
 the protected-main bypass merges; an inspected manual resume continued the
 same run without re-merging completed staging PRs. This run did not exercise
-rollback. These
-code changes are local and unmerged, and the real profile has no bypass
-ruleset pin: no real-product bypass or release has been tested or enabled.
+rollback. PR #227 merged the shared code. This follow-up pins only the real
+frontend's existing `main` bypass ruleset and required checks; the real
+backend remains unpinned. The configuration does not execute a release, and no
+real-product bypass, merge, deployment, E2E, or rollback has been tested. See
+the [read-only product-rule audit](./testing/real-frontend-approval-bypass-config-2026-09-24.md).
 
 The [September 23 staging check alignment](./testing/staging-check-alignment-2026-09-23.md)
 removed protection from only the two test `1a-staging` branches, matching the
@@ -81,12 +83,17 @@ also passed. GitHub CI and live product acceptance are separate evidence.
 
 ## Next steps
 
-Review and deliver the local approval-bypass code in a Coordinator PR; wait for
-its GitHub checks and review. Keep the real profile's bypass unconfigured until
-the product rules and required checks are separately audited and a filtered
-real-product acceptance is explicitly chosen. The one sandbox journal-lock
-interruption recovered by resume; investigate if it recurs, and do not describe
-this run as uninterrupted proof.
+PR #227 delivered the shared approval-bypass gate. This follow-up configures
+only the real frontend after read-only verification of its existing ruleset
+and five required checks. Existing staging Issue #224 pins frontend PR #4093
+at commit `d635b5f`, but GitHub reported that PR `BEHIND` on September 24;
+the bypass must not override it. If its branch is updated, that commit changes,
+so Issue #224 cannot be reused: submit a new verified ticket pinned to the new
+head, then filter a real run to only that Issue and actor `simo6529`. Stop on
+uncertain evidence and inspect the saved journal. A production ticket is
+separate and follows staging acceptance. The sandbox
+journal-lock interruption recovered by resume; investigate if it recurs, and
+do not describe that run as uninterrupted proof.
 
 Merged Coordinator [PR #219](https://github.com/6529-Collections/6529-release-coordinator/pull/219)
 dispatches staging monitoring from `1a-staging` and production monitoring from `main`,

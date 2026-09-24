@@ -7,7 +7,7 @@ import {
 import { createRehearsalGitHub } from "../src/rehearsal-github.mjs";
 import { createReadinessGitHub } from "../src/readiness-github.mjs";
 import { inspectPull } from "../src/readiness.mjs";
-import { sandboxProfile } from "../src/profiles.mjs";
+import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 
 const head = "a".repeat(40);
 const base = "b".repeat(40);
@@ -155,6 +155,108 @@ test("GitHub's null decision can mean an unreviewed team-required PR", () => {
   assert.equal(approvalBypassEvidence(input), null);
   input.pr.approvalBypass.review_count = 1;
   assert.equal(hasApprovalBypass(input.pr), false);
+});
+
+test("real frontend pins its current ruleset and every enforced check", () => {
+  const realRepo = realProfile.repositories.frontend;
+  assert.equal(realRepo.approval_bypass_ruleset_id, 18018081);
+  assert.equal(
+    realProfile.repositories.backend.approval_bypass_ruleset_id,
+    null
+  );
+  assert.deepEqual(realRepo.required_checks, [
+    "DCO",
+    "security/snyk (6529)",
+    "Plan risk and security checks",
+    "Installed app checks",
+    "Debt ratchet"
+  ]);
+  const value = {
+    ...pr(),
+    headRefName: "codex/double-image",
+    reviewDecision: null,
+    repository: { nameWithOwner: realRepo.full_name },
+    headRepository: { nameWithOwner: realRepo.full_name },
+    checks: realRepo.required_checks.map((name, index) => ({
+      __typename: "CheckRun",
+      id: `real-check-${index}`,
+      name,
+      isRequired: true,
+      status: "COMPLETED",
+      conclusion: "SUCCESS"
+    }))
+  };
+  const input = {
+    ...evidence(value),
+    rulesetId: realRepo.approval_bypass_ruleset_id,
+    expectedChecks: realRepo.required_checks,
+    ruleset: {
+      id: realRepo.approval_bypass_ruleset_id,
+      enforcement: "active",
+      current_user_can_bypass: "pull_requests_only"
+    },
+    rules: [
+      {
+        type: "pull_request",
+        ruleset_id: realRepo.approval_bypass_ruleset_id,
+        parameters: {
+          required_approving_review_count: 1,
+          allowed_merge_methods: ["merge", "squash", "rebase"]
+        }
+      },
+      {
+        type: "required_status_checks",
+        ruleset_id: realRepo.approval_bypass_ruleset_id,
+        parameters: {
+          required_status_checks: realRepo.required_checks.map((context) => ({
+            context
+          })),
+          strict_required_status_checks_policy: true
+        }
+      },
+      { type: "update", ruleset_id: realRepo.approval_bypass_ruleset_id },
+      { type: "deletion", ruleset_id: realRepo.approval_bypass_ruleset_id },
+      {
+        type: "non_fast_forward",
+        ruleset_id: realRepo.approval_bypass_ruleset_id
+      }
+    ],
+    branchProtection: null,
+    baseIsAncestor: true
+  };
+  value.approvalBypass = approvalBypassEvidence(input);
+  assert.equal(hasApprovalBypass(value), true);
+  const results = inspectPull(
+    value,
+    { branch: value.headRefName, commit: head },
+    "6529seize-frontend",
+    realRepo.full_name
+  );
+  for (const id of ["github_merge_gate", "required_checks", "reviews"])
+    assert.equal(results.find((item) => item.id === id).status, "pass", id);
+  const staleTicket = inspectPull(
+    value,
+    { branch: value.headRefName, commit: "c".repeat(40) },
+    "6529seize-frontend",
+    realRepo.full_name
+  );
+  assert.equal(
+    staleTicket.find((item) => item.id === "requested_code").status,
+    "blocked"
+  );
+
+  for (const index of realRepo.required_checks.keys()) {
+    const pending = structuredClone(input);
+    pending.pr.checks[index].status = "IN_PROGRESS";
+    pending.pr.checks[index].conclusion = null;
+    assert.equal(approvalBypassEvidence(pending), null);
+    const missing = structuredClone(input);
+    missing.pr.checks.splice(index, 1);
+    assert.equal(approvalBypassEvidence(missing), null);
+  }
+  const behind = structuredClone(input);
+  behind.pr.mergeStateStatus = "BEHIND";
+  assert.equal(approvalBypassEvidence(behind), null);
 });
 
 test("all ruleset checks and strict up-to-date requirements remain enforced", () => {
