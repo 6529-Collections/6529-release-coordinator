@@ -103,15 +103,19 @@ export async function createRehearsalGit({
         "closed_workspace",
         "Temporary rehearsal workspace is closed."
       );
-    const result = await execute("git", [...config, ...args], {
-      cwd,
-      env,
-      signal,
-      watch: storageLimit,
-      ...options
-    });
-    await storageLimit();
-    return result;
+    try {
+      return await execute("git", [...config, ...args], {
+        cwd,
+        env,
+        signal,
+        watch: storageLimit,
+        ...options
+      });
+    } finally {
+      // This also covers a lazy promisor fetch whose subprocess fails before
+      // the periodic watcher observes the newly downloaded object.
+      await storageLimit();
+    }
   }
   async function clean() {
     stopped = true;
@@ -180,6 +184,7 @@ export async function createRehearsalGit({
         // needed by merge-tree or an explicit file read, under the same limit.
         const filteredFetch = candidatePatchMode === "real";
         if (filteredFetch) {
+          // This is a new bare repository created with an empty template above.
           await git(cwd, ["remote", "add", "origin", remote]);
           await git(cwd, ["config", "remote.origin.promisor", "true"]);
           await git(cwd, [
@@ -188,7 +193,7 @@ export async function createRehearsalGit({
             "blob:none"
           ]);
         }
-        const header = fixtureRemotes ? null : await authentication();
+        const header = await authentication();
         const fetchEnv = {
           ...env,
           ...(header
@@ -199,22 +204,22 @@ export async function createRehearsalGit({
               }
             : {})
         };
-        await git(
-          cwd,
-          [
-            "fetch",
-            ...(filteredFetch ? ["--filter=blob:none"] : []),
-            "--no-tags",
-            "--no-recurse-submodules",
-            "--no-write-fetch-head",
-            "--",
-            filteredFetch ? "origin" : remote,
-            ...commits
-          ],
-          { env: fetchEnv }
-        );
+        // Object-reading Git commands may backfill promised blobs. Keep the
+        // same isolated authentication for those subprocesses as for fetch.
+        const repoGit = (args, options = {}) =>
+          git(cwd, args, { ...options, env: fetchEnv });
+        await repoGit([
+          "fetch",
+          ...(filteredFetch ? ["--filter=blob:none"] : []),
+          "--no-tags",
+          "--no-recurse-submodules",
+          "--no-write-fetch-head",
+          "--",
+          filteredFetch ? "origin" : remote,
+          ...commits
+        ]);
         async function oid(args) {
-          const value = (await git(cwd, args)).stdout.trim();
+          const value = (await repoGit(args)).stdout.trim();
           if (!isSha(value))
             throw new RehearsalError(
               "git_evidence",
@@ -229,7 +234,7 @@ export async function createRehearsalGit({
             `${commit}:${filename}`
           ]);
           const text = (
-            await git(cwd, ["cat-file", "blob", sha], {
+            await repoGit(["cat-file", "blob", sha], {
               maxOutput: 1024 * 1024
             })
           ).stdout;
@@ -237,7 +242,7 @@ export async function createRehearsalGit({
         }
         async function supportedTree(commit) {
           const entries = (
-            await git(cwd, ["ls-tree", "-r", "-z", commit])
+            await repoGit(["ls-tree", "-r", "-z", commit])
           ).stdout
             .split("\0")
             .filter(Boolean);
@@ -336,12 +341,11 @@ export async function createRehearsalGit({
                   "invalid_snapshot",
                   "Candidate patch is outside sample paths."
                 );
-              const entry = (await git(cwd, ["ls-tree", commit, "--", name]))
+              const entry = (await repoGit(["ls-tree", commit, "--", name]))
                 .stdout;
               if (!entry) {
-                const baseEntry = (
-                  await git(cwd, ["ls-tree", base, "--", name])
-                ).stdout;
+                const baseEntry = (await repoGit(["ls-tree", base, "--", name]))
+                  .stdout;
                 const baseMode = baseEntry.split(" ")[0];
                 if (!baseEntry || !["100644", "100755"].includes(baseMode))
                   throw new RehearsalError(
@@ -405,7 +409,7 @@ export async function createRehearsalGit({
               );
             const files = {};
             for (const name of names) {
-              const entry = (await git(cwd, ["ls-tree", commit, "--", name]))
+              const entry = (await repoGit(["ls-tree", commit, "--", name]))
                 .stdout;
               if (
                 !entry.startsWith("100644 blob ") &&
@@ -432,7 +436,7 @@ export async function createRehearsalGit({
                 "Invalid source comparison."
               );
             return (
-              await git(cwd, [
+              await repoGit([
                 "diff",
                 "--no-ext-diff",
                 "--no-renames",
@@ -451,8 +455,7 @@ export async function createRehearsalGit({
                 "invalid_commit",
                 "Invalid exact merge input."
               );
-            const result = await git(
-              cwd,
+            const result = await repoGit(
               [
                 "merge-tree",
                 "--write-tree",

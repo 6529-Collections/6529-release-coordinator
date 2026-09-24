@@ -47,7 +47,7 @@ blob-free partial fetch of the exact product commits used about 17.3 MB and
 produced the same clean merge tree, with on-demand file reads. The local
 `codex/real-rehearsal-partial-fetch` change keeps both existing storage guards,
 passes a focused offline clean/conflict regression and the full local
-`npm run check` (619 pass, three Docker-only skips), and passed a read-only
+`npm run check` (621 of 624 tests passed, three Docker-only skips), and passed a read-only
 product-object exercise. It is **not merged** and Issue #231 has **not** been
 rerun. No real integration PR, deploy, E2E, or rollback has occurred.
 

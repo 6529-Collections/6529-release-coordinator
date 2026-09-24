@@ -121,6 +121,9 @@ export async function rehearsalFixture(t) {
     });
   }
   const github = {
+    async gitAuthentication() {
+      return null;
+    },
     async destination(role, name) {
       return {
         repository: { ...profile.repositories[role] },
