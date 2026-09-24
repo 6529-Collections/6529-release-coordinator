@@ -5,6 +5,7 @@ import {
   hasApprovalBypass
 } from "../src/approval-bypass.mjs";
 import { createRehearsalGitHub } from "../src/rehearsal-github.mjs";
+import { createReadinessGitHub } from "../src/readiness-github.mjs";
 import { inspectPull } from "../src/readiness.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 
@@ -231,4 +232,119 @@ test("GitHub adapter binds rules, token eligibility and review threads to one PR
     `repos/${repo.full_name}/rules/branches/main`,
     `repos/${repo.full_name}/rulesets/${rulesetId}`
   ]);
+});
+
+test("readiness keeps a review block when bypass evidence is absent or unreadable", async () => {
+  for (const outcome of [null, new Error("token=SECRET")]) {
+    const value = pr();
+    const { checks, ...metadata } = value;
+    const roles = [];
+    const client = createReadinessGitHub({
+      profile: sandboxProfile,
+      execute: async () => ({
+        stdout: JSON.stringify({
+          data: {
+            repository: {
+              pullRequest: {
+                ...metadata,
+                commits: {
+                  nodes: [
+                    {
+                      commit: {
+                        oid: head,
+                        statusCheckRollup: {
+                          contexts: {
+                            nodes: checks,
+                            pageInfo: { hasNextPage: false, endCursor: null }
+                          }
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        })
+      }),
+      approvalGitHub: {
+        approvalBypass: async (role) => {
+          roles.push(role);
+          if (outcome instanceof Error) throw outcome;
+          return outcome;
+        }
+      }
+    });
+    const observed = await client.pullRequest(
+      repo.full_name.split("/")[1],
+      value.number
+    );
+    assert.deepEqual(roles, ["frontend"]);
+    assert.equal(observed.approvalBypass, null);
+    const results = inspectPull(
+      observed,
+      { branch: observed.headRefName, commit: head },
+      repo.full_name.split("/")[1],
+      repo.full_name
+    );
+    assert.equal(
+      results.find((item) => item.id === "reviews").status,
+      "blocked"
+    );
+  }
+});
+
+test("strict bypass rejects incomplete branch-ancestry evidence", async () => {
+  const value = pr();
+  const github = createRehearsalGitHub(sandboxProfile, {
+    execute: async (_file, args) => {
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint === "graphql")
+        return {
+          stdout: JSON.stringify({
+            data: {
+              repository: {
+                databaseId: repo.id,
+                nameWithOwner: repo.full_name,
+                isPrivate: repo.private,
+                ref: {
+                  name: "main",
+                  target: { oid: base },
+                  branchProtectionRule: evidence().branchProtection
+                },
+                pullRequest: {
+                  number: value.number,
+                  headRefOid: head,
+                  baseRefOid: base,
+                  reviews: { totalCount: 0 },
+                  reviewThreads: {
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                    nodes: []
+                  }
+                }
+              }
+            }
+          })
+        };
+      if (endpoint.endsWith("/rules/branches/main"))
+        return {
+          stdout: JSON.stringify([
+            ...evidence().rules,
+            {
+              type: "required_status_checks",
+              parameters: { strict_required_status_checks_policy: true }
+            }
+          ])
+        };
+      if (endpoint.endsWith(`/rulesets/${rulesetId}`))
+        return { stdout: JSON.stringify(evidence().ruleset) };
+      if (endpoint.includes("/compare/"))
+        return { stdout: JSON.stringify({ message: "Not Found" }) };
+      assert.fail(endpoint);
+    }
+  });
+  await assert.rejects(
+    github.approvalBypass("frontend", value),
+    /incomplete branch-ancestry evidence/
+  );
 });

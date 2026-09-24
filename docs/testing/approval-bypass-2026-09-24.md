@@ -40,7 +40,9 @@ The focused tests cover a missing approval with green checks; wrong or
 ineligible actor, failed/pending/missing checks, requested changes, conflicts,
 moved head/base, unresolved threads, unknown rules, classic review
 requirements, and strict up-to-date checks. After the null-decision follow-up,
-`npm run check` passed locally: 618 tests ran, 615 passed and three Docker-only
+the review follow-up also covered failed/absent optional readiness evidence and
+malformed ancestry responses. `npm run check` passed locally: 620 tests ran,
+617 passed and three Docker-only
 tests skipped; lint, formatting, documentation, workflow policy and package
 checks passed. This is local source proof, not a merged PR or GitHub CI result.
 
@@ -101,7 +103,9 @@ this acceptance.
 
 The local code was extended after the live sandbox run to handle this null
 case only with a verified zero-review count and the same ruleset/check/ref
-audit. A read-only probe supplied the real frontend ruleset ID and required
+audit. The later review follow-up also makes an unavailable optional bypass
+read leave readiness blocked on approval instead of aborting the whole scan.
+A read-only probe supplied the real frontend ruleset ID and required
 check names to an in-memory profile copy, without changing the configured
 real profile. It found the current `simo6529` token PR-only eligible on exact
 PR #4093 head `d635b5f` and current base `82583c9`, with all five ruleset

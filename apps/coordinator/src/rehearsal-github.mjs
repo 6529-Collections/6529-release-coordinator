@@ -249,6 +249,16 @@ export function createRehearsalGitHub(
         repo,
         `/compare/${pr.baseRefOid}...${pr.headRefOid}?per_page=1`
       );
+      if (
+        !isSha(compare?.base_commit?.sha) ||
+        !isSha(compare?.merge_base_commit?.sha) ||
+        !Number.isSafeInteger(compare?.behind_by) ||
+        !["ahead", "identical", "behind", "diverged"].includes(compare?.status)
+      )
+        throw new RehearsalError(
+          "github_evidence",
+          "GitHub returned incomplete branch-ancestry evidence."
+        );
       baseIsAncestor =
         compare.base_commit?.sha === pr.baseRefOid &&
         compare.merge_base_commit?.sha === pr.baseRefOid &&

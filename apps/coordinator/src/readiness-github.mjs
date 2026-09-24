@@ -1,4 +1,4 @@
-import { realProfile } from "./profiles.mjs";
+import { realProfile, repositoryRole } from "./profiles.mjs";
 import { createRehearsalGitHub } from "./rehearsal-github.mjs";
 import { needsApprovalBypass } from "./approval-bypass.mjs";
 import { execFile } from "node:child_process";
@@ -56,13 +56,17 @@ export function createReadinessGitHub({
   );
   async function withApprovalBypass(repository, pr) {
     if (!needsApprovalBypass(pr)) return pr;
-    const role = Object.keys(profile.repositories).find(
-      (key) =>
-        profile.repositories[key].full_name === `6529-Collections/${repository}`
-    );
+    const role = repositoryRole(repository, profile);
+    let approvalBypass = null;
+    try {
+      approvalBypass = await approvalGitHub.approvalBypass(role, pr);
+    } catch {
+      // Missing optional evidence never turns a blocked PR into a pass, nor
+      // prevents the rest of the read-only readiness scan from completing.
+    }
     return {
       ...pr,
-      approvalBypass: await approvalGitHub.approvalBypass(role, pr)
+      approvalBypass
     };
   }
   async function api(method, endpoint, fields = []) {
