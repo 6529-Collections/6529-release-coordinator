@@ -249,6 +249,7 @@ export function createRehearsalGitHub(
         repo,
         `/compare/${pr.baseRefOid}...${pr.headRefOid}?per_page=1`
       );
+      // Behind/diverged are valid API shapes, but cannot prove ancestry below.
       if (
         !isSha(compare?.base_commit?.sha) ||
         !isSha(compare?.merge_base_commit?.sha) ||

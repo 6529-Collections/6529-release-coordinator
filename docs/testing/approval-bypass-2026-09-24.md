@@ -32,7 +32,9 @@ up-to-date requirement is checked by commit ancestry. It rechecks immediately
 before an integration merge and saves bypass evidence in the journal. GitHub's
 bypass applies to its ruleset as a whole, so the Coordinator must keep checking
 the other known conditions itself; a ruleset change it cannot audit stops the
-bypass.
+bypass. The journal's `approval_bypass` field describes the final pre-merge
+gate: if a human review lands between the two checks, that final gate needs no
+bypass and the field is absent.
 
 ## Offline checks
 

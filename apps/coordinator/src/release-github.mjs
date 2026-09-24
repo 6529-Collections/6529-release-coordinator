@@ -848,6 +848,8 @@ export function createReleaseGitHub({
           await save();
           return cleanupFailedPull(role, record, candidate, save);
         }
+        // Audit the final merge gate, not a bypass seen at an earlier check.
+        // A review may land between the two gates and remove the need to bypass.
         if (hasApprovalBypass(finalGate.observed))
           record.approval_bypass = finalGate.observed.approvalBypass;
         else delete record.approval_bypass;
