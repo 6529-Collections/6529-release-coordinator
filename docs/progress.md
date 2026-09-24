@@ -1,8 +1,8 @@
 # Progress and next steps
 
 Last reviewed: **2026-09-24**, against merged Coordinator `main` source
-`0e5880c` ([PR #232](https://github.com/6529-Collections/6529-release-coordinator/pull/232))
-plus the local, unmerged real-ticket mode correction below.
+`247369e` ([PR #233](https://github.com/6529-Collections/6529-release-coordinator/pull/233))
+plus the local, unmerged trial-check correction below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
@@ -52,8 +52,16 @@ default sandbox/full-fetch mode instead of passing its real profile to the
 transport. The run recorded `rehearsal:unknown`, verified cleanup, released the
 journal lock, and started no combined checks or product release operations.
 The [ticket-mode investigation](./testing/real-ticket-rehearsal-mode-2026-09-24.md)
-records that result and the local routing correction, which is **not yet
-merged or live-tested**. No real integration PR, deploy, E2E, or rollback has
+records that result. PR #233 merged the routing correction. The next filtered
+retry (run `9efb8684-5f92-4f02-8fe6-cf62e624e1c2`) passed real Git rehearsal,
+cleanup, and combined Git filtering. It opened owned frontend trial PR #4097,
+then stopped before release because the trial-check reader did not recognize
+GitHub's required Snyk status-context field and queried before every required
+job appeared. After all checks settled, DCO separately failed on the unsigned
+Coordinator-created trial commit. The [trial-check investigation](./testing/real-trial-checks-2026-09-24.md)
+records the saved run and the local check-reader correction, which is **not yet
+merged**. The interrupted run retains its lock and owned trial until inspected
+same-run reconciliation. No real integration PR, deploy, E2E, or rollback has
 occurred.
 
 The [September 24 approval-bypass acceptance](./testing/approval-bypass-2026-09-24.md)

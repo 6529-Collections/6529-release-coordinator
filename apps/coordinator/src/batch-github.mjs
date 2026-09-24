@@ -10,7 +10,10 @@ import {
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { serviceFiles } from "./service-contract.mjs";
 import { releaseMonitoringPaths } from "./release-contract.mjs";
-import { effectiveRequiredChecks } from "./github-checks.mjs";
+import {
+  effectiveAllChecks,
+  effectiveRequiredChecks
+} from "./github-checks.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const branchName = (value) =>
@@ -437,13 +440,22 @@ export function createBatchGitHub({
           record.commit
         );
         const expected = policy.required_checks[record.role];
+        const checkName = (check) => check.name ?? check.context;
+        const all = effectiveAllChecks(observed.checks, record.commit);
+        // GitHub may not have attached every required job to a new PR yet.
+        // The existing poll budget handles absent results; a present but
+        // non-required result is a configuration change and must stop.
+        const present = expected.filter((name) =>
+          all.some((check) => checkName(check) === name)
+        );
         serviceAssert(
-          expected.every((name) =>
-            required.some((check) => check.name === name)
+          present.every((name) =>
+            required.some((check) => checkName(check) === name)
           ),
           "batch-checks",
-          "A configured product PR check is absent or no longer required."
+          "A configured product PR check is no longer required."
         );
+        if (present.length !== expected.length) return null;
         if (
           required.some((check) =>
             check.__typename === "CheckRun"
@@ -473,7 +485,7 @@ export function createBatchGitHub({
           base: record.base,
           workflow_id: null,
           checks: required.map((check) => ({
-            name: check.name,
+            name: checkName(check),
             status:
               check.__typename === "CheckRun" ? check.status : check.state,
             conclusion:
