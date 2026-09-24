@@ -346,6 +346,23 @@ for (const profile of [sandboxProfile, realProfile]) {
       inbox: profile.inbox,
       repositories: profile.repositories
     });
+    const fixturePullRequest = f.github.pullRequest;
+    f.github.pullRequest = async (role, number) => {
+      const observed = await fixturePullRequest(role, number);
+      return {
+        ...observed,
+        checks: profile.repositories[role].required_checks.map(
+          (name, index) => ({
+            id: `check-${number}-${index}`,
+            __typename: "CheckRun",
+            name,
+            status: "COMPLETED",
+            conclusion: "SUCCESS",
+            isRequired: true
+          })
+        )
+      };
+    };
     const pull = await f.branch("frontend", "feature/one", {
       "one.txt": "sample\n"
     });

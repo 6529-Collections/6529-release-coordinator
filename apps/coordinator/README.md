@@ -349,7 +349,10 @@ account is eligible on that exact ruleset, all
 required checks pass on the exact commit, and the Coordinator verifies the
 other known merge conditions and records the bypass. This is not `--admin` or
 a general permission to ignore failed checks. The real profile has no bypass
-ruleset pin; a real release still stops for missing review. See the
+ruleset pin for the backend. The real frontend profile pins its current
+`main` ruleset and five enforced checks; it uses the same gate but has no
+real-release execution proof yet. A PR that GitHub marks `BEHIND` is not
+bypassable. See the
 [dated sandbox acceptance](../../docs/testing/approval-bypass-2026-09-24.md)
 for settings, proof, and the manual-resume caveat.
 

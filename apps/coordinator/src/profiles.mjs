@@ -31,7 +31,18 @@ export const realProfile = profile(
   "real",
   repository("6529-Collections/6529-release-coordinator", 1346244762),
   {
-    frontend: repository("6529-Collections/6529seize-frontend", 579004979),
+    frontend: repository(
+      "6529-Collections/6529seize-frontend",
+      579004979,
+      [
+        "DCO",
+        "security/snyk (6529)",
+        "Plan risk and security checks",
+        "Installed app checks",
+        "Debt ratchet"
+      ],
+      18018081
+    ),
     backend: repository("6529-Collections/6529seize-backend", 579003578)
   }
 );

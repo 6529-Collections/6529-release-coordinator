@@ -862,7 +862,9 @@ record does not claim an uninterrupted run. A later read-only real-PR probe
 found GitHub can return a null review decision for an unreviewed
 team-required PR; the local gate now requires verified zero reviews in that
 case. This null path has offline and read-only real evidence, but no live
-merge. Real-profile bypass remains unconfigured and untested in execution.
+merge. The real frontend profile now pins its existing `main` ruleset and
+required check names; the real backend remains unpinned. No real-product
+bypass, merge, or deployment has been executed.
 
 The first sandbox sequence passed live on September 11. One production-target
 ticket moved through protected fake staging, matching E2E, protected fake
