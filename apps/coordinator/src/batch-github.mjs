@@ -445,19 +445,17 @@ export function createBatchGitHub({
         // GitHub may not have attached every required job to a new PR yet.
         // The existing poll budget handles absent results; a present but
         // non-required result is a configuration change and must stop.
-        if (
-          expected.some(
-            (name) => !all.some((check) => checkName(check) === name)
-          )
-        )
-          return null;
+        const present = expected.filter((name) =>
+          all.some((check) => checkName(check) === name)
+        );
         serviceAssert(
-          expected.every((name) =>
+          present.every((name) =>
             required.some((check) => checkName(check) === name)
           ),
           "batch-checks",
           "A configured product PR check is no longer required."
         );
+        if (present.length !== expected.length) return null;
         if (
           required.some((check) =>
             check.__typename === "CheckRun"

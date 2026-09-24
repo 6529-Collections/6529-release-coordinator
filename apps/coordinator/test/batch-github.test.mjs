@@ -72,6 +72,9 @@ test("real trial waits for a missing required job and recognizes required status
   );
   f.gate.checks = f.gate.checks.filter((check) => check !== installed);
   assert.equal(await f.client.result(f.record), null);
+  snyk.isRequired = false;
+  await assert.rejects(f.client.result(f.record), /no longer required/u);
+  snyk.isRequired = true;
   f.gate.checks.push(installed);
 
   const passing = await f.client.result(f.record);
