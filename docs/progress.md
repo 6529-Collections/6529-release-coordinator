@@ -39,7 +39,10 @@ the exact PR/base and all required checks pass, and review threads and other
 known gates are clear. A filtered sandbox production ticket (#50) completed
 both unapproved protected-main integration merges, all fake deployments and
 matching E2E; the journal recorded each bypass and released its lock. One
-mid-run journal-lock interruption required an inspected manual resume. These
+mid-run journal-lock interruption occurred after staging integration and before
+the protected-main bypass merges; an inspected manual resume continued the
+same run without re-merging completed staging PRs. This run did not exercise
+rollback. These
 code changes are local and unmerged, and the real profile has no bypass
 ruleset pin: no real-product bypass or release has been tested or enabled.
 
