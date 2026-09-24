@@ -247,6 +247,12 @@ must pass its selected profile into the Git transport; the
 [September 24 ticket-mode record](./testing/real-ticket-rehearsal-mode-2026-09-24.md)
 documents why this needs a separate integration regression.
 
+For real product trial PRs, required GitHub checks may be either check runs
+(`name`) or status contexts (`context`), and jobs may appear after the PR is
+created. The trial reader waits within its existing poll budget for absent
+checks, but stops if a present configured check is no longer required. See the
+[September 24 trial-check record](./testing/real-trial-checks-2026-09-24.md).
+
 Invoke Git and GitHub tools with validated argument arrays and no shell.
 Isolate Git configuration and environment so inherited hooks, external merge
 drivers, filters, credential output, or command aliases cannot run code from a

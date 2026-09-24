@@ -54,6 +54,38 @@ test("real trial checks bind the exact head tree and base without trusting merge
   await assert.rejects(f.client.result(f.record), /saved exact tested tree/u);
 });
 
+test("real trial waits for a missing required job and recognizes required status contexts", async () => {
+  const f = fixture({ profile: realProfile, role: "frontend" });
+  await f.client.open(f.record, f.patch, f.save);
+  const snyk = f.gate.checks.find(
+    (check) => check.name === "security/snyk (6529)"
+  );
+  snyk.__typename = "StatusContext";
+  snyk.context = snyk.name;
+  snyk.state = "SUCCESS";
+  delete snyk.name;
+  delete snyk.status;
+  delete snyk.conclusion;
+
+  const installed = f.gate.checks.find(
+    (check) => check.name === "Installed app checks"
+  );
+  f.gate.checks = f.gate.checks.filter((check) => check !== installed);
+  assert.equal(await f.client.result(f.record), null);
+  f.gate.checks.push(installed);
+
+  const passing = await f.client.result(f.record);
+  assert.equal(passing.status, "passed");
+  assert.ok(
+    passing.checks.some((check) => check.name === "security/snyk (6529)")
+  );
+  f.gate.checks.find((check) => check.name === "DCO").conclusion =
+    "ACTION_REQUIRED";
+  assert.equal((await f.client.result(f.record)).status, "unknown");
+  snyk.isRequired = false;
+  await assert.rejects(f.client.result(f.record), /no longer required/u);
+});
+
 test("an archived product repository cannot start a real trial", async () => {
   const f = fixture({ profile: realProfile, archived: true });
   await assert.rejects(
