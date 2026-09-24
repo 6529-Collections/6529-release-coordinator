@@ -145,6 +145,7 @@ export async function runMergePlan(
     profile,
     get,
     githubFactory = createRehearsalGitHub,
+    gitFactory = createRehearsalGit,
     run = rehearseMerge,
     save = saveRehearsalReport,
     revision = codeRevision,
@@ -167,7 +168,7 @@ export async function runMergePlan(
       captureRepository,
       revision: await revision(),
       createGit: (options) =>
-        createRehearsalGit({
+        gitFactory({
           ...options,
           repositories: profile.repositories,
           candidatePatchMode
@@ -229,6 +230,7 @@ export async function rehearseInboxTicket(
     ...options,
     profile,
     get,
+    candidatePatchMode: profile.name,
     ...(profile.name === "sandbox"
       ? { captureRepository: captureServiceSource }
       : {})

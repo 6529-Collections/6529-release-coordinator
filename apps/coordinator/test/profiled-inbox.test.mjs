@@ -381,8 +381,10 @@ for (const profile of [sandboxProfile, realProfile]) {
       profile,
       get: receipt.get,
       githubFactory: () => f.github,
-      run: (plan, options) =>
-        rehearseMerge(plan, { ...options, createGit: f.createGit }),
+      gitFactory: (options) => {
+        assert.equal(options.candidatePatchMode, profile.name);
+        return f.createGit(options);
+      },
       revision: async () => ({ commit: "f".repeat(40), dirty: false }),
       save: async (value) => {
         report = value;
