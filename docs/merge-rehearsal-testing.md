@@ -236,6 +236,13 @@ Use a dedicated temporary directory per run, with cleanup in failure paths.
 Do not run Git inside a user's product checkout or borrow its index, branches,
 worktrees, hooks, or configuration. Fetch only from the explicit trusted
 repository profile; local filesystem remotes belong only to offline fixtures.
+The real profile uses a blob-free partial fetch from its pinned public remote,
+then reads only blobs needed by the exact merge and requested file observations.
+The sandbox retains its full fetch. Both keep the 128 MiB / 20,000-entry
+temporary-storage guard and all existing process/output limits. Missing promised
+objects or a crossed guard leave an unknown result. The
+[September 24 sizing record](./testing/real-rehearsal-size-2026-09-24.md)
+separates the local transport fix from any real release acceptance.
 
 Invoke Git and GitHub tools with validated argument arrays and no shell.
 Isolate Git configuration and environment so inherited hooks, external merge

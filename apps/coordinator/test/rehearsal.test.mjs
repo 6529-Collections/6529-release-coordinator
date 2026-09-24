@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { randomBytes } from "node:crypto";
 import {
   readdir,
   mkdir,
@@ -644,6 +645,142 @@ test("MR-18: storage limits also clean up setup failures", async (t) => {
     ),
     []
   );
+});
+
+test("real rehearsal fetches only needed blobs while retaining the storage limit", async (t) => {
+  const f = await rehearsalFixture(t);
+  const pr = await f.branch("frontend", "feature/blobless", {
+    "large.bin": randomBytes(2 * 1024 * 1024),
+    "feature.txt": "new\n"
+  });
+  await f.git(f.repositories.frontend.cwd, [
+    "config",
+    "uploadpack.allowFilter",
+    "true"
+  ]);
+  const input = f.manifest([{ role: "frontend", pulls: [pr] }]);
+  let authenticatedObjectReads = 0;
+  const createGit = async (options) => {
+    const session = await createRehearsalGit({
+      ...options,
+      temporaryRoot: f.directory,
+      fixtureRemotes: {
+        frontend: `file://${f.repositories.frontend.cwd}`
+      },
+      candidatePatchMode: "real",
+      authentication: async () => "Authorization: Bearer fixture-token",
+      execute: async (file, args, processOptions) => {
+        if (args.includes("cat-file") || args.includes("merge-tree")) {
+          assert.equal(
+            processOptions.env.GIT_CONFIG_VALUE_0,
+            "Authorization: Bearer fixture-token"
+          );
+          authenticatedObjectReads += 1;
+        }
+        return runRehearsalProcess(file, args, processOptions);
+      },
+      maxStorageBytes: 1024 * 1024
+    });
+    const repository = session.repository;
+    session.repository = async (repo) => {
+      const workspace = await repository(repo);
+      const patch = await workspace.patch(
+        repo.destination.commit,
+        repo.pull_requests[0].commit,
+        ["feature.txt"]
+      );
+      assert.equal(patch.length, 1);
+      assert.equal(patch[0].path, "feature.txt");
+      return workspace;
+    };
+    return session;
+  };
+  const report = await f.run(input, { createGit });
+  assert.equal(report.status, "pass");
+  assert.equal(report.cleanup.status, "removed");
+  assert.ok(report.repositories[0].final_tree);
+  assert.ok(authenticatedObjectReads > 0);
+
+  const other = await f.branch("frontend", "feature/conflict", {
+    "feature.txt": "other\n"
+  });
+  const conflict = f.manifest([{ role: "frontend", pulls: [pr, other] }]);
+  const conflictReport = await f.run(conflict, { createGit });
+  assert.equal(conflictReport.status, "blocked");
+  assert.equal(conflictReport.cleanup.status, "removed");
+  assert.equal(conflictReport.operation_errors.length, 0);
+  assert.equal(
+    conflictReport.repositories[0].checks.find(
+      (check) => check.id === "local_merge"
+    ).status,
+    "blocked"
+  );
+});
+
+test("real rehearsal bounds lazy blob downloads after the initial fetch", async (t) => {
+  const f = await rehearsalFixture(t);
+  const pr = await f.branch("frontend", "feature/large", {
+    "large.bin": randomBytes(2 * 1024 * 1024)
+  });
+  await f.git(f.repositories.frontend.cwd, [
+    "config",
+    "uploadpack.allowFilter",
+    "true"
+  ]);
+  const session = await createRehearsalGit({
+    temporaryRoot: f.directory,
+    fixtureRemotes: {
+      frontend: `file://${f.repositories.frontend.cwd}`
+    },
+    candidatePatchMode: "real",
+    maxStorageBytes: 1024 * 1024
+  });
+  try {
+    const repository = await session.repository({
+      role: "frontend",
+      destination: { commit: f.repositories.frontend.base },
+      pull_requests: [pr]
+    });
+    await assert.rejects(
+      repository.patch(f.repositories.frontend.base, pr.commit, ["large.bin"]),
+      { code: "resource_limit" }
+    );
+  } finally {
+    await session.cleanup();
+  }
+  assert.deepEqual(
+    (await readdir(f.directory)).filter((name) =>
+      name.startsWith("6529-rehearsal-")
+    ),
+    []
+  );
+});
+
+test("real rehearsal does not pass when a remote ignores blob filtering", async (t) => {
+  const f = await rehearsalFixture(t);
+  const pr = await f.branch("frontend", "feature/unfiltered", {
+    "large.bin": randomBytes(2 * 1024 * 1024)
+  });
+  await f.git(f.repositories.frontend.cwd, [
+    "config",
+    "uploadpack.allowFilter",
+    "false"
+  ]);
+  const input = f.manifest([{ role: "frontend", pulls: [pr] }]);
+  const report = await f.run(input, {
+    createGit: (options) =>
+      createRehearsalGit({
+        ...options,
+        temporaryRoot: f.directory,
+        fixtureRemotes: {
+          frontend: `file://${f.repositories.frontend.cwd}`
+        },
+        candidatePatchMode: "real",
+        maxStorageBytes: 1024 * 1024
+      })
+  });
+  assert.equal(report.status, "unknown");
+  assert.equal(report.cleanup.status, "removed");
 });
 
 test("MR-18: failed initialization plus failed cleanup still records the owned leftover", async (t) => {
