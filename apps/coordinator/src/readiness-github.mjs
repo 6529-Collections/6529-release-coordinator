@@ -1,4 +1,6 @@
 import { realProfile } from "./profiles.mjs";
+import { createRehearsalGitHub } from "./rehearsal-github.mjs";
+import { needsApprovalBypass } from "./approval-bypass.mjs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -44,13 +46,25 @@ const pullQuery = `query ReadinessPull($repository: String!, $number: Int!, $cur
 
 export function createReadinessGitHub({
   execute = executeFile,
-  profile = realProfile
+  profile = realProfile,
+  approvalGitHub = createRehearsalGitHub(profile)
 } = {}) {
   const repositories = new Set(
     Object.values(profile.repositories).map(
       (repo) => repo.full_name.split("/")[1]
     )
   );
+  async function withApprovalBypass(repository, pr) {
+    if (!needsApprovalBypass(pr)) return pr;
+    const role = Object.keys(profile.repositories).find(
+      (key) =>
+        profile.repositories[key].full_name === `6529-Collections/${repository}`
+    );
+    return {
+      ...pr,
+      approvalBypass: await approvalGitHub.approvalBypass(role, pr)
+    };
+  }
   async function api(method, endpoint, fields = []) {
     let stdout;
     try {
@@ -145,7 +159,8 @@ export function createReadinessGitHub({
         }
         snapshot = metadata;
         const rollup = commits[0].commit.statusCheckRollup;
-        if (rollup === null && !cursor) return { ...snapshot, checks };
+        if (rollup === null && !cursor)
+          return withApprovalBypass(repository, { ...snapshot, checks });
         const connection = rollup?.contexts;
         if (
           !Array.isArray(connection?.nodes) ||
@@ -170,7 +185,8 @@ export function createReadinessGitHub({
           ids.add(check.id);
           checks.push(check);
         }
-        if (!connection.pageInfo.hasNextPage) return { ...snapshot, checks };
+        if (!connection.pageInfo.hasNextPage)
+          return withApprovalBypass(repository, { ...snapshot, checks });
         cursor = connection.pageInfo.endCursor;
         if (typeof cursor !== "string" || !cursor || cursors.has(cursor)) {
           throw new Error(

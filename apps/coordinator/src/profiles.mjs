@@ -1,11 +1,17 @@
 import { validateReleaseRequest } from "../../../packages/release-request/src/index.mjs";
 
-const repository = (full_name, id, required_checks = []) =>
+const repository = (
+  full_name,
+  id,
+  required_checks = [],
+  approval_bypass_ruleset_id = null
+) =>
   Object.freeze({
     full_name,
     id,
     private: false,
-    required_checks: Object.freeze(required_checks)
+    required_checks: Object.freeze(required_checks),
+    approval_bypass_ruleset_id
   });
 // Rehearsal destinations only: capturing main does not authorize changing it
 // or choose the future release executor's branch/deployment policy.
@@ -36,12 +42,14 @@ export const sandboxProfile = profile(
     frontend: repository(
       "6529-Collections/release-coordinator-test-frontend",
       1362504370,
-      ["Sandbox check"]
+      ["Sandbox check"],
+      23921701
     ),
     backend: repository(
       "6529-Collections/release-coordinator-test-backend",
       1362505082,
-      ["Sandbox check"]
+      ["Sandbox check"],
+      23921709
     )
   }
 );

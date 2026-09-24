@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   createReleaseGitHub,
-  integrationGateChecks
+  integrationGateChecks,
+  integrationPullPasses
 } from "../src/release-github.mjs";
 import {
   makeReleaseBuild,
@@ -83,6 +84,63 @@ test("staging gates optional product checks while main still requires GitHub enf
   assert.deepEqual(
     integrationGateChecks(checks, commit, ["Other required check"], true),
     { checks: [checks[2]], missing: [] }
+  );
+});
+
+test("integration merge accepts only a verified approval bypass with green checks", () => {
+  const head = "a".repeat(40);
+  const base = "b".repeat(40);
+  const check = {
+    __typename: "CheckRun",
+    status: "COMPLETED",
+    conclusion: "SUCCESS"
+  };
+  const observed = {
+    state: "OPEN",
+    isDraft: false,
+    headRefOid: head,
+    baseRefOid: base,
+    mergeable: "MERGEABLE",
+    mergeStateStatus: "BLOCKED",
+    reviewDecision: "REVIEW_REQUIRED",
+    approvalBypass: {
+      status: "eligible",
+      ruleset_id: 23921709,
+      head_commit: head,
+      base_commit: base
+    }
+  };
+  assert.equal(integrationPullPasses(observed, [check]), true);
+  for (const change of [
+    (value) => {
+      value.approvalBypass = null;
+    },
+    (value) => {
+      value.reviewDecision = "CHANGES_REQUESTED";
+    },
+    (value) => {
+      value.mergeable = "CONFLICTING";
+    },
+    (value) => {
+      value.headRefOid = "c".repeat(40);
+    },
+    (value) => {
+      value.baseRefOid = "d".repeat(40);
+    }
+  ]) {
+    const changed = structuredClone(observed);
+    change(changed);
+    assert.equal(integrationPullPasses(changed, [check]), false);
+  }
+  assert.equal(
+    integrationPullPasses(observed, [{ ...check, conclusion: "FAILURE" }]),
+    false
+  );
+  assert.equal(
+    integrationPullPasses(observed, [
+      { ...check, status: "IN_PROGRESS", conclusion: null }
+    ]),
+    false
   );
 });
 
@@ -613,6 +671,7 @@ test("integration uses a unique checked commit with the exact candidate tree", a
           baseRefName: "1a-staging",
           state: "OPEN",
           mergeable: "MERGEABLE",
+          mergeStateStatus: "CLEAN",
           checks: [
             {
               __typename: "CheckRun",

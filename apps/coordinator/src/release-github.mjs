@@ -13,6 +13,7 @@ import { effectiveAllChecks } from "./github-checks.mjs";
 import { integrationCommitInput } from "./release-plan.mjs";
 import { activeWorkflowRunStatuses } from "./release-state.mjs";
 import { runEvent } from "./run-log.mjs";
+import { hasApprovalBypass } from "./approval-bypass.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -48,6 +49,19 @@ export function integrationGateChecks(
     checks: [...new Set([...required, ...configured])],
     missing
   };
+}
+
+export function integrationPullPasses(observed, checked) {
+  return (
+    observed.mergeable === "MERGEABLE" &&
+    (["CLEAN", "UNSTABLE"].includes(observed.mergeStateStatus) ||
+      hasApprovalBypass(observed)) &&
+    checked.every((item) =>
+      item.__typename === "CheckRun"
+        ? item.status === "COMPLETED" && item.conclusion === "SUCCESS"
+        : item.__typename === "StatusContext" && item.state === "SUCCESS"
+    )
+  );
 }
 
 export function createReleaseGitHub({
@@ -286,15 +300,7 @@ export function createReleaseGitHub({
           : check.state === "PENDING"
       );
       if (!pending) {
-        const passed =
-          observed.mergeable === "MERGEABLE" &&
-          (profile.name !== "real" ||
-            ["CLEAN", "UNSTABLE"].includes(observed.mergeStateStatus)) &&
-          gate.checks.every((check) =>
-            check.__typename === "CheckRun"
-              ? check.conclusion === "SUCCESS"
-              : check.state === "SUCCESS"
-          );
+        const passed = integrationPullPasses(observed, gate.checks);
         return { passed, observed };
       }
       if (poll + 1 < polls) await wait(pollMs, { signal });
@@ -836,6 +842,15 @@ export function createReleaseGitHub({
         }
         if (runtime.workflow)
           await waitForQuietWorkflow(role, record, save, "merge");
+        const finalGate = await waitForPull(role, record, candidate);
+        if (!finalGate.passed) {
+          record.state = "cleaning";
+          await save();
+          return cleanupFailedPull(role, record, candidate, save);
+        }
+        if (hasApprovalBypass(finalGate.observed))
+          record.approval_bypass = finalGate.observed.approvalBypass;
+        else delete record.approval_bypass;
         pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
         verifyPull(pr, record, candidate);
         serviceAssert(
