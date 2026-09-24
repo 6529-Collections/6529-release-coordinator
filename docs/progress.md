@@ -1,8 +1,8 @@
 # Progress and next steps
 
 Last reviewed: **2026-09-24**, against merged Coordinator `main` source
-`fdbbecd` ([PR #229](https://github.com/6529-Collections/6529-release-coordinator/pull/229))
-plus the local, unmerged real-rehearsal sizing fix below.
+`0e5880c` ([PR #232](https://github.com/6529-Collections/6529-release-coordinator/pull/232))
+plus the local, unmerged real-ticket mode correction below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
@@ -44,12 +44,17 @@ locks and changed no product branch or environment.
 The [sizing investigation](./testing/real-rehearsal-size-2026-09-24.md)
 reproduced the byte-limit trigger at 135,629,887 bytes with 28 entries. A
 blob-free partial fetch of the exact product commits used about 17.3 MB and
-produced the same clean merge tree, with on-demand file reads. The local
-`codex/real-rehearsal-partial-fetch` change keeps both existing storage guards,
-passes a focused offline clean/conflict regression and the full local
-`npm run check` (621 of 624 tests passed, three Docker-only skips), and passed a read-only
-product-object exercise. It is **not merged** and Issue #231 has **not** been
-rerun. No real integration PR, deploy, E2E, or rollback has occurred.
+produced the same clean merge tree, with on-demand file reads. PR #232 merged
+this transport fix and its storage/authentication regressions after green CI.
+The filtered retry of Issue #231 (run `ebfa6356-2815-4215-a967-bf28e261def7`)
+still stopped at the 128 MiB guard: the inbox-ticket caller had selected the
+default sandbox/full-fetch mode instead of passing its real profile to the
+transport. The run recorded `rehearsal:unknown`, verified cleanup, released the
+journal lock, and started no combined checks or product release operations.
+The [ticket-mode investigation](./testing/real-ticket-rehearsal-mode-2026-09-24.md)
+records that result and the local routing correction, which is **not yet
+merged or live-tested**. No real integration PR, deploy, E2E, or rollback has
+occurred.
 
 The [September 24 approval-bypass acceptance](./testing/approval-bypass-2026-09-24.md)
 added PR-only review-bypass rules to both test `main` branches without removing

@@ -242,7 +242,10 @@ The sandbox retains its full fetch. Both keep the 128 MiB / 20,000-entry
 temporary-storage guard and all existing process/output limits. Missing promised
 objects or a crossed guard leave an unknown result. The
 [September 24 sizing record](./testing/real-rehearsal-size-2026-09-24.md)
-separates the local transport fix from any real release acceptance.
+separates the transport fix from real release acceptance. Inbox-ticket execution
+must pass its selected profile into the Git transport; the
+[September 24 ticket-mode record](./testing/real-ticket-rehearsal-mode-2026-09-24.md)
+documents why this needs a separate integration regression.
 
 Invoke Git and GitHub tools with validated argument arrays and no shell.
 Isolate Git configuration and environment so inherited hooks, external merge
