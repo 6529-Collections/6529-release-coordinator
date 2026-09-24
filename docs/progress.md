@@ -1,8 +1,8 @@
 # Progress and next steps
 
 Last reviewed: **2026-09-24**, against merged Coordinator `main` source
-`247369e` ([PR #233](https://github.com/6529-Collections/6529-release-coordinator/pull/233))
-plus the local, unmerged trial-check correction below.
+`b8b1865` ([PR #235](https://github.com/6529-Collections/6529-release-coordinator/pull/235))
+and the same-run real trial-check reconciliation below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
@@ -57,12 +57,15 @@ retry (run `9efb8684-5f92-4f02-8fe6-cf62e624e1c2`) passed real Git rehearsal,
 cleanup, and combined Git filtering. It opened owned frontend trial PR #4097,
 then stopped before release because the trial-check reader did not recognize
 GitHub's required Snyk status-context field and queried before every required
-job appeared. After all checks settled, DCO separately failed on the unsigned
-Coordinator-created trial commit. The [trial-check investigation](./testing/real-trial-checks-2026-09-24.md)
-records the saved run and the local check-reader correction, which is **not yet
-merged**. The interrupted run retains its lock and owned trial until inspected
-same-run reconciliation. No real integration PR, deploy, E2E, or rollback has
-occurred.
+job appeared. PR #235 merged the check-reader correction after local and GitHub
+checks. An inspected resume of the same run then read all five required checks:
+four passed and DCO failed because the Coordinator-created trial commit lacked
+a sign-off. The Coordinator recorded `batch:waiting`, closed its owned trial
+PR #4097, verified removal of its branch, updated Issue #231, and released the
+journal lock. The [trial-check investigation](./testing/real-trial-checks-2026-09-24.md)
+records the evidence. No real integration PR, deploy, E2E, or rollback has
+occurred. The next trial needs an explicitly agreed, truthful way for the
+Coordinator-created commit to satisfy DCO; do not bypass the failed check.
 
 The [September 24 approval-bypass acceptance](./testing/approval-bypass-2026-09-24.md)
 added PR-only review-bypass rules to both test `main` branches without removing

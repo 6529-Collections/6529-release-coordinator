@@ -30,6 +30,24 @@ The local reader change recognizes both check-run names and status-context
 names, waits within its existing poll budget for a required job not yet
 attached to a new PR, and still stops when a present configured check is not
 required. An offline real-frontend fixture covers delayed jobs, a required
-Snyk context, failed DCO, and a demoted required check. This change has not
-merged or resumed the locked live run yet. Future trial commit sign-off needs
-separate authorization and testing; this correction does not add one.
+Snyk context, failed DCO, and a demoted required check. At the first cut of
+this record, the change had not merged or resumed the locked live run. Future
+trial commit sign-off needs separate authorization and testing; this
+correction does not add one.
+
+## Follow-up acceptance boundary
+
+Coordinator [PR #235](https://github.com/6529-Collections/6529-release-coordinator/pull/235)
+merged at `b8b1865` after 622 of 625 local tests passed (three Docker-only
+skips), green GitHub checks, and a review-driven regression for a demoted
+check while another job is late. The original run was resumed again from that
+merged `main`, with only Issue #231 in its saved filter. It recognized all five
+required frontend checks: Plan risk and security checks, Debt ratchet,
+Installed app checks, and Snyk passed; DCO was `ACTION_REQUIRED`. It recorded
+the candidate as `unknown`/`batch-deferred`, without release authorization.
+
+The Coordinator closed owned trial PR #4097 without merging, verified its
+branch was removed, updated Issue #231 to `status:waiting` with
+`rehearsal:passed`, and released the journal lock. The source PR #4093 and
+frontend `main` were not merged or deployed. DCO remains the blocking product
+gate; this follow-up does not authorize a sign-off or bypass.
