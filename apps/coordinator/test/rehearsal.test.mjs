@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { randomBytes } from "node:crypto";
 import {
   readdir,
   mkdir,
@@ -643,6 +644,63 @@ test("MR-18: storage limits also clean up setup failures", async (t) => {
       name.startsWith("6529-rehearsal-")
     ),
     []
+  );
+});
+
+test("real rehearsal fetches only needed blobs while retaining the storage limit", async (t) => {
+  const f = await rehearsalFixture(t);
+  const pr = await f.branch("frontend", "feature/blobless", {
+    "large.bin": randomBytes(2 * 1024 * 1024),
+    "feature.txt": "new\n"
+  });
+  await f.git(f.repositories.frontend.cwd, [
+    "config",
+    "uploadpack.allowFilter",
+    "true"
+  ]);
+  const input = f.manifest([{ role: "frontend", pulls: [pr] }]);
+  const createGit = async (options) => {
+    const session = await createRehearsalGit({
+      ...options,
+      temporaryRoot: f.directory,
+      fixtureRemotes: {
+        frontend: `file://${f.repositories.frontend.cwd}`
+      },
+      candidatePatchMode: "real",
+      maxStorageBytes: 1024 * 1024
+    });
+    const repository = session.repository;
+    session.repository = async (repo) => {
+      const workspace = await repository(repo);
+      const patch = await workspace.patch(
+        repo.destination.commit,
+        repo.pull_requests[0].commit,
+        ["feature.txt"]
+      );
+      assert.equal(patch.length, 1);
+      assert.equal(patch[0].path, "feature.txt");
+      return workspace;
+    };
+    return session;
+  };
+  const report = await f.run(input, { createGit });
+  assert.equal(report.status, "pass");
+  assert.equal(report.cleanup.status, "removed");
+  assert.ok(report.repositories[0].final_tree);
+
+  const other = await f.branch("frontend", "feature/conflict", {
+    "feature.txt": "other\n"
+  });
+  const conflict = f.manifest([{ role: "frontend", pulls: [pr, other] }]);
+  const conflictReport = await f.run(conflict, { createGit });
+  assert.equal(conflictReport.status, "blocked");
+  assert.equal(conflictReport.cleanup.status, "removed");
+  assert.equal(conflictReport.operation_errors.length, 0);
+  assert.equal(
+    conflictReport.repositories[0].checks.find(
+      (check) => check.id === "local_merge"
+    ).status,
+    "blocked"
   );
 });
 

@@ -175,6 +175,19 @@ export async function createRehearsalGit({
             "invalid_commit",
             "Invalid exact Git commit."
           );
+        // Product repositories can be much larger than the bounded workspace.
+        // Keep a pinned promisor remote so Git fetches only the changed blobs
+        // needed by merge-tree or an explicit file read, under the same limit.
+        const filteredFetch = candidatePatchMode === "real";
+        if (filteredFetch) {
+          await git(cwd, ["remote", "add", "origin", remote]);
+          await git(cwd, ["config", "remote.origin.promisor", "true"]);
+          await git(cwd, [
+            "config",
+            "remote.origin.partialclonefilter",
+            "blob:none"
+          ]);
+        }
         const header = fixtureRemotes ? null : await authentication();
         const fetchEnv = {
           ...env,
@@ -190,11 +203,12 @@ export async function createRehearsalGit({
           cwd,
           [
             "fetch",
+            ...(filteredFetch ? ["--filter=blob:none"] : []),
             "--no-tags",
             "--no-recurse-submodules",
             "--no-write-fetch-head",
             "--",
-            remote,
+            filteredFetch ? "origin" : remote,
             ...commits
           ],
           { env: fetchEnv }

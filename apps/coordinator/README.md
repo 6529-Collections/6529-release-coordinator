@@ -275,9 +275,13 @@ may leave an owned `6529-rehearsal-*` directory; there is no automatic sweep.
 Current limits: 30 seconds per subprocess, three minutes per rehearsal, 16 MiB
 per process output/report, and a monitored 128 MiB temporary-storage budget.
 Git configuration is isolated; hooks, custom drivers, filters, submodules, and
-repository scripts are not run. Active `.gitattributes` rules and gitlinks are
-conservatively unsupported and leave an explicit unknown result. These limits
-are part of later product-repository integration, not proof it already works.
+repository scripts are not run. Unsupported active `.gitattributes` rules and
+gitlinks leave an explicit unknown result. These limits do not prove a product
+release.
+Real-profile Git rehearsal fetches commit/tree objects first and retrieves only
+needed blobs from its pinned public repository on demand. Sandbox fixtures keep
+their full fetch. The same temporary-storage and process limits still apply to
+both; a missing object or exceeded limit remains unknown, never a pass.
 
 Local fixture tests run offline in `npm test`. The live test setup script is a
 separate explicit mutation tool for empty, pinned sandbox repositories; it is
