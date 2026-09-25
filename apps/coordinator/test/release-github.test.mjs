@@ -1996,7 +1996,7 @@ test("real runtime checks a shared workflow pin against each backend branch", as
           type: "file",
           path: file[1],
           sha:
-            drift === environment &&
+            (drift === environment || drift === "both") &&
             role === "backend" &&
             file[1] === ".github/workflows/deploy.yml"
               ? "0".repeat(40)
@@ -2008,12 +2008,13 @@ test("real runtime checks a shared workflow pin against each backend branch", as
     });
 
   assert.deepEqual((await clientFor(null).identity()).versions, versions);
-  assert.deepEqual(seen, ["staging", "prod"]);
+  assert.deepEqual(seen.sort(), ["prod", "staging"]);
   await assert.rejects(
     clientFor("staging").identity(),
     /runtime file changed/u
   );
   await assert.rejects(clientFor("prod").identity(), /runtime file changed/u);
+  await assert.rejects(clientFor("both").identity(), /runtime file changed/u);
 });
 
 test("real integration rejects a changed live account before creating a commit", async () => {

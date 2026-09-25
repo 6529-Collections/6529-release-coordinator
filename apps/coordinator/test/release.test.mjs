@@ -316,6 +316,52 @@ test("missing test-main role version stops before release mutations", async () =
   assert.equal(batch.execution, undefined);
 });
 
+test("a prepared release rechecks runtime identity after a stopped attempt", async () => {
+  const batch = await selectedBatch();
+  const calls = [];
+  const oldClient = client(calls);
+  oldClient.identity = async () => {
+    calls.push("old runtime identity");
+    throw new Error("A pinned product release runtime file changed.");
+  };
+  await assert.rejects(
+    executeRelease({
+      batch,
+      client: oldClient,
+      guard: async () => {},
+      save: async () => {}
+    }),
+    /pinned product release runtime file changed/u
+  );
+  assert.deepEqual(calls, ["old runtime identity"]);
+  assert.equal(batch.execution, undefined);
+
+  const refreshedClient = client(calls);
+  const refreshedIdentity = refreshedClient.identity;
+  refreshedClient.identity = async () => {
+    calls.push("refreshed runtime identity");
+    return refreshedIdentity();
+  };
+  let guardCalls = 0;
+  await assert.rejects(
+    executeRelease({
+      batch,
+      client: refreshedClient,
+      guard: async () => {
+        if (++guardCalls === 2) throw new Error("stop before first operation");
+      },
+      save: async () => {}
+    }),
+    /stop before first operation/u
+  );
+  assert.deepEqual(calls, [
+    "old runtime identity",
+    "refreshed runtime identity"
+  ]);
+  assert.equal(batch.execution.status, "running");
+  assert.deepEqual(batch.execution.operations, {});
+});
+
 test("database-changing ticket reaches the release sequence alone", async () => {
   const batch = await selectedBatch({ database: true });
   const calls = [];
