@@ -11,6 +11,7 @@ import {
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { effectiveAllChecks } from "./github-checks.mjs";
 import { integrationCommitInput } from "./release-plan.mjs";
+import { assertProductCommitActor } from "./product-commit-signoff.mjs";
 import { activeWorkflowRunStatuses } from "./release-state.mjs";
 import { runEvent } from "./run-log.mjs";
 import { hasApprovalBypass } from "./approval-bypass.mjs";
@@ -718,6 +719,11 @@ export function createReleaseGitHub({
         "release-recovery",
         "This unfinished release predates unique integration commits and needs manual recovery."
       );
+      if (!sandbox) {
+        const observed = (await call(role, "GET", "user")).data;
+        assertProductCommitActor(actor, observed);
+        assertProductCommitActor(record.actor, observed);
+      }
       const commitInput = integrationCommitInput(record, candidate);
       if (!record.integration_version) {
         record.integration_version = 1;

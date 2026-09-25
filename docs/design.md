@@ -669,6 +669,16 @@ moved, recompute and obtain evidence for the changed combination. Never force
 an old tree over somebody else's work, or claim a client-side check makes two
 GitHub repository merges atomic.
 
+For real product trial and integration/restoration commits authored directly by
+the Coordinator, the currently authorized DCO signer is Simo's verified
+`@simo6529` account, using its GitHub no-reply address. Recheck the live GitHub
+account before writing the commit; another account must stop rather than sign
+as Simo. The commit author, committer, and `Signed-off-by` line must match. This
+does not add a sign-off to developers' source commits, the inbox journal, or
+GitHub-generated merge commits. It does not bypass DCO. The real frontend DCO
+check on a new exact trial PR remains the acceptance proof; offline and sandbox
+checks alone cannot establish it.
+
 For a PR that GitHub marks `BLOCKED` with `REVIEW_REQUIRED`, or with a null
 decision and verified zero reviews, a configured profile may use the acting account's
 PR-only ruleset bypass only after verifying the exact head and current base,

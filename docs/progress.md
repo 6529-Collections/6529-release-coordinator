@@ -1,8 +1,8 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-24**, against merged Coordinator `main` source
-`b8b1865` ([PR #235](https://github.com/6529-Collections/6529-release-coordinator/pull/235))
-and the same-run real trial-check reconciliation below.
+Last reviewed: **2026-09-25**, against merged Coordinator `main` source
+`b74f1fd` ([PR #236](https://github.com/6529-Collections/6529-release-coordinator/pull/236))
+plus the local, unmerged product-commit DCO correction below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
@@ -64,8 +64,14 @@ a sign-off. The Coordinator recorded `batch:waiting`, closed its owned trial
 PR #4097, verified removal of its branch, updated Issue #231, and released the
 journal lock. The [trial-check investigation](./testing/real-trial-checks-2026-09-24.md)
 records the evidence. No real integration PR, deploy, E2E, or rollback has
-occurred. The next trial needs an explicitly agreed, truthful way for the
-Coordinator-created commit to satisfy DCO; do not bypass the failed check.
+occurred. Simo then authorized his own GitHub no-reply DCO identity for commits
+the Coordinator creates in product repositories while it is authenticated as
+`@simo6529`. The local, **unmerged** change signs temporary trial and
+integration/restoration commits, checks the current GitHub account before
+writing them, and leaves source commits, journal commits, sandbox identity and
+DCO rules unchanged. Offline checks pass (623 of 626 tests; three Docker-only
+skips). It has not yet passed GitHub PR review or a fresh real DCO check; no
+new release attempt has begun. See the [DCO follow-up](./testing/product-dco-signoff-2026-09-25.md).
 
 The [September 24 approval-bypass acceptance](./testing/approval-bypass-2026-09-24.md)
 added PR-only review-bypass rules to both test `main` branches without removing

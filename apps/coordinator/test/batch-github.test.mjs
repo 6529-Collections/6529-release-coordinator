@@ -40,11 +40,18 @@ test("real trial checks bind the exact head tree and base without trusting merge
     null
   );
   await f.client.open(f.record, f.patch, f.save);
+  const created = f.calls.find(
+    (call) => call.method === "POST" && call.path === "/git/commits"
+  ).body;
+  assert.deepEqual(created.author, {
+    name: "Simo",
+    email: "209783236+simo6529@users.noreply.github.com",
+    date: f.record.created_at
+  });
+  assert.deepEqual(created.committer, created.author);
   assert.equal(
-    f.calls.find(
-      (call) => call.method === "POST" && call.path === "/git/commits"
-    ).body.author.email,
-    "456+tester@users.noreply.github.com"
+    created.message,
+    `Temporary batch trial ${f.record.branch}\n\nSigned-off-by: Simo <209783236+simo6529@users.noreply.github.com>`
   );
   f.gate.mergeable = "UNKNOWN";
   f.gate.mergeStateStatus = "BLOCKED";
@@ -52,6 +59,29 @@ test("real trial checks bind the exact head tree and base without trusting merge
   assert.equal(result.status, "passed");
   f.tested.tree.sha = "f".repeat(40);
   await assert.rejects(f.client.result(f.record), /saved exact tested tree/u);
+});
+
+test("real trial refuses a different authenticated signer before creating a commit", async () => {
+  const f = fixture({ profile: realProfile });
+  f.authenticatedActor.id = 999;
+  await assert.rejects(
+    f.client.open(f.record, f.patch, f.save),
+    /authorized, currently authenticated/u
+  );
+  assert.equal(
+    f.calls.some((call) => call.method === "POST"),
+    false
+  );
+  f.authenticatedActor.id = 209783236;
+  f.authenticatedActor.login = "another-account";
+  await assert.rejects(
+    f.client.open(f.record, f.patch, f.save),
+    /authorized, currently authenticated/u
+  );
+  assert.equal(
+    f.calls.some((call) => call.method === "POST"),
+    false
+  );
 });
 
 test("real trial waits for a missing required job and recognizes required status contexts", async () => {

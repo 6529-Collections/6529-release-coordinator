@@ -13,6 +13,7 @@ import {
   isReleaseRequestTarget,
   releaseEnvironmentsForTarget
 } from "./release-target.mjs";
+import { productCommitSignoff } from "./product-commit-signoff.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -389,25 +390,28 @@ export function integrationCommitInput(record, candidate) {
     "release-identity",
     "The product integration commit needs the verified GitHub actor."
   );
-  const signature = {
-    name:
-      profile === "sandbox"
-        ? "Coordinator sandbox"
-        : "6529 Release Coordinator",
-    email:
-      profile === "real"
-        ? `${record.actor.id}+${record.actor.login}@users.noreply.github.com`
-        : "rehearsal@example.invalid",
+  const message = record.step.recovery
+    ? `${profile === "sandbox" ? "Sandbox" : "Product"} ${record.step.environment} restoration for ${record.release_id}\n\nRestore ${record.restore_to} after ${candidate.commit}`
+    : `${profile === "sandbox" ? "Sandbox" : "Product"} ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`;
+  const sandboxIdentity = {
+    name: "Coordinator sandbox",
+    email: "rehearsal@example.invalid",
     date: record.created_at
   };
+  const commitIdentity =
+    profile === "real"
+      ? productCommitSignoff(record.actor, record.created_at, message)
+      : {
+          message,
+          author: sandboxIdentity,
+          committer: sandboxIdentity
+        };
   return {
-    message: record.step.recovery
-      ? `${profile === "sandbox" ? "Sandbox" : "Product"} ${record.step.environment} restoration for ${record.release_id}\n\nRestore ${record.restore_to} after ${candidate.commit}`
-      : `${profile === "sandbox" ? "Sandbox" : "Product"} ${record.step.environment} candidate for ${record.release_id}\n\nExact selected candidate ${candidate.commit}`,
+    message: commitIdentity.message,
     tree: candidate.tree,
     parents: [candidate.commit],
-    author: signature,
-    committer: signature
+    author: commitIdentity.author,
+    committer: commitIdentity.committer
   };
 }
 
