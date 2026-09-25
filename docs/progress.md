@@ -1,8 +1,8 @@
 # Progress and next steps
 
 Last reviewed: **2026-09-25**, against merged Coordinator `main` source
-`a869405` ([PR #237](https://github.com/6529-Collections/6529-release-coordinator/pull/237))
-and the live source-PR status below.
+`bb07ff5` ([PR #238](https://github.com/6529-Collections/6529-release-coordinator/pull/238))
+and the real ticket #239 trial below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
@@ -29,7 +29,7 @@ PR/CI delivery and live environment proof.
 | Frontend production source guard    | The real `Web Deploy - PROD` workflow accepts an optional `expected_source_sha` and refuses before building when it does not match the `main` commit fixed for the run                                                                              | Frontend [PR #4072](https://github.com/6529-Collections/6529seize-frontend/pull/4072) merged at `7471ac1`; the exact [workflow source](https://github.com/6529-Collections/6529seize-frontend/blob/7471ac113cb2535940b19f036bf38f47f4d44eb6/.github/workflows/build-upload-deploy-prod.yml) was read back from frontend `main`. Manual dispatches may still omit the input under existing human authorization. The PR #218 adapter always supplies the exact approved frontend commit, verifies the pinned workflow source and matching run, and never uses the empty compatibility path. That enforcement has offline coverage only; it has not dispatched the real workflow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Product-shaped test workflow mirror | Merged test workflows build sample code and publish fake deployment evidence while mirroring the existing product workflow interfaces, including branch-aligned monitoring and linked deploy-to-E2E runs.                                           | Original mirror: frontend PR #92 and backend PR #100, with [September 21 acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md). Branch-contract correction: backend PRs #139/#140 and frontend PRs #127/#128, with [September 23 success and recovery acceptance](./testing/monitoring-branch-contract-2026-09-23.md). These are test repositories only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Product-workflow sandbox adapter    | Sandbox release operations use the separate product-shaped backend, monitoring, frontend and E2E workflow mirrors by default; the generic `sandbox-release.yml` client remains an explicit fallback                                                 | The [adapter-selection implementation](../apps/coordinator/src/sandbox-release-client.mjs), including the explicit `RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER=generic` fallback, ships in the same change as this status row. Offline contract and recovery suites cover branch sources, exact runs/artifacts, operation persistence, failures and recovery. The independent [success-path acceptance](./testing/adapter-success-path-2026-09-21.md) completed staging and production, and the independent [controlled-recovery acceptance](./testing/adapter-recovery-2026-09-21.md) stopped on monitoring failure, restored production then staging, reran matching deploys/E2E, and resumed the same journal without duplicate dispatch. The [September 22 profile/scope acceptance](./testing/profile-scope-sandbox-2026-09-22.md) additionally passed fresh one-ticket, two-ticket, solo-database and staging-E2E-failure recovery cases; it exposed and fixed causal-time and running-wrapper reconciliation gaps before same-run recovery completed. All used only test repositories. Delivered to protected Coordinator `main` in PR #218.                                                                                                                                          |
-| Real-profile release adapter        | PR #218 selects product repositories under `RELEASE_COORDINATOR_PROFILE=real` and uses the shared release engine with existing product workflows.                                                                                                   | PR #219 merged the monitoring dispatch correction after offline tests and sandbox success/recovery acceptance, but there is no product execution proof. No product PR, merge, deploy, rollback, or live E2E was performed. Database-changing failures never enter automatic recovery; manual release remains the proven path.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Real-profile release adapter        | PR #218 selects product repositories under `RELEASE_COORDINATOR_PROFILE=real` and uses the shared release engine with existing product workflows. | PR #219 merged the monitoring dispatch correction. Filtered Issue #239 passed real Git rehearsal and the owned trial PR's required checks, including DCO, then stopped on a changed backend workflow pin before release authorization. No real integration merge, deploy, rollback, or live E2E has run. See the [September 25 trial](./testing/real-staging-ticket-239-2026-09-25.md). Database-changing failures never enter automatic recovery. |
 
 ### Real frontend rehearsal sizing — September 24
 
@@ -70,11 +70,19 @@ the Coordinator creates in product repositories while it is authenticated as
 integration/restoration commits, checks the current GitHub account before
 writing them, and leaves source commits, journal commits, sandbox identity and
 DCO rules unchanged. Offline checks passed (625 of 628 tests; three Docker-only
-skips), and the exact PR head passed GitHub CI and review. It has **not** passed
-a fresh real DCO check or started a new release. At the September 25 readback,
-source frontend PR #4093 was 11 commits behind `main`; the Coordinator will
-not use a `BEHIND` PR. Issue #231 remains waiting. Updating that source branch
-requires separate authorization. See the [DCO follow-up](./testing/product-dco-signoff-2026-09-25.md).
+skips), and the exact PR head passed GitHub CI and review. The source frontend
+PR #4093 was then updated to `c0768baa` against current `main`; all its checks
+passed. Its old-commit Issue #231 was closed as outdated by a filtered run,
+without release execution. The frontend submitter created replacement staging
+Issue #239 for the new exact head. Its filtered real run passed Git rehearsal,
+combined Git filtering and the owned temporary PR #4098's required checks,
+including **real DCO** on the Coordinator-authored commit. The owned trial PR
+and branch were removed. Before any product integration or staging deployment,
+the Coordinator rejected drift in its pinned backend deploy workflow on both
+environment branches and retained the run lock. See the [ticket #239 trial](./testing/real-staging-ticket-239-2026-09-25.md).
+No real integration merge, deployment, E2E or rollback has occurred. The
+earlier [DCO follow-up](./testing/product-dco-signoff-2026-09-25.md) records
+the pre-retry state, not this newer result.
 
 The [September 24 approval-bypass acceptance](./testing/approval-bypass-2026-09-24.md)
 added PR-only review-bypass rules to both test `main` branches without removing
@@ -128,15 +136,14 @@ also passed. GitHub CI and live product acceptance are separate evidence.
 
 ## Next steps
 
-Finish the local real-rehearsal partial-fetch checks and review, then merge
-through the protected Coordinator PR gate. Only after that source is on `main`,
-recheck frontend PR #4093 and `main`; if Issue #231 still pins its exact head,
-rerun the real Coordinator with only Issue #231 and actor `simo6529`. If the PR
-head changed, submit a new verified ticket. Stop on uncertain evidence and
-inspect the saved journal. A production ticket is separate and follows staging
-acceptance. The sandbox
-journal-lock interruption recovered by resume; investigate if it recurs, and
-do not describe that run as uninterrupted proof.
+Review the changed backend deploy workflow, deliver its exact updated staging
+and production blob pins through the protected Coordinator PR gate, then verify
+the current product refs, PR #4093 and the retained journal lock. If they still
+match the saved scope, resume run `744ab6e1-4aaa-4299-9777-623901c4cf9b`
+for only Issue #239 after the documented stop-and-wait procedure. Do not start
+a new filtered run while its lock remains. Record the actual real staging
+result separately; successful trial checks are not staging proof. A production
+ticket is separate and follows staging acceptance.
 
 Merged Coordinator [PR #219](https://github.com/6529-Collections/6529-release-coordinator/pull/219)
 dispatches staging monitoring from `1a-staging` and production monitoring from `main`,

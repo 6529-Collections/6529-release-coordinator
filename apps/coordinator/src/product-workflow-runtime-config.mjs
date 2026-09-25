@@ -113,8 +113,8 @@ export const realProductWorkflowRuntime = Object.freeze({
       stagingIntegrationChecks: Object.freeze(["DCO", "security/snyk (6529)"]),
       files: Object.freeze({
         ".github/workflows/deploy.yml": Object.freeze({
-          staging: "9644738f3e06f2ddc26cd5b63f138f1f8fbbbc6a",
-          prod: "14565b6dabd5772f21f89f868e1029ae5a95aace"
+          staging: "4738363b457f5af9a2497b2854d1e5f78c241222",
+          prod: "4738363b457f5af9a2497b2854d1e5f78c241222"
         }),
         ".github/workflows/deploy-operational-monitoring.yml":
           "2621e6705ab9fa70b006e7d8345762c95685cf73"
