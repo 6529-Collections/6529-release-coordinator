@@ -1,14 +1,11 @@
 import { serviceAssert } from "./service-contract.mjs";
+import { realProfile } from "./profiles.mjs";
 
 // The acting account explicitly authorized its DCO attestation for commits
 // created by the Coordinator in the real product repositories. This does not
 // sign source commits submitted by other developers.
-const authorizedSigner = Object.freeze({
-  id: "209783236",
-  login: "simo6529",
-  name: "Simo",
-  email: "209783236+simo6529@users.noreply.github.com"
-});
+const authorizedSigner = realProfile.product_commit_signer;
+const email = `${authorizedSigner.id}+${authorizedSigner.login}@users.noreply.github.com`;
 
 export function assertProductCommitActor(saved, observed) {
   serviceAssert(
@@ -30,7 +27,7 @@ export function productCommitSignoff(actor, date, message) {
   );
   const identity = {
     name: authorizedSigner.name,
-    email: authorizedSigner.email,
+    email,
     date
   };
   return {

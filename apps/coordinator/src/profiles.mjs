@@ -15,7 +15,7 @@ const repository = (
   });
 // Rehearsal destinations only: capturing main does not authorize changing it
 // or choose the future release executor's branch/deployment policy.
-const profile = (name, inbox, repositories) =>
+const profile = (name, inbox, repositories, productCommitSigner = null) =>
   Object.freeze({
     name,
     inbox,
@@ -25,7 +25,10 @@ const profile = (name, inbox, repositories) =>
       frontend: "main",
       backend: "main"
     }),
-    repositories: Object.freeze(repositories)
+    repositories: Object.freeze(repositories),
+    ...(productCommitSigner
+      ? { product_commit_signer: Object.freeze(productCommitSigner) }
+      : {})
   });
 export const realProfile = profile(
   "real",
@@ -44,7 +47,10 @@ export const realProfile = profile(
       18018081
     ),
     backend: repository("6529-Collections/6529seize-backend", 579003578)
-  }
+  },
+  // This is reviewed source configuration, not an environment override.
+  // Changing the responsible DCO signer requires new explicit authorization.
+  { id: "209783236", login: "simo6529", name: "Simo" }
 );
 export const sandboxProfile = profile(
   "sandbox",

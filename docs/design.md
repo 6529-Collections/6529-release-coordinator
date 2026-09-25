@@ -679,6 +679,13 @@ GitHub-generated merge commits. It does not bypass DCO. The real frontend DCO
 check on a new exact trial PR remains the acceptance proof; offline and sandbox
 checks alone cannot establish it.
 
+If the acting account changes, stop the real run. Obtain explicit authorization
+from the new signer, update the trusted real profile's
+`product_commit_signer` in a reviewed PR, and re-test before retrying any
+waiting release. Do not use an environment override, another person's
+sign-off, or a DCO bypass as a credential-rotation shortcut. An in-flight run
+under the old actor needs inspected reconciliation rather than silent adoption.
+
 For a PR that GitHub marks `BLOCKED` with `REVIEW_REQUIRED`, or with a null
 decision and verified zero reviews, a configured profile may use the acting account's
 PR-only ruleset bypass only after verifying the exact head and current base,

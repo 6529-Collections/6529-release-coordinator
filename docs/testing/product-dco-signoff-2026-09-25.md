@@ -21,10 +21,12 @@ commits and Coordinator inbox-journal commits are unchanged.
 
 ## Evidence still needed
 
-- The local repository check passed: 623 of 626 tests, with three Docker-only
-  skips; lint, formatting, documentation, workflow-policy and package checks
-  also passed.
-- Coordinator PR review and merge are not yet complete.
+- The local `npm run check` passed on the updated
+  [Coordinator PR #237](https://github.com/6529-Collections/6529-release-coordinator/pull/237)
+  branch: 624 of 627 tests, with three Docker-only skips; lint, formatting,
+  documentation, workflow-policy and package checks also passed. Updated-head
+  GitHub CI and review remain separate evidence.
+- Coordinator PR merge is not yet complete.
 - No new real trial PR has tested this sign-off against the frontend's actual
   DCO app. Ticket #231 remains waiting. A new exact trial PR must pass DCO and
   the other configured checks before staging integration or deployment can

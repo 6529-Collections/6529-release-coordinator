@@ -69,9 +69,10 @@ the Coordinator creates in product repositories while it is authenticated as
 `@simo6529`. The local, **unmerged** change signs temporary trial and
 integration/restoration commits, checks the current GitHub account before
 writing them, and leaves source commits, journal commits, sandbox identity and
-DCO rules unchanged. Offline checks pass (623 of 626 tests; three Docker-only
-skips). It has not yet passed GitHub PR review or a fresh real DCO check; no
-new release attempt has begun. See the [DCO follow-up](./testing/product-dco-signoff-2026-09-25.md).
+DCO rules unchanged. Offline checks pass (624 of 627 tests; three Docker-only
+skips). [PR #237](https://github.com/6529-Collections/6529-release-coordinator/pull/237)
+has not yet merged or passed a fresh real DCO check; no new release attempt has
+begun. See the [DCO follow-up](./testing/product-dco-signoff-2026-09-25.md).
 
 The [September 24 approval-bypass acceptance](./testing/approval-bypass-2026-09-24.md)
 added PR-only review-bypass rules to both test `main` branches without removing

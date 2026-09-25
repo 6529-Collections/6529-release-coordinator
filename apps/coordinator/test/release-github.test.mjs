@@ -13,6 +13,7 @@ import {
   releaseProtocol
 } from "../src/release-contract.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
+import { realProductWorkflowRuntime } from "../src/product-workflow-runtime-config.mjs";
 
 const runtime = {
   workflow: "sandbox-release.yml",
@@ -1934,4 +1935,46 @@ test("real profile and unpinned release runtime are refused", () => {
       }),
     /never a fallback/
   );
+});
+
+test("real integration rejects a changed live account before creating a commit", async () => {
+  const calls = [];
+  const client = createReleaseGitHub({
+    profile: realProfile,
+    runtime: realProductWorkflowRuntime,
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      calls.push({ method, endpoint });
+      assert.equal(method, "GET");
+      assert.equal(endpoint, "user");
+      return 'HTTP/2 200 OK\r\ncontent-type: application/json\r\n\r\n{"id":999,"login":"another-account"}';
+    }
+  });
+  const actor = { id: "209783236", login: "simo6529" };
+  const record = {
+    profile: "real",
+    actor,
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: { kind: "integrate", environment: "staging", role: "frontend" },
+    state: "merged",
+    base: "a".repeat(40),
+    integration_version: 1
+  };
+  await assert.rejects(
+    client.integrate({
+      record,
+      candidate: {
+        role: "frontend",
+        commit: "b".repeat(40),
+        tree: "c".repeat(40),
+        changed: true
+      },
+      actor,
+      expectedBase: record.base,
+      save: async () => {}
+    }),
+    /authorized, currently authenticated/u
+  );
+  assert.deepEqual(calls, [{ method: "GET", endpoint: "user" }]);
 });

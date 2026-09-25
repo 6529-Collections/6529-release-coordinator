@@ -719,8 +719,10 @@ export function createReleaseGitHub({
         "release-recovery",
         "This unfinished release predates unique integration commits and needs manual recovery."
       );
-      if (!sandbox) {
+      if (profile.name === "real") {
         const observed = (await call(role, "GET", "user")).data;
+        // Both the current run actor and saved operation must name the account
+        // whose live token will create this signed-off commit.
         assertProductCommitActor(actor, observed);
         assertProductCommitActor(record.actor, observed);
       }
