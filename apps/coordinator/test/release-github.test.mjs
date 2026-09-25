@@ -109,7 +109,9 @@ test("integration merge accepts only a verified approval bypass with green check
       status: "eligible",
       ruleset_id: 23921709,
       head_commit: head,
-      base_commit: base
+      base_commit: base,
+      review_count: 0,
+      review_states: []
     }
   };
   assert.equal(integrationPullPasses(observed, [check]), true);

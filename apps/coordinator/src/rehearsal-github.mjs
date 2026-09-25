@@ -60,6 +60,19 @@ const approvalQuery = `query ApprovalBypass($owner: String!, $name: String!, $nu
     }
   }
 }`;
+const approvalReviewsQuery = `query ApprovalBypassReviews($owner: String!, $name: String!, $number: Int!, $cursor: String) {
+  repository(owner: $owner, name: $name) {
+    databaseId nameWithOwner isPrivate
+    pullRequest(number: $number) {
+      number headRefOid baseRefOid reviewDecision
+      reviews(first: 100, after: $cursor) {
+        totalCount
+        pageInfo { hasNextPage endCursor }
+        nodes { id state }
+      }
+    }
+  }
+}`;
 
 export function createRehearsalGitHub(
   profile,
@@ -228,6 +241,74 @@ export function createRehearsalGitHub(
         );
       cursors.add(cursor);
     }
+    const reviewStates = [];
+    if (reviewCount > 0) {
+      const reviewIds = new Set();
+      const reviewCursors = new Set();
+      let reviewCursor;
+      for (;;) {
+        const result = await graphql(repo, approvalReviewsQuery, [
+          "-F",
+          `number=${pr.number}`,
+          ...(reviewCursor ? ["-f", `cursor=${reviewCursor}`] : [])
+        ]);
+        verify(result, repo);
+        const observed = result.pullRequest;
+        const reviews = observed?.reviews;
+        if (
+          observed?.number !== pr.number ||
+          observed.headRefOid !== pr.headRefOid ||
+          observed.baseRefOid !== pr.baseRefOid ||
+          observed.reviewDecision !== pr.reviewDecision ||
+          reviews?.totalCount !== reviewCount
+        )
+          throw new RehearsalError(
+            "moving_pages",
+            "PR or review count changed during approval-bypass verification."
+          );
+        if (
+          !Array.isArray(reviews.nodes) ||
+          typeof reviews.pageInfo?.hasNextPage !== "boolean" ||
+          reviews.nodes.some(
+            (review) =>
+              typeof review?.id !== "string" ||
+              !review.id ||
+              typeof review.state !== "string" ||
+              reviewIds.has(review.id)
+          )
+        )
+          throw new RehearsalError(
+            "github_evidence",
+            "GitHub returned incomplete or repeated review evidence."
+          );
+        for (const review of reviews.nodes) {
+          reviewIds.add(review.id);
+          reviewStates.push(review.state);
+        }
+        if (reviewStates.length > reviewCount)
+          throw new RehearsalError(
+            "moving_pages",
+            "PR review count changed during approval-bypass verification."
+          );
+        if (!reviews.pageInfo.hasNextPage) break;
+        reviewCursor = reviews.pageInfo.endCursor;
+        if (
+          typeof reviewCursor !== "string" ||
+          !reviewCursor ||
+          reviewCursors.has(reviewCursor)
+        )
+          throw new RehearsalError(
+            "github_evidence",
+            "GitHub returned a missing or repeated review cursor."
+          );
+        reviewCursors.add(reviewCursor);
+      }
+      if (reviewStates.length !== reviewCount)
+        throw new RehearsalError(
+          "github_evidence",
+          "GitHub returned an incomplete set of PR reviews."
+        );
+    }
     const rules = await rest(
       repo,
       `/rules/branches/${encodeURIComponent(pr.baseRefName)}`
@@ -273,6 +354,7 @@ export function createRehearsalGitHub(
       branchProtection: protection,
       unresolvedThreads,
       reviewCount,
+      reviewStates,
       baseIsAncestor,
       rulesetId: repo.approval_bypass_ruleset_id,
       expectedChecks: repo.required_checks
