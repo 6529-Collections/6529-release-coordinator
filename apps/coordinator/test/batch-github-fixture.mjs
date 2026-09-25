@@ -11,12 +11,19 @@ export function fixture({
   policy = profile.name === "real" ? realBatchPolicy : batchPolicy
 } = {}) {
   const repo = profile.repositories[role];
+  const authenticatedActor =
+    profile.name === "real"
+      ? { id: 209783236, login: "simo6529" }
+      : { id: 456, login: "tester" };
   const record = {
     role,
     branch: "codex/batch-trial-bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
     base: "a".repeat(40),
     tree: "b".repeat(40),
-    actor: { id: "456", login: "tester" },
+    actor: {
+      id: String(authenticatedActor.id),
+      login: authenticatedActor.login
+    },
     workflow_id: profile.name === "real" ? null : 101,
     created_at: "2026-09-10T12:00:00.000Z",
     body: "Exact trial marker"
@@ -35,7 +42,7 @@ export function fixture({
     head_branch: record.branch,
     event: "pull_request",
     run_attempt: 1,
-    actor: { id: 456 },
+    actor: { id: authenticatedActor.id },
     path: ".github/workflows/sandbox-check.yml",
     status: "completed",
     conclusion: "success",
@@ -94,7 +101,7 @@ export function fixture({
       data;
     if (method === "GET" && path === "")
       data = { ...repo, archived, permissions: { push: true } };
-    else if (path === "user") data = { id: 456, login: "tester" };
+    else if (path === "user") data = authenticatedActor;
     else if (path.startsWith("/contents/")) {
       const filePath = path.slice("/contents/".length).split("?")[0];
       data = {
@@ -142,7 +149,7 @@ export function fixture({
         number: 25,
         state: "open",
         merged: false,
-        user: { id: 456 },
+        user: { id: authenticatedActor.id },
         body: body.body,
         html_url: "https://github.com/example/pull/25",
         head: { ref: record.branch, sha: run.head_sha, repo },
@@ -196,6 +203,7 @@ export function fixture({
     saved.push(structuredClone(value));
   };
   return {
+    authenticatedActor,
     record,
     calls,
     saved,

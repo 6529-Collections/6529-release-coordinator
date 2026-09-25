@@ -14,6 +14,10 @@ import {
   effectiveAllChecks,
   effectiveRequiredChecks
 } from "./github-checks.mjs";
+import {
+  assertProductCommitActor,
+  productCommitSignoff
+} from "./product-commit-signoff.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const branchName = (value) =>
@@ -232,6 +236,10 @@ export function createBatchGitHub({
     async open(record, patch, save) {
       validate(record);
       await unchanged(record);
+      if (profile.name === "real") {
+        const observed = (await call(record.role, "GET", "user")).data;
+        assertProductCommitActor(record.actor, observed);
+      }
       serviceAssert(
         Array.isArray(patch) &&
           patch.length > 0 &&
@@ -289,12 +297,21 @@ export function createBatchGitHub({
         );
         const author = {
           name: "6529 Coordinator batch trial",
-          email:
-            profile.name === "real"
-              ? `${record.actor.id}+${record.actor.login}@users.noreply.github.com`
-              : "coordinator@example.invalid",
+          email: "coordinator@example.invalid",
           date: record.created_at
         };
+        const commitIdentity =
+          profile.name === "real"
+            ? productCommitSignoff(
+                record.actor,
+                record.created_at,
+                `Temporary batch trial ${record.branch}`
+              )
+            : {
+                message: `Temporary batch trial ${record.branch}`,
+                author,
+                committer: author
+              };
         const commit = (
           await call(
             record.role,
@@ -303,9 +320,7 @@ export function createBatchGitHub({
             {
               tree: tree.sha,
               parents: [record.base],
-              message: `Temporary batch trial ${record.branch}`,
-              author,
-              committer: author
+              ...commitIdentity
             },
             [201]
           )

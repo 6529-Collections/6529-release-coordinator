@@ -31,10 +31,10 @@ import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
 import { buildApplication } from "../sandbox/application-build.mjs";
 
-test("product integration commits use the verified GitHub actor identity", () => {
+test("product integration and recovery commits use Simo's authorized DCO identity", () => {
   const record = {
     profile: "real",
-    actor: { id: "456", login: "tester" },
+    actor: { id: "209783236", login: "simo6529" },
     created_at: "2026-09-23T00:00:00.000Z",
     release_id: "11111111-1111-4111-8111-111111111111",
     step: { environment: "staging" }
@@ -43,8 +43,26 @@ test("product integration commits use the verified GitHub actor identity", () =>
     commit: "a".repeat(40),
     tree: "b".repeat(40)
   });
-  assert.equal(input.author.email, "456+tester@users.noreply.github.com");
+  assert.deepEqual(input.author, {
+    name: "Simo",
+    email: "209783236+simo6529@users.noreply.github.com",
+    date: record.created_at
+  });
   assert.deepEqual(input.committer, input.author);
+  assert.match(
+    input.message,
+    /\n\nSigned-off-by: Simo <209783236\+simo6529@users\.noreply\.github\.com>$/u
+  );
+  const recovery = integrationCommitInput(
+    {
+      ...record,
+      step: { ...record.step, recovery: true },
+      restore_to: "c".repeat(40)
+    },
+    { commit: "a".repeat(40), tree: "b".repeat(40) }
+  );
+  assert.match(recovery.message, /restoration/u);
+  assert.match(recovery.message, /Signed-off-by: Simo/u);
   assert.throws(
     () =>
       integrationCommitInput(
@@ -55,6 +73,14 @@ test("product integration commits use the verified GitHub actor identity", () =>
         }
       ),
     /verified GitHub actor/u
+  );
+  assert.throws(
+    () =>
+      integrationCommitInput(
+        { ...record, actor: { id: "456", login: "tester" } },
+        { commit: "a".repeat(40), tree: "b".repeat(40) }
+      ),
+    /authorized, currently authenticated/u
   );
 });
 import { harness } from "./inbox-batch-harness.mjs";

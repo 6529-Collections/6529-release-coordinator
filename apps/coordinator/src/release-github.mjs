@@ -11,6 +11,7 @@ import {
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { effectiveAllChecks } from "./github-checks.mjs";
 import { integrationCommitInput } from "./release-plan.mjs";
+import { assertProductCommitActor } from "./product-commit-signoff.mjs";
 import { activeWorkflowRunStatuses } from "./release-state.mjs";
 import { runEvent } from "./run-log.mjs";
 import { hasApprovalBypass } from "./approval-bypass.mjs";
@@ -718,6 +719,13 @@ export function createReleaseGitHub({
         "release-recovery",
         "This unfinished release predates unique integration commits and needs manual recovery."
       );
+      if (profile.name === "real") {
+        const observed = (await call(role, "GET", "user")).data;
+        // Both the current run actor and saved operation must name the account
+        // whose live token will create this signed-off commit.
+        assertProductCommitActor(actor, observed);
+        assertProductCommitActor(record.actor, observed);
+      }
       const commitInput = integrationCommitInput(record, candidate);
       if (!record.integration_version) {
         record.integration_version = 1;
