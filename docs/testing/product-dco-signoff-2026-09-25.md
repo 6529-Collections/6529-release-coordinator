@@ -24,10 +24,16 @@ commits and Coordinator inbox-journal commits are unchanged.
 - The local `npm run check` passed on the updated
   [Coordinator PR #237](https://github.com/6529-Collections/6529-release-coordinator/pull/237)
   branch: 625 of 628 tests, with three Docker-only skips; lint, formatting,
-  documentation, workflow-policy and package checks also passed. Updated-head
-  GitHub CI and review remain separate evidence.
-- Coordinator PR merge is not yet complete.
+  documentation, workflow-policy and package checks also passed.
+- The final PR head `2a8aabf` passed GitHub repository checks
+  ([run 36106184128](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/36106184128)),
+  CodeQL ([run 36106184121](https://github.com/6529-Collections/6529-release-coordinator/actions/runs/36106184121)),
+  and Snyk. The final general review said good to merge. PR #237 merged at
+  `a869405` and local `main` was fast-forwarded to it.
 - No new real trial PR has tested this sign-off against the frontend's actual
-  DCO app. Ticket #231 remains waiting. A new exact trial PR must pass DCO and
-  the other configured checks before staging integration or deployment can
-  start. Sandbox tests cannot substitute for that real check.
+  DCO app. Ticket #231 remains waiting. On the September 25 readback,
+  frontend source PR #4093 was 11 commits behind `main` and GitHub marked it
+  `BEHIND`; the Coordinator will stop before trial creation until that branch
+  is updated. A new exact trial PR must then pass DCO and the other configured
+  checks before staging integration or deployment can start. Sandbox tests
+  cannot substitute for that real check.
