@@ -1938,6 +1938,85 @@ test("real profile and unpinned release runtime are refused", () => {
   );
 });
 
+test("real runtime checks a shared workflow pin against each backend branch", async () => {
+  const shared = "9".repeat(40);
+  const configured = {
+    ...realProductWorkflowRuntime,
+    repositories: {
+      ...realProductWorkflowRuntime.repositories,
+      backend: {
+        ...realProductWorkflowRuntime.repositories.backend,
+        files: {
+          ...realProductWorkflowRuntime.repositories.backend.files,
+          ".github/workflows/deploy.yml": { staging: shared, prod: shared }
+        }
+      }
+    }
+  };
+  const versions = {
+    staging: { backend: "a".repeat(40), frontend: "b".repeat(40) },
+    prod: { backend: "c".repeat(40), frontend: "d".repeat(40) }
+  };
+  const seen = [];
+  const clientFor = (drift) =>
+    createReleaseGitHub({
+      profile: realProfile,
+      runtime: configured,
+      execute: async (args) => {
+        const endpoint = args[args.indexOf("--method") + 2];
+        if (endpoint === "user")
+          return apiResponse("200 OK", { id: 209783236, login: "simo6529" });
+        const role = endpoint.includes("6529seize-frontend")
+          ? "frontend"
+          : "backend";
+        const repository = realProfile.repositories[role];
+        const prefix = `repos/${repository.full_name}`;
+        if (endpoint === prefix)
+          return apiResponse("200 OK", {
+            id: repository.id,
+            full_name: repository.full_name,
+            private: false,
+            permissions: { push: true }
+          });
+        for (const [environment, branch] of Object.entries(configured.branches))
+          if (endpoint === `${prefix}/git/ref/heads/${branch}`)
+            return apiResponse("200 OK", {
+              object: { sha: versions[environment][role] }
+            });
+        const file = endpoint.match(/\/contents\/(.+)\?ref=([a-f0-9]{40})$/u);
+        assert.ok(file, `Unexpected runtime request: ${endpoint}`);
+        const environment =
+          file[2] === versions.staging[role] ? "staging" : "prod";
+        assert.equal(file[2], versions[environment][role]);
+        const pin = configured.repositories[role].files[file[1]];
+        assert.ok(pin, `Unexpected runtime file: ${file[1]}`);
+        if (role === "backend" && file[1] === ".github/workflows/deploy.yml")
+          seen.push(environment);
+        return apiResponse("200 OK", {
+          type: "file",
+          path: file[1],
+          sha:
+            (drift === environment || drift === "both") &&
+            role === "backend" &&
+            file[1] === ".github/workflows/deploy.yml"
+              ? "0".repeat(40)
+              : typeof pin === "string"
+                ? pin
+                : pin[environment]
+        });
+      }
+    });
+
+  assert.deepEqual((await clientFor(null).identity()).versions, versions);
+  assert.deepEqual(seen.sort(), ["prod", "staging"]);
+  await assert.rejects(
+    clientFor("staging").identity(),
+    /runtime file changed/u
+  );
+  await assert.rejects(clientFor("prod").identity(), /runtime file changed/u);
+  await assert.rejects(clientFor("both").identity(), /runtime file changed/u);
+});
+
 test("real integration rejects a changed live account before creating a commit", async () => {
   const calls = [];
   const client = createReleaseGitHub({
