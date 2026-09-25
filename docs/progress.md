@@ -1,8 +1,8 @@
 # Progress and next steps
 
 Last reviewed: **2026-09-25**, against merged Coordinator `main` source
-`b74f1fd` ([PR #236](https://github.com/6529-Collections/6529-release-coordinator/pull/236))
-plus the local, unmerged product-commit DCO correction below.
+`a869405` ([PR #237](https://github.com/6529-Collections/6529-release-coordinator/pull/237))
+and the live source-PR status below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
@@ -66,13 +66,15 @@ journal lock. The [trial-check investigation](./testing/real-trial-checks-2026-0
 records the evidence. No real integration PR, deploy, E2E, or rollback has
 occurred. Simo then authorized his own GitHub no-reply DCO identity for commits
 the Coordinator creates in product repositories while it is authenticated as
-`@simo6529`. The local, **unmerged** change signs temporary trial and
+`@simo6529`. Merged PR #237 signs temporary trial and
 integration/restoration commits, checks the current GitHub account before
 writing them, and leaves source commits, journal commits, sandbox identity and
-DCO rules unchanged. Offline checks pass (625 of 628 tests; three Docker-only
-skips). [PR #237](https://github.com/6529-Collections/6529-release-coordinator/pull/237)
-has not yet merged or passed a fresh real DCO check; no new release attempt has
-begun. See the [DCO follow-up](./testing/product-dco-signoff-2026-09-25.md).
+DCO rules unchanged. Offline checks passed (625 of 628 tests; three Docker-only
+skips), and the exact PR head passed GitHub CI and review. It has **not** passed
+a fresh real DCO check or started a new release. At the September 25 readback,
+source frontend PR #4093 was 11 commits behind `main`; the Coordinator will
+not use a `BEHIND` PR. Issue #231 remains waiting. Updating that source branch
+requires separate authorization. See the [DCO follow-up](./testing/product-dco-signoff-2026-09-25.md).
 
 The [September 24 approval-bypass acceptance](./testing/approval-bypass-2026-09-24.md)
 added PR-only review-bypass rules to both test `main` branches without removing
