@@ -7,6 +7,21 @@ const safeRuleTypes = new Set([
   "deletion",
   "non_fast_forward"
 ]);
+const nonBlockingReviewStates = new Set(["APPROVED", "COMMENTED", "DISMISSED"]);
+
+function verifiedReviewStates(pr, reviewCount, reviewStates) {
+  return (
+    Number.isSafeInteger(reviewCount) &&
+    reviewCount >= 0 &&
+    Array.isArray(reviewStates) &&
+    reviewStates.length === reviewCount &&
+    reviewStates.every((state) =>
+      pr.reviewDecision === null
+        ? state === "COMMENTED"
+        : nonBlockingReviewStates.has(state)
+    )
+  );
+}
 
 export function needsApprovalBypass(pr) {
   return (
@@ -28,6 +43,7 @@ export function approvalBypassEvidence({
   branchProtection,
   unresolvedThreads,
   reviewCount,
+  reviewStates,
   baseIsAncestor,
   rulesetId,
   expectedChecks
@@ -43,9 +59,7 @@ export function approvalBypassEvidence({
     ruleset.current_user_can_bypass !== "pull_requests_only" ||
     !Number.isSafeInteger(unresolvedThreads) ||
     unresolvedThreads !== 0 ||
-    !Number.isSafeInteger(reviewCount) ||
-    reviewCount < 0 ||
-    (pr.reviewDecision === null && reviewCount !== 0)
+    !verifiedReviewStates(pr, reviewCount, reviewStates)
   )
     return null;
   const approvalRules = rules.filter((rule) => rule.type === "pull_request");
@@ -100,6 +114,7 @@ export function approvalBypassEvidence({
     base_commit: pr.baseRefOid,
     required_checks: names,
     review_count: reviewCount,
+    review_states: [...reviewStates],
     unresolved_review_threads: 0
   };
 }
@@ -110,7 +125,11 @@ export function hasApprovalBypass(pr) {
     pr.approvalBypass?.status === "eligible" &&
     pr.approvalBypass.head_commit === pr.headRefOid &&
     pr.approvalBypass.base_commit === pr.baseRefOid &&
-    (pr.reviewDecision !== null || pr.approvalBypass.review_count === 0) &&
+    verifiedReviewStates(
+      pr,
+      pr.approvalBypass.review_count,
+      pr.approvalBypass.review_states
+    ) &&
     Number.isSafeInteger(pr.approvalBypass.ruleset_id) &&
     pr.approvalBypass.ruleset_id > 0
   );

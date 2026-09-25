@@ -63,6 +63,7 @@ function evidence(value = pr()) {
     },
     unresolvedThreads: 0,
     reviewCount: 0,
+    reviewStates: [],
     baseIsAncestor: false,
     rulesetId,
     expectedChecks: ["Sandbox check"]
@@ -144,7 +145,7 @@ test("unknown GitHub rule, wrong actor, missing check or open thread denies bypa
   }
 });
 
-test("GitHub's null decision can mean an unreviewed team-required PR", () => {
+test("GitHub's null decision permits only verified comment-only reviews", () => {
   const input = evidence();
   input.pr.reviewDecision = null;
   const bypass = approvalBypassEvidence(input);
@@ -153,8 +154,41 @@ test("GitHub's null decision can mean an unreviewed team-required PR", () => {
   assert.equal(hasApprovalBypass(input.pr), true);
   input.reviewCount = 1;
   assert.equal(approvalBypassEvidence(input), null);
-  input.pr.approvalBypass.review_count = 1;
+  input.reviewStates = ["COMMENTED"];
+  input.pr.approvalBypass = approvalBypassEvidence(input);
+  assert.equal(hasApprovalBypass(input.pr), true);
+  const checks = inspectPull(
+    input.pr,
+    { branch: input.pr.headRefName, commit: head },
+    "release-coordinator-test-frontend",
+    repo.full_name
+  );
+  for (const id of ["github_merge_gate", "required_checks", "reviews"])
+    assert.equal(checks.find((item) => item.id === id).status, "pass", id);
+  for (const state of [
+    "CHANGES_REQUESTED",
+    "PENDING",
+    "APPROVED",
+    "DISMISSED",
+    "UNKNOWN"
+  ]) {
+    input.reviewStates = [state];
+    assert.equal(approvalBypassEvidence(input), null, state);
+  }
+  input.pr.approvalBypass.review_states = ["CHANGES_REQUESTED"];
   assert.equal(hasApprovalBypass(input.pr), false);
+  input.reviewStates = ["COMMENTED"];
+  input.unresolvedThreads = 1;
+  assert.equal(approvalBypassEvidence(input), null);
+});
+
+test("a reported review requirement never bypasses requested changes", () => {
+  const input = evidence();
+  input.reviewCount = 1;
+  input.reviewStates = ["CHANGES_REQUESTED"];
+  assert.equal(approvalBypassEvidence(input), null);
+  input.reviewStates = ["COMMENTED"];
+  assert.equal(approvalBypassEvidence(input).status, "eligible");
 });
 
 test("real frontend pins its current ruleset and every enforced check", () => {
@@ -334,6 +368,148 @@ test("GitHub adapter binds rules, token eligibility and review threads to one PR
     `repos/${repo.full_name}/rules/branches/main`,
     `repos/${repo.full_name}/rulesets/${rulesetId}`
   ]);
+});
+
+test("GitHub adapter verifies every comment-only review page before bypass", async () => {
+  const value = { ...pr(), reviewDecision: null };
+  const calls = [];
+  const github = createRehearsalGitHub(sandboxProfile, {
+    execute: async (_file, args) => {
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint === "graphql") {
+        const reviewsQuery = args.some((arg) =>
+          arg.startsWith("query=query ApprovalBypassReviews")
+        );
+        const secondPage = args.includes("cursor=next");
+        calls.push(reviewsQuery ? `reviews:${secondPage}` : "threads");
+        return {
+          stdout: JSON.stringify({
+            data: {
+              repository: {
+                databaseId: repo.id,
+                nameWithOwner: repo.full_name,
+                isPrivate: repo.private,
+                ...(!reviewsQuery
+                  ? {
+                      ref: {
+                        name: "main",
+                        target: { oid: base },
+                        branchProtectionRule: evidence().branchProtection
+                      }
+                    }
+                  : {}),
+                pullRequest: {
+                  number: value.number,
+                  headRefOid: head,
+                  baseRefOid: base,
+                  reviewDecision: null,
+                  reviews: reviewsQuery
+                    ? {
+                        totalCount: 2,
+                        pageInfo: {
+                          hasNextPage: !secondPage,
+                          endCursor: secondPage ? null : "next"
+                        },
+                        nodes: [
+                          {
+                            id: secondPage ? "review-2" : "review-1",
+                            state: "COMMENTED"
+                          }
+                        ]
+                      }
+                    : { totalCount: 2 },
+                  ...(!reviewsQuery
+                    ? {
+                        reviewThreads: {
+                          pageInfo: {
+                            hasNextPage: false,
+                            endCursor: null
+                          },
+                          nodes: [{ isResolved: true }]
+                        }
+                      }
+                    : {})
+                }
+              }
+            }
+          })
+        };
+      }
+      if (endpoint.endsWith("/rules/branches/main"))
+        return { stdout: JSON.stringify(evidence().rules) };
+      if (endpoint.endsWith(`/rulesets/${rulesetId}`))
+        return { stdout: JSON.stringify(evidence().ruleset) };
+      assert.fail(endpoint);
+    }
+  });
+  const bypass = await github.approvalBypass("frontend", value);
+  assert.deepEqual(bypass.review_states, ["COMMENTED", "COMMENTED"]);
+  value.approvalBypass = bypass;
+  assert.equal(hasApprovalBypass(value), true);
+  assert.deepEqual(calls, ["threads", "reviews:false", "reviews:true"]);
+});
+
+test("GitHub adapter rejects changed or incomplete review pages", async () => {
+  const value = { ...pr(), reviewDecision: null };
+  for (const badReviews of [
+    {
+      totalCount: 2,
+      pageInfo: { hasNextPage: false, endCursor: null },
+      nodes: [{ id: "review-1", state: "COMMENTED" }]
+    },
+    {
+      totalCount: 1,
+      pageInfo: { hasNextPage: false, endCursor: null },
+      nodes: [{ id: "review-1", state: "COMMENTED" }]
+    },
+    {
+      totalCount: 2,
+      pageInfo: { hasNextPage: true, endCursor: null },
+      nodes: [{ id: "review-1", state: "COMMENTED" }]
+    }
+  ]) {
+    const github = createRehearsalGitHub(sandboxProfile, {
+      execute: async (_file, args) => {
+        const reviewsQuery = args.some((arg) =>
+          arg.startsWith("query=query ApprovalBypassReviews")
+        );
+        assert.equal(args[args.indexOf("--method") + 2], "graphql");
+        return {
+          stdout: JSON.stringify({
+            data: {
+              repository: {
+                databaseId: repo.id,
+                nameWithOwner: repo.full_name,
+                isPrivate: repo.private,
+                ...(!reviewsQuery
+                  ? { ref: { name: "main", target: { oid: base } } }
+                  : {}),
+                pullRequest: {
+                  number: value.number,
+                  headRefOid: head,
+                  baseRefOid: base,
+                  reviewDecision: null,
+                  reviews: reviewsQuery ? badReviews : { totalCount: 2 },
+                  ...(!reviewsQuery
+                    ? {
+                        reviewThreads: {
+                          pageInfo: {
+                            hasNextPage: false,
+                            endCursor: null
+                          },
+                          nodes: []
+                        }
+                      }
+                    : {})
+                }
+              }
+            }
+          })
+        };
+      }
+    });
+    await assert.rejects(github.approvalBypass("frontend", value));
+  }
 });
 
 test("readiness keeps a review block when bypass evidence is absent or unreadable", async () => {

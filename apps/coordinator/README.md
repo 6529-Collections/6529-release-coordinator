@@ -348,10 +348,13 @@ rules.
 
 The sandbox profile pins PR-only approval-bypass rulesets on the two test
 `main` branches. An unapproved PR may continue only if GitHub reports
-`REVIEW_REQUIRED` (or a null decision with verified zero reviews), the acting
-account is eligible on that exact ruleset, all
-required checks pass on the exact commit, and the Coordinator verifies the
-other known merge conditions and records the bypass. This is not `--admin` or
+`REVIEW_REQUIRED` (or a null decision with verified zero or comment-only
+reviews), the acting account is eligible on that exact ruleset, all required
+checks pass on the exact commit, and the Coordinator verifies the other known
+merge conditions and records the bypass. It reads every review page when reviews
+exist. A null decision with an approval, dismissed, pending, change-requested,
+unknown, or unreadable review still stops; unresolved review threads also stop.
+This is not `--admin` or
 a general permission to ignore failed checks. The real profile has no bypass
 ruleset pin for the backend. The real frontend profile pins its current
 `main` ruleset and five enforced checks; it uses the same gate but has no
