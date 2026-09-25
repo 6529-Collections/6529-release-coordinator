@@ -50,7 +50,12 @@ export const realProfile = profile(
   },
   // This is reviewed source configuration, not an environment override.
   // Changing the responsible DCO signer requires new explicit authorization.
-  { id: "209783236", login: "simo6529", name: "Simo" }
+  {
+    id: "209783236",
+    login: "simo6529",
+    name: "Simo",
+    email: "209783236+simo6529@users.noreply.github.com"
+  }
 );
 export const sandboxProfile = profile(
   "sandbox",

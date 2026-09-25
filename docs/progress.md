@@ -69,7 +69,7 @@ the Coordinator creates in product repositories while it is authenticated as
 `@simo6529`. The local, **unmerged** change signs temporary trial and
 integration/restoration commits, checks the current GitHub account before
 writing them, and leaves source commits, journal commits, sandbox identity and
-DCO rules unchanged. Offline checks pass (624 of 627 tests; three Docker-only
+DCO rules unchanged. Offline checks pass (625 of 628 tests; three Docker-only
 skips). [PR #237](https://github.com/6529-Collections/6529-release-coordinator/pull/237)
 has not yet merged or passed a fresh real DCO check; no new release attempt has
 begun. See the [DCO follow-up](./testing/product-dco-signoff-2026-09-25.md).

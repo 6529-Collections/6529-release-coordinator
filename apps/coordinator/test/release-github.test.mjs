@@ -14,6 +14,7 @@ import {
 } from "../src/release-contract.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import { realProductWorkflowRuntime } from "../src/product-workflow-runtime-config.mjs";
+import { integrationCommitInput } from "../src/release-plan.mjs";
 
 const runtime = {
   workflow: "sandbox-release.yml",
@@ -1977,4 +1978,72 @@ test("real integration rejects a changed live account before creating a commit",
     /authorized, currently authenticated/u
   );
   assert.deepEqual(calls, [{ method: "GET", endpoint: "user" }]);
+});
+
+test("real integration writes only a signed-off commit for the matching live account", async () => {
+  const calls = [];
+  let created;
+  const client = createReleaseGitHub({
+    profile: realProfile,
+    runtime: realProductWorkflowRuntime,
+    execute: async (args, body) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      calls.push({ method, endpoint });
+      if (method === "GET" && endpoint === "user")
+        return 'HTTP/2 200 OK\r\ncontent-type: application/json\r\n\r\n{"id":209783236,"login":"simo6529"}';
+      assert.equal(method, "POST");
+      assert.equal(
+        endpoint,
+        `repos/${realProfile.repositories.frontend.full_name}/git/commits`
+      );
+      created = body;
+      throw new Error("Stopped after inspecting the exact commit payload.");
+    }
+  });
+  const actor = { id: "209783236", login: "simo6529" };
+  const candidate = {
+    role: "frontend",
+    commit: "b".repeat(40),
+    tree: "c".repeat(40),
+    changed: true
+  };
+  const record = {
+    profile: "real",
+    actor,
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: { kind: "integrate", environment: "staging", role: "frontend" },
+    state: "merged",
+    base: "a".repeat(40),
+    integration_version: 1,
+    created_at: "2026-09-25T00:00:00.000Z"
+  };
+  record.integration_input = integrationCommitInput(record, candidate);
+  await assert.rejects(
+    client.integrate({
+      record,
+      candidate,
+      actor,
+      expectedBase: record.base,
+      save: async () => {}
+    }),
+    /Stopped after inspecting/u
+  );
+  assert.deepEqual(calls, [
+    { method: "GET", endpoint: "user" },
+    {
+      method: "POST",
+      endpoint: `repos/${realProfile.repositories.frontend.full_name}/git/commits`
+    }
+  ]);
+  assert.deepEqual(created, record.integration_input);
+  assert.deepEqual(created.author, {
+    name: "Simo",
+    email: "209783236+simo6529@users.noreply.github.com",
+    date: record.created_at
+  });
+  assert.match(
+    created.message,
+    /Signed-off-by: Simo <209783236\+simo6529@users\.noreply\.github\.com>$/u
+  );
 });
