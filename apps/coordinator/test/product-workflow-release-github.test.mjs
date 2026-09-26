@@ -108,6 +108,7 @@ function directHarness(
     returnRunDetails = false,
     dispatchRunId,
     jobStatuses = [],
+    baseTree = "a".repeat(40),
     mutateManifest,
     mutateRun,
     profile = sandboxProfile
@@ -149,6 +150,11 @@ function directHarness(
       const role = repositoryRole(endpoint);
       return apiResponse("200 OK", { object: { sha: commits[role] } });
     }
+    if (method === "GET" && endpoint.includes("/git/commits/"))
+      return apiResponse("200 OK", {
+        sha: endpoint.split("/").at(-1),
+        tree: { sha: baseTree }
+      });
     if (method === "GET" && endpoint.endsWith(`/actions/runs/${run.id}`))
       return apiResponse("200 OK", run);
     if (
@@ -903,7 +909,8 @@ test("a changed staging frontend adopts its automatic push deployment without di
     runtime: savedRuntime,
     operations: {
       "staging:integrate:frontend": {
-        result: { status: "passed", kind: "merge" }
+        base: "b".repeat(40),
+        result: { status: "passed", kind: "merge", tree: "c".repeat(40) }
       }
     },
     steps: [harness.record.step],
@@ -917,6 +924,164 @@ test("a changed staging frontend adopts its automatic push deployment without di
     false
   );
   assert.equal(result.workflow.id, harness.run.id);
+  assert.equal(harness.record.dispatch_after_run_id, undefined);
+  assert.equal(harness.record.workflow_run_id, harness.run.id);
+  const readsBeforeResume = harness.calls.filter((call) =>
+    call.endpoint.includes("/git/commits/")
+  ).length;
+  const resumed = await harness.client.run({
+    record: harness.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {
+      "staging:integrate:frontend": {
+        result: { status: "passed", kind: "merge" }
+      }
+    },
+    steps: [harness.record.step],
+    save: async () => {}
+  });
+  assert.equal(resumed.status, "passed");
+  assert.equal(
+    harness.calls.filter((call) => call.endpoint.includes("/git/commits/"))
+      .length,
+    readsBeforeResume
+  );
+});
+
+test("a tree-identical staging merge dispatches and verifies a fresh real frontend deploy", async () => {
+  const operation = makeProfileReleaseOperation({
+    profile: "real",
+    release_id: "55555555-5555-4555-8555-555555555555",
+    operation_id: "66666666-6666-4666-8666-666666666666",
+    operation: "deploy",
+    environment: "staging",
+    role: "frontend",
+    unit: "frontend",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "frontend",
+    role: "frontend",
+    buildRole: "frontend",
+    environment: "staging",
+    sourceCommit: commits.frontend,
+    ref: "1a-staging",
+    event: "workflow_dispatch",
+    workflow: "deploy-staging.yml",
+    workflowId: savedRuntime.frontend.workflows.stagingDeploy.workflow_id,
+    title: null,
+    unit: null,
+    jobs: ["Build exact staging artifact", "Deploy exact staging artifact"]
+  };
+  const harness = directHarness(descriptor, operation, {
+    profile: realProfile,
+    returnRunDetails: true
+  });
+  const result = await harness.client.run({
+    record: harness.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {
+      "staging:integrate:frontend": {
+        base: "b".repeat(40),
+        result: { status: "passed", kind: "merge", tree: "a".repeat(40) }
+      }
+    },
+    steps: [harness.record.step],
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.equal(result.workflow.id, harness.run.id);
+  const dispatches = harness.calls.filter(
+    (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+  );
+  assert.equal(dispatches.length, 1);
+  assert.equal(harness.record.dispatch_after_run_id, 0);
+  assert.equal(harness.record.workflow_run_id, harness.run.id);
+  assert.deepEqual(dispatches[0].body, {
+    ref: "1a-staging",
+    inputs: {},
+    return_run_details: true
+  });
+  const readsBeforeResume = harness.calls.filter((call) =>
+    call.endpoint.includes("/git/commits/")
+  ).length;
+  const resumed = await harness.client.run({
+    record: harness.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {
+      "staging:integrate:frontend": {
+        result: { status: "passed", kind: "merge" }
+      }
+    },
+    steps: [harness.record.step],
+    save: async () => {}
+  });
+  assert.equal(resumed.status, "passed");
+  assert.equal(
+    harness.calls.filter((call) => call.endpoint.includes("/git/commits/"))
+      .length,
+    readsBeforeResume
+  );
+  assert.equal(
+    harness.calls.filter(
+      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+    ).length,
+    1
+  );
+});
+
+test("an unverifiable staging merge tree stops before dispatch", async () => {
+  const operation = makeReleaseOperation({
+    release_id: "55555555-5555-4555-8555-555555555555",
+    operation_id: "66666666-6666-4666-8666-666666666666",
+    operation: "deploy",
+    environment: "staging",
+    role: "frontend",
+    unit: "frontend",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "frontend",
+    role: "frontend",
+    buildRole: "frontend",
+    environment: "staging",
+    sourceCommit: commits.frontend,
+    ref: "1a-staging",
+    event: "workflow_dispatch",
+    workflow: "deploy-staging.yml",
+    workflowId: savedRuntime.frontend.workflows.stagingDeploy.workflow_id,
+    title: null,
+    unit: null,
+    jobs: ["Build exact staging artifact", "Deploy exact staging artifact"]
+  };
+  const harness = directHarness(descriptor, operation);
+  await assert.rejects(
+    harness.client.run({
+      record: harness.record,
+      actor,
+      runtime: savedRuntime,
+      operations: {
+        "staging:integrate:frontend": {
+          base: "b".repeat(40),
+          result: { status: "passed", kind: "merge" }
+        }
+      },
+      steps: [harness.record.step],
+      save: async () => {}
+    }),
+    /lacks its exact base or merged tree/u
+  );
+  assert.equal(
+    harness.calls.some(
+      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+    ),
+    false
+  );
 });
 
 test("staging recovery dispatches a fresh frontend deploy after backend recovery", async () => {

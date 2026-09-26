@@ -252,7 +252,7 @@ function directDescriptor(operation, sourceChanged, runtime) {
   };
 }
 
-function integrationChanged(record, operations) {
+async function integrationChanged(record, operations, readCommit) {
   const id = `${record.step.id.startsWith("restore:") ? "restore:" : ""}${record.step.environment}:integrate:frontend`;
   const integration = operations?.[id];
   if (!integration) return false;
@@ -262,7 +262,30 @@ function integrationChanged(record, operations) {
     "release-state",
     "The frontend workflow lacks its saved integration result."
   );
-  return integration.result.kind === "merge";
+  if (integration.result.kind === "unchanged") return false;
+  serviceAssert(
+    sha(integration.base) && sha(integration.result.tree),
+    "release-state",
+    "The frontend integration lacks its exact base or merged tree."
+  );
+  const base = await readCommit(integration.base);
+  serviceAssert(
+    base?.sha === integration.base && sha(base.tree?.sha),
+    "release-state",
+    "The frontend integration base tree is unavailable."
+  );
+  // A merge commit can advance staging while leaving its files unchanged.
+  // GitHub does not start the path-filtered push deploy for that case.
+  return base.tree.sha !== integration.result.tree;
+}
+
+function savedAutomaticPush(record) {
+  // A persisted dispatch boundary identifies a manual run, even when its
+  // workflow run ID is also present. A running step without that boundary
+  // is the already-selected automatic push path.
+  if (record.dispatch_after_run_id !== undefined) return false;
+  if (record.workflow_run_id || record.state === "running") return true;
+  return null;
 }
 
 function deploymentDependencies(record, operations, steps) {
@@ -821,16 +844,24 @@ export function createProductWorkflowReleaseGitHub({
     operations,
     save
   }) {
-    const sourceChanged =
-      operation.role === "frontend" && operation.environment === "staging"
-        ? integrationChanged(record, operations)
-        : false;
     // Recovery integrates all saved refs before redeploying backend services.
     // Its frontend staging merge can auto-deploy/E2E too early to prove the
     // restored backend+frontend combination, so dispatch a fresh deploy after
     // the ordered backend recovery steps instead of adopting that push run.
+    // Once a run or dispatch boundary is saved, keep its chosen event on
+    // resume; a transient base-commit read must not change its identity.
+    const selectedPush = savedAutomaticPush(record);
     const useAutomaticPush =
-      sourceChanged && !record.step.id.startsWith("restore:");
+      operation.role === "frontend" &&
+      operation.environment === "staging" &&
+      !record.step.id.startsWith("restore:") &&
+      (selectedPush ??
+        (await integrationChanged(
+          record,
+          operations,
+          async (commit) =>
+            (await call("frontend", "GET", `/git/commits/${commit}`)).data
+        )));
     const descriptor = directDescriptor(operation, useAutomaticPush, runtime);
     const workflowIdentity = workflow(
       descriptor.role,
