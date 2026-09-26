@@ -1,9 +1,10 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-26**, including the in-progress real production
-ticket #250. Its tree-identical staging merge exposed a missing manual-dispatch
-fallback; that correction has local tests but no merged or resumed live proof
-yet. The earlier completed real staging ticket #239 is recorded below.
+Last reviewed: **2026-09-26**, including the real production release attempt
+that failed for open Issue #250 and its verified staging restoration. The
+tree-identical staging deploy correction is merged and passed a real-profile
+resume; production did not merge or deploy. The earlier completed real staging
+ticket #239 is below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
@@ -30,23 +31,25 @@ PR/CI delivery and live environment proof.
 | Frontend production source guard    | The real `Web Deploy - PROD` workflow accepts an optional `expected_source_sha` and refuses before building when it does not match the `main` commit fixed for the run                                                                              | Frontend [PR #4072](https://github.com/6529-Collections/6529seize-frontend/pull/4072) merged at `7471ac1`; the exact [workflow source](https://github.com/6529-Collections/6529seize-frontend/blob/7471ac113cb2535940b19f036bf38f47f4d44eb6/.github/workflows/build-upload-deploy-prod.yml) was read back from frontend `main`. Manual dispatches may still omit the input under existing human authorization. The PR #218 adapter always supplies the exact approved frontend commit, verifies the pinned workflow source and matching run, and never uses the empty compatibility path. That enforcement has offline coverage only; it has not dispatched the real workflow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
 | Product-shaped test workflow mirror | Merged test workflows build sample code and publish fake deployment evidence while mirroring the existing product workflow interfaces, including branch-aligned monitoring and linked deploy-to-E2E runs.                                           | Original mirror: frontend PR #92 and backend PR #100, with [September 21 acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md). Branch-contract correction: backend PRs #139/#140 and frontend PRs #127/#128, with [September 23 success and recovery acceptance](./testing/monitoring-branch-contract-2026-09-23.md). These are test repositories only.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | Product-workflow sandbox adapter    | Sandbox release operations use the separate product-shaped backend, monitoring, frontend and E2E workflow mirrors by default; the generic `sandbox-release.yml` client remains an explicit fallback                                                 | The [adapter-selection implementation](../apps/coordinator/src/sandbox-release-client.mjs), including the explicit `RELEASE_COORDINATOR_SANDBOX_RELEASE_ADAPTER=generic` fallback, ships in the same change as this status row. Offline contract and recovery suites cover branch sources, exact runs/artifacts, operation persistence, failures and recovery. The independent [success-path acceptance](./testing/adapter-success-path-2026-09-21.md) completed staging and production, and the independent [controlled-recovery acceptance](./testing/adapter-recovery-2026-09-21.md) stopped on monitoring failure, restored production then staging, reran matching deploys/E2E, and resumed the same journal without duplicate dispatch. The [September 22 profile/scope acceptance](./testing/profile-scope-sandbox-2026-09-22.md) additionally passed fresh one-ticket, two-ticket, solo-database and staging-E2E-failure recovery cases; it exposed and fixed causal-time and running-wrapper reconciliation gaps before same-run recovery completed. All used only test repositories. Delivered to protected Coordinator `main` in PR #218.                                                                                                                                          |
-| Real-profile release adapter        | PR #218 selects product repositories under `RELEASE_COORDINATOR_PROFILE=real` and uses the shared release engine with existing product workflows. | PR #240 refreshed the backend runtime pins after a safe stop. The same filtered run then completed frontend-only staging Issue #239: integration PR #4100 merged, exact staging deploy and linked E2E passed, the ticket closed, and the journal lock released. See [September 25 real staging acceptance](./testing/real-staging-ticket-239-2026-09-25.md). The first production-target attempt for Issue #247 stopped before rehearsal because a comment-only CodeRabbit review made GitHub's null review decision fail the existing zero-review bypass guard; see [the production-attempt record](./testing/real-production-ticket-247-2026-09-25.md). Production, backend services, monitoring, database changes and failure/recovery remain unproved in real products. Database-changing failures never enter automatic recovery. |
+| Real-profile release adapter        | PR #218 selects product repositories under `RELEASE_COORDINATOR_PROFILE=real` and uses the shared release engine with existing product workflows. | Filtered staging Issue #239 completed with exact deploy/E2E; see [September 25 acceptance](./testing/real-staging-ticket-239-2026-09-25.md). Production-target Issue #247 stopped before rehearsal; see [its record](./testing/real-production-ticket-247-2026-09-25.md). Issue #250 proved the tree-identical staging manual-dispatch fallback and verified no-database-change staging restoration after a production integration gate failure; see [September 26 record](./testing/real-production-ticket-250-2026-09-26.md). No production merge or deployment occurred. Successful production, backend services, monitoring and database-changing releases remain unproved in real products. Database-changing failures never enter automatic recovery. |
 
 ### Real production ticket #250 — September 26
 
 [Issue #250](https://github.com/6529-Collections/6529-release-coordinator/issues/250)
-selects only frontend [PR #4093](https://github.com/6529-Collections/6529seize-frontend/pull/4093)
+selected only frontend [PR #4093](https://github.com/6529-Collections/6529seize-frontend/pull/4093)
 at its exact head, with actor `simo6529` and no database change. The trial
-checks passed, and frontend staging integration PR #4105 merged. Its merge
-advanced `1a-staging` but left the tree unchanged. The path-filtered staging
-deploy workflow did not start, so run `7dd97148-06c3-4615-acde-6db3c5ed9c9a`
-stopped while waiting. The journal remains locked to #250 with the deploy step
-prepared and no dispatch recorded. No production merge or deployment occurred.
-The [dated attempt record](./testing/real-production-ticket-250-2026-09-26.md)
-contains the exact boundary. The proposed adapter correction dispatches the
-existing staging workflow for a verified tree-identical merge and keeps the
-automatic-push path for changed content. This is local implementation only
-until review/merge and a safe resume of the saved run.
+checks passed, and staging integration PR #4105 merged with an unchanged tree.
+Coordinator [PR #251](https://github.com/6529-Collections/6529-release-coordinator/pull/251)
+merged the manual-dispatch fallback; the same saved run then passed exact
+staging deploy and matching E2E. Production integration
+[PR #4106](https://github.com/6529-Collections/6529seize-frontend/pull/4106)
+stopped at an unresolved code-review thread despite green CI, and closed
+unmerged. The Coordinator restored staging through
+[PR #4107](https://github.com/6529-Collections/6529seize-frontend/pull/4107),
+verified its deploy/E2E and both environment trees, marked #250 `action-needed`,
+and released its lock. Production `main` never moved or deployed. The
+[dated record](./testing/real-production-ticket-250-2026-09-26.md) has the run
+IDs and next source-code action. Do not retry failed #250 unchanged.
 
 ### Real frontend rehearsal sizing — September 24
 
