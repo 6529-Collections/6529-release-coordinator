@@ -924,6 +924,27 @@ test("a changed staging frontend adopts its automatic push deployment without di
     false
   );
   assert.equal(result.workflow.id, harness.run.id);
+  const readsBeforeResume = harness.calls.filter((call) =>
+    call.endpoint.includes("/git/commits/")
+  ).length;
+  const resumed = await harness.client.run({
+    record: harness.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {
+      "staging:integrate:frontend": {
+        result: { status: "passed", kind: "merge" }
+      }
+    },
+    steps: [harness.record.step],
+    save: async () => {}
+  });
+  assert.equal(resumed.status, "passed");
+  assert.equal(
+    harness.calls.filter((call) => call.endpoint.includes("/git/commits/"))
+      .length,
+    readsBeforeResume
+  );
 });
 
 test("a tree-identical staging merge dispatches and verifies a fresh real frontend deploy", async () => {
@@ -980,6 +1001,33 @@ test("a tree-identical staging merge dispatches and verifies a fresh real fronte
     inputs: {},
     return_run_details: true
   });
+  const readsBeforeResume = harness.calls.filter((call) =>
+    call.endpoint.includes("/git/commits/")
+  ).length;
+  const resumed = await harness.client.run({
+    record: harness.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {
+      "staging:integrate:frontend": {
+        result: { status: "passed", kind: "merge" }
+      }
+    },
+    steps: [harness.record.step],
+    save: async () => {}
+  });
+  assert.equal(resumed.status, "passed");
+  assert.equal(
+    harness.calls.filter((call) => call.endpoint.includes("/git/commits/"))
+      .length,
+    readsBeforeResume
+  );
+  assert.equal(
+    harness.calls.filter(
+      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+    ).length,
+    1
+  );
 });
 
 test("an unverifiable staging merge tree stops before dispatch", async () => {

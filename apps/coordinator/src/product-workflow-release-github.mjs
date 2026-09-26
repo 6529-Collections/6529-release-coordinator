@@ -839,16 +839,22 @@ export function createProductWorkflowReleaseGitHub({
     // Its frontend staging merge can auto-deploy/E2E too early to prove the
     // restored backend+frontend combination, so dispatch a fresh deploy after
     // the ordered backend recovery steps instead of adopting that push run.
+    // Once a run or dispatch boundary is saved, keep its chosen event on
+    // resume; a transient base-commit read must not change its identity.
     const useAutomaticPush =
       operation.role === "frontend" &&
       operation.environment === "staging" &&
       !record.step.id.startsWith("restore:") &&
-      (await integrationChanged(
-        record,
-        operations,
-        async (commit) =>
-          (await call("frontend", "GET", `/git/commits/${commit}`)).data
-      ));
+      (record.dispatch_after_run_id !== undefined
+        ? false
+        : record.workflow_run_id || record.state === "running"
+          ? true
+          : await integrationChanged(
+              record,
+              operations,
+              async (commit) =>
+                (await call("frontend", "GET", `/git/commits/${commit}`)).data
+            ));
     const descriptor = directDescriptor(operation, useAutomaticPush, runtime);
     const workflowIdentity = workflow(
       descriptor.role,
