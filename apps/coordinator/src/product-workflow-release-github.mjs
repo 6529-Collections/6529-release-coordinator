@@ -279,6 +279,15 @@ async function integrationChanged(record, operations, readCommit) {
   return base.tree.sha !== integration.result.tree;
 }
 
+function savedAutomaticPush(record) {
+  // A persisted dispatch boundary identifies a manual run, even when its
+  // workflow run ID is also present. A running step without that boundary
+  // is the already-selected automatic push path.
+  if (record.dispatch_after_run_id !== undefined) return false;
+  if (record.workflow_run_id || record.state === "running") return true;
+  return null;
+}
+
 function deploymentDependencies(record, operations, steps) {
   const index = steps.findIndex((step) => step.id === record.step.id);
   serviceAssert(
@@ -841,20 +850,18 @@ export function createProductWorkflowReleaseGitHub({
     // the ordered backend recovery steps instead of adopting that push run.
     // Once a run or dispatch boundary is saved, keep its chosen event on
     // resume; a transient base-commit read must not change its identity.
+    const selectedPush = savedAutomaticPush(record);
     const useAutomaticPush =
       operation.role === "frontend" &&
       operation.environment === "staging" &&
       !record.step.id.startsWith("restore:") &&
-      (record.dispatch_after_run_id !== undefined
-        ? false
-        : record.workflow_run_id || record.state === "running"
-          ? true
-          : await integrationChanged(
-              record,
-              operations,
-              async (commit) =>
-                (await call("frontend", "GET", `/git/commits/${commit}`)).data
-            ));
+      (selectedPush ??
+        (await integrationChanged(
+          record,
+          operations,
+          async (commit) =>
+            (await call("frontend", "GET", `/git/commits/${commit}`)).data
+        )));
     const descriptor = directDescriptor(operation, useAutomaticPush, runtime);
     const workflowIdentity = workflow(
       descriptor.role,

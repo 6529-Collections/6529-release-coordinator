@@ -924,6 +924,8 @@ test("a changed staging frontend adopts its automatic push deployment without di
     false
   );
   assert.equal(result.workflow.id, harness.run.id);
+  assert.equal(harness.record.dispatch_after_run_id, undefined);
+  assert.equal(harness.record.workflow_run_id, harness.run.id);
   const readsBeforeResume = harness.calls.filter((call) =>
     call.endpoint.includes("/git/commits/")
   ).length;
@@ -996,6 +998,8 @@ test("a tree-identical staging merge dispatches and verifies a fresh real fronte
     (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
   );
   assert.equal(dispatches.length, 1);
+  assert.equal(harness.record.dispatch_after_run_id, 0);
+  assert.equal(harness.record.workflow_run_id, harness.run.id);
   assert.deepEqual(dispatches[0].body, {
     ref: "1a-staging",
     inputs: {},
