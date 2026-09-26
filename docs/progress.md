@@ -1,9 +1,10 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-26**, including the completed, failed real production
-ticket #250 and its verified staging restoration. The tree-identical staging
-deploy correction is merged and passed a real-profile resume; production did
-not merge or deploy. The earlier completed real staging ticket #239 is below.
+Last reviewed: **2026-09-26**, including the real production release attempt
+that failed for open Issue #250 and its verified staging restoration. The
+tree-identical staging deploy correction is merged and passed a real-profile
+resume; production did not merge or deploy. The earlier completed real staging
+ticket #239 is below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
