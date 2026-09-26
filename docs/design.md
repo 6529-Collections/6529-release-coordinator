@@ -829,8 +829,13 @@ product workflow run is not independent proof of monitoring target health.
    dependency order. When database-changing execution is later supported, use
    and verify the existing database service before its dependent services.
 4. After backend prerequisites succeed, merge frontend changes into
-   `1a-staging`. Its push starts `Web Deploy - STAGING`; use its documented
-   manual dispatch for an authorized ops-only deployment.
+   `1a-staging`. A content-changing push starts `Web Deploy - STAGING`.
+   When the checked merge advances the branch but leaves its tree unchanged,
+   GitHub's path-filtered push trigger does not start a deploy. Read back the
+   saved base and merged trees, then use the workflow's existing manual
+   dispatch for that exact staging commit. Recovery likewise dispatches after
+   its ordered backend steps. Use the documented manual dispatch for an
+   authorized ops-only deployment.
 5. Save the exact runs, source commits, deployed versions and existing artifact/
    health results. Actions own the separate staging builds and settings.
 6. Wait for required staging E2E to finish successfully for the recorded deployed
