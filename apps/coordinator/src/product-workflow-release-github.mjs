@@ -299,6 +299,14 @@ function deploymentDependencies(record, operations, steps) {
     const saved = operations?.[step.id];
     return saved?.result?.status === "passed" ? [{ step, saved }] : [];
   });
+  const backendPlanned = steps
+    .slice(0, index)
+    .some(
+      (step) =>
+        step.kind === "deploy" &&
+        step.role === "backend" &&
+        step.environment === record.step.environment
+    );
   const frontend = prior
     .filter(
       ({ step }) =>
@@ -316,7 +324,7 @@ function deploymentDependencies(record, operations, steps) {
     )
     .at(-1)?.saved;
   serviceAssert(
-    frontend?.result?.report && (!backend || backend?.result?.report),
+    frontend?.result?.report && (!backendPlanned || backend?.result?.report),
     "release-state",
     "Matching backend and frontend deployments are required before E2E."
   );
@@ -854,6 +862,7 @@ export function createProductWorkflowReleaseGitHub({
     const useAutomaticPush =
       operation.role === "frontend" &&
       operation.environment === "staging" &&
+      record.force_dispatch !== true &&
       !record.step.id.startsWith("restore:") &&
       (selectedPush ??
         (await integrationChanged(
@@ -1336,6 +1345,25 @@ export function createProductWorkflowReleaseGitHub({
       (value) => value.file
     );
   const client = {
+    async environmentVersions(environment) {
+      serviceAssert(
+        ["staging", "prod"].includes(environment),
+        "release-state",
+        "An exact product environment is required."
+      );
+      return Object.fromEntries(
+        await Promise.all(
+          ["backend", "frontend"].map(async (role) => [
+            role,
+            await ref(role, branch(runtime, environment))
+          ])
+        )
+      );
+    },
+    async waitForStagingQuiet(record, save) {
+      for (const role of ["backend", "frontend"])
+        await waitForQuiet(role, allFiles(role), record, save, "dispatch");
+    },
     async identity() {
       const generic = await base.identity();
       const saved = { backend: { workflows: {} }, frontend: { workflows: {} } };

@@ -1,6 +1,11 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-26**, including the real production release attempt
+Last reviewed: **2026-09-28** for local staging-drift recovery work.
+Real Issue #253 stopped after a successful frontend staging deploy and GitHub
+staging E2E because another developer moved backend staging before the
+Coordinator accepted the E2E. Both production branches stayed unchanged. The
+same run's journal lock is still held; this local code has not resumed it.
+The older evidence below includes the real production release attempt
 that failed for open Issue #250 and its verified staging restoration. The
 tree-identical staging deploy correction is merged and passed a real-profile
 resume; production did not merge or deploy. The earlier completed real staging
@@ -8,6 +13,20 @@ ticket #239 is below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
+
+The local staging-drift change records both branch pairs, projects a named
+waiting reason while keeping the run lock, and offers a guarded resume choice:
+fresh frontend staging deploy/E2E against the new backend, or restore only
+the Coordinator's frontend staging change and verify the result. It refuses
+automatic action for database-changing, mixed/backend-owned, or newly moved
+refs. The product-shaped sandbox report now supports a frontend-only selected
+deployment without inventing a Coordinator-owned backend deployment. Focused
+offline simulations cover both choices, the moved-ref stop, and that report.
+The full local `npm run check` passed on September 28: 646 tests passed,
+three optional Docker tests skipped, plus lint, formatting, docs, workflow
+policy and package checks. This is **not merged or live accepted**. Before any
+real choice, a maintainer must verify the other developer's backend deployments
+and database/compatibility effects.
 
 ## Current state
 
@@ -162,14 +181,15 @@ also passed. GitHub CI and live product acceptance are separate evidence.
 
 ## Next steps
 
-Frontend-only real staging Issue #239 is complete. Production ticket #247 is
-accepted for the exact current frontend PR, but its first filtered run stopped
-before rehearsal or deployment on the comment-only review guard. Review and
-merge the narrow bypass fix, then recheck the ticket's exact PR, workflow pins,
-required checks and lock before another `real`/`filtered` run for only #247 and
-actor `simo6529`. Staging acceptance does not grant production proof. Real
-backend-service, monitoring, database-changing, multi-ticket and
-failure/recovery paths still need separate, scoped acceptance.
+Review and deliver the local staging-drift handling, then exercise the
+concurrent-backend-change retest and own-frontend-restoration cases against
+the product-shaped test repositories. Separately inspect Issue #253's
+external backend deployments and possible database/compatibility effects.
+Only after the code and sandbox path are accepted should a maintainer choose
+whether the still-locked real run should retest or restore staging. No
+production merge or deployment is proved yet. Backend-service, monitoring,
+database-changing, multi-ticket and other failure/recovery paths still need
+separate, scoped real acceptance.
 
 Merged Coordinator [PR #219](https://github.com/6529-Collections/6529-release-coordinator/pull/219)
 dispatches staging monitoring from `1a-staging` and production monitoring from `main`,

@@ -21,6 +21,7 @@ RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox npm run
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --issue NUMBER [--issue NUMBER...] --actor LOGIN [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --issue NUMBER --actor LOGIN --close-test [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID [--json]
+RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --staging-change retest|restore [--json]
 
 Writes managed labels, titles, submitter assignment, one status comment, justified
 Issue closures, and the selected inbox's codex/inbox-state journal branch. Runs once.
@@ -40,6 +41,11 @@ staging E2E passes. In real profile these are real product changes and deploymen
   --resume ID     Resume the stored action and selection after an interrupted run.
                   Stop the original process and wait at least 60 seconds first.
                   Never resume while the original process may still be running.
+  --staging-change retest|restore
+                  For a saved staging E2E drift only: explicitly retest the
+                  new backend/frontend pair, or restore only this release's
+                  frontend staging change. Requires --resume and an exact,
+                  unchanged no-database-change frontend-only reconciliation.
   --json         Print structured results; live progress goes to stderr.
                  Per-run logs are saved under ~/.6529-release-coordinator/logs/.
   --help         Show this help without contacting GitHub.
@@ -89,9 +95,14 @@ export async function runInboxRunCli(
     const key = args[index];
     if (
       (key !== "--issue" && seen.has(key)) ||
-      !["--issue", "--actor", "--close-test", "--resume", "--json"].includes(
-        key
-      )
+      ![
+        "--issue",
+        "--actor",
+        "--close-test",
+        "--resume",
+        "--staging-change",
+        "--json"
+      ].includes(key)
     ) {
       stderr(help);
       return 2;
@@ -132,10 +143,17 @@ export async function runInboxRunCli(
         stderr(help);
         return 2;
       }
+    } else if (key === "--staging-change") {
+      options.stagingChange = args[++index];
+      if (!["retest", "restore"].includes(options.stagingChange)) {
+        stderr(help);
+        return 2;
+      }
     } else if (key === "--close-test") options.closeTest = true;
   }
   if (
     (options.closeTest && options.issueNumbers.length !== 1) ||
+    (options.stagingChange && !options.resume) ||
     (options.resume &&
       (options.issueNumbers.length || options.actorLogin || options.closeTest))
   ) {

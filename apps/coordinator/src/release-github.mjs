@@ -604,6 +604,25 @@ export function createReleaseGitHub({
     };
   }
   return {
+    async environmentVersions(environment) {
+      serviceAssert(
+        ["staging", "prod"].includes(environment),
+        "release-state",
+        "An exact release environment is required."
+      );
+      return Object.fromEntries(
+        await Promise.all(
+          ["backend", "frontend"].map(async (role) => [
+            role,
+            (await ref(role, target(runtime, environment))).data.object.sha
+          ])
+        )
+      );
+    },
+    async waitForStagingQuiet(record, save) {
+      for (const role of ["backend", "frontend"])
+        await waitForQuietWorkflow(role, record, save, "dispatch");
+    },
     async identity() {
       const actor = (await call("backend", "GET", "user")).data;
       serviceAssert(

@@ -689,6 +689,13 @@ test("profile, scope, report-file and old-command validation fails before reads 
     ["--manifest", "x"],
     ["--report", "x"],
     ["--plan", "x"],
+    ["--staging-change", "retest"],
+    [
+      "--resume",
+      "33333333-3333-4333-8333-333333333333",
+      "--staging-change",
+      "skip"
+    ],
     ["--resume", "33333333-3333-4333-8333-333333333333", "--issue", "1"]
   ]) {
     assert.equal(
@@ -887,6 +894,69 @@ test("the profile release client receives the command's stop signal", async () =
   assert.equal(clients[0].profile.name, "sandbox");
   assert.equal(clients[0].adapter, "product-workflows");
   assert.equal(clients[0].signal, controller.signal);
+});
+
+test("a staging choice reaches only an explicit resumed release", async () => {
+  const f = fixture(sandboxProfile);
+  let observed;
+  const result = await invoke(f, {
+    args: [
+      "--resume",
+      "33333333-3333-4333-8333-333333333333",
+      "--staging-change",
+      "restore",
+      "--json"
+    ],
+    env: { RELEASE_COORDINATOR_SCOPE: "inbox" },
+    createReleaseClient: () => ({ fake: true }),
+    executeReleaseSequence: async ({ stagingChange }) => {
+      observed = stagingChange;
+      return { status: "needs-human" };
+    },
+    run: async (options) => {
+      assert.equal(options.stagingChange, "restore");
+      await options.release({
+        batch: {},
+        state: {},
+        run: {},
+        stagingChange: options.stagingChange,
+        guard: async () => {},
+        save: async () => {}
+      });
+      return { run_id: options.resume, requests: [] };
+    }
+  });
+  assert.equal(result.code, 0);
+  assert.equal(observed, "restore");
+});
+
+test("a staged-change decision keeps the saved run lock while its ticket is presented", async () => {
+  const f = fixture(sandboxProfile);
+  const result = await invoke(f, {
+    args: ["--issue", "1", "--actor", "trusted-user", "--json"],
+    batch: async () => ({
+      status: "awaiting-staging-choice",
+      selected: [1],
+      release_executed: false
+    })
+  });
+  assert.equal(result.report.batch.status, "awaiting-staging-choice");
+  assert.equal(f.state().lock.run_id, result.report.run_id);
+});
+
+test("a failed staging restoration also keeps the run lock", async () => {
+  const f = fixture(sandboxProfile);
+  const result = await invoke(f, {
+    args: ["--issue", "1", "--actor", "trusted-user", "--json"],
+    batch: async () => ({
+      status: "needs-human",
+      selected: [1],
+      release_executed: false,
+      release: { staging_drift: { status: "failed" } }
+    })
+  });
+  assert.equal(result.report.batch.release.staging_drift.status, "failed");
+  assert.equal(f.state().lock.run_id, result.report.run_id);
 });
 
 test("one inbox scan generates a separate saved plan for each suitable ticket", async () => {

@@ -25,7 +25,7 @@ import {
   integrationCommitInput,
   makeReleasePlan
 } from "../src/release-plan.mjs";
-import { serviceHash } from "../src/service-contract.mjs";
+import { ServiceError, serviceHash } from "../src/service-contract.mjs";
 import { elapsedBatchPolicy, legacyBatchPolicy } from "../src/batch-plan.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
@@ -288,6 +288,296 @@ async function productionBatch({ database = false } = {}) {
   });
   return batch;
 }
+
+async function frontendOnlyProductionBatch() {
+  const batch = await productionBatch();
+  const prepared = batch.attempts.find(
+    (attempt) => attempt.phase === "git" && attempt.result?.status === "passed"
+  ).result;
+  prepared.publications = prepared.publications.filter(
+    (publication) => publication.role === "frontend"
+  );
+  prepared.service_plan.steps = prepared.service_plan.steps
+    .filter((step) => step.role === "frontend")
+    .map((step) => ({ ...step, depends_on: [] }));
+  return batch;
+}
+
+async function frontendStagingDrift() {
+  const batch = await frontendOnlyProductionBatch();
+  const calls = [];
+  const releaseClient = client(calls);
+  const versions = {
+    staging: { backend: "b".repeat(40), frontend: "b".repeat(40) },
+    prod: { backend: "b".repeat(40), frontend: "b".repeat(40) }
+  };
+  const originalIntegrate = releaseClient.integrate;
+  releaseClient.integrate = async (args) => {
+    const result = await originalIntegrate(args);
+    versions[args.record.step.environment][args.record.step.role] =
+      result.commit;
+    return result;
+  };
+  releaseClient.environmentVersions = async (environment) => ({
+    ...versions[environment]
+  });
+  releaseClient.waitForStagingQuiet = async () => {
+    calls.push("wait:staging-quiet");
+  };
+  const originalRun = releaseClient.run;
+  let firstE2e = true;
+  releaseClient.run = async (args) => {
+    if (args.record.step.id === "staging:e2e" && firstE2e) {
+      firstE2e = false;
+      args.record.workflow_run_id = 990;
+      args.record.state = "running";
+      versions.staging.backend = "c".repeat(40);
+      throw new ServiceError(
+        "release-stale",
+        "Staging changed before E2E result acceptance."
+      );
+    }
+    return originalRun(args);
+  };
+  const options = {
+    batch,
+    client: releaseClient,
+    operator: { id: "456", login: "tester" },
+    guard: async () => {},
+    save: async () => {}
+  };
+  const stopped = await executeRelease(options);
+  assert.equal(stopped.status, "awaiting-staging-choice");
+  assert.equal(stopped.staging_drift.observed.backend, "c".repeat(40));
+  assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
+  assert.equal(
+    calls.some((step) => step.startsWith("prod:")),
+    false
+  );
+  return { batch, calls, releaseClient, versions, options };
+}
+
+test("a concurrent backend staging move is recorded and blocks production until a choice", async () => {
+  const { batch, calls, options } = await frontendStagingDrift();
+  assert.equal(releaseTicketResult(batch, 1).code, "release-staging-changed");
+  const waiting = await executeRelease(options);
+  assert.equal(waiting.status, "awaiting-staging-choice");
+  assert.equal(
+    calls.some((step) => step.startsWith("prod:")),
+    false
+  );
+});
+
+test("explicit staging retest keeps old evidence and deploys the frontend afresh before production", async () => {
+  const { batch, calls, options } = await frontendStagingDrift();
+  const done = await executeRelease({ ...options, stagingChange: "retest" });
+  assert.equal(done.status, "completed");
+  assert.equal(done.staging_drift.status, "retested");
+  assert.deepEqual(done.staging_drift.chosen_by, {
+    id: "456",
+    login: "tester"
+  });
+  assert.equal(done.staging_drift.previous_e2e.workflow_run_id, 990);
+  assert.notEqual(
+    done.operations["staging:deploy:frontend:frontend"].id,
+    done.staging_drift.previous_deploy.id
+  );
+  assert.equal(
+    done.operations["staging:deploy:frontend:frontend"].force_dispatch,
+    true
+  );
+  assert.equal(
+    done.operations["staging:e2e"].operation.backend_commit,
+    "c".repeat(40)
+  );
+  assert.equal(
+    calls.filter((step) => step === "staging:deploy:frontend:frontend").length,
+    2
+  );
+  assert.ok(
+    calls.indexOf("wait:staging-quiet") <
+      calls.indexOf("prod:integrate:frontend")
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(done, batch));
+});
+
+test("explicit staging restoration preserves the external backend and stops before production", async () => {
+  const { batch, calls, options, versions, releaseClient } =
+    await frontendStagingDrift();
+  const originalRestore = releaseClient.restore;
+  releaseClient.restore = async (args) => {
+    const result = await originalRestore(args);
+    versions.staging.frontend = result.commit;
+    return result;
+  };
+  releaseClient.verifyRestoredStaging = async ({
+    versions: expected,
+    trees
+  }) => {
+    calls.push("verify:restored-staging");
+    assert.deepEqual(versions.staging, expected);
+    return {
+      staging: { ...versions.staging },
+      prod: { ...versions.prod },
+      trees: { frontend: trees.frontend }
+    };
+  };
+  const stopped = await executeRelease({
+    ...options,
+    stagingChange: "restore"
+  });
+  assert.equal(stopped.status, "needs-human");
+  assert.equal(stopped.staging_drift.status, "restored");
+  assert.equal(stopped.staging_drift.chosen_by.login, "tester");
+  assert.equal(versions.staging.backend, "c".repeat(40));
+  assert.equal(versions.prod.frontend, "b".repeat(40));
+  assert.equal(
+    calls.some((step) => step.startsWith("prod:")),
+    false
+  );
+  assert.ok(calls.includes("restore:staging:integrate:frontend"));
+  assert.ok(calls.includes("restore:staging:deploy:frontend:frontend"));
+  assert.ok(calls.includes("restore:staging:e2e"));
+  assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
+});
+
+test("a second environment move refuses the chosen staging reconciliation", async () => {
+  const { calls, options, versions } = await frontendStagingDrift();
+  versions.staging.backend = "d".repeat(40);
+  await assert.rejects(
+    executeRelease({ ...options, stagingChange: "retest" }),
+    /moved again/u
+  );
+  assert.equal(
+    calls.some((step) => step.startsWith("prod:")),
+    false
+  );
+});
+
+test("a backend-owned batch cannot automatically adopt someone else's staging backend", async () => {
+  const batch = await productionBatch();
+  const calls = [];
+  const releaseClient = client(calls);
+  const versions = {
+    staging: { backend: "b".repeat(40), frontend: "b".repeat(40) },
+    prod: { backend: "b".repeat(40), frontend: "b".repeat(40) }
+  };
+  const integrate = releaseClient.integrate;
+  releaseClient.integrate = async (args) => {
+    const result = await integrate(args);
+    versions[args.record.step.environment][args.record.step.role] =
+      result.commit;
+    return result;
+  };
+  releaseClient.environmentVersions = async (environment) => ({
+    ...versions[environment]
+  });
+  const run = releaseClient.run;
+  releaseClient.run = async (args) => {
+    if (args.record.step.id === "staging:e2e") {
+      args.record.workflow_run_id = 991;
+      versions.staging.backend = "c".repeat(40);
+      throw new ServiceError("release-stale", "Staging changed.");
+    }
+    return run(args);
+  };
+  const options = {
+    batch,
+    client: releaseClient,
+    operator: { id: "456", login: "tester" },
+    guard: async () => {},
+    save: async () => {}
+  };
+  assert.equal(
+    (await executeRelease(options)).status,
+    "awaiting-staging-choice"
+  );
+  await assert.rejects(
+    executeRelease({ ...options, stagingChange: "retest" }),
+    /frontend release/u
+  );
+  assert.equal(
+    calls.some((step) => step.startsWith("prod:")),
+    false
+  );
+});
+
+test("staging restoration resumes its saved operations after interruption", async () => {
+  const { batch, calls, options, versions, releaseClient } =
+    await frontendStagingDrift();
+  const restore = releaseClient.restore;
+  releaseClient.restore = async (args) => {
+    const result = await restore(args);
+    versions.staging.frontend = result.commit;
+    return result;
+  };
+  releaseClient.verifyRestoredStaging = async ({ trees }) => ({
+    staging: { ...versions.staging },
+    prod: { ...versions.prod },
+    trees: { frontend: trees.frontend }
+  });
+  let interrupted = false;
+  await assert.rejects(
+    executeRelease({
+      ...options,
+      stagingChange: "restore",
+      save: async (message) => {
+        if (
+          !interrupted &&
+          message ===
+            "staging reconciliation step restore:staging:integrate:frontend passed"
+        ) {
+          interrupted = true;
+          throw new Error("saved restoration interrupted");
+        }
+      }
+    }),
+    /saved restoration interrupted/u
+  );
+  assert.equal(batch.execution.status, "reconciling-staging");
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+  const done = await executeRelease(options);
+  assert.equal(done.staging_drift.status, "restored");
+  assert.equal(
+    calls.filter((step) => step === "restore:staging:integrate:frontend")
+      .length,
+    1
+  );
+});
+
+test("a moved ref at staging-restoration readback cannot release the lane", async () => {
+  const { batch, options, releaseClient } = await frontendStagingDrift();
+  releaseClient.verifyRestoredStaging = async () => {
+    throw new ServiceError(
+      "release-recovery-moved",
+      "Staging moved before restoration was confirmed."
+    );
+  };
+  await assert.rejects(
+    executeRelease({ ...options, stagingChange: "restore" }),
+    /moved before restoration/u
+  );
+  assert.equal(batch.execution.status, "reconciling-staging");
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+});
+
+test("a failed own-frontend staging restoration is recorded but not accepted", async () => {
+  const { batch, options, releaseClient } = await frontendStagingDrift();
+  releaseClient.restore = async ({ record }) => ({
+    status: "failed",
+    kind: "checks",
+    url: `https://example.invalid/failed/${record.id}`
+  });
+  const stopped = await executeRelease({
+    ...options,
+    stagingChange: "restore"
+  });
+  assert.equal(stopped.status, "needs-human");
+  assert.equal(stopped.staging_drift.status, "failed");
+  assert.equal(stopped.staging_drift.restoration.status, "failed");
+  assert.match(stopped.message, /lane remains locked/u);
+  assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
+});
 
 test("missing test-main role version stops before release mutations", async () => {
   const batch = await productionBatch();

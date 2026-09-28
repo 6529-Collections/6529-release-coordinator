@@ -110,7 +110,7 @@ export function verifyProductWorkflowReport(report, operation) {
   validateProfileReleaseOperation(operation);
   const runtime = productWorkflowRuntimeForProfile({ name: operation.profile });
   const requiredRoles =
-    operation.profile === "real" && operation.operation === "e2e"
+    operation.operation === "e2e"
       ? Object.keys(report?.deployments ?? {})
       : releaseBuildRoles(operation);
   const buildEntries = object(report?.builds)
@@ -176,8 +176,7 @@ export function verifyProductWorkflowReport(report, operation) {
         !["passed", "failed"].includes(check.status)
     ) ||
     !object(report.builds) ||
-    (operation.profile === "real" &&
-      operation.operation === "e2e" &&
+    (operation.operation === "e2e" &&
       (requiredRoles.some((role) => !["backend", "frontend"].includes(role)) ||
         (report.status === "passed" && !requiredRoles.includes("frontend")))) ||
     !buildsValid ||

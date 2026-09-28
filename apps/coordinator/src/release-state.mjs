@@ -1,5 +1,8 @@
 import { validateProfileReleaseOperation } from "./profile-release-contract.mjs";
-import { verifySavedReleaseReport } from "./product-workflow-contract.mjs";
+import {
+  productWorkflowReleaseAdapter,
+  verifySavedReleaseReport
+} from "./product-workflow-contract.mjs";
 import {
   integrationCommitInput,
   operationForStep,
@@ -55,12 +58,46 @@ function validateWaitedFor(record) {
   );
 }
 
+function validateE2eDeploymentRoles(record, steps) {
+  if (
+    record.step.kind !== "e2e" ||
+    record.result?.report?.adapter !== productWorkflowReleaseAdapter ||
+    record.result.report.status !== "passed"
+  )
+    return;
+  const index = steps.findIndex((step) => step.id === record.step.id);
+  const selected = [
+    ...new Set(
+      steps
+        .slice(0, index)
+        .filter(
+          (step) =>
+            step.kind === "deploy" &&
+            step.environment === record.step.environment
+        )
+        .map((step) => step.role)
+    )
+  ].sort();
+  const deployed = Object.keys(record.result.report.deployments ?? {}).sort();
+  const built = Object.keys(record.result.report.builds ?? {}).sort();
+  serviceAssert(
+    selected.includes("frontend") &&
+      serviceHash(selected) === serviceHash(deployed) &&
+      (record.operation.profile !== "sandbox" ||
+        serviceHash(selected) === serviceHash(built)),
+    "release-state",
+    "E2E evidence omits a selected deployment or includes an unselected one."
+  );
+}
+
 export function validateReleaseExecution(execution, batch) {
   serviceAssert(
     execution?.version === 1 &&
       [
         "prepared",
         "running",
+        "awaiting-staging-choice",
+        "reconciling-staging",
         "recovering",
         "completed",
         "needs-human"
@@ -119,11 +156,26 @@ export function validateReleaseExecution(execution, batch) {
     );
     ids.add(record.id);
     validateWaitedFor(record);
+    if (record.force_dispatch !== undefined)
+      serviceAssert(
+        record.force_dispatch === true &&
+          record.step.environment === "staging" &&
+          record.step.kind === "deploy" &&
+          record.step.role === "frontend" &&
+          execution.staging_drift?.choice === "retest",
+        "release-state",
+        "Only a chosen staging retest can force a fresh frontend deployment."
+      );
     const hasIntegrationCommit = Object.hasOwn(record, "integration_commit");
     const hasIntegrationInput = Object.hasOwn(record, "integration_input");
     const hasIntegrationVersion = Object.hasOwn(record, "integration_version");
     const needsPreparedIntegrationInput =
-      ["running", "recovering"].includes(execution.status) &&
+      [
+        "running",
+        "recovering",
+        "awaiting-staging-choice",
+        "reconciling-staging"
+      ].includes(execution.status) &&
       record.step.kind === "integrate" &&
       record.state === "commit-prepared";
     if (
@@ -136,7 +188,12 @@ export function validateReleaseExecution(execution, batch) {
         "This unfinished release predates unique integration commits and needs manual recovery."
       );
     const needsCreatedIntegrationCommit =
-      ["running", "recovering"].includes(execution.status) &&
+      [
+        "running",
+        "recovering",
+        "awaiting-staging-choice",
+        "reconciling-staging"
+      ].includes(execution.status) &&
       record.step.kind === "integrate" &&
       !["prepared", "commit-prepared"].includes(record.state);
     if (
@@ -179,6 +236,7 @@ export function validateReleaseExecution(execution, batch) {
       if (record.result?.report)
         verifySavedReleaseReport(record.result.report, record.operation);
     }
+    validateE2eDeploymentRoles(record, execution.plan.steps);
     if (record.step.kind === "integrate" && record.result)
       serviceAssert(
         ["passed", "failed"].includes(record.result.status) &&
@@ -208,14 +266,198 @@ export function validateReleaseExecution(execution, batch) {
     const step = execution.plan.steps[execution.step_index];
     serviceAssert(
       execution.completed_at &&
-        execution.operations[step?.id]?.result?.status === "failed",
+        (execution.operations[step?.id]?.result?.status === "failed" ||
+          ["restored", "failed"].includes(execution.staging_drift?.status)),
       "release-state",
       "Stopped release lacks a confirmed failing step."
     );
   }
+  if (execution.staging_drift) validateStagingDrift(execution, ids);
   if (execution.status === "recovering" || execution.recovery)
     validateRecovery(execution, batch, ids);
   return execution;
+}
+
+function validateStagingDrift(execution, ids) {
+  const drift = execution.staging_drift;
+  const sourceE2e =
+    drift.choice === "retest"
+      ? drift.previous_e2e
+      : execution.operations["staging:e2e"];
+  const versions = (value) =>
+    value &&
+    ["backend", "frontend"].every((role) =>
+      /^[0-9a-f]{40}$/u.test(value[role] ?? "")
+    );
+  serviceAssert(
+    [
+      "awaiting-choice",
+      "retesting",
+      "retested",
+      "restoring",
+      "restored",
+      "failed"
+    ].includes(drift.status) &&
+      Number.isFinite(Date.parse(drift.detected_at)) &&
+      drift.step_id === "staging:e2e" &&
+      versions(drift.expected) &&
+      versions(drift.observed) &&
+      sourceE2e?.operation?.backend_commit === drift.expected.backend &&
+      sourceE2e?.operation?.frontend_commit === drift.expected.frontend &&
+      ["backend", "frontend"].some(
+        (role) => drift.expected[role] !== drift.observed[role]
+      ) &&
+      Array.isArray(drift.superseded) &&
+      (drift.choice === undefined ||
+        ["retest", "restore"].includes(drift.choice)) &&
+      (drift.choice === undefined ||
+        (Number.isFinite(Date.parse(drift.chosen_at)) &&
+          /^[1-9][0-9]*$/u.test(drift.chosen_by?.id ?? "") &&
+          /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u.test(
+            drift.chosen_by?.login ?? ""
+          ))) &&
+      (execution.status !== "awaiting-staging-choice" ||
+        (drift.status === "awaiting-choice" && drift.choice === undefined)) &&
+      (execution.status !== "reconciling-staging" ||
+        drift.status === "restoring") &&
+      (drift.status !== "restored" ||
+        (execution.status === "needs-human" &&
+          drift.restoration?.status === "completed")) &&
+      (drift.status !== "failed" ||
+        (execution.status === "needs-human" &&
+          drift.restoration?.status === "failed")),
+    "release-state",
+    "Invalid saved staging-change decision."
+  );
+  if (drift.choice === "retest") {
+    const oldDeploy = drift.previous_deploy;
+    const oldE2e = drift.previous_e2e;
+    serviceAssert(
+      oldDeploy?.result?.status === "passed" &&
+        oldDeploy.result.report &&
+        oldE2e?.operation &&
+        Number.isSafeInteger(oldE2e.workflow_run_id) &&
+        oldE2e.workflow_run_id > 0 &&
+        oldE2e.result === null,
+      "release-state",
+      "The prior staging deploy and E2E identities were not retained."
+    );
+    for (const record of [oldDeploy, oldE2e]) {
+      serviceAssert(
+        uuid(record.id) &&
+          !ids.has(record.id) &&
+          record.release_id === execution.plan.release_id &&
+          record.operation?.operation_id === record.id,
+        "release-state",
+        "Invalid superseded staging operation."
+      );
+      ids.add(record.id);
+      validateProfileReleaseOperation(record.operation);
+      if (record.result?.report)
+        verifySavedReleaseReport(record.result.report, record.operation);
+    }
+  }
+  if (!drift.restoration) return;
+  const restored = drift.restoration;
+  const expectedSteps = [
+    {
+      id: "restore:staging:integrate:frontend",
+      kind: "integrate",
+      environment: "staging",
+      role: "frontend",
+      recovery: true
+    },
+    {
+      id: "restore:staging:deploy:frontend:frontend",
+      kind: "deploy",
+      environment: "staging",
+      role: "frontend",
+      unit: "frontend"
+    },
+    {
+      id: "restore:staging:e2e",
+      kind: "e2e",
+      environment: "staging",
+      role: null
+    }
+  ];
+  const originalFrontend = execution.operations["staging:integrate:frontend"];
+  serviceAssert(
+    drift.choice === "restore" &&
+      ["running", "completed", "failed"].includes(restored.status) &&
+      restored.baseline === originalFrontend?.base &&
+      /^[0-9a-f]{40}$/u.test(restored.baseline ?? "") &&
+      versions(restored.versions) &&
+      restored.versions.backend === drift.observed.backend &&
+      Array.isArray(restored.steps) &&
+      serviceHash(restored.steps) === serviceHash(expectedSteps) &&
+      Number.isSafeInteger(restored.step_index) &&
+      restored.step_index >= 0 &&
+      restored.step_index <= restored.steps.length &&
+      restored.operations &&
+      typeof restored.operations === "object" &&
+      !Array.isArray(restored.operations) &&
+      Object.keys(restored.operations).every((id) =>
+        expectedSteps.some((step) => step.id === id)
+      ),
+    "release-state",
+    "Invalid staging restoration plan."
+  );
+  for (const [index, step] of restored.steps.entries()) {
+    const record = restored.operations[step.id];
+    if (!record) {
+      serviceAssert(
+        index >= restored.step_index,
+        "release-state",
+        "A completed staging restoration step lacks evidence."
+      );
+      continue;
+    }
+    serviceAssert(
+      index <= restored.step_index &&
+        uuid(record.id) &&
+        !ids.has(record.id) &&
+        record.release_id === execution.plan.release_id &&
+        serviceHash(record.step) === serviceHash(step),
+      "release-state",
+      "Invalid staging restoration operation."
+    );
+    ids.add(record.id);
+    if (index < restored.step_index)
+      serviceAssert(
+        record.state === "completed" && record.result?.status === "passed",
+        "release-state",
+        "A saved staging restoration step did not pass."
+      );
+    if (record.operation) {
+      validateProfileReleaseOperation(record.operation);
+      if (record.result?.report)
+        verifySavedReleaseReport(record.result.report, record.operation);
+    }
+    validateE2eDeploymentRoles(record, restored.steps);
+  }
+  serviceAssert(
+    restored.status !== "completed" ||
+      (restored.step_index === restored.steps.length &&
+        restored.verification &&
+        ["backend", "frontend"].every(
+          (role) =>
+            restored.verification.staging?.[role] === restored.versions[role] &&
+            restored.verification.prod?.[role] === execution.versions.prod[role]
+        ) &&
+        restored.verification.trees?.frontend ===
+          restored.operations["restore:staging:integrate:frontend"]
+            ?.restore_tree),
+    "release-state",
+    "Completed staging restoration lacks readback."
+  );
+  if (restored.status === "failed")
+    serviceAssert(
+      restored.operations[restored.steps[restored.step_index]?.id]?.result
+        ?.status === "failed",
+      "release-state",
+      "Failed staging restoration lacks its exact failed operation."
+    );
 }
 
 function validateRecovery(execution, batch, ids) {
@@ -369,6 +611,7 @@ function validateRecovery(execution, batch, ids) {
         if (record.result?.report)
           verifySavedReleaseReport(record.result.report, record.operation);
       }
+      validateE2eDeploymentRoles(record, recovery.plan.steps);
       if (record.state === "completed")
         serviceAssert(
           record.operation && record.result?.report,

@@ -639,6 +639,21 @@ An active saved release is different: resume verifies and reuses its completed
 matching operations so a lost response or ticket-write failure does not deploy
 the same step twice. A run stopped while waiting for someone else's workflow run
 has dispatched nothing; resume simply waits again.
+If the Coordinator records that backend staging moved during a frontend-only
+E2E, it updates the ticket with `release-staging-changed` and retains the lock.
+First inspect the other developer's deployment outcome and database/compatibility
+effects. Then, only for a confirmed no-database-change frontend-only release,
+resume the same run with `--staging-change retest` (new frontend staging deploy
+and E2E before production) or `--staging-change restore` (undo only this
+release's frontend staging change, redeploy, verify E2E, stop). The command
+waits for pinned workflows to become quiet and refuses either choice if the
+recorded staging or production refs moved again. It does not alter the other
+developer's backend branch. Other drift cases require manual reconciliation.
+If interrupted after the choice is saved, use ordinary `--resume RUN_ID`
+without repeating `--staging-change`; the journal keeps the chosen operation
+identities.
+If restoration itself fails, the ticket records that failure and the lane
+remains locked for manual inspection; a failed check is not restoration proof.
 Do not combine `--resume` with `--issue`, `--actor`, or `--close-test`. The scope
 must match the saved run, and the saved Issue/actor filter is reused rather than
 supplied again. It does not process tickets outside that saved filter. There is
