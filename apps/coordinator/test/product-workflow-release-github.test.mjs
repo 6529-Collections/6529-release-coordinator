@@ -1084,6 +1084,61 @@ test("an unverifiable staging merge tree stops before dispatch", async () => {
   );
 });
 
+test("a chosen staging retest forces a new frontend deployment instead of adopting the old push run", async () => {
+  const operation = makeReleaseOperation({
+    release_id: "55555555-5555-4555-8555-555555555555",
+    operation_id: "77777777-7777-4777-8777-777777777777",
+    operation: "deploy",
+    environment: "staging",
+    role: "frontend",
+    unit: "frontend",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const descriptor = {
+    kind: "frontend",
+    role: "frontend",
+    buildRole: "frontend",
+    environment: "staging",
+    sourceCommit: commits.frontend,
+    ref: "1a-staging",
+    event: "workflow_dispatch",
+    workflow: "deploy-staging.yml",
+    workflowId: savedRuntime.frontend.workflows.stagingDeploy.workflow_id,
+    title: null,
+    unit: null,
+    jobs: ["Build exact staging artifact", "Deploy exact staging artifact"]
+  };
+  const harness = directHarness(descriptor, operation);
+  harness.record.force_dispatch = true;
+  assert.deepEqual(
+    await harness.client.environmentVersions("staging"),
+    commits
+  );
+  const result = await harness.client.run({
+    record: harness.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {
+      "staging:integrate:frontend": {
+        base: "b".repeat(40),
+        result: { status: "passed", kind: "merge", tree: "a".repeat(40) }
+      }
+    },
+    steps: [harness.record.step],
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  const dispatches = harness.calls.filter(
+    (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
+  );
+  assert.equal(dispatches.length, 1);
+  assert.equal(dispatches[0].body.ref, "1a-staging");
+  assert.equal(dispatches[0].body.return_run_details, true);
+  assert.deepEqual(dispatches[0].body.inputs, {});
+  assert.equal(result.workflow.id, harness.run.id);
+});
+
 test("staging recovery dispatches a fresh frontend deploy after backend recovery", async () => {
   const operation = makeReleaseOperation({
     release_id: "12121212-1212-4212-8212-121212121212",
@@ -1518,6 +1573,17 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
   assert.equal(result.report.deployments.frontend.run_id, 602);
   assert.equal(result.report.report_hash, undefined);
   assert.equal(result.report_hash, releaseHash(result.report));
+  const frontendOnly = await client.run({
+    record: makeRecord(),
+    actor,
+    runtime: savedRuntime,
+    operations: { [steps[1].id]: operations[steps[1].id] },
+    steps: steps.slice(1),
+    save: async () => {}
+  });
+  assert.equal(frontendOnly.status, "passed");
+  assert.deepEqual(Object.keys(frontendOnly.report.deployments), ["frontend"]);
+  assert.equal(frontendOnly.report.deployments.frontend.run_id, 602);
   e2eRun.conclusion = "failure";
   const failed = await client.run({
     record: makeRecord(),
@@ -1542,7 +1608,7 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     }),
     /frontend deployment started before the matching backend deployment finished/u
   );
-  assert.equal(automaticQueries.length, 4);
+  assert.equal(automaticQueries.length, 6);
   for (const [index, endpoint] of automaticQueries.entries()) {
     const dispatchQuery = index % 2 === 0;
     const query = new URL(`https://example.invalid/${endpoint}`).searchParams;
@@ -1600,6 +1666,142 @@ test("E2E refuses a plan without matching successful backend and frontend deploy
       runtime: savedRuntime,
       operations: {},
       steps: [step],
+      save: async () => {}
+    }),
+    /Matching backend and frontend deployments are required before E2E/u
+  );
+});
+
+test("the product-shaped sandbox accepts frontend-only E2E evidence for its selected deployment", () => {
+  const releaseId = "edededed-eded-4ded-8ded-edededededed";
+  const frontendOperation = makeReleaseOperation({
+    release_id: releaseId,
+    operation_id: "12121212-1212-4212-8212-121212121212",
+    operation: "deploy",
+    environment: "staging",
+    role: "frontend",
+    unit: "frontend",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const e2eOperation = makeReleaseOperation({
+    release_id: releaseId,
+    operation_id: "34343434-3434-4434-8434-343434343434",
+    operation: "e2e",
+    environment: "staging",
+    role: null,
+    unit: null,
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const frontend = dependencyReport(frontendOperation, "frontend", 602, null);
+  const report = {
+    protocol: e2eOperation.protocol,
+    profile: "sandbox",
+    adapter: productWorkflowReleaseAdapter,
+    release_id: releaseId,
+    operation_id: e2eOperation.operation_id,
+    operation_hash: e2eOperation.fingerprint,
+    operation: "e2e",
+    environment: "staging",
+    role: null,
+    unit: null,
+    status: "passed",
+    checks: [{ name: "product-shaped-workflow", status: "passed" }],
+    builds: frontend.builds,
+    deployments: frontend.deployments,
+    versions: { ...commits },
+    runner: {
+      repository: sandboxProfile.repositories.frontend.full_name,
+      run_id: 604,
+      attempt: 1,
+      commit: "c".repeat(40),
+      workflow: ".github/workflows/staging-e2e.yml"
+    },
+    completed_at: "2026-09-21T16:02:00.000Z"
+  };
+  assert.equal(verifyProductWorkflowReport(report, e2eOperation), report);
+  delete report.deployments.frontend;
+  assert.throws(
+    () => verifyProductWorkflowReport(report, e2eOperation),
+    /does not match its saved operation/u
+  );
+});
+
+test("product-shaped E2E cannot omit a backend deployment selected by the plan", async () => {
+  const releaseId = "56565656-5656-4656-8656-565656565656";
+  const frontendOperation = makeReleaseOperation({
+    release_id: releaseId,
+    operation_id: "78787878-7878-4878-8878-787878787878",
+    operation: "deploy",
+    environment: "staging",
+    role: "frontend",
+    unit: "frontend",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const e2eOperation = makeReleaseOperation({
+    release_id: releaseId,
+    operation_id: "90909090-9090-4090-8090-909090909090",
+    operation: "e2e",
+    environment: "staging",
+    role: null,
+    unit: null,
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  const steps = [
+    {
+      id: "staging:deploy:backend:api",
+      kind: "deploy",
+      environment: "staging",
+      role: "backend",
+      unit: "api"
+    },
+    {
+      id: "staging:deploy:frontend:frontend",
+      kind: "deploy",
+      environment: "staging",
+      role: "frontend",
+      unit: "frontend"
+    },
+    {
+      id: "staging:e2e",
+      kind: "e2e",
+      environment: "staging",
+      role: null
+    }
+  ];
+  const client = createProductWorkflowReleaseGitHub({
+    profile: sandboxProfile,
+    execute: async () => assert.fail("missing dependency must precede GitHub"),
+    base: {},
+    polls: 1,
+    wait: async () => {}
+  });
+  await assert.rejects(
+    client.run({
+      record: {
+        id: e2eOperation.operation_id,
+        release_id: releaseId,
+        step: steps[2],
+        state: "prepared",
+        actor,
+        created_at: "2026-09-21T16:00:00.000Z",
+        operation: e2eOperation
+      },
+      actor,
+      runtime: savedRuntime,
+      operations: {
+        [steps[1].id]: {
+          result: {
+            status: "passed",
+            report: dependencyReport(frontendOperation, "frontend", 602, null)
+          },
+          operation: frontendOperation
+        }
+      },
+      steps,
       save: async () => {}
     }),
     /Matching backend and frontend deployments are required before E2E/u

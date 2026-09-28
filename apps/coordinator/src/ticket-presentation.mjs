@@ -52,6 +52,7 @@ export const reasons = [
   "batch-target-deferred",
   "release-completed",
   "release-failed",
+  "release-staging-changed",
   "release-unverified"
 ];
 export const batchStatuses = [

@@ -982,6 +982,43 @@ batch identity, stop advancement if a required input moved, and reconcile actual
 state. A later source-branch commit is not added to an active deployment. Do not
 claim old E2E proves new code. Staging-to-production continuation rechecks inputs.
 
+When staging changes during E2E result acceptance or immediately before the
+first production action, save both exact branch pairs,
+project a named waiting reason to the ticket, keep the lane lock and stop before
+production. Save the authenticated operator and time with any later choice. An
+operator must inspect the external deployment and choose on an
+explicit resume. The supported automatic choice is deliberately narrow: a
+confirmed no-database-change frontend-only release, its own frontend staging
+commit still at the tip, an unrelated backend staging move, no selected backend
+service or monitoring deployment, quiet pinned workflows, and unchanged staging
+and production refs since the recorded stop.
+
+For `retest`, preserve the old deploy and E2E records, run a new frontend
+staging deployment (never adopt its earlier push run), and accept only the new
+automatic E2E bound to that deploy and the new backend branch commit. Only then
+may the saved release continue to production. For `restore`, use an ordinary
+staging PR to undo only this release's frontend tree, redeploy frontend, run
+matching E2E, verify staging and production refs/trees, and close the release as
+needing a person. A failed restoration retains the lane lock for manual
+reconciliation; a failed check is not verification. Neither choice resets,
+reverts, or deploys the other developer's backend change. The operator is
+responsible for checking that
+the external backend deployment finished successfully and that its database
+and compatibility effects are understood; workflow quiet alone is not proof
+of a successful deployment. If the moved role belongs to this release, either
+ref moves again, or the external effect is uncertain, do not choose either
+automatic path; perform manual reconciliation without claiming production
+authorization. Both choices and the late production-boundary check have
+[live sandbox acceptance](./testing/staging-drift-2026-09-28.md) but no real-product
+recovery proof.
+The product-shaped sandbox report requires build/deploy artifacts for exactly
+the roles actually deployed by the selected release; a frontend-only E2E
+therefore need not invent a Coordinator-owned backend deployment. It still
+pins both environment commits and validates the frontend artifact and matching
+E2E chain. A plan that selected a backend deployment cannot omit its backend
+evidence. This matches the real adapter's frontend-only evidence boundary;
+the operator's check of the unrelated backend deployment remains separate.
+
 ### Failed preflight, infrastructure or build
 
 Before shared mutation, confirmed Git/code failures may use the bounded selection

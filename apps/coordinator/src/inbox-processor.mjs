@@ -27,6 +27,7 @@ export async function processInbox({
   actorLogin,
   closeTest = false,
   resume,
+  stagingChange,
   rehearsal,
   services,
   batch,
@@ -90,6 +91,14 @@ export async function processInbox({
     "The saved inbox run has no valid Issue selection or action."
   );
   const selection = readInboxSelection(run.scope);
+  if (stagingChange)
+    serviceAssert(
+      resume &&
+        state.batches?.[run.batch_fingerprint]?.execution?.status ===
+          "awaiting-staging-choice",
+      "release-recovery",
+      "A staging-change choice requires the saved run to be awaiting that decision."
+    );
   serviceAssert(
     !resume || selectionMode === undefined || selection.mode === selectionMode,
     "run-scope",
@@ -132,9 +141,13 @@ export async function processInbox({
           record.status === "finished" &&
           record.selected.length &&
           (!record.execution ||
-            ["prepared", "running", "recovering"].includes(
-              record.execution.status
-            ))
+            [
+              "prepared",
+              "running",
+              "awaiting-staging-choice",
+              "reconciling-staging",
+              "recovering"
+            ].includes(record.execution.status))
       );
       if (active.length > 1)
         throw new Error("More than one unfinished release exists.");
@@ -210,7 +223,9 @@ export async function processInbox({
             github,
             plan
           }),
-        release
+        release: release
+          ? (options) => release({ ...options, stagingChange, operator: actor })
+          : undefined
       });
     }
     for (const item of preparedTickets) {
@@ -236,13 +251,17 @@ export async function processInbox({
       pendingNumber = null;
     }
     signal?.throwIfAborted();
-    await loggedStep(
-      {
-        step: "journal.release",
-        message: "Release the completed run's inbox lock."
-      },
-      () => journal.release(state, run)
-    );
+    if (
+      batchResult?.status !== "awaiting-staging-choice" &&
+      batchResult?.release?.staging_drift?.status !== "failed"
+    )
+      await loggedStep(
+        {
+          step: "journal.release",
+          message: "Release the completed run's inbox lock."
+        },
+        () => journal.release(state, run)
+      );
     return {
       mode: "write",
       profile: profile.name,

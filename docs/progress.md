@@ -1,6 +1,18 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-26**, including the real production release attempt
+Last reviewed: **2026-09-28** for sandbox staging-drift acceptance.
+Real Issue #253 stopped after a successful frontend staging deploy and GitHub
+staging E2E because another developer moved backend staging before the
+Coordinator accepted the E2E. At that stop, this run had not changed either
+production branch. The
+same run's journal lock remains held; it has not been resumed here. The
+[sandbox acceptance](./testing/staging-drift-2026-09-28.md) does not establish
+that the real backend deployment or database effects are safe for Issue #253.
+At a later September 28 readback, both real staging refs and both real `main`
+refs had moved beyond the versions saved in that run. Its automatic retest and
+restoration choices now fail the unchanged-ref prerequisite; the old ticket
+requires manual reconciliation before further real release work.
+The older evidence below includes the real production release attempt
 that failed for open Issue #250 and its verified staging restoration. The
 tree-identical staging deploy correction is merged and passed a real-profile
 resume; production did not merge or deploy. The earlier completed real staging
@@ -8,6 +20,36 @@ ticket #239 is below.
 Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
+
+Coordinator [PR #256](https://github.com/6529-Collections/6529-release-coordinator/pull/256)
+records both branch pairs, projects a named
+waiting reason while keeping the run lock, and offers a guarded resume choice:
+fresh frontend staging deploy/E2E against the new backend, or restore only
+the Coordinator's frontend staging change and verify the result. It refuses
+automatic action for database-changing, mixed/backend-owned, or newly moved
+refs. It also checks staging again just before the first production action;
+the sandbox test found that staging can move after E2E passes. The
+product-shaped sandbox report supports a frontend-only selected
+deployment without inventing a Coordinator-owned backend deployment. Focused
+offline simulations and the [September 28 sandbox run](./testing/staging-drift-2026-09-28.md)
+cover the fresh retest, late-drift stop, and frontend-only restoration. The
+branch is **not yet merged** and no real-profile recovery has run. Before any
+real choice, a maintainer must verify the other developer's backend deployments
+and database/compatibility effects. Local and PR checks are recorded below.
+
+The first frontend-only sandbox acceptance ticket
+[#51](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/51)
+passed intake and exact PR rehearsal but stopped before any staging or production
+mutation: the older sandbox service stage required both sample repositories.
+The follow-up treats a frontend-only sandbox batch like the real
+frontend-only scope: exact combined PR checks, no invented backend service or
+database execution, then the product-shaped frontend deploy/E2E path. Offline
+tests and the full check passed before live acceptance. Sandbox tickets
+[#52](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/52)
+and [#53](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/53)
+then passed the retest and restoration paths respectively; details and the
+temporary GitHub journal HTTP 422 are in the
+[acceptance record](./testing/staging-drift-2026-09-28.md).
 
 ## Current state
 
@@ -162,14 +204,15 @@ also passed. GitHub CI and live product acceptance are separate evidence.
 
 ## Next steps
 
-Frontend-only real staging Issue #239 is complete. Production ticket #247 is
-accepted for the exact current frontend PR, but its first filtered run stopped
-before rehearsal or deployment on the comment-only review guard. Review and
-merge the narrow bypass fix, then recheck the ticket's exact PR, workflow pins,
-required checks and lock before another `real`/`filtered` run for only #247 and
-actor `simo6529`. Staging acceptance does not grant production proof. Real
-backend-service, monitoring, database-changing, multi-ticket and
-failure/recovery paths still need separate, scoped acceptance.
+Finish PR #256 checks/review and merge the sandbox-accepted staging-drift
+handling. Separately inspect Issue #253's
+external backend deployments and possible database/compatibility effects.
+Because its saved refs have since moved, do not use either automatic choice on
+that still-locked run; reconcile its state manually and prepare a fresh exact
+request if the source PR still needs release. No production merge or deployment
+by Issue #253 is proved. Backend-service, monitoring,
+database-changing, multi-ticket and other failure/recovery paths still need
+separate, scoped real acceptance.
 
 Merged Coordinator [PR #219](https://github.com/6529-Collections/6529-release-coordinator/pull/219)
 dispatches staging monitoring from `1a-staging` and production monitoring from `main`,

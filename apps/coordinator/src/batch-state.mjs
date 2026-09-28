@@ -4,6 +4,7 @@ import {
   verifyServiceReport
 } from "./service-contract.mjs";
 import { validateReleaseExecution } from "./release-state.mjs";
+import { sandboxFrontendServiceProtocol } from "./service-plan.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
 import {
   databaseBatchPolicies,
@@ -201,6 +202,8 @@ export function validateBatchHistory(batches, profile) {
               progress.result &&
               serviceHash(progress.result) === serviceHash(attempt.result) &&
               (profile.name === "real" ||
+                prepared.service_plan?.protocol ===
+                  sandboxFrontendServiceProtocol ||
                 (progress.service_attempts.candidate?.result?.report?.status ===
                   "passed" &&
                   progress.service_attempts.candidate.plan_hash ===

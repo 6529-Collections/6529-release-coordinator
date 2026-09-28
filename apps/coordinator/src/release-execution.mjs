@@ -41,6 +41,29 @@ export function releaseTicketResult(batch, number) {
         "The saved batch is stale, so its release result cannot complete this ticket.",
       execution
     };
+  if (execution?.status === "awaiting-staging-choice") {
+    const drift = execution.staging_drift;
+    serviceAssert(
+      ["expected", "observed"].every((pair) =>
+        ["backend", "frontend"].every((role) =>
+          /^[0-9a-f]{40}$/u.test(drift?.[pair]?.[role] ?? "")
+        )
+      ),
+      "release-state",
+      "Staging-change ticket projection lacks exact saved branch versions."
+    );
+    const timing =
+      execution.operations?.["staging:e2e"]?.result?.status === "passed"
+        ? "after E2E passed but before production"
+        : "while E2E ran";
+    return {
+      status: "waiting",
+      batch_status: "waiting",
+      code: "release-staging-changed",
+      message: `Staging changed from backend ${drift.expected.backend}, frontend ${drift.expected.frontend} to backend ${drift.observed.backend}, frontend ${drift.observed.frontend} ${timing}. Production has not started. Inspect the other deployment and choose a supported reconciliation path; the old E2E cannot authorize production.`,
+      execution
+    };
+  }
   if (execution?.status === "completed")
     return {
       status: "completed",
@@ -72,6 +95,8 @@ export async function executeRelease({
   save,
   guard,
   signal,
+  stagingChange,
+  operator,
   uuid = randomUUID,
   now = () => new Date()
 }) {
@@ -110,6 +135,287 @@ export async function executeRelease({
     batch.execution = structuredClone(execution);
     await save(message);
   };
+  const sameVersions = (left, right) =>
+    ["backend", "frontend"].every((role) => left?.[role] === right?.[role]);
+  let chosenStagingChange = false;
+  const stagingDrift = async (record) => {
+    const observed = await client.environmentVersions?.("staging");
+    const expected = execution.versions.staging;
+    serviceAssert(
+      observed &&
+        ["backend", "frontend"].every((role) =>
+          /^[0-9a-f]{40}$/u.test(observed[role] ?? "")
+        ) &&
+        !sameVersions(observed, expected),
+      "release-stale",
+      "Staging changed, but its exact new branch versions could not be saved."
+    );
+    execution.staging_drift = {
+      status: "awaiting-choice",
+      detected_at: now().toISOString(),
+      step_id: record.step.id,
+      expected: { ...expected },
+      observed: { ...observed },
+      superseded: execution.staging_drift
+        ? [structuredClone(execution.staging_drift)]
+        : []
+    };
+    execution.status = "awaiting-staging-choice";
+    execution.message =
+      record.result?.status === "passed"
+        ? "Staging changed after E2E passed but before production. Production is stopped. A maintainer must choose a fresh staging test or restore only this release's staging change."
+        : "Staging changed while E2E was running. Production is stopped. A maintainer must choose a fresh staging test or restore only this release's staging change.";
+    await persist("staging changed; awaiting explicit reconciliation choice");
+    return execution;
+  };
+  const supportedStagingChoice = () => {
+    const drift = execution.staging_drift;
+    const frontend = execution.operations["staging:integrate:frontend"];
+    serviceAssert(
+      !databaseChange &&
+        drift?.step_id === "staging:e2e" &&
+        drift.expected.frontend === drift.observed.frontend &&
+        drift.expected.backend !== drift.observed.backend &&
+        execution.operations["staging:integrate:backend"]?.result?.kind !==
+          "merge" &&
+        !execution.plan.steps.some(
+          (step) =>
+            step.environment === "staging" &&
+            (step.role === "backend" ||
+              (step.kind === "deploy" && step.role !== "frontend"))
+        ) &&
+        frontend?.result?.kind === "merge" &&
+        frontend?.result?.status === "passed" &&
+        frontend.result.commit === drift.observed.frontend &&
+        /^[0-9a-f]{40}$/u.test(frontend.base ?? ""),
+      "release-recovery",
+      "Automatic staging reconciliation is safe only when an unrelated backend ref moved during a no-database-change frontend release. Inspect other changes manually."
+    );
+    return frontend;
+  };
+  const checkStagingChoice = async () => {
+    const drift = execution.staging_drift;
+    serviceAssert(
+      typeof client.waitForStagingQuiet === "function",
+      "release-recovery",
+      "The selected release adapter cannot verify that staging workflows are quiet."
+    );
+    await client.waitForStagingQuiet(execution.operations[drift.step_id], () =>
+      persist("wait for staging workflows to finish")
+    );
+    serviceAssert(
+      sameVersions(
+        await client.environmentVersions?.("staging"),
+        drift.observed
+      ) &&
+        sameVersions(
+          await client.environmentVersions?.("prod"),
+          execution.versions.prod
+        ),
+      "release-stale",
+      "Staging or production moved again. No reconciliation action was started; inspect the new state."
+    );
+  };
+  const restoreChangedStaging = async () => {
+    const drift = execution.staging_drift;
+    const restoration = drift.restoration;
+    while (restoration.step_index < restoration.steps.length) {
+      const step = restoration.steps[restoration.step_index];
+      let record = restoration.operations[step.id];
+      if (!record) {
+        record = {
+          id: uuid(),
+          release_id: execution.plan.release_id,
+          step,
+          state: "prepared",
+          created_at: now().toISOString(),
+          result: null
+        };
+        restoration.operations[step.id] = record;
+        await persist(`staging reconciliation step ${step.id} prepared`);
+      }
+      let result;
+      if (step.kind === "integrate") {
+        record.profile ??= execution.plan.profile;
+        record.actor ??= execution.actor;
+        result = await client.restore({
+          record,
+          restoreTo: restoration.baseline,
+          expectedBase: restoration.versions.frontend,
+          actor: execution.actor,
+          save: () => persist(`staging reconciliation step ${step.id} progress`)
+        });
+        if (successful(result)) restoration.versions.frontend = result.commit;
+      } else {
+        record.operation ??= operationForStep(
+          execution.plan,
+          step,
+          restoration.versions,
+          record.id
+        );
+        record.actor ??= execution.actor;
+        record.workflow_id ??=
+          execution.runtime?.[
+            step.kind === "e2e" ? "backend" : step.role
+          ]?.workflow_id;
+        await persist(`staging reconciliation step ${step.id} operation`);
+        result = await client.run({
+          record,
+          actor: execution.actor,
+          runtime: execution.runtime,
+          operations: restoration.operations,
+          steps: restoration.steps,
+          save: () => persist(`staging reconciliation step ${step.id} progress`)
+        });
+      }
+      record.result = result;
+      record.state = "completed";
+      if (!successful(result)) {
+        restoration.status = "failed";
+        drift.status = "failed";
+        execution.status = "needs-human";
+        execution.completed_at = now().toISOString();
+        execution.message = `Staging reconciliation failed at ${step.id}; the lane remains locked and a person must inspect the environments. Production was not started.`;
+        await persist(`staging reconciliation step ${step.id} failed`);
+        return execution;
+      }
+      restoration.step_index++;
+      await persist(`staging reconciliation step ${step.id} passed`);
+    }
+    const restoreTree =
+      restoration.operations["restore:staging:integrate:frontend"].restore_tree;
+    serviceAssert(
+      /^[0-9a-f]{40}$/u.test(restoreTree ?? ""),
+      "release-recovery",
+      "The frontend staging restoration has no verified source tree."
+    );
+    restoration.verification = await client.verifyRestoredStaging({
+      versions: restoration.versions,
+      trees: { frontend: restoreTree },
+      prodVersions: execution.versions.prod
+    });
+    serviceAssert(
+      sameVersions(restoration.verification?.staging, restoration.versions) &&
+        sameVersions(restoration.verification?.prod, execution.versions.prod) &&
+        restoration.verification?.trees?.frontend === restoreTree,
+      "release-recovery",
+      "Restored staging or production readback does not match the saved versions and frontend tree."
+    );
+    restoration.status = "completed";
+    drift.status = "restored";
+    execution.status = "needs-human";
+    execution.completed_at = now().toISOString();
+    execution.message =
+      "Only this release's frontend staging change was restored. The other developer's backend staging version was preserved; matching frontend deployment and E2E passed. Production was not started.";
+    await persist("staging reconciliation restoration verified");
+    return execution;
+  };
+  if (execution.status === "awaiting-staging-choice") {
+    if (!stagingChange) return execution;
+    serviceAssert(
+      operator?.id &&
+        /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u.test(
+          operator.login ?? ""
+        ),
+      "release-recovery",
+      "An authenticated Coordinator operator is required for the staging decision."
+    );
+    supportedStagingChoice();
+    await checkStagingChoice();
+    if (stagingChange === "retest") {
+      chosenStagingChange = true;
+      const deployIndex = execution.plan.steps.findIndex(
+        (step) =>
+          step.environment === "staging" &&
+          step.kind === "deploy" &&
+          step.role === "frontend"
+      );
+      serviceAssert(
+        deployIndex >= 0 &&
+          deployIndex < execution.step_index &&
+          (execution.plan.steps[execution.step_index]?.id === "staging:e2e" ||
+            (execution.plan.steps[execution.step_index]?.environment ===
+              "prod" &&
+              execution.plan.steps[execution.step_index]?.kind ===
+                "integrate" &&
+              execution.operations[
+                execution.plan.steps[execution.step_index].id
+              ]?.state === "prepared")),
+        "release-recovery",
+        "The saved frontend deployment cannot be restarted for a fresh E2E."
+      );
+      const deployStep = execution.plan.steps[deployIndex];
+      const drift = execution.staging_drift;
+      drift.choice = "retest";
+      drift.chosen_by = {
+        id: String(operator.id),
+        login: operator.login
+      };
+      drift.chosen_at = now().toISOString();
+      drift.status = "retesting";
+      drift.previous_deploy = structuredClone(
+        execution.operations[deployStep.id]
+      );
+      drift.previous_e2e = structuredClone(execution.operations[drift.step_id]);
+      delete execution.operations[deployStep.id];
+      delete execution.operations[drift.step_id];
+      execution.versions.staging.backend = drift.observed.backend;
+      execution.step_index = deployIndex;
+      execution.status = "running";
+      execution.message =
+        "A fresh frontend staging deployment and E2E are required for the changed backend version.";
+      await persist("restart frontend deployment for fresh staging E2E");
+    } else if (stagingChange === "restore") {
+      const drift = execution.staging_drift;
+      const frontend = supportedStagingChoice();
+      drift.choice = "restore";
+      drift.chosen_by = {
+        id: String(operator.id),
+        login: operator.login
+      };
+      drift.chosen_at = now().toISOString();
+      drift.status = "restoring";
+      drift.restoration = {
+        status: "running",
+        baseline: frontend.base,
+        versions: { ...drift.observed },
+        step_index: 0,
+        steps: [
+          {
+            id: "restore:staging:integrate:frontend",
+            kind: "integrate",
+            environment: "staging",
+            role: "frontend",
+            recovery: true
+          },
+          {
+            id: "restore:staging:deploy:frontend:frontend",
+            kind: "deploy",
+            environment: "staging",
+            role: "frontend",
+            unit: "frontend"
+          },
+          {
+            id: "restore:staging:e2e",
+            kind: "e2e",
+            environment: "staging",
+            role: null
+          }
+        ],
+        operations: {}
+      };
+      execution.status = "reconciling-staging";
+      await persist("restore only this release's frontend staging change");
+      return restoreChangedStaging();
+    }
+  }
+  if (execution.status === "reconciling-staging")
+    return restoreChangedStaging();
+  serviceAssert(
+    !stagingChange || chosenStagingChange,
+    "release-recovery",
+    "A staging reconciliation choice requires a saved staging change."
+  );
   const restoreEnvironments = async () => {
     const recovery = execution.recovery;
     validateRecoveryPlan(recovery.plan, execution, batch);
@@ -270,8 +576,39 @@ export async function executeRelease({
     execution.message = `${execution.plan.profile === "sandbox" ? "Sandbox" : "Product"} release is running.`;
     await persist(`release ${execution.plan.release_id} started`);
   }
+  const firstProdIndex = execution.plan.steps.findIndex(
+    (candidate) => candidate.environment === "prod"
+  );
   while (execution.step_index < execution.plan.steps.length) {
     const step = execution.plan.steps[execution.step_index];
+    if (execution.step_index === firstProdIndex) {
+      serviceAssert(
+        typeof client.environmentVersions === "function",
+        "release-recovery",
+        "The release adapter cannot verify staging before production."
+      );
+      const currentStaging = await client.environmentVersions("staging");
+      if (!sameVersions(currentStaging, execution.versions.staging)) {
+        const productionRecord = execution.operations[step.id];
+        serviceAssert(
+          !productionRecord ||
+            (productionRecord.state === "prepared" &&
+              productionRecord.result === null &&
+              !productionRecord.operation &&
+              !productionRecord.integration_version &&
+              !productionRecord.integration_commit),
+          "release-recovery",
+          "Staging moved after production work may have begun. Inspect the saved production operation manually before reconciliation."
+        );
+        const earlierE2e = execution.operations["staging:e2e"];
+        serviceAssert(
+          earlierE2e?.result?.status === "passed",
+          "release-recovery",
+          "Staging changed without a saved passing E2E; production remains stopped."
+        );
+        return stagingDrift(earlierE2e);
+      }
+    }
     let record = execution.operations[step.id];
     if (!record) {
       record = {
@@ -326,36 +663,49 @@ export async function executeRelease({
         versions,
         record.id
       );
+      if (
+        execution.staging_drift?.status === "retesting" &&
+        step.environment === "staging" &&
+        step.kind === "deploy" &&
+        step.role === "frontend"
+      )
+        record.force_dispatch = true;
       const workflowRole = step.kind === "e2e" ? "backend" : step.role;
       record.actor ??= execution.actor;
       record.workflow_id ??= execution.runtime?.[workflowRole]?.workflow_id;
       await persist(`release step ${step.id} operation`);
-      result = await loggedStep(
-        {
-          step: `release.${step.kind}`,
-          operation_id: record.id,
-          role: step.role,
-          message:
-            step.kind === "e2e"
-              ? `Run matching ${step.environment} E2E.`
-              : step.kind === "monitoring"
-                ? `Deploy monitoring for ${step.monitoring_environment} from ${step.environment === "staging" ? "staging" : "main"}.`
-                : `Run ${step.role} ${step.unit} ${execution.plan.profile} deployment check.`
-        },
-        () =>
-          client.run({
-            record,
-            actor: execution.actor,
-            runtime: execution.runtime,
-            operations: execution.operations,
-            steps: execution.plan.steps,
-            save: () => persist(`release step ${step.id} progress`)
-          }),
-        (value) => ({
-          outcome: logOutcome(value.status),
-          url: value.workflow?.url
-        })
-      );
+      try {
+        result = await loggedStep(
+          {
+            step: `release.${step.kind}`,
+            operation_id: record.id,
+            role: step.role,
+            message:
+              step.kind === "e2e"
+                ? `Run matching ${step.environment} E2E.`
+                : step.kind === "monitoring"
+                  ? `Deploy monitoring for ${step.monitoring_environment} from ${step.environment === "staging" ? "staging" : "main"}.`
+                  : `Run ${step.role} ${step.unit} ${execution.plan.profile} deployment check.`
+          },
+          () =>
+            client.run({
+              record,
+              actor: execution.actor,
+              runtime: execution.runtime,
+              operations: execution.operations,
+              steps: execution.plan.steps,
+              save: () => persist(`release step ${step.id} progress`)
+            }),
+          (value) => ({
+            outcome: logOutcome(value.status),
+            url: value.workflow?.url
+          })
+        );
+      } catch (error) {
+        if (error?.code === "release-stale" && step.id === "staging:e2e")
+          return stagingDrift(record);
+        throw error;
+      }
     }
     record.result = result;
     record.state = "completed";
@@ -389,6 +739,11 @@ export async function executeRelease({
       return execution;
     }
     execution.step_index++;
+    if (
+      step.id === "staging:e2e" &&
+      execution.staging_drift?.status === "retesting"
+    )
+      execution.staging_drift.status = "retested";
     await persist(`release step ${step.id} passed`);
   }
   execution.status = "completed";

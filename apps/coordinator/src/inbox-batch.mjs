@@ -67,12 +67,16 @@ function releasedDecision(decision, result) {
     action: completed
       ? "No further action is required for this release request."
       : waiting
-        ? "Recheck the saved batch and release evidence before continuing."
-        : result.execution?.recovery?.status === "completed"
-          ? "The affected branches were restored. Inspect the failed release before submitting changed code."
-          : result.execution?.message?.includes("changes the database")
-            ? "A person must inspect the database-changing release and staging state before another release."
-            : "Inspect the affected environments and failed release before another release starts.",
+        ? result.code === "release-staging-changed"
+          ? "A Coordinator maintainer must inspect the external deployment. If the guarded frontend-only case applies, resume this run with --staging-change retest or --staging-change restore; otherwise reconcile manually. No production work starts without a safe decision."
+          : "Recheck the saved batch and release evidence before continuing."
+        : result.execution?.staging_drift?.status === "restored"
+          ? "The frontend staging change was restored and checked. Inspect the stopped request before submitting a new release."
+          : result.execution?.recovery?.status === "completed"
+            ? "The affected branches were restored. Inspect the failed release before submitting changed code."
+            : result.execution?.message?.includes("changes the database")
+              ? "A person must inspect the database-changing release and staging state before another release."
+              : "Inspect the affected environments and failed release before another release starts.",
     owner: completed ? "None" : "Coordinator maintainers"
   };
   next.reasons.push(reason);

@@ -73,6 +73,16 @@ and an explicit filtered/full inbox scope.
 The command automatically creates a separate plan for each suitable ticket. Its
 [command guide](../apps/coordinator/README.md#run-the-ticket-workflow)
 describes GitHub writes, selection, and recovery. It is not a background service.
+For a staging change detected at E2E acceptance or immediately before the first
+production action, the run records both exact
+branch pairs, gives the ticket reason `release-staging-changed`, and keeps
+its lane lock. The operator must inspect the external deployment before an
+explicit `--resume RUN_ID --staging-change retest|restore` choice. Only a
+no-database-change frontend-only release with stable refs can use these
+automatic paths. A retest starts a fresh frontend deploy/E2E; a restoration
+undoes only the Coordinator's frontend staging change and verifies it. Neither
+path automatically rolls back another developer's backend or any database
+change.
 
 ### Inbox selection guard
 
