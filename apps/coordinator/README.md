@@ -8,6 +8,8 @@ staging with a Coordinator-checked status and protected fake production, locked
 npm builds, short-lived GitHub artifacts, and
 E2E against the built backend/frontend HTTP boundary. Select `sandbox` or `real`
 explicitly.
+Frontend-only sandbox batches use their exact PR checks and frontend deploy/E2E;
+they do not invent backend service or database checks.
 The merged source also supports one database-changing sandbox ticket on
 its own; a failed database-changing release stops for a person without automatic
 restoration. It also restores test `main` and staging after confirmed

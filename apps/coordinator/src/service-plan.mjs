@@ -33,7 +33,7 @@ export function validateSandboxFrontendServicePlan(plan) {
       plan.binding?.repository === sandboxProfile.inbox.full_name &&
       /^[0-9a-f]{64}$/u.test(plan.rehearsal_input_hash ?? "") &&
       Object.keys(plan.sources ?? {}).length === 1 &&
-      source.repository?.id === sandboxProfile.repositories.frontend.id &&
+      source?.repository?.id === sandboxProfile.repositories.frontend.id &&
       source.repository.full_name ===
         sandboxProfile.repositories.frontend.full_name &&
       /^[0-9a-f]{40}$/u.test(source.base_commit ?? "") &&
