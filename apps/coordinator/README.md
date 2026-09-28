@@ -642,7 +642,8 @@ matching operations so a lost response or ticket-write failure does not deploy
 the same step twice. A run stopped while waiting for someone else's workflow run
 has dispatched nothing; resume simply waits again.
 If the Coordinator records that backend staging moved during a frontend-only
-E2E, it updates the ticket with `release-staging-changed` and retains the lock.
+E2E or after E2E passed but before the first production action, it updates the
+ticket with `release-staging-changed` and retains the lock.
 First inspect the other developer's deployment outcome and database/compatibility
 effects. Then, only for a confirmed no-database-change frontend-only release,
 resume the same run with `--staging-change retest` (new frontend staging deploy

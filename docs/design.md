@@ -982,7 +982,8 @@ batch identity, stop advancement if a required input moved, and reconcile actual
 state. A later source-branch commit is not added to an active deployment. Do not
 claim old E2E proves new code. Staging-to-production continuation rechecks inputs.
 
-When staging changes during E2E result acceptance, save both exact branch pairs,
+When staging changes during E2E result acceptance or immediately before the
+first production action, save both exact branch pairs,
 project a named waiting reason to the ticket, keep the lane lock and stop before
 production. Save the authenticated operator and time with any later choice. An
 operator must inspect the external deployment and choose on an
@@ -1007,7 +1008,9 @@ and compatibility effects are understood; workflow quiet alone is not proof
 of a successful deployment. If the moved role belongs to this release, either
 ref moves again, or the external effect is uncertain, do not choose either
 automatic path; perform manual reconciliation without claiming production
-authorization. This path has offline tests, not live sandbox or product proof.
+authorization. Both choices and the late production-boundary check have
+[live sandbox acceptance](./testing/staging-drift-2026-09-28.md) but no real-product
+recovery proof.
 The product-shaped sandbox report requires build/deploy artifacts for exactly
 the roles actually deployed by the selected release; a frontend-only E2E
 therefore need not invent a Coordinator-owned backend deployment. It still

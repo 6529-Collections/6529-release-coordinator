@@ -147,7 +147,9 @@ export async function executeRelease({
     };
     execution.status = "awaiting-staging-choice";
     execution.message =
-      "Staging changed while E2E was running. Production is stopped. A maintainer must choose a fresh staging test or restore only this release's staging change.";
+      record.result?.status === "passed"
+        ? "Staging changed after E2E passed but before production. Production is stopped. A maintainer must choose a fresh staging test or restore only this release's staging change."
+        : "Staging changed while E2E was running. Production is stopped. A maintainer must choose a fresh staging test or restore only this release's staging change.";
     await persist("staging changed; awaiting explicit reconciliation choice");
     return execution;
   };
@@ -316,7 +318,14 @@ export async function executeRelease({
       serviceAssert(
         deployIndex >= 0 &&
           deployIndex < execution.step_index &&
-          execution.plan.steps[execution.step_index]?.id === "staging:e2e",
+          (execution.plan.steps[execution.step_index]?.id === "staging:e2e" ||
+            (execution.plan.steps[execution.step_index]?.environment ===
+              "prod" &&
+              execution.plan.steps[execution.step_index]?.kind ===
+                "integrate" &&
+              execution.operations[
+                execution.plan.steps[execution.step_index].id
+              ]?.state === "prepared")),
         "release-recovery",
         "The saved frontend deployment cannot be restarted for a fresh E2E."
       );
@@ -552,8 +561,28 @@ export async function executeRelease({
     execution.message = `${execution.plan.profile === "sandbox" ? "Sandbox" : "Product"} release is running.`;
     await persist(`release ${execution.plan.release_id} started`);
   }
+  const firstProdIndex = execution.plan.steps.findIndex(
+    (candidate) => candidate.environment === "prod"
+  );
   while (execution.step_index < execution.plan.steps.length) {
     const step = execution.plan.steps[execution.step_index];
+    if (execution.step_index === firstProdIndex) {
+      serviceAssert(
+        typeof client.environmentVersions === "function",
+        "release-recovery",
+        "The release adapter cannot verify staging before production."
+      );
+      const currentStaging = await client.environmentVersions("staging");
+      if (!sameVersions(currentStaging, execution.versions.staging)) {
+        const earlierE2e = execution.operations["staging:e2e"];
+        serviceAssert(
+          earlierE2e?.result?.status === "passed",
+          "release-recovery",
+          "Staging changed without a saved passing E2E; production remains stopped."
+        );
+        return stagingDrift(earlierE2e);
+      }
+    }
     let record = execution.operations[step.id];
     if (!record) {
       record = {

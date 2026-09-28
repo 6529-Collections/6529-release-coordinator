@@ -141,6 +141,7 @@ function fakeReport(record, status = "passed", runId = 100) {
 function client(calls, { failStep, interruptAt } = {}) {
   let runId = 100;
   const versions = { backend: "b".repeat(40), frontend: "b".repeat(40) };
+  const liveVersions = { staging: { ...versions }, prod: { ...versions } };
   return {
     identity: async () => ({
       actor: { id: "456", login: "tester" },
@@ -148,7 +149,10 @@ function client(calls, { failStep, interruptAt } = {}) {
         backend: { workflow_id: 201 },
         frontend: { workflow_id: 202 }
       },
-      versions: { staging: { ...versions }, prod: { ...versions } }
+      versions: structuredClone(liveVersions)
+    }),
+    environmentVersions: async (environment) => ({
+      ...liveVersions[environment]
     }),
     integrate: async ({ record, candidate, expectedBase }) => {
       calls.push(record.step.id);
@@ -160,13 +164,15 @@ function client(calls, { failStep, interruptAt } = {}) {
         40
       );
       record.cleanup = "removed";
-      return {
+      const result = {
         status: "passed",
         kind: "merge",
         commit: record.integration_commit,
         tree: candidate.tree,
         url: "https://example.invalid/integration"
       };
+      liveVersions[record.step.environment][record.step.role] = result.commit;
+      return result;
     },
     restore: async ({ record, restoreTo, expectedBase }) => {
       calls.push(record.step.id);
@@ -182,13 +188,15 @@ function client(calls, { failStep, interruptAt } = {}) {
         0,
         40
       );
-      return {
+      const result = {
         status: "passed",
         kind: "merge",
         commit: record.integration_commit,
         tree: record.restore_tree,
         url: "https://example.invalid/restore"
       };
+      liveVersions[record.step.environment][record.step.role] = result.commit;
+      return result;
     },
     verifyRestoredStaging: async ({ versions: saved, trees, prodVersions }) => {
       calls.push("verify:restored-staging");

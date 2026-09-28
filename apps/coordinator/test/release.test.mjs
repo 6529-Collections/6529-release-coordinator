@@ -157,6 +157,10 @@ function client(
   { failE2e = false, failStep, failRestore = false, movedRestore = false } = {}
 ) {
   let runId = 100;
+  const liveVersions = {
+    staging: { backend: "b".repeat(40), frontend: "b".repeat(40) },
+    prod: { backend: "b".repeat(40), frontend: "b".repeat(40) }
+  };
   return {
     identity: async () => ({
       actor: { id: "456", login: "tester" },
@@ -164,11 +168,14 @@ function client(
         backend: { workflow_id: 201 },
         frontend: { workflow_id: 202 }
       },
-      versions: {
-        staging: { backend: "b".repeat(40), frontend: "b".repeat(40) },
-        prod: { backend: "b".repeat(40), frontend: "b".repeat(40) }
-      }
+      versions: structuredClone(liveVersions)
     }),
+    environmentVersions: async (environment) => ({
+      ...liveVersions[environment]
+    }),
+    waitForStagingQuiet: async () => {
+      calls.push("wait:staging-quiet");
+    },
     integrate: async ({ record, candidate, expectedBase }) => {
       calls.push(record.step.id);
       record.base = expectedBase;
@@ -179,13 +186,15 @@ function client(
         40
       );
       record.cleanup = "removed";
-      return {
+      const result = {
         status: "passed",
         kind: "merge",
         commit: record.integration_commit,
         tree: candidate.tree,
         url: "https://example.invalid/integration"
       };
+      liveVersions[record.step.environment][record.step.role] = result.commit;
+      return result;
     },
     restore: async ({ record, restoreTo, expectedBase }) => {
       calls.push(record.step.id);
@@ -201,7 +210,7 @@ function client(
         0,
         40
       );
-      return failRestore
+      const result = failRestore
         ? {
             status: "failed",
             kind: "checks",
@@ -214,6 +223,9 @@ function client(
             tree: record.restore_tree,
             url: "https://example.invalid/restore"
           };
+      if (result.status === "passed")
+        liveVersions[record.step.environment][record.step.role] = result.commit;
+      return result;
     },
     verifyRestoredStaging: async ({ versions, trees, prodVersions }) => {
       calls.push("verify:restored-staging");
@@ -258,6 +270,7 @@ function client(
           ? "failed"
           : "passed";
       const value = report(record, status, runId++);
+      record.workflow_run_id = value.runner.run_id;
       return {
         status,
         report: value,
@@ -366,6 +379,84 @@ test("a concurrent backend staging move is recorded and blocks production until 
     calls.some((step) => step.startsWith("prod:")),
     false
   );
+});
+
+async function driftAfterPassingStagingE2e() {
+  const batch = await frontendOnlyProductionBatch();
+  const calls = [];
+  const releaseClient = client(calls);
+  const options = {
+    batch,
+    client: releaseClient,
+    operator: { id: "456", login: "tester" },
+    guard: async () => {},
+    save: async (message) => {
+      if (message === "release step prod:integrate:frontend prepared")
+        throw new Error("paused before production integration");
+    }
+  };
+  await assert.rejects(
+    executeRelease(options),
+    /paused before production integration/u
+  );
+  assert.equal(batch.execution.step_index, 3);
+  assert.equal(
+    batch.execution.operations["staging:e2e"].result.status,
+    "passed"
+  );
+  const versions = structuredClone(batch.execution.versions);
+  versions.staging.backend = "c".repeat(40);
+  releaseClient.environmentVersions = async (environment) => ({
+    ...versions[environment]
+  });
+  options.save = async () => {};
+  const waiting = await executeRelease(options);
+  assert.equal(waiting.status, "awaiting-staging-choice");
+  assert.equal(waiting.staging_drift.observed.backend, "c".repeat(40));
+  assert.match(waiting.message, /after E2E passed but before production/u);
+  assert.equal(calls.includes("prod:integrate:frontend"), false);
+  assert.doesNotThrow(() => validateReleaseExecution(waiting, batch));
+  return { batch, calls, releaseClient, versions, options };
+}
+
+test("a backend move after passing staging E2E blocks the first production merge", async () => {
+  const { batch, calls, releaseClient, options } =
+    await driftAfterPassingStagingE2e();
+  const done = await executeRelease({ ...options, stagingChange: "retest" });
+  assert.equal(done.status, "completed");
+  assert.equal(done.staging_drift.previous_e2e.result.status, "passed");
+  assert.equal(
+    done.operations["staging:e2e"].operation.backend_commit,
+    "c".repeat(40)
+  );
+  assert.ok(
+    calls.indexOf("prod:integrate:frontend") > calls.indexOf("staging:e2e")
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(done, batch));
+  assert.equal(typeof releaseClient.environmentVersions, "function");
+});
+
+test("a late backend move can restore only the frontend staging change", async () => {
+  const { batch, calls, releaseClient, versions, options } =
+    await driftAfterPassingStagingE2e();
+  const originalRestore = releaseClient.restore;
+  releaseClient.restore = async (args) => {
+    const result = await originalRestore(args);
+    versions.staging.frontend = result.commit;
+    return result;
+  };
+  const stopped = await executeRelease({
+    ...options,
+    stagingChange: "restore"
+  });
+  assert.equal(stopped.status, "needs-human");
+  assert.equal(stopped.staging_drift.status, "restored");
+  assert.equal(versions.staging.backend, "c".repeat(40));
+  assert.equal(
+    calls.some((step) => step.startsWith("prod:")),
+    false
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
 });
 
 test("explicit staging retest keeps old evidence and deploys the frontend afresh before production", async () => {

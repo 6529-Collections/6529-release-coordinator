@@ -136,7 +136,10 @@ export function validateReleaseExecution(execution, batch) {
         !ids.has(record.id) &&
         record.release_id === execution.plan.release_id &&
         serviceHash(record.step) === serviceHash(execution.plan.steps[index]) &&
-        index <= execution.step_index &&
+        (index <= execution.step_index ||
+          (execution.staging_drift?.status === "retesting" &&
+            record.step.environment === "prod" &&
+            record.state === "prepared")) &&
         [
           "prepared",
           "branch-prepared",
@@ -342,7 +345,10 @@ function validateStagingDrift(execution, ids) {
         oldE2e?.operation &&
         Number.isSafeInteger(oldE2e.workflow_run_id) &&
         oldE2e.workflow_run_id > 0 &&
-        oldE2e.result === null,
+        (oldE2e.result === null ||
+          (oldE2e.state === "completed" &&
+            oldE2e.result?.status === "passed" &&
+            oldE2e.result.report)),
       "release-state",
       "The prior staging deploy and E2E identities were not retained."
     );

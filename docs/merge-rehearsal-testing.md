@@ -508,10 +508,14 @@ For a frontend-only test ticket, the sandbox batch should require its exact
 frontend PR checks but should not fabricate a backend service check or database
 change. The separate product-shaped frontend deploy and matching E2E still run.
 Ticket #51 exposed the older two-repository prerequisite before any release
-mutation. The local frontend-only batch correction has offline tests; the
-concurrent backend staging-change retest and own-frontend restoration still need
-live acceptance in the test repositories. This does not change mixed-role or
-database-changing sandbox batches.
+mutation. The frontend-only batch correction has offline tests, and
+[September 28 sandbox acceptance](./testing/staging-drift-2026-09-28.md)
+proved both a fresh frontend deploy/E2E after unrelated backend staging moved
+and restoration of only the Coordinator's frontend staging change. The latter
+also exposed a gap after E2E passed but before production integration; the
+Coordinator now checks staging again at that boundary. This does not change
+mixed-role or database-changing sandbox batches, and sandbox proof is not
+real-product approval.
 
 The source PRs are merged, and the
 [September 21 live acceptance](./testing/product-shaped-workflow-mirror-2026-09-21.md)

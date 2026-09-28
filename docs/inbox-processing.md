@@ -73,7 +73,8 @@ and an explicit filtered/full inbox scope.
 The command automatically creates a separate plan for each suitable ticket. Its
 [command guide](../apps/coordinator/README.md#run-the-ticket-workflow)
 describes GitHub writes, selection, and recovery. It is not a background service.
-For a staging change detected at E2E acceptance, the run records both exact
+For a staging change detected at E2E acceptance or immediately before the first
+production action, the run records both exact
 branch pairs, gives the ticket reason `release-staging-changed`, and keeps
 its lane lock. The operator must inspect the external deployment before an
 explicit `--resume RUN_ID --staging-change retest|restore` choice. Only a

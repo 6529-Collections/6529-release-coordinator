@@ -1,10 +1,12 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-28** for local staging-drift recovery work.
+Last reviewed: **2026-09-28** for sandbox staging-drift acceptance.
 Real Issue #253 stopped after a successful frontend staging deploy and GitHub
 staging E2E because another developer moved backend staging before the
 Coordinator accepted the E2E. Both production branches stayed unchanged. The
-same run's journal lock is still held; this local code has not resumed it.
+same run's journal lock remains held; it has not been resumed here. The
+[sandbox acceptance](./testing/staging-drift-2026-09-28.md) does not establish
+that the real backend deployment or database effects are safe for Issue #253.
 The older evidence below includes the real production release attempt
 that failed for open Issue #250 and its verified staging restoration. The
 tree-identical staging deploy correction is merged and passed a real-profile
@@ -14,29 +16,35 @@ Frontend, backend, package and sandbox observations below retain their recorded
 dates unless a newer check is stated. This page separates local implementation,
 PR/CI delivery and live environment proof.
 
-The local staging-drift change records both branch pairs, projects a named
+Coordinator [PR #256](https://github.com/6529-Collections/6529-release-coordinator/pull/256)
+records both branch pairs, projects a named
 waiting reason while keeping the run lock, and offers a guarded resume choice:
 fresh frontend staging deploy/E2E against the new backend, or restore only
 the Coordinator's frontend staging change and verify the result. It refuses
 automatic action for database-changing, mixed/backend-owned, or newly moved
-refs. The product-shaped sandbox report now supports a frontend-only selected
+refs. It also checks staging again just before the first production action;
+the sandbox test found that staging can move after E2E passes. The
+product-shaped sandbox report supports a frontend-only selected
 deployment without inventing a Coordinator-owned backend deployment. Focused
-offline simulations cover both choices, the moved-ref stop, and that report.
-The full local `npm run check` passed on September 28: 646 tests passed,
-three optional Docker tests skipped, plus lint, formatting, docs, workflow
-policy and package checks. This is **not merged or live accepted**. Before any
+offline simulations and the [September 28 sandbox run](./testing/staging-drift-2026-09-28.md)
+cover the fresh retest, late-drift stop, and frontend-only restoration. The
+branch is **not yet merged** and no real-profile recovery has run. Before any
 real choice, a maintainer must verify the other developer's backend deployments
-and database/compatibility effects.
+and database/compatibility effects. Local and PR checks are recorded below.
 
 The first frontend-only sandbox acceptance ticket
 [#51](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/51)
 passed intake and exact PR rehearsal but stopped before any staging or production
 mutation: the older sandbox service stage required both sample repositories.
-The local follow-up now treats a frontend-only sandbox batch like the real
+The follow-up treats a frontend-only sandbox batch like the real
 frontend-only scope: exact combined PR checks, no invented backend service or
 database execution, then the product-shaped frontend deploy/E2E path. Offline
-tests and the full check pass (649 tests passed, three optional Docker tests
-skipped); live retest and restoration acceptance remain outstanding.
+tests and the full check passed before live acceptance. Sandbox tickets
+[#52](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/52)
+and [#53](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/53)
+then passed the retest and restoration paths respectively; details and the
+temporary GitHub journal HTTP 422 are in the
+[acceptance record](./testing/staging-drift-2026-09-28.md).
 
 ## Current state
 
@@ -191,9 +199,8 @@ also passed. GitHub CI and live product acceptance are separate evidence.
 
 ## Next steps
 
-Review and deliver the local staging-drift handling, then exercise the
-concurrent-backend-change retest and own-frontend-restoration cases against
-the product-shaped test repositories. Separately inspect Issue #253's
+Finish PR #256 checks/review and merge the sandbox-accepted staging-drift
+handling. Separately inspect Issue #253's
 external backend deployments and possible database/compatibility effects.
 Only after the code and sandbox path are accepted should a maintainer choose
 whether the still-locked real run should retest or restore staging. No
