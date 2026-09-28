@@ -574,6 +574,17 @@ export async function executeRelease({
       );
       const currentStaging = await client.environmentVersions("staging");
       if (!sameVersions(currentStaging, execution.versions.staging)) {
+        const productionRecord = execution.operations[step.id];
+        serviceAssert(
+          !productionRecord ||
+            (productionRecord.state === "prepared" &&
+              productionRecord.result === null &&
+              !productionRecord.operation &&
+              !productionRecord.integration_version &&
+              !productionRecord.integration_commit),
+          "release-recovery",
+          "Staging moved after production work may have begun. Inspect the saved production operation manually before reconciliation."
+        );
         const earlierE2e = execution.operations["staging:e2e"];
         serviceAssert(
           earlierE2e?.result?.status === "passed",

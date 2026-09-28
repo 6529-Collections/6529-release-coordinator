@@ -381,7 +381,7 @@ test("a concurrent backend staging move is recorded and blocks production until 
   );
 });
 
-async function driftAfterPassingStagingE2e() {
+async function driftAfterPassingStagingE2e({ partialProduction = false } = {}) {
   const batch = await frontendOnlyProductionBatch();
   const calls = [];
   const releaseClient = client(calls);
@@ -406,10 +406,29 @@ async function driftAfterPassingStagingE2e() {
   );
   const versions = structuredClone(batch.execution.versions);
   versions.staging.backend = "c".repeat(40);
+  if (partialProduction) {
+    const record = batch.execution.operations["prod:integrate:frontend"];
+    record.actor = batch.execution.actor;
+    record.base = versions.prod.frontend;
+    record.integration_version = 1;
+    record.integration_input = integrationCommitInput(
+      record,
+      batch.execution.plan.candidates.frontend
+    );
+    record.state = "commit-prepared";
+  }
   releaseClient.environmentVersions = async (environment) => ({
     ...versions[environment]
   });
   options.save = async () => {};
+  if (partialProduction) {
+    await assert.rejects(
+      executeRelease(options),
+      /Inspect the saved production operation manually/u
+    );
+    assert.equal(calls.includes("prod:integrate:frontend"), false);
+    return { batch, calls, releaseClient, versions, options };
+  }
   const waiting = await executeRelease(options);
   assert.equal(waiting.status, "awaiting-staging-choice");
   assert.equal(waiting.staging_drift.observed.backend, "c".repeat(40));
@@ -418,6 +437,10 @@ async function driftAfterPassingStagingE2e() {
   assert.doesNotThrow(() => validateReleaseExecution(waiting, batch));
   return { batch, calls, releaseClient, versions, options };
 }
+
+test("a staging move cannot offer automatic choices after production integration started", async () => {
+  await driftAfterPassingStagingE2e({ partialProduction: true });
+});
 
 test("a backend move after passing staging E2E blocks the first production merge", async () => {
   const { batch, calls, releaseClient, options } =

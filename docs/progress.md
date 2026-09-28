@@ -3,10 +3,15 @@
 Last reviewed: **2026-09-28** for sandbox staging-drift acceptance.
 Real Issue #253 stopped after a successful frontend staging deploy and GitHub
 staging E2E because another developer moved backend staging before the
-Coordinator accepted the E2E. Both production branches stayed unchanged. The
+Coordinator accepted the E2E. At that stop, this run had not changed either
+production branch. The
 same run's journal lock remains held; it has not been resumed here. The
 [sandbox acceptance](./testing/staging-drift-2026-09-28.md) does not establish
 that the real backend deployment or database effects are safe for Issue #253.
+At a later September 28 readback, both real staging refs and both real `main`
+refs had moved beyond the versions saved in that run. Its automatic retest and
+restoration choices now fail the unchanged-ref prerequisite; the old ticket
+requires manual reconciliation before further real release work.
 The older evidence below includes the real production release attempt
 that failed for open Issue #250 and its verified staging restoration. The
 tree-identical staging deploy correction is merged and passed a real-profile
@@ -202,9 +207,10 @@ also passed. GitHub CI and live product acceptance are separate evidence.
 Finish PR #256 checks/review and merge the sandbox-accepted staging-drift
 handling. Separately inspect Issue #253's
 external backend deployments and possible database/compatibility effects.
-Only after the code and sandbox path are accepted should a maintainer choose
-whether the still-locked real run should retest or restore staging. No
-production merge or deployment is proved yet. Backend-service, monitoring,
+Because its saved refs have since moved, do not use either automatic choice on
+that still-locked run; reconcile its state manually and prepare a fresh exact
+request if the source PR still needs release. No production merge or deployment
+by Issue #253 is proved. Backend-service, monitoring,
 database-changing, multi-ticket and other failure/recovery paths still need
 separate, scoped real acceptance.
 

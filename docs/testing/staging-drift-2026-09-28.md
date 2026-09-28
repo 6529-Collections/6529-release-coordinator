@@ -83,5 +83,15 @@ These runs prove the sandbox choices and the newly added last check with the
 test workflow mirror. They do not prove that real backend staging was deployed
 successfully, that its database effects are absent, or that the real frontend
 and backend are compatible. Real Issue #253 remains stopped pending those
-separate checks and an explicit operator choice. PR #256 must pass its final
-checks/review and merge before any real-profile resume uses this behavior.
+separate checks. A later read-only September 28 comparison found that all four
+real staging/`main` refs had moved beyond the saved versions. Its automatic
+choices require unchanged refs, so neither is available for that old run; it
+needs manual reconciliation and, if appropriate, a fresh exact request. PR
+#256 must pass final checks/review and merge before any real-profile run uses
+this behavior.
+
+The real journal's saved versions were backend staging `2c84d3e7`, frontend
+staging `5719c1b9`, backend `main` `664eef9d`, and frontend `main` `fbc351e1`.
+The later read-only refs were `d66b9e65`, `85b7d754`, `29bf0f37`, and
+`1672474d` in the same order. This is a ref comparison, not deployment proof
+or an attribution of those later changes to Issue #253.
