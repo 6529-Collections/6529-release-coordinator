@@ -416,10 +416,11 @@ test("explicit staging restoration preserves the external backend and stops befo
   }) => {
     calls.push("verify:restored-staging");
     assert.deepEqual(versions.staging, expected);
+    assert.equal(trees.frontend, "a".repeat(40));
     return {
       staging: { ...versions.staging },
       prod: { ...versions.prod },
-      trees: { frontend: trees.frontend }
+      trees: { frontend: "a".repeat(40) }
     };
   };
   const stopped = await executeRelease({
@@ -438,6 +439,34 @@ test("explicit staging restoration preserves the external backend and stops befo
   assert.ok(calls.includes("restore:staging:integrate:frontend"));
   assert.ok(calls.includes("restore:staging:deploy:frontend:frontend"));
   assert.ok(calls.includes("restore:staging:e2e"));
+  assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
+});
+
+test("a failed fresh frontend deploy remains recoverable after a staging retest choice", async () => {
+  const { batch, options, releaseClient } = await frontendStagingDrift();
+  const originalRun = releaseClient.run;
+  releaseClient.run = async (args) => {
+    if (
+      args.record.step.id === "staging:deploy:frontend:frontend" &&
+      args.record.force_dispatch === true
+    ) {
+      const failed = report(args.record, "failed", 992);
+      return {
+        status: "failed",
+        report: failed,
+        workflow: { id: 992, url: "https://example.invalid/release/992" }
+      };
+    }
+    return originalRun(args);
+  };
+  const stopped = await executeRelease({ ...options, stagingChange: "retest" });
+  assert.equal(stopped.status, "needs-human");
+  assert.equal(stopped.recovery.status, "completed");
+  assert.equal(stopped.staging_drift.status, "retesting");
+  assert.equal(
+    stopped.operations["staging:deploy:frontend:frontend"].result.status,
+    "failed"
+  );
   assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
 });
 

@@ -440,6 +440,10 @@ function validateStagingDrift(execution, ids) {
     restored.status !== "completed" ||
       (restored.step_index === restored.steps.length &&
         restored.verification &&
+        /^[0-9a-f]{40}$/u.test(
+          restored.operations["restore:staging:integrate:frontend"]
+            ?.restore_tree ?? ""
+        ) &&
         ["backend", "frontend"].every(
           (role) =>
             restored.verification.staging?.[role] === restored.versions[role] &&

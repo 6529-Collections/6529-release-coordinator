@@ -265,21 +265,22 @@ export async function executeRelease({
       restoration.step_index++;
       await persist(`staging reconciliation step ${step.id} passed`);
     }
+    const restoreTree =
+      restoration.operations["restore:staging:integrate:frontend"].restore_tree;
+    serviceAssert(
+      /^[0-9a-f]{40}$/u.test(restoreTree ?? ""),
+      "release-recovery",
+      "The frontend staging restoration has no verified source tree."
+    );
     restoration.verification = await client.verifyRestoredStaging({
       versions: restoration.versions,
-      trees: {
-        frontend:
-          restoration.operations["restore:staging:integrate:frontend"]
-            .restore_tree
-      },
+      trees: { frontend: restoreTree },
       prodVersions: execution.versions.prod
     });
     serviceAssert(
       sameVersions(restoration.verification?.staging, restoration.versions) &&
         sameVersions(restoration.verification?.prod, execution.versions.prod) &&
-        restoration.verification?.trees?.frontend ===
-          restoration.operations["restore:staging:integrate:frontend"]
-            .restore_tree,
+        restoration.verification?.trees?.frontend === restoreTree,
       "release-recovery",
       "Restored staging or production readback does not match the saved versions and frontend tree."
     );
