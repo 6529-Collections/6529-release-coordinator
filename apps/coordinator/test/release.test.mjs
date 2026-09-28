@@ -401,6 +401,42 @@ test("explicit staging retest keeps old evidence and deploys the frontend afresh
   assert.doesNotThrow(() => validateReleaseExecution(done, batch));
 });
 
+test("a second backend move during retest stays resumable and needs another fresh E2E", async () => {
+  const { batch, options, releaseClient, versions } =
+    await frontendStagingDrift();
+  const originalRun = releaseClient.run;
+  let secondMove = true;
+  releaseClient.run = async (args) => {
+    if (args.record.step.id === "staging:e2e" && secondMove) {
+      secondMove = false;
+      args.record.workflow_run_id = 992;
+      args.record.state = "running";
+      versions.staging.backend = "d".repeat(40);
+      throw new ServiceError(
+        "release-stale",
+        "Backend staging moved again during retest."
+      );
+    }
+    return originalRun(args);
+  };
+  const waiting = await executeRelease({ ...options, stagingChange: "retest" });
+  assert.equal(waiting.status, "awaiting-staging-choice");
+  assert.equal(waiting.staging_drift.observed.backend, "d".repeat(40));
+  assert.equal(waiting.staging_drift.superseded[0].choice, "retest");
+  assert.doesNotThrow(() => validateReleaseExecution(waiting, batch));
+  assert.equal(
+    (await executeRelease(options)).status,
+    "awaiting-staging-choice"
+  );
+  const done = await executeRelease({ ...options, stagingChange: "retest" });
+  assert.equal(done.status, "completed");
+  assert.equal(
+    done.operations["staging:e2e"].operation.backend_commit,
+    "d".repeat(40)
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(done, batch));
+});
+
 test("explicit staging restoration preserves the external backend and stops before production", async () => {
   const { batch, calls, options, versions, releaseClient } =
     await frontendStagingDrift();

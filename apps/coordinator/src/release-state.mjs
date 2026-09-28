@@ -162,7 +162,10 @@ export function validateReleaseExecution(execution, batch) {
           record.step.environment === "staging" &&
           record.step.kind === "deploy" &&
           record.step.role === "frontend" &&
-          execution.staging_drift?.choice === "retest",
+          (execution.staging_drift?.choice === "retest" ||
+            execution.staging_drift?.superseded?.some(
+              (drift) => drift.choice === "retest"
+            )),
         "release-state",
         "Only a chosen staging retest can force a fresh frontend deployment."
       );
@@ -280,6 +283,7 @@ export function validateReleaseExecution(execution, batch) {
 
 function validateStagingDrift(execution, ids) {
   const drift = execution.staging_drift;
+  // A retest replaces the live staging E2E operation, while a restore keeps it.
   const sourceE2e =
     drift.choice === "retest"
       ? drift.previous_e2e
