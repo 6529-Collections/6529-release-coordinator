@@ -4,7 +4,9 @@ import { normalizeMergePlan } from "./rehearsal-plan.mjs";
 import { runMergePlan } from "./rehearsal-runner.mjs";
 import {
   captureServiceSource,
-  servicePlanFromSources
+  servicePlanFromSources,
+  sandboxFrontendServiceProtocol,
+  validateSandboxFrontendServicePlan
 } from "./service-plan.mjs";
 import {
   serviceAssert,
@@ -453,7 +455,10 @@ export function realServicePlan(plan, report, items) {
 }
 
 export function validateBatchServicePlan(plan, profileName) {
-  if (profileName === "sandbox") return validateServicePlan(plan);
+  if (profileName === "sandbox")
+    return plan?.protocol === sandboxFrontendServiceProtocol
+      ? validateSandboxFrontendServicePlan(plan)
+      : validateServicePlan(plan);
   const { fingerprint, ...contents } = plan ?? {};
   serviceAssert(
     profileName === "real" &&

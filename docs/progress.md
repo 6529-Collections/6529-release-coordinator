@@ -28,6 +28,16 @@ policy and package checks. This is **not merged or live accepted**. Before any
 real choice, a maintainer must verify the other developer's backend deployments
 and database/compatibility effects.
 
+The first frontend-only sandbox acceptance ticket
+[#51](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/51)
+passed intake and exact PR rehearsal but stopped before any staging or production
+mutation: the older sandbox service stage required both sample repositories.
+The local follow-up now treats a frontend-only sandbox batch like the real
+frontend-only scope: exact combined PR checks, no invented backend service or
+database execution, then the product-shaped frontend deploy/E2E path. Offline
+tests and the full check pass (649 tests passed, three optional Docker tests
+skipped); live retest and restoration acceptance remain outstanding.
+
 ## Current state
 
 | Area                                | What is available                                                                                                                                                                                                                                   | Evidence boundary                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |

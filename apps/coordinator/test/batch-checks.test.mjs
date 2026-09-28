@@ -14,8 +14,36 @@ import { selectBatch } from "../src/batch-selection.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import { validateBatchHistory } from "../src/batch-state.mjs";
 import { databaseCandidate, sampleFiles } from "../sandbox/fixtures.mjs";
+import { sandboxFrontendServiceProtocol } from "../src/service-plan.mjs";
 
 import { checkHarness } from "./checks-harness.mjs";
+
+test("frontend-only sandbox batch checks its exact PR without inventing backend service work", async (t) => {
+  const f = await batchFixture(t);
+  const item = await f.ticket({}, { frontendOnly: true });
+  const prepared = await f.prepare([item]);
+  assert.equal(prepared.status, "passed");
+  assert.equal(prepared.service_plan.protocol, sandboxFrontendServiceProtocol);
+  assert.deepEqual(
+    prepared.service_plan.steps.map((step) => step.unit),
+    ["frontend"]
+  );
+  const h = checkHarness(prepared);
+  const selected = await selectBatch({
+    items: [item],
+    prepare: async () => prepared,
+    check: (_candidate, options) => h.run(options),
+    guard: async () => {},
+    verify: async () => true,
+    save: async () => {}
+  });
+  assert.deepEqual(selected.selected, [item.number]);
+  assert.deepEqual(h.events, ["open:frontend", "cleanup:frontend"]);
+  assert.deepEqual(Object.keys(h.state().service_attempts), []);
+  assert.doesNotThrow(() =>
+    validateBatchHistory({ [selected.fingerprint]: selected }, sandboxProfile)
+  );
+});
 
 test("real Git combines whole cross-repository tickets and captures exact supported patches", async (t) => {
   const f = await batchFixture(t),

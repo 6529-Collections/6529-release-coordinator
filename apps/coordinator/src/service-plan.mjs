@@ -7,6 +7,7 @@ import {
 } from "./readiness-dependencies.mjs";
 import {
   serviceFiles,
+  blobHash,
   serviceHash,
   serviceAssert,
   ServiceError,
@@ -15,6 +16,52 @@ import {
   serviceProtocol,
   validateServicePlan
 } from "./service-contract.mjs";
+
+export const sandboxFrontendServiceProtocol = "sandbox-frontend-services-v1";
+
+export function validateSandboxFrontendServicePlan(plan) {
+  const { fingerprint, ...contents } = plan ?? {};
+  const source = plan?.sources?.frontend;
+  const render = source?.files?.["src/render.mjs"];
+  const baseline = source?.baseline?.["src/render.mjs"];
+  serviceAssert(
+    plan?.protocol === sandboxFrontendServiceProtocol &&
+      plan.profile === "sandbox" &&
+      plan.target === "staging" &&
+      /^[0-9a-f]{64}$/u.test(fingerprint ?? "") &&
+      serviceHash(contents) === fingerprint &&
+      plan.binding?.repository === sandboxProfile.inbox.full_name &&
+      /^[0-9a-f]{64}$/u.test(plan.rehearsal_input_hash ?? "") &&
+      Object.keys(plan.sources ?? {}).length === 1 &&
+      source.repository?.id === sandboxProfile.repositories.frontend.id &&
+      source.repository.full_name ===
+        sandboxProfile.repositories.frontend.full_name &&
+      /^[0-9a-f]{40}$/u.test(source.base_commit ?? "") &&
+      /^[0-9a-f]{40}$/u.test(source.tree ?? "") &&
+      Object.keys(source.files ?? {}).length === 1 &&
+      Object.keys(source.baseline ?? {}).length === 1 &&
+      [render, baseline].every(
+        (file) =>
+          typeof file?.text === "string" &&
+          Buffer.byteLength(file.text) <= 12_000 &&
+          blobHash(file.text) === file.sha
+      ) &&
+      plan.database?.declared === "no" &&
+      plan.database.observed === "no" &&
+      serviceHash(plan.steps) ===
+        serviceHash([
+          {
+            unit: "frontend",
+            role: "frontend",
+            version: render.sha,
+            depends_on: []
+          }
+        ]),
+    "source-unverified",
+    "Frontend-only sandbox preparation is not bound to one exact checked sample."
+  );
+  return plan;
+}
 
 export async function captureServiceSource(workspace, repo, commit) {
   try {
@@ -108,6 +155,38 @@ export function servicePlanFromSources({ request, binding, report, runtime }) {
       tree: repo.final_tree,
       ...snapshot
     };
+  }
+  if (
+    sources.frontend &&
+    !sources.backend &&
+    Object.keys(sources).length === 1
+  ) {
+    serviceAssert(
+      request.database_change === "no",
+      "database-unverified",
+      "A frontend-only sample has no backend database change to execute."
+    );
+    const contents = {
+      protocol: sandboxFrontendServiceProtocol,
+      profile: "sandbox",
+      target: "staging",
+      binding,
+      rehearsal_input_hash: report.input_hash,
+      sources,
+      database: { declared: "no", observed: "no" },
+      steps: [
+        {
+          unit: "frontend",
+          role: "frontend",
+          version: sources.frontend.files["src/render.mjs"].sha,
+          depends_on: []
+        }
+      ]
+    };
+    return validateSandboxFrontendServicePlan({
+      ...contents,
+      fingerprint: serviceHash(contents)
+    });
   }
   serviceAssert(
     sources.backend && sources.frontend && Object.keys(sources).length === 2,

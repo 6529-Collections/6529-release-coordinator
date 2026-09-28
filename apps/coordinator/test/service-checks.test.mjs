@@ -16,8 +16,11 @@ import {
 } from "../src/service-contract.mjs";
 import {
   buildServicePlan,
-  captureServiceSource
+  captureServiceSource,
+  sandboxFrontendServiceProtocol,
+  validateSandboxFrontendServicePlan
 } from "../src/service-plan.mjs";
+import { inboxBinding } from "../src/inbox-merge-plan.mjs";
 import {
   runServiceAttempt,
   coordinateServices,
@@ -42,6 +45,33 @@ const decision = () => ({
   next_action: "Wait",
   action_owner: "Coordinator maintainers",
   submitter_action: "None"
+});
+
+test("frontend-only sandbox rehearsal has a checked no-database plan and no backend service", () => {
+  const f = serviceFixture();
+  const report = f.report();
+  f.entry.request.release_parts = f.entry.request.release_parts
+    .filter((part) => part.id === "frontend")
+    .map((part) => ({ ...part, depends_on: [] }));
+  report.inbox = inboxBinding(f.entry, f.profile);
+  report.inbox_final = structuredClone(report.inbox);
+  report.repositories = report.repositories.filter(
+    (repository) => repository.role === "frontend"
+  );
+  const plan = compile({ ...f, report: () => report });
+  assert.equal(plan.protocol, sandboxFrontendServiceProtocol);
+  assert.deepEqual(
+    plan.steps.map((step) => step.unit),
+    ["frontend"]
+  );
+  assert.deepEqual(plan.database, { declared: "no", observed: "no" });
+  assert.equal(validateSandboxFrontendServicePlan(plan), plan);
+  f.entry.request.database_change = "yes";
+  report.inbox = inboxBinding(f.entry, f.profile);
+  report.inbox_final = structuredClone(report.inbox);
+  assert.throws(() => compile({ ...f, report: () => report }), {
+    code: "database-unverified"
+  });
 });
 
 test("missing source identity and final checkpoint failure remain explicit uncertainty", async () => {

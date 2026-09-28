@@ -3,7 +3,10 @@ import { loggedStep, runEvent, logOutcome } from "./run-log.mjs";
 import { createBatchGitHub } from "./batch-github.mjs";
 import { createServiceGitHub } from "./service-github.mjs";
 import { runServiceAttempt } from "./inbox-services.mjs";
-import { servicePlanFromSources } from "./service-plan.mjs";
+import {
+  sandboxFrontendServiceProtocol,
+  servicePlanFromSources
+} from "./service-plan.mjs";
 import {
   batchPolicy,
   batchPolicyProfile,
@@ -385,20 +388,23 @@ export async function checkBatch(
         checks,
         message: "Required combined PR checks lack complete evidence."
       };
-    } else if (profile.name === "real") {
+    } else if (
+      profile.name === "real" ||
+      prepared.service_plan.protocol === sandboxFrontendServiceProtocol
+    ) {
       result = checks.every((check) => check.status === "passed")
         ? {
             status: "passed",
             kind: "checks",
             checks,
-            message: "The exact combined product PR checks passed."
+            message: "The exact combined PR checks passed."
           }
         : {
             status: "unknown",
             kind: "evidence",
             checks,
             message:
-              "Product PR checks did not all pass; the Coordinator did not attribute or split the failure."
+              "PR checks did not all pass; the Coordinator did not attribute or split the failure."
           };
     } else {
       const service = checks.every((check) => check.status === "passed")
