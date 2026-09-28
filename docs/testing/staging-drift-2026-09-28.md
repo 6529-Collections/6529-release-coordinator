@@ -86,9 +86,10 @@ and backend are compatible. Real Issue #253 remains stopped pending those
 separate checks. A later read-only September 28 comparison found that all four
 real staging/`main` refs had moved beyond the saved versions. Its automatic
 choices require unchanged refs, so neither is available for that old run; it
-needs manual reconciliation and, if appropriate, a fresh exact request. PR
-#256 must pass final checks/review and merge before any real-profile run uses
-this behavior.
+needs manual reconciliation and, if appropriate, a fresh exact request.
+Coordinator PR #256 merged at `88ddbd7d0a27f63ab2054277cdcacc8fbd0c946f`
+after green checks and current-head review; this is source delivery, not
+real-profile recovery proof.
 
 The real journal's saved versions were backend staging `2c84d3e7`, frontend
 staging `5719c1b9`, backend `main` `664eef9d`, and frontend `main` `fbc351e1`.
