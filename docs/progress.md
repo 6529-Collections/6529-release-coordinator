@@ -1,6 +1,6 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-28** for sandbox staging-drift acceptance.
+Last reviewed: **2026-09-28** for staging-drift delivery and sandbox acceptance.
 Real Issue #253 stopped after a successful frontend staging deploy and GitHub
 staging E2E because another developer moved backend staging before the
 Coordinator accepted the E2E. At that stop, this run had not changed either
@@ -33,9 +33,11 @@ product-shaped sandbox report supports a frontend-only selected
 deployment without inventing a Coordinator-owned backend deployment. Focused
 offline simulations and the [September 28 sandbox run](./testing/staging-drift-2026-09-28.md)
 cover the fresh retest, late-drift stop, and frontend-only restoration. The
-branch is **not yet merged** and no real-profile recovery has run. Before any
-real choice, a maintainer must verify the other developer's backend deployments
-and database/compatibility effects. Local and PR checks are recorded below.
+change merged at `88ddbd7d0a27f63ab2054277cdcacc8fbd0c946f` after green
+GitHub checks and current-head review. The last local `npm run check` passed
+653 tests with three optional Docker skips. No real-profile recovery has run.
+Before any real choice, a maintainer must verify the other developer's backend
+deployments and database/compatibility effects.
 
 The first frontend-only sandbox acceptance ticket
 [#51](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/51)
@@ -204,10 +206,9 @@ also passed. GitHub CI and live product acceptance are separate evidence.
 
 ## Next steps
 
-Finish PR #256 checks/review and merge the sandbox-accepted staging-drift
-handling. Separately inspect Issue #253's
-external backend deployments and possible database/compatibility effects.
-Because its saved refs have since moved, do not use either automatic choice on
+Inspect Issue #253's external backend deployments and possible
+database/compatibility effects. Because its saved refs have since moved, do not
+use either automatic choice on
 that still-locked run; reconcile its state manually and prepare a fresh exact
 request if the source PR still needs release. No production merge or deployment
 by Issue #253 is proved. Backend-service, monitoring,
