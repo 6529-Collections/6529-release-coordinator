@@ -433,6 +433,16 @@ async function driftAfterPassingStagingE2e({ partialProduction = false } = {}) {
   assert.equal(waiting.status, "awaiting-staging-choice");
   assert.equal(waiting.staging_drift.observed.backend, "c".repeat(40));
   assert.match(waiting.message, /after E2E passed but before production/u);
+  assert.match(
+    releaseTicketResult(batch, batch.selected[0]).message,
+    /after E2E passed but before production/u
+  );
+  const damaged = structuredClone(batch);
+  damaged.execution.staging_drift.expected = null;
+  assert.throws(
+    () => releaseTicketResult(damaged, damaged.selected[0]),
+    /lacks exact saved branch versions/u
+  );
   assert.equal(calls.includes("prod:integrate:frontend"), false);
   assert.doesNotThrow(() => validateReleaseExecution(waiting, batch));
   return { batch, calls, releaseClient, versions, options };

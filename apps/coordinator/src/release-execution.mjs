@@ -41,14 +41,29 @@ export function releaseTicketResult(batch, number) {
         "The saved batch is stale, so its release result cannot complete this ticket.",
       execution
     };
-  if (execution?.status === "awaiting-staging-choice")
+  if (execution?.status === "awaiting-staging-choice") {
+    const drift = execution.staging_drift;
+    serviceAssert(
+      ["expected", "observed"].every((pair) =>
+        ["backend", "frontend"].every((role) =>
+          /^[0-9a-f]{40}$/u.test(drift?.[pair]?.[role] ?? "")
+        )
+      ),
+      "release-state",
+      "Staging-change ticket projection lacks exact saved branch versions."
+    );
+    const timing =
+      execution.operations?.["staging:e2e"]?.result?.status === "passed"
+        ? "after E2E passed but before production"
+        : "while E2E ran";
     return {
       status: "waiting",
       batch_status: "waiting",
       code: "release-staging-changed",
-      message: `Staging changed from backend ${execution.staging_drift.expected.backend}, frontend ${execution.staging_drift.expected.frontend} to backend ${execution.staging_drift.observed.backend}, frontend ${execution.staging_drift.observed.frontend} while E2E ran. Production has not started. Inspect the other deployment and choose a supported reconciliation path; the old E2E cannot authorize production.`,
+      message: `Staging changed from backend ${drift.expected.backend}, frontend ${drift.expected.frontend} to backend ${drift.observed.backend}, frontend ${drift.observed.frontend} ${timing}. Production has not started. Inspect the other deployment and choose a supported reconciliation path; the old E2E cannot authorize production.`,
       execution
     };
+  }
   if (execution?.status === "completed")
     return {
       status: "completed",
