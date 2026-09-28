@@ -506,6 +506,10 @@ test("explicit staging retest keeps old evidence and deploys the frontend afresh
     done.operations["staging:deploy:frontend:frontend"].id,
     done.staging_drift.previous_deploy.id
   );
+  assert.notEqual(
+    done.operations["staging:deploy:frontend:frontend"].workflow_run_id,
+    done.staging_drift.previous_deploy.workflow_run_id
+  );
   assert.equal(
     done.operations["staging:deploy:frontend:frontend"].force_dispatch,
     true

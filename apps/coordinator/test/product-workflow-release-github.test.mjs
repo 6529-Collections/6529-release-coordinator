@@ -1129,12 +1129,14 @@ test("a chosen staging retest forces a new frontend deployment instead of adopti
     save: async () => {}
   });
   assert.equal(result.status, "passed");
-  assert.equal(
-    harness.calls.filter(
-      (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
-    ).length,
-    1
+  const dispatches = harness.calls.filter(
+    (call) => call.method === "POST" && call.endpoint.endsWith("/dispatches")
   );
+  assert.equal(dispatches.length, 1);
+  assert.equal(dispatches[0].body.ref, "1a-staging");
+  assert.equal(dispatches[0].body.return_run_details, true);
+  assert.deepEqual(dispatches[0].body.inputs, {});
+  assert.equal(result.workflow.id, harness.run.id);
 });
 
 test("staging recovery dispatches a fresh frontend deploy after backend recovery", async () => {
@@ -1571,6 +1573,17 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
   assert.equal(result.report.deployments.frontend.run_id, 602);
   assert.equal(result.report.report_hash, undefined);
   assert.equal(result.report_hash, releaseHash(result.report));
+  const frontendOnly = await client.run({
+    record: makeRecord(),
+    actor,
+    runtime: savedRuntime,
+    operations: { [steps[1].id]: operations[steps[1].id] },
+    steps: steps.slice(1),
+    save: async () => {}
+  });
+  assert.equal(frontendOnly.status, "passed");
+  assert.deepEqual(Object.keys(frontendOnly.report.deployments), ["frontend"]);
+  assert.equal(frontendOnly.report.deployments.frontend.run_id, 602);
   e2eRun.conclusion = "failure";
   const failed = await client.run({
     record: makeRecord(),
@@ -1595,7 +1608,7 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     }),
     /frontend deployment started before the matching backend deployment finished/u
   );
-  assert.equal(automaticQueries.length, 4);
+  assert.equal(automaticQueries.length, 6);
   for (const [index, endpoint] of automaticQueries.entries()) {
     const dispatchQuery = index % 2 === 0;
     const query = new URL(`https://example.invalid/${endpoint}`).searchParams;

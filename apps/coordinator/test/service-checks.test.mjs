@@ -50,6 +50,7 @@ const decision = () => ({
 test("frontend-only sandbox rehearsal has a checked no-database plan and no backend service", () => {
   const f = serviceFixture();
   const report = f.report();
+  const originalBinding = inboxBinding(f.entry, f.profile);
   f.entry.request.release_parts = f.entry.request.release_parts
     .filter((part) => part.id === "frontend")
     .map((part) => ({ ...part, depends_on: [] }));
@@ -57,6 +58,13 @@ test("frontend-only sandbox rehearsal has a checked no-database plan and no back
   report.inbox_final = structuredClone(report.inbox);
   report.repositories = report.repositories.filter(
     (repository) => repository.role === "frontend"
+  );
+  assert.notEqual(report.inbox.checksum, originalBinding.checksum);
+  assert.deepEqual(report.inbox, inboxBinding(f.entry, f.profile));
+  assert.deepEqual(report.inbox_final, report.inbox);
+  assert.deepEqual(
+    report.repositories.map((repository) => repository.role),
+    ["frontend"]
   );
   const plan = compile({ ...f, report: () => report });
   assert.equal(plan.protocol, sandboxFrontendServiceProtocol);
