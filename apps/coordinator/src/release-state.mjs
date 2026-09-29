@@ -97,6 +97,7 @@ export function validateReleaseExecution(execution, batch) {
       [
         "prepared",
         "running",
+        "awaiting-review",
         "awaiting-staging-choice",
         "reconciling-staging",
         "recovering",
@@ -160,6 +161,19 @@ export function validateReleaseExecution(execution, batch) {
     );
     ids.add(record.id);
     validateWaitedFor(record);
+    if (record.cleanup_reason !== undefined)
+      serviceAssert(
+        record.cleanup_reason === "review-stop" &&
+          record.step.kind === "integrate" &&
+          ["checking", "cleaning", "completed"].includes(record.state) &&
+          Number.isSafeInteger(record.number) &&
+          record.number > 0 &&
+          /^[0-9a-f]{40}$/u.test(record.integration_commit ?? "") &&
+          (record.state !== "completed" ||
+            record.result?.kind === "review-stop"),
+        "release-state",
+        "Invalid saved review-stop decision."
+      );
     if (record.force_dispatch !== undefined)
       serviceAssert(
         record.force_dispatch === true &&
@@ -179,6 +193,7 @@ export function validateReleaseExecution(execution, batch) {
     const needsPreparedIntegrationInput =
       [
         "running",
+        "awaiting-review",
         "recovering",
         "awaiting-staging-choice",
         "reconciling-staging"
@@ -197,6 +212,7 @@ export function validateReleaseExecution(execution, batch) {
     const needsCreatedIntegrationCommit =
       [
         "running",
+        "awaiting-review",
         "recovering",
         "awaiting-staging-choice",
         "reconciling-staging"
@@ -288,6 +304,31 @@ export function validateReleaseExecution(execution, batch) {
       "Stopped release lacks a confirmed failing step."
     );
   }
+  if (execution.status === "awaiting-review") {
+    const pause = execution.review_pause;
+    const step = execution.plan.steps[execution.step_index];
+    const record = execution.operations[step?.id];
+    serviceAssert(
+      step?.kind === "integrate" &&
+        record?.state === "checking" &&
+        record.result === null &&
+        pause?.step_id === step.id &&
+        pause.pr_number === record.number &&
+        pause.url === record.url &&
+        pause.head_commit === record.integration_commit &&
+        pause.base_commit === record.base &&
+        Number.isFinite(Date.parse(pause.at)) &&
+        !execution.completed_at &&
+        !execution.recovery,
+      "release-state",
+      "Paused review lacks the exact unfinished integration PR."
+    );
+  } else
+    serviceAssert(
+      execution.review_pause === undefined,
+      "release-state",
+      "Review pause evidence exists outside its waiting state."
+    );
   if (execution.manual_stop) {
     const stop = execution.manual_stop;
     const step = execution.plan.steps[execution.step_index];

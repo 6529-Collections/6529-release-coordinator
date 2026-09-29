@@ -3,7 +3,8 @@ import test from "node:test";
 import {
   createReleaseGitHub,
   integrationGateChecks,
-  integrationPullPasses
+  integrationPullPasses,
+  integrationPullWaitsForReview
 } from "../src/release-github.mjs";
 import {
   makeReleaseBuild,
@@ -146,6 +147,194 @@ test("integration merge accepts only a verified approval bypass with green check
     ]),
     false
   );
+});
+
+test("green checks plus a blocked merge pause without treating failed checks as review", () => {
+  const observed = {
+    state: "OPEN",
+    isDraft: false,
+    mergeable: "MERGEABLE",
+    mergeStateStatus: "BLOCKED"
+  };
+  const green = {
+    __typename: "CheckRun",
+    status: "COMPLETED",
+    conclusion: "SUCCESS"
+  };
+  assert.equal(integrationPullWaitsForReview(observed, [green]), true);
+  assert.equal(
+    integrationPullWaitsForReview(observed, [
+      { ...green, conclusion: "FAILURE" }
+    ]),
+    false
+  );
+  assert.equal(integrationPullWaitsForReview(observed, []), false);
+  assert.equal(
+    integrationPullWaitsForReview({ ...observed, mergeable: "CONFLICTING" }, [
+      green
+    ]),
+    false
+  );
+  assert.equal(
+    integrationPullWaitsForReview({ ...observed, isDraft: true }, [green]),
+    false
+  );
+});
+
+test("a blocked owned integration PR stays open until an explicit stop closes it", async () => {
+  const candidate = {
+    role: "backend",
+    base: "e".repeat(40),
+    commit: "c".repeat(40),
+    tree: "d".repeat(40),
+    changed: true
+  };
+  const record = {
+    id: "22222222-2222-4222-8222-222222222222",
+    release_id: "11111111-1111-4111-8111-111111111111",
+    step: {
+      id: "staging:integrate:backend",
+      kind: "integrate",
+      environment: "staging",
+      role: "backend"
+    },
+    state: "checking",
+    created_at: "2026-09-11T12:00:00.000Z",
+    actor: { id: "456", login: "tester" },
+    target_branch: "1a-staging",
+    branch:
+      "codex/release-11111111-1111-4111-8111-111111111111-staging-backend",
+    body: "Sandbox release test",
+    base: candidate.base,
+    integration_version: 1,
+    integration_commit: "9".repeat(40),
+    number: 7,
+    url: "https://example.invalid/pr/7"
+  };
+  record.integration_input = integrationCommitInput(record, candidate);
+  let branchExists = true;
+  let prState = "open";
+  const writes = [];
+  const pull = () => ({
+    number: 7,
+    html_url: record.url,
+    head: {
+      repo: { id: sandboxProfile.repositories.backend.id },
+      ref: record.branch,
+      sha: record.integration_commit
+    },
+    base: {
+      repo: { id: sandboxProfile.repositories.backend.id },
+      ref: "1a-staging"
+    },
+    user: { id: 456 },
+    body: record.body,
+    state: prState,
+    merged: false
+  });
+  const client = createReleaseGitHub({
+    profile: sandboxProfile,
+    runtime,
+    wait: async () => {},
+    gates: {
+      pullRequest: async () => ({
+        headRefOid: record.integration_commit,
+        headRefName: record.branch,
+        baseRefOid: candidate.base,
+        baseRefName: "1a-staging",
+        state: "OPEN",
+        isDraft: false,
+        mergeable: "MERGEABLE",
+        mergeStateStatus: "BLOCKED",
+        checks: [
+          {
+            __typename: "CheckRun",
+            name: "Sandbox check",
+            isRequired: false,
+            status: "COMPLETED",
+            conclusion: "SUCCESS"
+          }
+        ]
+      })
+    },
+    execute: async (args) => {
+      const method = args[args.indexOf("--method") + 1];
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (method !== "GET") writes.push(`${method} ${endpoint}`);
+      if (endpoint.endsWith("/git/ref/heads/1a-staging"))
+        return apiResponse("200 OK", { object: { sha: candidate.base } });
+      if (method === "POST" && endpoint.endsWith("/git/commits"))
+        return apiResponse("201 Created", {
+          sha: record.integration_commit,
+          tree: { sha: candidate.tree },
+          parents: [{ sha: candidate.commit }]
+        });
+      if (endpoint.endsWith(`/git/commits/${record.integration_commit}`))
+        return apiResponse("200 OK", {
+          sha: record.integration_commit,
+          tree: { sha: candidate.tree },
+          parents: [{ sha: candidate.commit }]
+        });
+      if (endpoint.endsWith(`/git/ref/heads/${record.branch}`))
+        return branchExists
+          ? apiResponse("200 OK", {
+              object: { sha: record.integration_commit }
+            })
+          : apiResponse("404 Not Found", {});
+      if (endpoint.endsWith("/pulls/7") && method === "GET")
+        return apiResponse("200 OK", pull());
+      if (endpoint.endsWith("/pulls/7") && method === "PATCH") {
+        prState = "closed";
+        return apiResponse("200 OK", pull());
+      }
+      if (
+        method === "DELETE" &&
+        endpoint.endsWith(`/git/refs/heads/${record.branch}`)
+      ) {
+        branchExists = false;
+        return apiResponse("204 No Content");
+      }
+      assert.fail(`${method} ${endpoint}`);
+    }
+  });
+  let loseStopSave = false;
+  const input = {
+    record,
+    candidate,
+    actor: record.actor,
+    expectedBase: candidate.base,
+    save: async () => {
+      if (record.state === "cleaning" && loseStopSave) {
+        loseStopSave = false;
+        throw new Error("lost stop save response");
+      }
+    }
+  };
+  const paused = await client.integrate(input);
+  assert.equal(paused.status, "waiting-review");
+  assert.equal(prState, "open");
+  assert.equal(branchExists, true);
+  assert.deepEqual(
+    writes.map((write) => write.split(" ")[0]),
+    ["POST"]
+  );
+  const stillPaused = await client.integrate(input);
+  assert.equal(stillPaused.status, "waiting-review");
+  assert.equal(prState, "open");
+  assert.equal(branchExists, true);
+  loseStopSave = true;
+  await assert.rejects(
+    client.integrate({ ...input, reviewStop: true }),
+    /lost stop save response/u
+  );
+  assert.equal(record.cleanup_reason, "review-stop");
+  assert.equal(prState, "open");
+  assert.equal(branchExists, true);
+  const stopped = await client.integrate(input);
+  assert.equal(stopped.kind, "review-stop");
+  assert.equal(prState, "closed");
+  assert.equal(branchExists, false);
+  assert.equal(record.cleanup, "removed");
 });
 
 function runtimeFile(endpoint, changed = false) {

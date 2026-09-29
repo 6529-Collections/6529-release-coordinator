@@ -624,6 +624,22 @@ advance. GitHub Issue calls are not transactional; do not run a resumed copy
 while the original process may still be alive. The command guide owns the
 recovery procedure and timeout guidance.
 
+If an exact integration PR has green required checks but GitHub still marks
+its merge gate `BLOCKED`, the release records `awaiting-review` and the ticket
+gets `reason:release-review-pending` with the PR link. The owned PR and branch
+stay open, no later release step runs, and the same journal lock remains held.
+This is a safe wait, not proof that review is the only rule blocking GitHub.
+After a person handles the PR, ordinary `--resume RUN_ID` rechecks its exact
+head, base, checks, rules, and branch before a merge; a still-blocked PR stays
+paused. `--resume RUN_ID --review-stop` explicitly closes the verified owned
+PR and follows the normal release recovery path. An uncertain identity or moved
+branch keeps the lock for manual investigation. Neither command ignores a
+review thread, auto-resumes, or imposes a pause timeout. Other releases in the
+same profile wait; the separate sandbox and real journals do not block each
+other. Once a stop choice is saved, an interrupted stop uses ordinary
+`--resume RUN_ID` to continue that saved cleanup; it cannot turn back into a
+merge merely because the GitHub review changes meanwhile.
+
 The [v0.1 run logs](./design.md#next-step-v01-run-logging) add local step history
 and live progress, separate from this journal. They explain started, verified and
 uncertain operations and actual cleanup. They do not supply ticket evidence,

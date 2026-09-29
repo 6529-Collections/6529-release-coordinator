@@ -14,6 +14,7 @@ import path from "node:path";
 import {
   createRunLog,
   bindRunLog,
+  logOutcome,
   loggedStep,
   runEvent
 } from "../src/run-log.mjs";
@@ -30,6 +31,11 @@ import { batchFixture } from "./batch-fixture.mjs";
 import { checkHarness } from "./checks-harness.mjs";
 
 const runId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+test("a deliberate review pause is logged as waiting, not unknown", () => {
+  assert.equal(logOutcome("waiting-review"), "waiting");
+  assert.equal(logOutcome("failed"), "failed");
+});
+
 async function rootFor(t) {
   const root = await mkdtemp(path.join(tmpdir(), "coordinator-run-logs-"));
   t.after(() => rm(root, { recursive: true, force: true }));

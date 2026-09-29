@@ -64,6 +64,16 @@ export function releaseTicketResult(batch, number) {
       execution
     };
   }
+  if (execution?.status === "awaiting-review") {
+    const pause = execution.review_pause;
+    return {
+      status: "waiting",
+      batch_status: "waiting",
+      code: "release-review-pending",
+      message: `The exact ${execution.plan.profile} integration PR ${pause.url} is blocked after its required checks passed. No later release step ran. Inspect the GitHub review or merge rule, then resume this run to check it again.`,
+      execution
+    };
+  }
   if (execution?.status === "completed")
     return {
       status: "completed",
@@ -96,6 +106,7 @@ export async function executeRelease({
   guard,
   signal,
   stagingChange,
+  reviewStop = false,
   operator,
   uuid = randomUUID,
   now = () => new Date()
@@ -127,6 +138,11 @@ export async function executeRelease({
       execution.step_index === execution.plan.steps.length,
     "release-state",
     "Terminal release state has an incomplete step position."
+  );
+  serviceAssert(
+    !reviewStop || execution.status === "awaiting-review",
+    "release-review",
+    "An explicit review stop requires a saved release awaiting review."
   );
   if (["completed", "needs-human"].includes(execution.status)) return execution;
   const persist = async (message) => {
@@ -558,6 +574,22 @@ export async function executeRelease({
     return execution;
   };
   if (execution.status === "recovering") return restoreEnvironments();
+  if (execution.status === "awaiting-review") {
+    if (reviewStop) {
+      const step = execution.plan.steps[execution.step_index];
+      execution.operations[step.id].cleanup_reason = "review-stop";
+    }
+    execution.status = "running";
+    execution.message = reviewStop
+      ? "Closing the paused PR and recovering the release at the operator's request."
+      : "Rechecking the exact paused integration PR and its merge requirements.";
+    delete execution.review_pause;
+    await persist(
+      reviewStop
+        ? "stop paused integration PR"
+        : "recheck paused integration PR"
+    );
+  }
   if (execution.status === "prepared") {
     const identity = await client.identity();
     serviceAssert(
@@ -640,6 +672,7 @@ export async function executeRelease({
             candidate: execution.plan.candidates[step.role],
             actor: execution.actor,
             expectedBase: versions[step.role],
+            reviewStop,
             save: () => persist(`release step ${step.id} progress`)
           }),
         (value) => ({ outcome: logOutcome(value.status), url: value.url })
@@ -706,6 +739,31 @@ export async function executeRelease({
           return stagingDrift(record);
         throw error;
       }
+    }
+    if (result?.status === "waiting-review") {
+      serviceAssert(
+        step.kind === "integrate" &&
+          record.state === "checking" &&
+          Number.isSafeInteger(record.number) &&
+          record.number > 0 &&
+          typeof record.url === "string" &&
+          /^[0-9a-f]{40}$/u.test(record.integration_commit ?? "") &&
+          /^[0-9a-f]{40}$/u.test(record.base ?? ""),
+        "release-review",
+        "A paused review lacks its exact saved integration PR."
+      );
+      execution.review_pause = {
+        step_id: step.id,
+        pr_number: record.number,
+        url: record.url,
+        head_commit: record.integration_commit,
+        base_commit: record.base,
+        at: now().toISOString()
+      };
+      execution.status = "awaiting-review";
+      execution.message = `${step.id} is waiting at ${record.url}: GitHub blocks the exact integration PR after required checks passed. No later step ran.`;
+      await persist(`release step ${step.id} awaits PR review`);
+      return execution;
     }
     record.result = result;
     record.state = "completed";

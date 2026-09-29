@@ -69,7 +69,9 @@ function releasedDecision(decision, result) {
       : waiting
         ? result.code === "release-staging-changed"
           ? "A Coordinator maintainer must inspect the external deployment. If the guarded frontend-only case applies, resume this run with --staging-change retest or --staging-change restore; otherwise reconcile manually. No production work starts without a safe decision."
-          : "Recheck the saved batch and release evidence before continuing."
+          : result.code === "release-review-pending"
+            ? "Inspect the linked integration PR. Resolve its review or merge blocker, then resume this saved run; or explicitly resume with --review-stop to close the PR and start ordinary recovery."
+            : "Recheck the saved batch and release evidence before continuing."
         : result.execution?.staging_drift?.status === "restored"
           ? "The frontend staging change was restored and checked. Inspect the stopped request before submitting a new release."
           : result.execution?.recovery?.status === "completed"

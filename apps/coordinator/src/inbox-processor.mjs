@@ -28,6 +28,7 @@ export async function processInbox({
   closeTest = false,
   resume,
   stagingChange,
+  reviewStop = false,
   rehearsal,
   services,
   batch,
@@ -99,6 +100,14 @@ export async function processInbox({
       "release-recovery",
       "A staging-change choice requires the saved run to be awaiting that decision."
     );
+  if (reviewStop)
+    serviceAssert(
+      resume &&
+        state.batches?.[run.batch_fingerprint]?.execution?.status ===
+          "awaiting-review",
+      "release-review",
+      "Stopping a review requires the saved run to be awaiting review."
+    );
   serviceAssert(
     !resume || selectionMode === undefined || selection.mode === selectionMode,
     "run-scope",
@@ -144,6 +153,7 @@ export async function processInbox({
             [
               "prepared",
               "running",
+              "awaiting-review",
               "awaiting-staging-choice",
               "reconciling-staging",
               "recovering"
@@ -224,7 +234,13 @@ export async function processInbox({
             plan
           }),
         release: release
-          ? (options) => release({ ...options, stagingChange, operator: actor })
+          ? (options) =>
+              release({
+                ...options,
+                stagingChange,
+                reviewStop,
+                operator: actor
+              })
           : undefined
       });
     }
@@ -253,6 +269,7 @@ export async function processInbox({
     signal?.throwIfAborted();
     if (
       batchResult?.status !== "awaiting-staging-choice" &&
+      batchResult?.status !== "awaiting-review" &&
       batchResult?.release?.staging_drift?.status !== "failed"
     )
       await loggedStep(

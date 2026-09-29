@@ -690,6 +690,14 @@ test("profile, scope, report-file and old-command validation fails before reads 
     ["--report", "x"],
     ["--plan", "x"],
     ["--staging-change", "retest"],
+    ["--review-stop"],
+    [
+      "--resume",
+      "33333333-3333-4333-8333-333333333333",
+      "--review-stop",
+      "--staging-change",
+      "restore"
+    ],
     [
       "--resume",
       "33333333-3333-4333-8333-333333333333",
@@ -930,6 +938,39 @@ test("a staging choice reaches only an explicit resumed release", async () => {
   assert.equal(observed, "restore");
 });
 
+test("an explicit review stop reaches the resumed release", async () => {
+  const f = fixture(sandboxProfile);
+  let observed;
+  const result = await invoke(f, {
+    args: [
+      "--resume",
+      "33333333-3333-4333-8333-333333333333",
+      "--review-stop",
+      "--json"
+    ],
+    env: { RELEASE_COORDINATOR_SCOPE: "inbox" },
+    createReleaseClient: () => ({ fake: true }),
+    executeReleaseSequence: async ({ reviewStop }) => {
+      observed = reviewStop;
+      return { status: "needs-human" };
+    },
+    run: async (options) => {
+      assert.equal(options.reviewStop, true);
+      await options.release({
+        batch: {},
+        state: {},
+        run: {},
+        reviewStop: options.reviewStop,
+        guard: async () => {},
+        save: async () => {}
+      });
+      return { run_id: options.resume, requests: [] };
+    }
+  });
+  assert.equal(result.code, 0);
+  assert.equal(observed, true);
+});
+
 test("a staged-change decision keeps the saved run lock while its ticket is presented", async () => {
   const f = fixture(sandboxProfile);
   const result = await invoke(f, {
@@ -941,6 +982,20 @@ test("a staged-change decision keeps the saved run lock while its ticket is pres
     })
   });
   assert.equal(result.report.batch.status, "awaiting-staging-choice");
+  assert.equal(f.state().lock.run_id, result.report.run_id);
+});
+
+test("a review pause keeps the saved run lock while its ticket is presented", async () => {
+  const f = fixture(sandboxProfile);
+  const result = await invoke(f, {
+    args: ["--issue", "1", "--actor", "trusted-user", "--json"],
+    batch: async () => ({
+      status: "awaiting-review",
+      selected: [1],
+      release_executed: false
+    })
+  });
+  assert.equal(result.report.batch.status, "awaiting-review");
   assert.equal(f.state().lock.run_id, result.report.run_id);
 });
 
