@@ -24,7 +24,7 @@ export function stopStaleE2e(batch, { actor, observed, at, workflow }) {
     workflow?.status !== "completed" ||
     workflow?.conclusion !== "success" ||
     workflow?.html_url !== workflowUrl ||
-    !actor?.id ||
+    !/^[1-9][0-9]*$/u.test(String(actor?.id ?? "")) ||
     !actor?.login ||
     !Number.isFinite(Date.parse(at)) ||
     !["backend", "frontend"].every(

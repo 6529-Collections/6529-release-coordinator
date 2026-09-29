@@ -262,35 +262,52 @@ async function main() {
       }
     }
   };
-  await presentRunTicket(
-    {
-      number: 253,
-      issue,
-      entry,
-      ticket: null,
-      recordedTerminal: false,
-      observation: {
-        kind: "manual-stale-e2e-stop",
-        run_id: expected.run,
-        expected: execution.manual_stop.expected,
-        observed,
-        e2e_workflow_run_id: expected.e2eRun
+  let presentationError = null;
+  try {
+    await presentRunTicket(
+      {
+        number: 253,
+        issue,
+        entry,
+        ticket: null,
+        recordedTerminal: false,
+        observation: {
+          kind: "manual-stale-e2e-stop",
+          run_id: expected.run,
+          expected: execution.manual_stop.expected,
+          observed,
+          e2e_workflow_run_id: expected.e2eRun
+        },
+        decision
       },
-      decision
-    },
-    {
-      api,
-      journal,
-      state,
-      run,
-      actor,
-      now: () => new Date(),
-      inspect: inspectIssue,
-      get,
-      profile: realProfile
-    }
-  );
-  await journal.release(state, run);
+      {
+        api,
+        journal,
+        state,
+        run,
+        actor,
+        now: () => new Date(),
+        inspect: inspectIssue,
+        get,
+        profile: realProfile
+      }
+    );
+  } catch (error) {
+    presentationError = error;
+  }
+  try {
+    await journal.release(state, run);
+  } catch (error) {
+    throw new Error(
+      `Manual stop was saved, but the lock could not be released and ticket presentation may be incomplete. Inspect the journal and Issue #253 before further release work: ${error.message}`,
+      { cause: error }
+    );
+  }
+  if (presentationError)
+    throw new Error(
+      `Manual stop was saved and the lock released, but Issue #253 presentation failed. Inspect the journal and Issue before further release work: ${presentationError.message}`,
+      { cause: presentationError }
+    );
   const final = await journal.read();
   assert.equal(final.state.lock, null);
   assert.equal(

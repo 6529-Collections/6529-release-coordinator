@@ -385,6 +385,8 @@ test("manual stale-E2E stop preserves the passing workflow without claiming prod
     conclusion: "success",
     html_url: `https://github.com/${repositoryName}/actions/runs/${record.workflow_run_id}`
   };
+  assert.ok(Number.isSafeInteger(record.workflow_run_id));
+  assert.ok(record.workflow_run_id > 0);
   const stopOptions = {
     actor: { id: "456", login: "tester" },
     observed: {
@@ -396,13 +398,37 @@ test("manual stale-E2E stop preserves the passing workflow without claiming prod
   };
   for (const invalidWorkflow of [
     { ...workflow, id: workflow.id + 1 },
+    { ...workflow, status: "in_progress" },
     { ...workflow, conclusion: "failure" },
-    { ...workflow, html_url: `${workflow.html_url}/other` }
+    { ...workflow, html_url: `${workflow.html_url}/other` },
+    undefined
   ]) {
     assert.throws(() =>
       stopStaleE2e(batch, { ...stopOptions, workflow: invalidWorkflow })
     );
   }
+  assert.throws(() =>
+    stopStaleE2e(batch, {
+      ...stopOptions,
+      observed: {
+        ...stopOptions.observed,
+        backend: execution.versions.staging.backend
+      }
+    })
+  );
+  assert.throws(() =>
+    stopStaleE2e(batch, {
+      ...stopOptions,
+      actor: { id: "invalid", login: "tester" }
+    })
+  );
+  const withProd = structuredClone(batch);
+  const prodStep = execution.plan.steps.find(
+    (step) => step.environment === "prod"
+  );
+  assert.ok(prodStep);
+  withProd.execution.operations[prodStep.id] = { state: "running" };
+  assert.throws(() => stopStaleE2e(withProd, stopOptions));
   const stopped = stopStaleE2e(batch, stopOptions);
   assert.equal(stopped.status, "needs-human");
   assert.equal(record.state, "running");
@@ -422,9 +448,8 @@ test("manual stale-E2E stop preserves the passing workflow without claiming prod
   assert.throws(() => validateReleaseExecution(missing, batch));
   assert.throws(() =>
     stopStaleE2e(batch, {
-      actor: { id: "456", login: "tester" },
-      observed: stopped.manual_stop.observed,
-      at
+      ...stopOptions,
+      observed: stopped.manual_stop.observed
     })
   );
 });
