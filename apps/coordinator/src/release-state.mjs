@@ -1,4 +1,5 @@
 import { validateProfileReleaseOperation } from "./profile-release-contract.mjs";
+import { selectProfile } from "./profiles.mjs";
 import {
   productWorkflowReleaseAdapter,
   verifySavedReleaseReport
@@ -225,7 +226,15 @@ export function validateReleaseExecution(execution, batch) {
         "Invalid sandbox integration commit state."
       );
     }
-    if (record.state === "completed" && record.step.kind !== "integrate")
+    if (
+      record.state === "completed" &&
+      record.step.kind !== "integrate" &&
+      !(
+        execution.manual_stop &&
+        stepId === "staging:e2e" &&
+        record.result?.status === "stopped"
+      )
+    )
       serviceAssert(
         record.operation && record.result?.report,
         "release-state",
@@ -273,9 +282,52 @@ export function validateReleaseExecution(execution, batch) {
     serviceAssert(
       execution.completed_at &&
         (execution.operations[step?.id]?.result?.status === "failed" ||
-          ["restored", "failed"].includes(execution.staging_drift?.status)),
+          ["restored", "failed"].includes(execution.staging_drift?.status) ||
+          execution.manual_stop),
       "release-state",
       "Stopped release lacks a confirmed failing step."
+    );
+  }
+  if (execution.manual_stop) {
+    const stop = execution.manual_stop;
+    const step = execution.plan.steps[execution.step_index];
+    const record = execution.operations["staging:e2e"];
+    const repositoryName = selectProfile(execution.plan.profile).repositories
+      .frontend.full_name;
+    serviceAssert(
+      execution.status === "needs-human" &&
+        ["real", "sandbox"].includes(execution.plan.profile) &&
+        execution.completed_at === stop.at &&
+        step?.id === "staging:e2e" &&
+        stop.reason === "release-stale" &&
+        Number.isFinite(Date.parse(stop.at)) &&
+        /^[1-9][0-9]*$/u.test(String(stop.actor?.id ?? "")) &&
+        typeof stop.actor?.login === "string" &&
+        record?.state === "completed" &&
+        record.result?.status === "stopped" &&
+        record.result.reason === stop.reason &&
+        Number.isSafeInteger(record.workflow_run_id) &&
+        record.workflow_run_id > 0 &&
+        record.result.workflow?.id === record.workflow_run_id &&
+        record.result.workflow?.url ===
+          `https://github.com/${repositoryName}/actions/runs/${record.workflow_run_id}` &&
+        record.result.workflow?.conclusion === "success" &&
+        record.workflow_run_id === stop.e2e_workflow_run_id &&
+        ["backend", "frontend"].every(
+          (role) =>
+            /^[0-9a-f]{40}$/u.test(stop.expected?.[role] ?? "") &&
+            /^[0-9a-f]{40}$/u.test(stop.observed?.[role] ?? "") &&
+            stop.expected[role] === execution.versions.staging[role]
+        ) &&
+        stop.expected.backend !== stop.observed.backend &&
+        !execution.staging_drift &&
+        !execution.recovery &&
+        !execution.plan.steps.some(
+          (planned) =>
+            planned.environment === "prod" && execution.operations[planned.id]
+        ),
+      "release-state",
+      "Manual stop lacks exact stale E2E evidence or includes production work."
     );
   }
   if (execution.staging_drift) validateStagingDrift(execution, ids);

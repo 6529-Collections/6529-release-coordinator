@@ -84,6 +84,18 @@ undoes only the Coordinator's frontend staging change and verifies it. Neither
 path automatically rolls back another developer's backend or any database
 change.
 
+For the specific real Issue #253 stop, both staging refs later moved beyond
+the saved versions, so neither automatic choice was safe. The one-time
+`ops/scripts/reconcile-issue-253.mjs` correction first verifies the exact
+journal head, run lock, public intake, stale-acceptance log event, workflow
+conclusions and current staging refs. Its read-only `--check` mode makes no
+writes; `--apply` records a `needs-human` manual stop without calling either
+product release adapter, presents `reason:release-stopped` on the same Issue,
+and releases the original journal lock. It retains the successful E2E workflow
+conclusion separately from the stopped Coordinator acceptance and leaves the
+run's production steps absent. A changed journal head or uncertain outcome
+requires inspection, not rerunning this one-time correction.
+
 ### Inbox selection guard
 
 `RELEASE_COORDINATOR_PROFILE=sandbox|real` selects the trusted repositories.

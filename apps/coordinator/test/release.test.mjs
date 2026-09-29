@@ -26,6 +26,7 @@ import {
   makeReleasePlan
 } from "../src/release-plan.mjs";
 import { ServiceError, serviceHash } from "../src/service-contract.mjs";
+import { stopStaleE2e } from "../src/manual-stale-stop.mjs";
 import { elapsedBatchPolicy, legacyBatchPolicy } from "../src/batch-plan.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
@@ -369,6 +370,96 @@ async function frontendStagingDrift() {
   );
   return { batch, calls, releaseClient, versions, options };
 }
+
+test("manual stale-E2E stop preserves the passing workflow without claiming production", async () => {
+  const { batch } = await frontendStagingDrift();
+  const execution = batch.execution;
+  const record = execution.operations["staging:e2e"];
+  delete execution.staging_drift;
+  execution.status = "running";
+  const at = "2026-09-29T06:00:00.000Z";
+  const repositoryName = sandboxProfile.repositories.frontend.full_name;
+  const workflow = {
+    id: record.workflow_run_id,
+    status: "completed",
+    conclusion: "success",
+    html_url: `https://github.com/${repositoryName}/actions/runs/${record.workflow_run_id}`
+  };
+  assert.ok(Number.isSafeInteger(record.workflow_run_id));
+  assert.ok(record.workflow_run_id > 0);
+  const stopOptions = {
+    actor: { id: "456", login: "tester" },
+    observed: {
+      backend: "c".repeat(40),
+      frontend: execution.versions.staging.frontend
+    },
+    workflow,
+    at
+  };
+  for (const invalidWorkflow of [
+    { ...workflow, id: workflow.id + 1 },
+    { ...workflow, status: "in_progress" },
+    { ...workflow, conclusion: "failure" },
+    { ...workflow, html_url: `${workflow.html_url}/other` },
+    undefined
+  ]) {
+    assert.throws(() =>
+      stopStaleE2e(batch, { ...stopOptions, workflow: invalidWorkflow })
+    );
+  }
+  assert.throws(() =>
+    stopStaleE2e(batch, {
+      ...stopOptions,
+      observed: {
+        ...stopOptions.observed,
+        backend: execution.versions.staging.backend
+      }
+    })
+  );
+  assert.throws(() =>
+    stopStaleE2e(batch, {
+      ...stopOptions,
+      actor: { id: "invalid", login: "tester" }
+    })
+  );
+  const withProd = structuredClone(batch);
+  const prodStep = execution.plan.steps.find(
+    (step) => step.environment === "prod"
+  );
+  assert.ok(prodStep);
+  withProd.execution.operations[prodStep.id] = { state: "running" };
+  assert.throws(() => stopStaleE2e(withProd, stopOptions));
+  const stopped = stopStaleE2e(batch, stopOptions);
+  assert.equal(stopped.status, "needs-human");
+  assert.equal(record.state, "running");
+  assert.equal(stopped.operations["staging:e2e"].result.status, "stopped");
+  assert.equal(
+    stopped.operations["staging:e2e"].result.workflow.conclusion,
+    "success"
+  );
+  assert.equal(
+    stopped.operations["staging:e2e"].result.workflow.url,
+    workflow.html_url
+  );
+  assert.equal(releaseTicketResult(batch, 1).code, "release-stopped");
+  assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
+  const missing = structuredClone(stopped);
+  delete missing.manual_stop;
+  assert.throws(() => validateReleaseExecution(missing, batch));
+  const invalidRun = structuredClone(stopped);
+  invalidRun.operations["staging:e2e"].workflow_run_id = 0;
+  invalidRun.operations["staging:e2e"].result.workflow.id = 0;
+  invalidRun.operations["staging:e2e"].result.workflow.url =
+    `https://github.com/${repositoryName}/actions/runs/0`;
+  invalidRun.manual_stop.e2e_workflow_run_id = 0;
+  assert.throws(() => validateReleaseExecution(invalidRun, batch));
+  assert.throws(() =>
+    stopStaleE2e(batch, {
+      ...stopOptions,
+      observed: stopped.manual_stop.observed
+    })
+  );
+});
 
 test("a concurrent backend staging move is recorded and blocks production until a choice", async () => {
   const { batch, calls, options } = await frontendStagingDrift();

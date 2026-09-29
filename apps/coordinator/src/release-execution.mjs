@@ -76,7 +76,7 @@ export function releaseTicketResult(batch, number) {
     return {
       status: "blocked",
       batch_status: "passed",
-      code: "release-failed",
+      code: execution.manual_stop ? "release-stopped" : "release-failed",
       message: execution.message,
       execution
     };
