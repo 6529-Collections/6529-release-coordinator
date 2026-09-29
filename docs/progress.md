@@ -1,6 +1,14 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-29** for real Issue #253 manual reconciliation.
+Last reviewed: **2026-09-29** for real Issue #266's runtime-pin stop.
+Real [Issue #266](https://github.com/6529-Collections/6529-release-coordinator/issues/266)
+passed exact frontend PR rehearsal and the temporary combined PR checks, then
+stopped before release authorization because the pinned backend `deploy.yml`
+blobs no longer matched `1a-staging` and `main`. The original journal run lock
+remains held; no staging or production release step started. This source updates
+the two independently reviewed backend workflow pins without changing product
+repositories. Offline checks, PR delivery, and a guarded resume are separate
+evidence; see the [dated run record](./testing/real-production-ticket-266-2026-09-29.md).
 Real [Issue #253](https://github.com/6529-Collections/6529-release-coordinator/issues/253)
 stopped after a successful frontend staging deploy and GitHub staging E2E
 because backend staging moved before the Coordinator could accept the E2E.
@@ -209,6 +217,12 @@ skipped. Lint, formatting, documentation, workflow policy and package checks
 also passed. GitHub CI and live product acceptance are separate evidence.
 
 ## Next steps
+
+Complete CI and review for the Issue #266 backend runtime-pin update, merge it,
+then verify the old process is stopped, the same run still owns the journal
+lock, and the exact product refs/runtime files are current before resuming
+run `5375bc43-986c-418c-8a3c-bc64713e313f`. This is not a new ticket or
+a new run. No production outcome is proved by the passing temporary PR checks.
 
 Inspect Issue #253's external backend deployments and possible
 database/compatibility effects. Its run is recorded as a `needs-human` manual
@@ -941,6 +955,7 @@ snapshot is historical, not a fresh scan.
 | [Fake-production restoration](./testing/fake-production-restoration-2026-09-16.md)                                                   | Test `main` restored before staging through protected undo PRs, matching builds/E2E, final ref/tree readback, the large-journal blob fallback and the still-failed ticket.                                                                                                                              |
 | [Sample monitoring deployment](./testing/sandbox-monitoring-2026-09-17.md)                                                           | Monitoring deployed for staging and prod after the test-main merge and before production application deployments, installed templates bound to builds and artifact records, a controlled monitoring failure restored with monitoring redeployed, and the intake pin, allowlist and moved-base findings. |
 | [Branch-aligned monitoring acceptance](./testing/monitoring-branch-contract-2026-09-23.md)                                           | Merged test-mirror branch contract, exact staging/prod monitoring sources, full success release, staging and production controlled failures, protected restoration, matching E2E and final branch-tree readback.                                                                                        |
+| [Real ticket #266 runtime-pin stop](./testing/real-production-ticket-266-2026-09-29.md)                                               | Filtered real run, exact PR rehearsal, passing temporary combined checks, changed backend deploy-workflow pins, retained journal lock and no product release operation. |
 
 Keep current status and next steps here. Update behavior in its owning guide;
 keep dated acceptance reports unchanged unless explicitly recording a new run.
