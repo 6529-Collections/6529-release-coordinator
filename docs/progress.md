@@ -1,17 +1,20 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-28** for staging-drift delivery and sandbox acceptance.
-Real Issue #253 stopped after a successful frontend staging deploy and GitHub
-staging E2E because another developer moved backend staging before the
-Coordinator accepted the E2E. At that stop, this run had not changed either
-production branch. The
-same run's journal lock remains held; it has not been resumed here. The
-[sandbox acceptance](./testing/staging-drift-2026-09-28.md) does not establish
-that the real backend deployment or database effects are safe for Issue #253.
-At a later September 28 readback, both real staging refs and both real `main`
-refs had moved beyond the versions saved in that run. Its automatic retest and
-restoration choices now fail the unchanged-ref prerequisite; the old ticket
-requires manual reconciliation before further real release work.
+Last reviewed: **2026-09-29** for real Issue #253 manual reconciliation.
+Real [Issue #253](https://github.com/6529-Collections/6529-release-coordinator/issues/253)
+stopped after a successful frontend staging deploy and GitHub staging E2E
+because backend staging moved before the Coordinator could accept the E2E.
+On September 29, the exact saved run, successful workflow results, local
+`release-stale` event, current refs, and public receipt were checked. The
+Coordinator journal now records a `needs-human` manual stop, distinguishes the
+successful E2E workflow from its stale release acceptance, and has no saved
+production operation. The same Issue has `reason:release-stopped`; its original
+run lock was released at journal revision 307, commit
+`bceb24464a986d58e9d86d0967109faa4f130cfa`. No retest, restoration,
+product merge, or deployment was performed by this correction. The
+[sandbox acceptance](./testing/staging-drift-2026-09-28.md) and this journal
+correction do not establish that the external backend database and
+compatibility effects are safe for a new release.
 The older evidence below includes the real production release attempt
 that failed for open Issue #250 and its verified staging restoration. The
 tree-identical staging deploy correction is merged and passed a real-profile
@@ -34,10 +37,11 @@ deployment without inventing a Coordinator-owned backend deployment. Focused
 offline simulations and the [September 28 sandbox run](./testing/staging-drift-2026-09-28.md)
 cover the fresh retest, late-drift stop, and frontend-only restoration. The
 change merged at `88ddbd7d0a27f63ab2054277cdcacc8fbd0c946f` after green
-GitHub checks and current-head review. The last local `npm run check` passed
-653 tests with three optional Docker skips. No real-profile recovery has run.
-Before any real choice, a maintainer must verify the other developer's backend
-deployments and database/compatibility effects.
+GitHub checks and current-head review. Its automatic retest/restore choices
+were not used for #253 because both staging refs moved beyond the saved
+versions. The September 29 local `npm run check` passed 654 tests with three
+optional Docker skips for the narrow manual-stop correction; that local result
+does not establish merged source or a completed real release.
 
 The first frontend-only sandbox acceptance ticket
 [#51](https://github.com/6529-Collections/release-coordinator-test-inbox/issues/51)

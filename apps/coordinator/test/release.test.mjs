@@ -26,6 +26,7 @@ import {
   makeReleasePlan
 } from "../src/release-plan.mjs";
 import { ServiceError, serviceHash } from "../src/service-contract.mjs";
+import { stopStaleE2e } from "../src/manual-stale-stop.mjs";
 import { elapsedBatchPolicy, legacyBatchPolicy } from "../src/batch-plan.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
@@ -369,6 +370,42 @@ async function frontendStagingDrift() {
   );
   return { batch, calls, releaseClient, versions, options };
 }
+
+test("manual stale-E2E stop preserves the passing workflow without claiming production", async () => {
+  const { batch } = await frontendStagingDrift();
+  const execution = batch.execution;
+  const record = execution.operations["staging:e2e"];
+  delete execution.staging_drift;
+  execution.status = "running";
+  const at = "2026-09-29T06:00:00.000Z";
+  const stopped = stopStaleE2e(batch, {
+    actor: { id: "456", login: "tester" },
+    observed: {
+      backend: "c".repeat(40),
+      frontend: execution.versions.staging.frontend
+    },
+    at
+  });
+  assert.equal(stopped.status, "needs-human");
+  assert.equal(record.state, "running");
+  assert.equal(stopped.operations["staging:e2e"].result.status, "stopped");
+  assert.equal(
+    stopped.operations["staging:e2e"].result.workflow.conclusion,
+    "success"
+  );
+  assert.equal(releaseTicketResult(batch, 1).code, "release-stopped");
+  assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
+  const missing = structuredClone(stopped);
+  delete missing.manual_stop;
+  assert.throws(() => validateReleaseExecution(missing, batch));
+  assert.throws(() =>
+    stopStaleE2e(batch, {
+      actor: { id: "456", login: "tester" },
+      observed: stopped.manual_stop.observed,
+      at
+    })
+  );
+});
 
 test("a concurrent backend staging move is recorded and blocks production until a choice", async () => {
   const { batch, calls, options } = await frontendStagingDrift();
