@@ -762,6 +762,7 @@ export async function executeRelease({
       };
       execution.status = "awaiting-review";
       execution.message = `${step.id} is waiting at ${record.url}: GitHub blocks the exact integration PR after required checks passed. No later step ran.`;
+      // Keep the integration unfinished so resume rechecks this same PR.
       await persist(`release step ${step.id} awaits PR review`);
       return execution;
     }

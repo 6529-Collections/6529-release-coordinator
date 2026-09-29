@@ -701,6 +701,13 @@ test("profile, scope, report-file and old-command validation fails before reads 
     [
       "--resume",
       "33333333-3333-4333-8333-333333333333",
+      "--review-stop",
+      "--staging-change",
+      "retest"
+    ],
+    [
+      "--resume",
+      "33333333-3333-4333-8333-333333333333",
       "--staging-change",
       "skip"
     ],
@@ -996,6 +1003,7 @@ test("a review pause keeps the saved run lock while its ticket is presented", as
     })
   });
   assert.equal(result.report.batch.status, "awaiting-review");
+  assert.equal(result.report.batch.release_executed, false);
   assert.equal(f.state().lock.run_id, result.report.run_id);
 });
 

@@ -747,7 +747,10 @@ export function createReleaseGitHub({
           `${sandbox ? "Sandbox" : "Product"} ${record.step.environment} changed after this release captured its starting version.`
         );
         await save();
-      } else if (!["cleaning", "merging", "merged"].includes(record.state)) {
+      } else if (
+        !reviewStopRequested &&
+        !["cleaning", "merging", "merged"].includes(record.state)
+      ) {
         serviceAssert(
           (await ref(role, targetBranch)).data.object.sha === record.base,
           "release-stale",

@@ -214,6 +214,7 @@ test("a blocked owned integration PR stays open until an explicit stop closes it
   record.integration_input = integrationCommitInput(record, candidate);
   let branchExists = true;
   let prState = "open";
+  let targetCommit = candidate.base;
   const writes = [];
   const pull = () => ({
     number: 7,
@@ -262,7 +263,7 @@ test("a blocked owned integration PR stays open until an explicit stop closes it
       const endpoint = args[args.indexOf("--method") + 2];
       if (method !== "GET") writes.push(`${method} ${endpoint}`);
       if (endpoint.endsWith("/git/ref/heads/1a-staging"))
-        return apiResponse("200 OK", { object: { sha: candidate.base } });
+        return apiResponse("200 OK", { object: { sha: targetCommit } });
       if (method === "POST" && endpoint.endsWith("/git/commits"))
         return apiResponse("201 Created", {
           sha: record.integration_commit,
@@ -322,6 +323,8 @@ test("a blocked owned integration PR stays open until an explicit stop closes it
   assert.equal(stillPaused.status, "waiting-review");
   assert.equal(prState, "open");
   assert.equal(branchExists, true);
+  targetCommit = "f".repeat(40);
+  await assert.rejects(client.integrate(input), /changed before integration/u);
   loseStopSave = true;
   await assert.rejects(
     client.integrate({ ...input, reviewStop: true }),
