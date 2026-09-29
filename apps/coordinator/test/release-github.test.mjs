@@ -213,6 +213,7 @@ test("a blocked owned integration PR stays open until an explicit stop closes it
   };
   record.integration_input = integrationCommitInput(record, candidate);
   let branchExists = true;
+  let branchCommit = record.integration_commit;
   let prState = "open";
   let targetCommit = candidate.base;
   const writes = [];
@@ -279,7 +280,7 @@ test("a blocked owned integration PR stays open until an explicit stop closes it
       if (endpoint.endsWith(`/git/ref/heads/${record.branch}`))
         return branchExists
           ? apiResponse("200 OK", {
-              object: { sha: record.integration_commit }
+              object: { sha: branchCommit }
             })
           : apiResponse("404 Not Found", {});
       if (endpoint.endsWith("/pulls/7") && method === "GET")
@@ -325,6 +326,14 @@ test("a blocked owned integration PR stays open until an explicit stop closes it
   assert.equal(branchExists, true);
   targetCommit = "f".repeat(40);
   await assert.rejects(client.integrate(input), /changed before integration/u);
+  branchCommit = "a".repeat(40);
+  await assert.rejects(
+    client.integrate({ ...input, reviewStop: true }),
+    /branch does not name the exact integration commit/u
+  );
+  assert.equal(prState, "open");
+  assert.equal(branchExists, true);
+  branchCommit = record.integration_commit;
   loseStopSave = true;
   await assert.rejects(
     client.integrate({ ...input, reviewStop: true }),

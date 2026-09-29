@@ -634,7 +634,7 @@ head, base, checks, rules, and branch before a merge; a still-blocked PR stays
 paused. `--resume RUN_ID --review-stop` explicitly closes the verified owned
 PR and follows the normal release recovery path. A moved target branch blocks
 ordinary resume but not explicit cleanup of the still-verified owned PR. An
-uncertain identity or moved owned PR branch keeps the lock for manual
+uncertain identity or moved Coordinator-owned PR branch keeps the lock for manual
 investigation. Neither command ignores a
 review thread, auto-resumes, or imposes a pause timeout. Other releases in the
 same profile wait; the separate sandbox and real journals do not block each
