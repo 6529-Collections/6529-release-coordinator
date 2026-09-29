@@ -280,13 +280,12 @@ returning HTTP 200 and a passing exact run. The dated full Coordinator sandbox
 release preceded the opt-in; a direct probe does not promote it into
 real-product proof.
 
-PRs #218 and #219 are merged. Next, perform one deliberately filtered real
-acceptance with explicitly
-chosen Issue numbers and the verified submitter actor. Start with a small
-no-database-change staging ticket, verify every saved product workflow/E2E
-identity, and only then expand to a production ticket. Record live evidence
-separately; the offline suite is not proof that a product environment changed
-correctly.
+PRs #218 and #219 are merged. Their original next step was a deliberately
+filtered real acceptance, starting with a small no-database-change staging
+ticket before attempting production. That plan is historical: staging ticket
+#239 completed, and later production-target attempts are recorded above. The
+current #266 locked-run recovery step is at the top of this page. Keep each
+live result separate from offline checks and trial-PR evidence.
 
 Package publication and product adoption are complete. The GitHub-only sandbox
 build/E2E stage, staging restoration, solo database-changing release and
