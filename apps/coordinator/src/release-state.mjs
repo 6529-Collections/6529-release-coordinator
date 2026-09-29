@@ -306,6 +306,8 @@ export function validateReleaseExecution(execution, batch) {
         record?.state === "completed" &&
         record.result?.status === "stopped" &&
         record.result.reason === stop.reason &&
+        Number.isSafeInteger(record.workflow_run_id) &&
+        record.workflow_run_id > 0 &&
         record.result.workflow?.id === record.workflow_run_id &&
         record.result.workflow?.url ===
           `https://github.com/${repositoryName}/actions/runs/${record.workflow_run_id}` &&

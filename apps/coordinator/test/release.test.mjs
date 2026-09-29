@@ -446,6 +446,13 @@ test("manual stale-E2E stop preserves the passing workflow without claiming prod
   const missing = structuredClone(stopped);
   delete missing.manual_stop;
   assert.throws(() => validateReleaseExecution(missing, batch));
+  const invalidRun = structuredClone(stopped);
+  invalidRun.operations["staging:e2e"].workflow_run_id = 0;
+  invalidRun.operations["staging:e2e"].result.workflow.id = 0;
+  invalidRun.operations["staging:e2e"].result.workflow.url =
+    `https://github.com/${repositoryName}/actions/runs/0`;
+  invalidRun.manual_stop.e2e_workflow_run_id = 0;
+  assert.throws(() => validateReleaseExecution(invalidRun, batch));
   assert.throws(() =>
     stopStaleE2e(batch, {
       ...stopOptions,
