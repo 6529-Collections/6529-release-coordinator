@@ -22,7 +22,6 @@ const runFile = promisify(execFile);
 const expected = Object.freeze({
   head: "a068b3f203d8d2d02f66ff52dc078a6feafa96a8",
   run: "d0194c08-e739-4d95-aab3-ff7ec45539e4",
-  token: "8b8c5796-67ae-4339-99c7-0a70de1fbdaf",
   fingerprint:
     "e984346d2a546a7188f0d84c7868827f70213b17dab6cc7d7c3c9e674d9fb314",
   request: "dc1e7905-b2c9-4d32-8d0b-54784dc7bd75",
@@ -54,7 +53,6 @@ async function preflight() {
     "Journal head moved; inspect it before any write."
   );
   assert.equal(saved.state.lock?.run_id, expected.run);
-  assert.equal(saved.state.lock?.token, expected.token);
   assert.deepEqual(saved.state.lock?.ticket_numbers, [253]);
   assert.deepEqual(saved.state.lock?.scope?.selection, {
     mode: "filtered",
@@ -184,6 +182,7 @@ async function preflight() {
     entry,
     get,
     observed,
+    e2e,
     api: client.request
   };
 }
@@ -203,11 +202,16 @@ async function main() {
     );
     return;
   }
-  const { journal, actor, entry, issue, get, observed, api } = context;
+  const { journal, actor, entry, issue, get, observed, e2e, api } = context;
   const { state, run } = await journal.acquire(actor, expected.run);
   const batch = state.batches[expected.fingerprint];
   const at = new Date().toISOString();
-  const execution = stopStaleE2e(batch, { actor, observed, at });
+  const execution = stopStaleE2e(batch, {
+    actor,
+    observed,
+    at,
+    workflow: e2e
+  });
   await journal.save(
     state,
     run,

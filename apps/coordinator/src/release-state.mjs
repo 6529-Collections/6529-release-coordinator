@@ -1,4 +1,5 @@
 import { validateProfileReleaseOperation } from "./profile-release-contract.mjs";
+import { selectProfile } from "./profiles.mjs";
 import {
   productWorkflowReleaseAdapter,
   verifySavedReleaseReport
@@ -291,6 +292,8 @@ export function validateReleaseExecution(execution, batch) {
     const stop = execution.manual_stop;
     const step = execution.plan.steps[execution.step_index];
     const record = execution.operations["staging:e2e"];
+    const repositoryName = selectProfile(execution.plan.profile).repositories
+      .frontend.full_name;
     serviceAssert(
       execution.status === "needs-human" &&
         ["real", "sandbox"].includes(execution.plan.profile) &&
@@ -304,6 +307,8 @@ export function validateReleaseExecution(execution, batch) {
         record.result?.status === "stopped" &&
         record.result.reason === stop.reason &&
         record.result.workflow?.id === record.workflow_run_id &&
+        record.result.workflow?.url ===
+          `https://github.com/${repositoryName}/actions/runs/${record.workflow_run_id}` &&
         record.result.workflow?.conclusion === "success" &&
         record.workflow_run_id === stop.e2e_workflow_run_id &&
         ["backend", "frontend"].every(

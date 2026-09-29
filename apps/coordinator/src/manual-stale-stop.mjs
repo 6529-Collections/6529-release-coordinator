@@ -1,13 +1,17 @@
 import { validateReleaseExecution } from "./release-state.mjs";
+import { selectProfile } from "./profiles.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 
 // This records the failed acceptance of a successful E2E workflow. It does not
 // relabel the workflow as failed, retest, restore, or touch a product branch.
-export function stopStaleE2e(batch, { actor, observed, at }) {
+export function stopStaleE2e(batch, { actor, observed, at, workflow }) {
   const execution = structuredClone(batch.execution);
   const step = execution?.plan?.steps?.[execution.step_index];
   const record = execution?.operations?.["staging:e2e"];
+  const repositoryName = selectProfile(execution?.plan?.profile).repositories
+    .frontend.full_name;
+  const workflowUrl = `https://github.com/${repositoryName}/actions/runs/${record?.workflow_run_id}`;
   if (
     !["real", "sandbox"].includes(execution?.plan?.profile) ||
     execution.status !== "running" ||
@@ -16,6 +20,10 @@ export function stopStaleE2e(batch, { actor, observed, at }) {
     record.result !== null ||
     !Number.isSafeInteger(record.workflow_run_id) ||
     record.workflow_run_id < 1 ||
+    workflow?.id !== record.workflow_run_id ||
+    workflow?.status !== "completed" ||
+    workflow?.conclusion !== "success" ||
+    workflow?.html_url !== workflowUrl ||
     !actor?.id ||
     !actor?.login ||
     !Number.isFinite(Date.parse(at)) ||
@@ -44,9 +52,9 @@ export function stopStaleE2e(batch, { actor, observed, at }) {
     status: "stopped",
     reason: "release-stale",
     workflow: {
-      id: record.workflow_run_id,
-      url: `https://github.com/6529-Collections/6529seize-frontend/actions/runs/${record.workflow_run_id}`,
-      conclusion: "success"
+      id: workflow.id,
+      url: workflow.html_url,
+      conclusion: workflow.conclusion
     }
   };
   execution.status = "needs-human";

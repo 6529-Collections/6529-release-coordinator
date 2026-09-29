@@ -378,20 +378,42 @@ test("manual stale-E2E stop preserves the passing workflow without claiming prod
   delete execution.staging_drift;
   execution.status = "running";
   const at = "2026-09-29T06:00:00.000Z";
-  const stopped = stopStaleE2e(batch, {
+  const repositoryName = sandboxProfile.repositories.frontend.full_name;
+  const workflow = {
+    id: record.workflow_run_id,
+    status: "completed",
+    conclusion: "success",
+    html_url: `https://github.com/${repositoryName}/actions/runs/${record.workflow_run_id}`
+  };
+  const stopOptions = {
     actor: { id: "456", login: "tester" },
     observed: {
       backend: "c".repeat(40),
       frontend: execution.versions.staging.frontend
     },
+    workflow,
     at
-  });
+  };
+  for (const invalidWorkflow of [
+    { ...workflow, id: workflow.id + 1 },
+    { ...workflow, conclusion: "failure" },
+    { ...workflow, html_url: `${workflow.html_url}/other` }
+  ]) {
+    assert.throws(() =>
+      stopStaleE2e(batch, { ...stopOptions, workflow: invalidWorkflow })
+    );
+  }
+  const stopped = stopStaleE2e(batch, stopOptions);
   assert.equal(stopped.status, "needs-human");
   assert.equal(record.state, "running");
   assert.equal(stopped.operations["staging:e2e"].result.status, "stopped");
   assert.equal(
     stopped.operations["staging:e2e"].result.workflow.conclusion,
     "success"
+  );
+  assert.equal(
+    stopped.operations["staging:e2e"].result.workflow.url,
+    workflow.html_url
   );
   assert.equal(releaseTicketResult(batch, 1).code, "release-stopped");
   assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
