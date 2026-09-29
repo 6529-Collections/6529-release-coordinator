@@ -112,11 +112,11 @@ export const realProductWorkflowRuntime = Object.freeze({
       integrationChecks: Object.freeze(["Build backend and API"]),
       stagingIntegrationChecks: Object.freeze(["DCO", "security/snyk (6529)"]),
       files: Object.freeze({
-        // The two refs currently share a blob; keep independent pins so a
-        // future change to either branch still fails its own identity check.
+        // Staging and production have different reviewed workflow blobs; keep
+        // independent pins so a change to either branch fails its own check.
         ".github/workflows/deploy.yml": Object.freeze({
-          staging: "4738363b457f5af9a2497b2854d1e5f78c241222",
-          prod: "4738363b457f5af9a2497b2854d1e5f78c241222"
+          staging: "55f2db38999869b7b231c476f849ae330abef1da",
+          prod: "eff687cc84a14df7f15134af1068039c5b875bda"
         }),
         ".github/workflows/deploy-operational-monitoring.yml":
           "2621e6705ab9fa70b006e7d8345762c95685cf73"
