@@ -65,6 +65,21 @@ export function integrationPullPasses(observed, checked) {
   );
 }
 
+export function integrationPullWaitsForReview(observed, checked) {
+  return (
+    observed.state === "OPEN" &&
+    observed.isDraft === false &&
+    observed.mergeable === "MERGEABLE" &&
+    observed.mergeStateStatus === "BLOCKED" &&
+    checked.length > 0 &&
+    checked.every((item) =>
+      item.__typename === "CheckRun"
+        ? item.status === "COMPLETED" && item.conclusion === "SUCCESS"
+        : item.__typename === "StatusContext" && item.state === "SUCCESS"
+    )
+  );
+}
+
 export function createReleaseGitHub({
   profile,
   runtime = sandboxReleaseRuntime,
@@ -302,7 +317,12 @@ export function createReleaseGitHub({
       );
       if (!pending) {
         const passed = integrationPullPasses(observed, gate.checks);
-        return { passed, observed };
+        return {
+          passed,
+          waitingReview:
+            !passed && integrationPullWaitsForReview(observed, gate.checks),
+          observed
+        };
       }
       if (poll + 1 < polls) await wait(pollMs, { signal });
     }
@@ -339,12 +359,15 @@ export function createReleaseGitHub({
     );
     record.cleanup = "removed";
     await save();
+    const stopped = record.cleanup_reason === "review-stop";
     return {
       status: "failed",
-      kind: "checks",
+      kind: stopped ? "review-stop" : "checks",
       commit: null,
       url: record.url,
-      message: "The sandbox integration PR checks failed."
+      message: stopped
+        ? "The paused integration PR was closed at the operator's request."
+        : `The ${environmentLabel} integration PR checks failed.`
     };
   }
   const runTitle = (id) => `Sandbox release ${id}`;
@@ -665,7 +688,14 @@ export function createReleaseGitHub({
         versions
       };
     },
-    async integrate({ record, candidate, actor, expectedBase, save }) {
+    async integrate({
+      record,
+      candidate,
+      actor,
+      expectedBase,
+      save,
+      reviewStop = false
+    }) {
       const role = record.step.role;
       serviceAssert(
         record.step.kind === "integrate" &&
@@ -680,6 +710,8 @@ export function createReleaseGitHub({
       );
       const targetBranch = target(runtime, record.step.environment);
       const startingState = record.state;
+      const reviewStopRequested =
+        reviewStop || record.cleanup_reason === "review-stop";
       if (!candidate.changed) {
         const current = await ref(role, targetBranch);
         serviceAssert(
@@ -715,7 +747,10 @@ export function createReleaseGitHub({
           `${sandbox ? "Sandbox" : "Product"} ${record.step.environment} changed after this release captured its starting version.`
         );
         await save();
-      } else if (!["cleaning", "merging", "merged"].includes(record.state)) {
+      } else if (
+        !reviewStopRequested &&
+        !["cleaning", "merging", "merged"].includes(record.state)
+      ) {
         serviceAssert(
           (await ref(role, targetBranch)).data.object.sha === record.base,
           "release-stale",
@@ -858,11 +893,35 @@ export function createReleaseGitHub({
         await save();
       }
       if (pr.merged) {
+        serviceAssert(
+          !reviewStopRequested,
+          "release-review",
+          "The paused integration PR already merged; inspect the release manually."
+        );
         verifyPull(pr, record, candidate, { allowMerged: true });
       } else {
         verifyPull(pr, record, candidate);
+        if (reviewStopRequested) {
+          serviceAssert(
+            record.state === "checking" && positive(record.number),
+            "release-review",
+            "Only a saved, paused integration PR can be stopped."
+          );
+          record.cleanup_reason = "review-stop";
+          record.state = "cleaning";
+          await save();
+          return cleanupFailedPull(role, record, candidate, save);
+        }
         const checked = await waitForPull(role, record, candidate);
         if (!checked.passed) {
+          if (checked.waitingReview)
+            return {
+              status: "waiting-review",
+              kind: "review",
+              url: record.url,
+              message:
+                "GitHub blocks this integration PR after its required checks passed. Inspect its reviews and merge rules."
+            };
           record.state = "cleaning";
           await save();
           return cleanupFailedPull(role, record, candidate, save);
@@ -871,6 +930,14 @@ export function createReleaseGitHub({
           await waitForQuietWorkflow(role, record, save, "merge");
         const finalGate = await waitForPull(role, record, candidate);
         if (!finalGate.passed) {
+          if (finalGate.waitingReview)
+            return {
+              status: "waiting-review",
+              kind: "review",
+              url: record.url,
+              message:
+                "GitHub blocks this integration PR after its required checks passed. Inspect its reviews and merge rules."
+            };
           record.state = "cleaning";
           await save();
           return cleanupFailedPull(role, record, candidate, save);

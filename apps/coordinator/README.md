@@ -641,6 +641,15 @@ An active saved release is different: resume verifies and reuses its completed
 matching operations so a lost response or ticket-write failure does not deploy
 the same step twice. A run stopped while waiting for someone else's workflow run
 has dispatched nothing; resume simply waits again.
+When an owned integration PR has green required checks but GitHub still blocks
+its merge, the ticket links the PR with `release-review-pending`; the PR stays
+open and the saved run keeps the lock. Handle the review or rule on GitHub,
+then use ordinary `--resume RUN_ID`. It rechecks the exact PR and either moves
+on or remains paused. To abandon this paused PR deliberately, use
+`--resume RUN_ID --review-stop`; the Coordinator verifies and closes its own PR,
+then applies its normal recovery rules. A database-changing release is not
+automatically restored. Do not use either form while the previous process is
+still running.
 If the Coordinator records that backend staging moved during a frontend-only
 E2E or after E2E passed but before the first production action, it updates the
 ticket with `release-staging-changed` and retains the lock.

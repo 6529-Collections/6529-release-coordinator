@@ -22,6 +22,7 @@ RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=filtered npm 
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --issue NUMBER --actor LOGIN --close-test [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --staging-change retest|restore [--json]
+RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --review-stop [--json]
 
 Writes managed labels, titles, submitter assignment, one status comment, justified
 Issue closures, and the selected inbox's codex/inbox-state journal branch. Runs once.
@@ -46,6 +47,9 @@ staging E2E passes. In real profile these are real product changes and deploymen
                   new backend/frontend pair, or restore only this release's
                   frontend staging change. Requires --resume and an exact,
                   unchanged no-database-change frontend-only reconciliation.
+  --review-stop  For a run awaiting integration PR review only: explicitly
+                 close its owned PR, then apply ordinary release recovery.
+                 Requires --resume; never discards an uncertain PR or branch.
   --json         Print structured results; live progress goes to stderr.
                  Per-run logs are saved under ~/.6529-release-coordinator/logs/.
   --help         Show this help without contacting GitHub.
@@ -101,6 +105,7 @@ export async function runInboxRunCli(
         "--close-test",
         "--resume",
         "--staging-change",
+        "--review-stop",
         "--json"
       ].includes(key)
     ) {
@@ -149,11 +154,13 @@ export async function runInboxRunCli(
         stderr(help);
         return 2;
       }
-    } else if (key === "--close-test") options.closeTest = true;
+    } else if (key === "--review-stop") options.reviewStop = true;
+    else if (key === "--close-test") options.closeTest = true;
   }
   if (
     (options.closeTest && options.issueNumbers.length !== 1) ||
     (options.stagingChange && !options.resume) ||
+    (options.reviewStop && (!options.resume || options.stagingChange)) ||
     (options.resume &&
       (options.issueNumbers.length || options.actorLogin || options.closeTest))
   ) {

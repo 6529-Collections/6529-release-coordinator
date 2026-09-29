@@ -895,6 +895,18 @@ merge. The real frontend profile now pins its existing `main` ruleset and
 required check names; the real backend remains unpinned. No real-product
 bypass, merge, or deployment has been executed.
 
+### Paused integration review mirror
+
+The [September 29 sandbox acceptance](./testing/review-pause-2026-09-29.md)
+used the existing protected test-main review and conversation rules with an
+unresolved comment on the Coordinator's exact integration PR. Green required
+checks plus GitHub's `BLOCKED` merge state kept that PR and its branch open,
+published a waiting ticket reason, and retained the journal lock. Resuming
+without resolving the thread remained paused. Resolving it and explicitly
+resuming the same run merged the same PR, then passed fake production deploy
+and matching E2E. The explicit-stop cleanup/recovery path has offline tests
+only; this test did not exercise a real product repository.
+
 The first sandbox sequence passed live on September 11. One production-target
 ticket moved through protected fake staging, matching E2E, protected fake
 production, and matching E2E. The Coordinator recorded all 14 exact operations,

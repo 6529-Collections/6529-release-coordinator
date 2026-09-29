@@ -406,6 +406,15 @@ destinations and evidence. If another release changed those inputs, test the new
 combination. A production-intended batch keeps its lane through production or
 recovery, including while waiting for any required approval.
 
+An exact integration PR with passing required checks but a GitHub `BLOCKED`
+merge state waits in the release lane rather than being treated as a failed
+check. Its PR and branch remain available for a person to handle the review or
+rule. Explicit resume revalidates and retries the same step; explicit stop
+verifies and closes the owned PR before applying the existing recovery policy.
+The Coordinator never silently resolves review threads or bypasses a rule for
+this wait. An ambiguous block is reported as such, not claimed to be solely a
+missing review.
+
 One lane serializes this Coordinator; it cannot stop unrelated humans or Actions.
 Check current refs and conflicting runs before mutations and match deployed
 versions to E2E. Shared staging may contain other changes: inspect and record its

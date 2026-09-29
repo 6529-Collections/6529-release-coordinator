@@ -312,9 +312,11 @@ export const bindRunLog = (runId, resumed) =>
 export const logOutcome = (status) =>
   ["pass", "passed", "removed"].includes(status)
     ? "succeeded"
-    : ["blocked", "failed", "stale"].includes(status)
-      ? "failed"
-      : "unknown";
+    : status === "waiting-review"
+      ? "waiting"
+      : ["blocked", "failed", "stale"].includes(status)
+        ? "failed"
+        : "unknown";
 
 export async function loggedStep(event, operation, summarize = () => ({})) {
   if (!context.getStore()) return operation();

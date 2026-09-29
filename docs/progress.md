@@ -1,6 +1,24 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-29** for real Issue #266's runtime-pin stop.
+Last reviewed: **2026-09-29** for local review-pause implementation and real
+Issue #266's runtime-pin stop.
+The local `codex/review-pause` branch adds an explicit `awaiting-review` state
+when an exact integration PR has green required checks but GitHub still blocks
+its merge. It keeps that PR, its branch, and the journal lock; normal resume
+rechecks the same PR, while `--review-stop` closes the verified owned PR and
+uses existing recovery rules. Focused pause/retry/stop tests and the full local
+`npm run check` passed (662 passing tests, three optional Docker skips). The
+stop choice is saved before cleanup, so an interrupted stop cannot become a
+merge on ordinary resume; that post-acceptance hardening has offline tests
+only. This
+is local implementation, not a merged Coordinator PR or real-product proof.
+The [September 29 sandbox pause/resume record](./testing/review-pause-2026-09-29.md)
+shows a verified ticket pause on an unresolved review thread, retained lock and
+open PR, a still-blocked resume, and a second resume that merged the same PR
+after resolution. Fake production deploy and matching E2E passed; ticket #54
+closed as completed and the sandbox lock was released. The explicit stop path
+has offline tests only. This remains unmerged local Coordinator source and
+does not prove the behavior on real product repositories.
 Real [Issue #266](https://github.com/6529-Collections/6529-release-coordinator/issues/266)
 passed exact frontend PR rehearsal and the temporary combined PR checks, then
 stopped before release authorization because the pinned backend `deploy.yml`

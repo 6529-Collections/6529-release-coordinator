@@ -1071,6 +1071,114 @@ test("one release runs backend integration/services, frontend, then matching E2E
   assert.ok(saves.length > calls.length);
 });
 
+async function pausedReviewFixture() {
+  const batch = await selectedBatch();
+  const calls = [];
+  const releaseClient = client(calls);
+  const integrate = releaseClient.integrate;
+  releaseClient.integrate = async (args) => {
+    if (args.record.step.id !== "staging:integrate:backend")
+      return integrate(args);
+    calls.push(`${args.record.step.id}:${args.reviewStop ? "stop" : "review"}`);
+    if (args.reviewStop || args.record.cleanup_reason === "review-stop") {
+      args.record.cleanup = "removed";
+      return {
+        status: "failed",
+        kind: "review-stop",
+        url: args.record.url
+      };
+    }
+    if (args.record.number) return integrate(args);
+    args.record.base = args.expectedBase;
+    args.record.branch = `codex/release-${args.record.release_id}-staging-backend`;
+    args.record.target_branch = "1a-staging";
+    args.record.integration_version = 1;
+    args.record.integration_input = integrationCommitInput(
+      args.record,
+      args.candidate
+    );
+    args.record.integration_commit = serviceHash(
+      args.record.integration_input
+    ).slice(0, 40);
+    args.record.number = 42;
+    args.record.url =
+      "https://github.com/6529-Collections/release-coordinator-test-backend/pull/42";
+    args.record.state = "checking";
+    return { status: "waiting-review", kind: "review", url: args.record.url };
+  };
+  const options = {
+    batch,
+    client: releaseClient,
+    guard: async () => {},
+    save: async () => {}
+  };
+  const paused = await executeRelease(options);
+  return { batch, calls, options, paused };
+}
+
+test("a blocked integration PR pauses, keeps its identity, and resumes only the saved step", async () => {
+  const { batch, calls, options, paused } = await pausedReviewFixture();
+  assert.equal(paused.status, "awaiting-review");
+  assert.equal(paused.step_index, 0);
+  assert.equal(paused.operations["staging:integrate:backend"].result, null);
+  assert.equal(paused.review_pause.pr_number, 42);
+  assert.equal(releaseTicketResult(batch, 1).code, "release-review-pending");
+  assert.doesNotThrow(() => validateReleaseExecution(paused, batch));
+  const completed = await executeRelease(options);
+  assert.equal(completed.status, "completed");
+  assert.equal(completed.review_pause, undefined);
+  assert.equal(calls.filter((call) => call.endsWith(":review")).length, 2);
+  assert.doesNotThrow(() => validateReleaseExecution(completed, batch));
+});
+
+test("only an explicitly stopped paused PR follows release recovery", async () => {
+  const { batch, calls, options, paused } = await pausedReviewFixture();
+  assert.equal(paused.status, "awaiting-review");
+  const stopped = await executeRelease({ ...options, reviewStop: true });
+  assert.equal(stopped.status, "needs-human");
+  assert.equal(
+    stopped.operations["staging:integrate:backend"].result.kind,
+    "review-stop"
+  );
+  assert.equal(calls.filter((call) => call.endsWith(":stop")).length, 1);
+  assert.equal(
+    calls.some((call) => call.startsWith("prod:")),
+    false
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(stopped, batch));
+  await assert.rejects(
+    executeRelease({ ...options, reviewStop: true }),
+    /requires a saved release awaiting review/u
+  );
+});
+
+test("an interrupted saved review stop cannot turn into a merge on ordinary resume", async () => {
+  const { batch, options } = await pausedReviewFixture();
+  await assert.rejects(
+    executeRelease({
+      ...options,
+      reviewStop: true,
+      save: async (message) => {
+        if (message === "stop paused integration PR")
+          throw new Error("lost stop save response");
+      }
+    }),
+    /lost stop save response/u
+  );
+  assert.equal(batch.execution.status, "running");
+  assert.equal(
+    batch.execution.operations["staging:integrate:backend"].cleanup_reason,
+    "review-stop"
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+  const stopped = await executeRelease(options);
+  assert.equal(stopped.status, "needs-human");
+  assert.equal(
+    stopped.operations["staging:integrate:backend"].result.kind,
+    "review-stop"
+  );
+});
+
 test("failed staging E2E restores staging and stops before prod", async () => {
   const batch = await selectedBatch();
   for (const input of batch.inputs) input.target = "production";
