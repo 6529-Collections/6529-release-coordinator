@@ -2219,19 +2219,23 @@ for (const target of [
           assert.ok(pin, `Unexpected runtime file: ${file[1]}`);
           const selected = role === target.role && file[1] === target.path;
           if (selected) seen.push(environment);
+          let observed = selected
+            ? target.pins[environment]
+            : typeof pin === "string"
+              ? pin
+              : pin[environment];
+          if (selected && (drift === environment || drift === "both")) {
+            const otherEnvironment =
+              environment === "staging" ? "prod" : "staging";
+            observed =
+              target.pins.staging === target.pins.prod
+                ? "0".repeat(40)
+                : target.pins[otherEnvironment];
+          }
           return apiResponse("200 OK", {
             type: "file",
             path: file[1],
-            sha:
-              (drift === environment || drift === "both") && selected
-                ? target.pins.staging === target.pins.prod
-                  ? "0".repeat(40)
-                  : target.pins[environment === "staging" ? "prod" : "staging"]
-                : selected
-                  ? target.pins[environment]
-                  : typeof pin === "string"
-                    ? pin
-                    : pin[environment]
+            sha: observed
           });
         }
       });

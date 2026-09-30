@@ -18,7 +18,7 @@ same-run resume are separate evidence; see the
 The September 29 observations below predate merged Coordinator PR #270 and
 Issue #266's manually delivered disposition; their original run state is historical.
 
-### September 29 observations
+## September 29 observations
 
 The local `codex/review-pause` branch adds an explicit `awaiting-review` state
 when an exact integration PR has green required checks but GitHub still blocks
