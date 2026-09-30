@@ -111,6 +111,7 @@ function directHarness(
     baseTree = "a".repeat(40),
     mutateManifest,
     mutateRun,
+    mutateRuntimeFile,
     profile = sandboxProfile
   } = {}
 ) {
@@ -141,11 +142,11 @@ function directHarness(
     const method = args[args.indexOf("--method") + 1];
     const endpoint = args[args.indexOf("--method") + 2];
     calls.push({ method, endpoint, body });
-    if (endpoint.includes("/contents/"))
-      return apiResponse(
-        "200 OK",
-        runtimeFile(endpoint, runtime, operation.environment)
-      );
+    if (endpoint.includes("/contents/")) {
+      const observed = runtimeFile(endpoint, runtime, operation.environment);
+      mutateRuntimeFile?.(observed);
+      return apiResponse("200 OK", observed);
+    }
     if (endpoint.includes("/git/ref/heads/")) {
       const role = repositoryRole(endpoint);
       return apiResponse("200 OK", { object: { sha: commits[role] } });
@@ -948,6 +949,101 @@ test("a changed staging frontend adopts its automatic push deployment without di
     readsBeforeResume
   );
 });
+
+for (const environment of ["staging", "prod"]) {
+  test(`real frontend ${environment} deploy verifies its own runtime pins before dispatch`, async () => {
+    const staging = environment === "staging";
+    const operation = makeProfileReleaseOperation({
+      profile: "real",
+      release_id: "55555555-5555-4555-8555-555555555555",
+      operation_id: "66666666-6666-4666-8666-666666666666",
+      operation: "deploy",
+      environment,
+      role: "frontend",
+      unit: "frontend",
+      backend_commit: commits.backend,
+      frontend_commit: commits.frontend
+    });
+    const descriptor = {
+      kind: "frontend",
+      role: "frontend",
+      buildRole: "frontend",
+      environment,
+      sourceCommit: commits.frontend,
+      ref: staging ? "1a-staging" : "main",
+      event: "workflow_dispatch",
+      workflow: staging ? "deploy-staging.yml" : "build-upload-deploy-prod.yml",
+      workflowId:
+        savedRuntime.frontend.workflows[
+          staging ? "stagingDeploy" : "prodDeploy"
+        ].workflow_id,
+      title: staging ? null : `Production deploy ${commits.frontend}`,
+      unit: null,
+      jobs: staging
+        ? ["Build exact staging artifact", "Deploy exact staging artifact"]
+        : [
+            "Verify expected source commit",
+            "Build exact production artifact / Build exact production artifact",
+            "Resolve production artifact metadata / Resolve uploaded production artifact",
+            "Verify exact production artifact / Verify exact production artifact",
+            "Deploy verified production artifact"
+          ]
+    };
+    const run = (harness) =>
+      harness.client.run({
+        record: harness.record,
+        actor,
+        runtime: savedRuntime,
+        operations: {},
+        steps: [harness.record.step],
+        save: async () => {}
+      });
+    const accepted = directHarness(descriptor, operation, {
+      profile: realProfile,
+      returnRunDetails: true
+    });
+    assert.equal((await run(accepted)).status, "passed");
+    const dispatches = accepted.calls.filter(
+      ({ method, endpoint }) =>
+        method === "POST" && endpoint.endsWith("/dispatches")
+    );
+    assert.equal(dispatches.length, 1);
+    assert.equal(dispatches[0].body.ref, descriptor.ref);
+    if (!staging)
+      assert.deepEqual(dispatches[0].body.inputs, {
+        expected_source_sha: commits.frontend,
+        release_note_opt_out: false
+      });
+    assert.ok(
+      accepted.calls.some(({ endpoint }) =>
+        endpoint.includes(
+          `/contents/.github/workflows/deploy-staging.yml?ref=${commits.frontend}`
+        )
+      )
+    );
+
+    const rejected = directHarness(descriptor, operation, {
+      profile: realProfile,
+      returnRunDetails: true,
+      mutateRuntimeFile: (file) => {
+        if (file.path === ".github/workflows/deploy-staging.yml") {
+          file.sha =
+            realProductWorkflowRuntime.repositories.frontend.files[file.path][
+              staging ? "prod" : "staging"
+            ];
+        }
+      }
+    });
+    await assert.rejects(
+      run(rejected),
+      /pinned product workflow or evidence file changed/u
+    );
+    assert.equal(
+      rejected.calls.some(({ method }) => method !== "GET"),
+      false
+    );
+  });
+}
 
 test("a tree-identical staging merge dispatches and verifies a fresh real frontend deploy", async () => {
   const operation = makeProfileReleaseOperation({

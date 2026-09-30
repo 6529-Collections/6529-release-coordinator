@@ -1,7 +1,25 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-29** for local review-pause implementation and real
-Issue #266's runtime-pin stop.
+Last reviewed: **2026-09-30** for real Issue #275's frontend staging runtime-pin
+stop and the narrow Coordinator pin refresh.
+
+Real [Issue #275](https://github.com/6529-Collections/6529-release-coordinator/issues/275)
+passed exact frontend PR rehearsal and all 20 temporary candidate checks, then
+stopped before any release merge or deployment because frontend staging added
+`NEXT_PUBLIC_FEATURE_MULTI_COMPETITION: "true"` to its deployment workflow.
+The local refresh approves that exact staging blob independently while retaining
+the existing `main` blob. It leaves product code and workflow steps unchanged;
+runtime verification remains mandatory. Full local checks passed 665 tests with
+three optional Docker skips. The separate required npm audit passed after updating
+ESLint's development-only `brace-expansion` lock entry to patched `5.0.12`.
+Tests, remote delivery and the authorized
+same-run resume are separate evidence; see the
+[September 30 run record](./testing/real-production-ticket-275-2026-09-30.md).
+The September 29 observations below predate merged Coordinator PR #270 and
+Issue #266's manually delivered disposition; their original run state is historical.
+
+## September 29 observations
+
 The local `codex/review-pause` branch adds an explicit `awaiting-review` state
 when an exact integration PR has green required checks but GitHub still blocks
 its merge. It keeps that PR, its branch, and the journal lock; normal resume

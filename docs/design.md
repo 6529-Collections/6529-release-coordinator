@@ -202,6 +202,15 @@ The real adapter uses the same release sequence with product repositories and
 pinned workflows. Its local tests do not prove product merge timing, builds,
 database behavior, deployments, or recovery in a live environment.
 
+Trusted product runtime files may have independently reviewed staging and
+production blob pins when the branches differ. A shared string pin still
+requires the same file on both branches. Refresh only the reviewed environment's
+pin after comparing the complete file; do not waive verification or change the
+product workflow to match the Coordinator. A stopped run retains its original
+ticket/actor scope and journal evidence. Resume rechecks current runtime files
+and release inputs; approving one environment does not approve future changes
+or a different file on the other branch.
+
 <a id="proposed-batch-testing-and-selection"></a>
 
 ## Batch testing and selection
