@@ -2141,84 +2141,111 @@ test("real profile and unpinned release runtime are refused", () => {
   );
 });
 
-test("real runtime checks a shared workflow pin against each backend branch", async () => {
-  const shared = "9".repeat(40);
-  const configured = {
-    ...realProductWorkflowRuntime,
-    repositories: {
-      ...realProductWorkflowRuntime.repositories,
-      backend: {
-        ...realProductWorkflowRuntime.repositories.backend,
-        files: {
-          ...realProductWorkflowRuntime.repositories.backend.files,
-          ".github/workflows/deploy.yml": { staging: shared, prod: shared }
+for (const target of [
+  {
+    name: "a shared backend workflow pin",
+    role: "backend",
+    path: ".github/workflows/deploy.yml",
+    pins: { staging: "9".repeat(40), prod: "9".repeat(40) },
+    override: true
+  },
+  {
+    name: "independently reviewed frontend staging workflow pins",
+    role: "frontend",
+    path: ".github/workflows/deploy-staging.yml",
+    pins: {
+      staging: "c573f80b55aa46b2bb96259dee07b98c231d30b7",
+      prod: "36d10cd5f855d1510c5f2c6ffced7baf86db3987"
+    },
+    override: false
+  }
+]) {
+  test(`real runtime checks ${target.name} against each branch`, async () => {
+    const configured = {
+      ...realProductWorkflowRuntime,
+      repositories: {
+        ...realProductWorkflowRuntime.repositories,
+        [target.role]: {
+          ...realProductWorkflowRuntime.repositories[target.role],
+          files: {
+            ...realProductWorkflowRuntime.repositories[target.role].files,
+            ...(target.override ? { [target.path]: target.pins } : {})
+          }
         }
       }
-    }
-  };
-  const versions = {
-    staging: { backend: "a".repeat(40), frontend: "b".repeat(40) },
-    prod: { backend: "c".repeat(40), frontend: "d".repeat(40) }
-  };
-  const seen = [];
-  const clientFor = (drift) =>
-    createReleaseGitHub({
-      profile: realProfile,
-      runtime: configured,
-      execute: async (args) => {
-        const endpoint = args[args.indexOf("--method") + 2];
-        if (endpoint === "user")
-          return apiResponse("200 OK", { id: 209783236, login: "simo6529" });
-        const role = endpoint.includes("6529seize-frontend")
-          ? "frontend"
-          : "backend";
-        const repository = realProfile.repositories[role];
-        const prefix = `repos/${repository.full_name}`;
-        if (endpoint === prefix)
-          return apiResponse("200 OK", {
-            id: repository.id,
-            full_name: repository.full_name,
-            private: false,
-            permissions: { push: true }
-          });
-        for (const [environment, branch] of Object.entries(configured.branches))
-          if (endpoint === `${prefix}/git/ref/heads/${branch}`)
+    };
+    assert.deepEqual(
+      configured.repositories[target.role].files[target.path],
+      target.pins
+    );
+    const versions = {
+      staging: { backend: "a".repeat(40), frontend: "b".repeat(40) },
+      prod: { backend: "c".repeat(40), frontend: "d".repeat(40) }
+    };
+    const seen = [];
+    const clientFor = (drift) =>
+      createReleaseGitHub({
+        profile: realProfile,
+        runtime: configured,
+        execute: async (args) => {
+          const endpoint = args[args.indexOf("--method") + 2];
+          if (endpoint === "user")
+            return apiResponse("200 OK", { id: 209783236, login: "simo6529" });
+          const role = endpoint.includes("6529seize-frontend")
+            ? "frontend"
+            : "backend";
+          const repository = realProfile.repositories[role];
+          const prefix = `repos/${repository.full_name}`;
+          if (endpoint === prefix)
             return apiResponse("200 OK", {
-              object: { sha: versions[environment][role] }
+              id: repository.id,
+              full_name: repository.full_name,
+              private: false,
+              permissions: { push: true }
             });
-        const file = endpoint.match(/\/contents\/(.+)\?ref=([a-f0-9]{40})$/u);
-        assert.ok(file, `Unexpected runtime request: ${endpoint}`);
-        const environment =
-          file[2] === versions.staging[role] ? "staging" : "prod";
-        assert.equal(file[2], versions[environment][role]);
-        const pin = configured.repositories[role].files[file[1]];
-        assert.ok(pin, `Unexpected runtime file: ${file[1]}`);
-        if (role === "backend" && file[1] === ".github/workflows/deploy.yml")
-          seen.push(environment);
-        return apiResponse("200 OK", {
-          type: "file",
-          path: file[1],
-          sha:
-            (drift === environment || drift === "both") &&
-            role === "backend" &&
-            file[1] === ".github/workflows/deploy.yml"
-              ? "0".repeat(40)
-              : typeof pin === "string"
-                ? pin
-                : pin[environment]
-        });
-      }
-    });
+          for (const [environment, branch] of Object.entries(
+            configured.branches
+          ))
+            if (endpoint === `${prefix}/git/ref/heads/${branch}`)
+              return apiResponse("200 OK", {
+                object: { sha: versions[environment][role] }
+              });
+          const file = endpoint.match(/\/contents\/(.+)\?ref=([a-f0-9]{40})$/u);
+          assert.ok(file, `Unexpected runtime request: ${endpoint}`);
+          const environment =
+            file[2] === versions.staging[role] ? "staging" : "prod";
+          assert.equal(file[2], versions[environment][role]);
+          const pin = configured.repositories[role].files[file[1]];
+          assert.ok(pin, `Unexpected runtime file: ${file[1]}`);
+          const selected = role === target.role && file[1] === target.path;
+          if (selected) seen.push(environment);
+          return apiResponse("200 OK", {
+            type: "file",
+            path: file[1],
+            sha:
+              (drift === environment || drift === "both") && selected
+                ? target.pins.staging === target.pins.prod
+                  ? "0".repeat(40)
+                  : target.pins[environment === "staging" ? "prod" : "staging"]
+                : selected
+                  ? target.pins[environment]
+                  : typeof pin === "string"
+                    ? pin
+                    : pin[environment]
+          });
+        }
+      });
 
-  assert.deepEqual((await clientFor(null).identity()).versions, versions);
-  assert.deepEqual(seen.sort(), ["prod", "staging"]);
-  await assert.rejects(
-    clientFor("staging").identity(),
-    /runtime file changed/u
-  );
-  await assert.rejects(clientFor("prod").identity(), /runtime file changed/u);
-  await assert.rejects(clientFor("both").identity(), /runtime file changed/u);
-});
+    assert.deepEqual((await clientFor(null).identity()).versions, versions);
+    assert.deepEqual(seen.sort(), ["prod", "staging"]);
+    await assert.rejects(
+      clientFor("staging").identity(),
+      /runtime file changed/u
+    );
+    await assert.rejects(clientFor("prod").identity(), /runtime file changed/u);
+    await assert.rejects(clientFor("both").identity(), /runtime file changed/u);
+  });
+}
 
 test("real integration rejects a changed live account before creating a commit", async () => {
   const calls = [];

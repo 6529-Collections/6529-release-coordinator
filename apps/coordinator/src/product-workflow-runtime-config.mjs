@@ -142,8 +142,12 @@ export const realProductWorkflowRuntime = Object.freeze({
       ]),
       stagingIntegrationChecks: Object.freeze(["DCO", "security/snyk (6529)"]),
       files: Object.freeze({
-        ".github/workflows/deploy-staging.yml":
-          "36d10cd5f855d1510c5f2c6ffced7baf86db3987",
+        // Staging enables multi-competition; main still has the older file.
+        // Approving staging must not silently approve a change on main.
+        ".github/workflows/deploy-staging.yml": Object.freeze({
+          staging: "c573f80b55aa46b2bb96259dee07b98c231d30b7",
+          prod: "36d10cd5f855d1510c5f2c6ffced7baf86db3987"
+        }),
         ".github/workflows/staging-e2e-dispatch.yml":
           "07c0f501372f013300e2be44d6724238df760c5f",
         ".github/workflows/staging-e2e.yml":
