@@ -49,6 +49,12 @@ the production file on staging, rejects substituting the staging file on
 production, and rejects both substitutions. The existing shared backend pin
 regression remains covered.
 
+The direct product-workflow adapter also has explicit staging and production
+frontend deployment regressions. Each accepts its reviewed runtime pair and
+normal branch/dispatch inputs, then rejects the other environment's staging
+workflow blob before any GitHub write. These tests cover the adapter's separate
+`verifyFiles` path, not only the shared identity verifier.
+
 ## Delivery and resume boundary
 
 The full local check passed 663 tests with three optional Docker skips. A
@@ -60,7 +66,10 @@ to patched `5.0.12` retains its dependency range, engine requirement and license
 no public CLI production dependency changes. A fresh script-disabled locked
 install and the full local check passed again (663 passing tests, three optional
 Docker skips); the same required npm audit now reports zero vulnerabilities.
-Remote PR delivery is separate and pending at this point. The user
+After the review-requested direct product-adapter regressions were added, the
+full local check passed 665 tests with three optional Docker skips and the audit
+again reported zero vulnerabilities. Remote PR delivery is separate and pending
+at this point. The user
 authorized the narrow fix, checks and continuation of #275. Resume must preserve
 the original run ID and filter, confirm the original process is stopped, and
 freshly verify runtime files, source PR and branch inputs. New drift must stop

@@ -9,7 +9,7 @@ stopped before any release merge or deployment because frontend staging added
 `NEXT_PUBLIC_FEATURE_MULTI_COMPETITION: "true"` to its deployment workflow.
 The local refresh approves that exact staging blob independently while retaining
 the existing `main` blob. It leaves product code and workflow steps unchanged;
-runtime verification remains mandatory. Full local checks passed 663 tests with
+runtime verification remains mandatory. Full local checks passed 665 tests with
 three optional Docker skips. The separate required npm audit passed after updating
 ESLint's development-only `brace-expansion` lock entry to patched `5.0.12`.
 Tests, remote delivery and the authorized
