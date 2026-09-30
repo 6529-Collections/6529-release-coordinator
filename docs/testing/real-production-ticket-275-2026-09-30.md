@@ -351,6 +351,7 @@ acceptance yet. It makes no extra real journal write in this task.
 
 At the time of live cancellation, source and documentation were local and
 uncommitted. The cancellation implementation and later history hardening are
-now prepared for PR review; no remote merge is claimed by this acceptance record.
+submitted in [PR #282](https://github.com/6529-Collections/6529-release-coordinator/pull/282).
+This acceptance record covers the live cleanup, not that PR's remote delivery.
 A replacement request, fresh test of the fixed source head and production delivery remain
 separate. No new release ticket was created by this cancellation.

@@ -670,6 +670,15 @@ Verified cancelled batches can be archived by the normal journal closeout,
 with the explicit `cancelled` disposition and their complete operation history.
 Unverified cleanup or ticket presentation prevents archival. See progress for
 the distinction between live cancellation and this archive path's offline proof.
+The integration operation reuses the existing `review-stop` cleanup reason and
+result contract. The parent execution's explicit `cancellation.mode: keep-current`
+and `status: cancelled` distinguish cancellation from ordinary stop/recovery.
+Likewise, `batch_status: passed` describes the earlier selected-combination checks,
+not a successful release: ticket status is `closed`, execution status is
+`cancelled`, history summary is `cancelled`, and `release_executed` is false.
+Exact before/after refs are required audit observations, not deployment proof.
+If their readback fails after PR cleanup, the saved cancellation retains its lock
+and ordinary resume re-verifies that same cleanup; it never promotes code.
 
 The [v0.1 run logs](./design.md#next-step-v01-run-logging) add local step history
 and live progress, separate from this journal. They explain started, verified and

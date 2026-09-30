@@ -62,16 +62,18 @@ archive normally at a later ordinary closeout; this addition has offline proof,
 not live archive acceptance yet. No replacement request or fresh release has
 started. The implementation, tests and evidence are in
 [PR #282](https://github.com/6529-Collections/6529-release-coordinator/pull/282),
-not yet merged or published. Review follow-up adds an explicit missing-operation
+with remote delivery tracked by that PR; no package publication is claimed.
+Review follow-up adds an explicit missing-operation
 guard, structured `release-state` errors for corrupt cancellation journals,
 and focused tests for incomplete cleanup, partial refs, missing cancellation
-fields, late-merge state and non-selected terminal ticket preservation.
+fields, late-merge state, non-selected terminal ticket preservation,
+post-cleanup observation failure/resume, missing saved execution, and preservation
+of cancelled (but not unfinished) evidence if the old batch later becomes stale.
 The independent closed-PR readback remains mandatory before branch deletion.
-Full local checks passed 684 tests with three optional Docker skips, and the
+Full local checks passed 686 tests with three optional Docker skips, and the
 locked dependency audit reported no vulnerabilities.
 These follow-up additions are offline-only; they were not used in the real cleanup.
-Next: finish GitHub checks and reviews before merging the Coordinator change,
-then use a fresh ticket
+After the Coordinator change is merged, use a fresh ticket
 and new matching evidence for the fixed frontend version.
 The September 29 observations below predate merged Coordinator PR #270 and
 Issue #266's manually delivered disposition; their original run state is historical.

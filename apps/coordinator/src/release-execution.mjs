@@ -38,6 +38,7 @@ export function releaseTicketResult(batch, number) {
   if (execution?.status === "cancelled")
     return {
       status: "closed",
+      // The selected combination passed rehearsal; its release was cancelled.
       batch_status: "passed",
       code: "release-cancelled",
       message: execution.message,

@@ -1253,6 +1253,12 @@ test("explicit cancellation preserves moved staging/main and closes, not complet
   assert.equal(cancelled.review_pause, undefined);
   assert.equal(releaseTicketResult(batch, 1).code, "release-cancelled");
   assert.equal(releaseTicketResult(batch, 1).status, "closed");
+  assert.equal(releaseTicketResult(batch, 1).batch_status, "passed");
+  assert.equal(cancelled.cancellation.mode, "keep-current");
+  const cleaned = cancelled.operations["prod:integrate:frontend"];
+  assert.equal(cleaned.cleanup_reason, "review-stop");
+  assert.equal(cleaned.result.status, "failed");
+  assert.equal(cleaned.result.kind, "review-stop");
   const laterStale = structuredClone(batch);
   laterStale.stop = { status: "stale" };
   assert.equal(releaseTicketResult(laterStale, 1).code, "release-cancelled");
@@ -1401,6 +1407,7 @@ test("cancelled batch projection preserves terminal decisions of non-selected in
     release: async () => assert.fail("A cancelled release cannot restart")
   });
   assert.equal(result.status, "cancelled");
+  assert.equal(result.release_executed, false);
   assert.equal(selected.decision.status, "closed");
   assert.ok(
     selected.decision.reasons.some(
@@ -1409,6 +1416,81 @@ test("cancelled batch projection preserves terminal decisions of non-selected in
   );
   assert.deepEqual(unselected.decision, original);
   assert.equal(releaseTicketResult(active, 2), null);
+});
+
+test("post-cleanup observation failure keeps cancellation resumable without promotion", async () => {
+  const { batch, calls, options } = await cancellableProductionFixture();
+  const cleanup = options.client.cancelIntegration;
+  options.client.cancelIntegration = async (args) => {
+    args.record.state = "cleaning";
+    await args.save();
+    const result = await cleanup(args);
+    await args.save();
+    return result;
+  };
+  const observe = options.client.environmentVersions;
+  let observations = 0;
+  options.client.environmentVersions = async (environment) => {
+    if (++observations === 3) throw new Error("lost post-cleanup ref read");
+    return observe(environment);
+  };
+  const record = batch.execution.operations["prod:integrate:frontend"];
+  await assert.rejects(
+    executeRelease({ ...options, cancelKeepCurrent: true }),
+    /lost post-cleanup ref read/u
+  );
+  assert.deepEqual(calls, ["cancel:owned-pr"]);
+  assert.equal(batch.execution.status, "cancelling");
+  assert.equal(batch.execution.completed_at, null);
+  assert.equal(
+    batch.execution.operations["prod:integrate:frontend"].cleanup,
+    "removed"
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+  const resumed = await executeRelease(options);
+  assert.equal(resumed.status, "cancelled");
+  assert.equal(resumed.operations["prod:integrate:frontend"].id, record.id);
+  assert.equal(resumed.operations["prod:integrate:frontend"].number, 42);
+  assert.deepEqual(calls, ["cancel:owned-pr", "cancel:owned-pr"]);
+  assert.doesNotThrow(() => validateReleaseExecution(resumed, batch));
+});
+
+test("keep-current cancellation without saved release execution refuses before product or ticket work", async () => {
+  const h = harness(1);
+  h.options.release = async () => {
+    throw new Error("interrupted before release execution");
+  };
+  await assert.rejects(
+    processInbox(h.options),
+    /interrupted before release execution/u
+  );
+  const original = structuredClone(h.f.state());
+  const issues = structuredClone(h.f.issues);
+  const eventCount = h.events.length;
+  assert.ok(original.lock.run_id);
+  const saved = original.batches[original.lock.batch_fingerprint];
+  assert.equal(saved.execution, undefined);
+  await assert.rejects(
+    processInbox({
+      ...h.options,
+      resume: original.lock.run_id,
+      cancelKeepCurrent: true
+    }),
+    (error) =>
+      error instanceof ServiceError &&
+      error.code === "release-cancel" &&
+      error.message === "No saved release to cancel."
+  );
+  // Resuming renews the journal lease before checking the requested action.
+  // That normal lease write must not clear ownership or alter tickets/batches.
+  const current = h.f.state();
+  assert.equal(current.lock.run_id, original.lock.run_id);
+  assert.equal(current.lock.batch_fingerprint, original.lock.batch_fingerprint);
+  assert.deepEqual(current.lock.scope, original.lock.scope);
+  assert.deepEqual(current.batches, original.batches);
+  assert.deepEqual(current.tickets, original.tickets);
+  assert.deepEqual(h.f.issues, issues);
+  assert.equal(h.events.length, eventCount);
 });
 
 test("cancellation refuses DB changes, uncertain merges, other production steps, and conflicting choices", async () => {
@@ -1517,6 +1599,29 @@ test("a cancelled multi-ticket attempt closes every selected ticket and releases
     sandboxProfile
   );
   assert.equal(savedBatch.execution.status, "cancelled");
+  const laterStale = structuredClone(savedBatch);
+  laterStale.stop = {
+    status: "stale",
+    kind: "inputs",
+    message: "Old source inputs changed after cancellation."
+  };
+  assert.doesNotThrow(() =>
+    validateBatchHistory(
+      { [laterStale.fingerprint]: laterStale },
+      sandboxProfile
+    )
+  );
+  const unfinishedStale = structuredClone(laterStale);
+  unfinishedStale.execution.status = "cancelling";
+  unfinishedStale.execution.completed_at = null;
+  assert.throws(
+    () =>
+      validateBatchHistory(
+        { [unfinishedStale.fingerprint]: unfinishedStale },
+        sandboxProfile
+      ),
+    /stale batches can retain only terminal evidence/u
+  );
   assert.equal(
     savedBatch.execution.operations["staging:integrate:backend"].cleanup,
     "removed"
