@@ -679,6 +679,16 @@ not a successful release: ticket status is `closed`, execution status is
 Exact before/after refs are required audit observations, not deployment proof.
 If their readback fails after PR cleanup, the saved cancellation retains its lock
 and ordinary resume re-verifies that same cleanup; it never promotes code.
+Branch deletion uses an explicit saved-SHA Git lease, not REST's unconditional
+reference deletion. A push to that temporary branch between readback and delete
+therefore refuses deletion and retains ownership. The adapter uses an isolated
+empty bare repository and the same GitHub CLI credential identity over HTTPS;
+it does not use an operator checkout, hooks, SSH identity or global Git config.
+If Git access fails, there is no REST fallback. This transport hardening has
+real-Git offline race proof, not live GitHub cancellation acceptance yet.
+The contract follows [Git's explicit lease](https://git-scm.com/docs/git-push)
+because [GitHub ref deletion](https://docs.github.com/en/rest/git/refs#delete-a-reference)
+does not accept an expected SHA.
 
 The [v0.1 run logs](./design.md#next-step-v01-run-logging) add local step history
 and live progress, separate from this journal. They explain started, verified and

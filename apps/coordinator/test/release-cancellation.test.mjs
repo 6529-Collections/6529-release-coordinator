@@ -11,7 +11,7 @@ import {
   realProductWorkflowRuntime
 } from "../src/product-workflow-runtime-config.mjs";
 
-function fixture(profile) {
+function fixture(profile, { conditionalDelete = true } = {}) {
   const candidate = {
     role: "frontend",
     base: "a".repeat(40),
@@ -54,7 +54,8 @@ function fixture(profile) {
     commit: record.integration_commit,
     actor: record.actor.id,
     loseClose: false,
-    loseDelete: false
+    loseDelete: false,
+    moveBeforeDelete: false
   };
   const writes = [];
   const pull = () => ({
@@ -100,15 +101,6 @@ function fixture(profile) {
           : { message: "Not Found" }
       );
     }
-    if (endpoint.endsWith(`/git/refs/heads/${record.branch}`)) {
-      assert.equal(method, "DELETE");
-      live.exists = false;
-      if (live.loseDelete) {
-        live.loseDelete = false;
-        throw new Error("lost delete response");
-      }
-      return respond(204);
-    }
     assert.fail(`Cancellation must not access ${method} ${endpoint}`);
   };
   const base = createReleaseGitHub({
@@ -118,6 +110,24 @@ function fixture(profile) {
         ? realProductWorkflowRuntime
         : productWorkflowRuntime,
     execute,
+    deleteBranch: !conditionalDelete
+      ? undefined
+      : async ({ repository, branch, commit }) => {
+          assert.equal(repository.id, profile.repositories.frontend.id);
+          assert.equal(branch, record.branch);
+          writes.push(`GIT ${branch}`);
+          if (live.moveBeforeDelete) live.commit = "e".repeat(40);
+          assert.equal(
+            live.commit,
+            commit,
+            "conditional deletion rejected stale SHA"
+          );
+          live.exists = false;
+          if (live.loseDelete) {
+            live.loseDelete = false;
+            throw new Error("lost delete response");
+          }
+        },
     wait: async () => {}
   });
   // Both profiles use the same product-shaped entry point. It must not wait
@@ -160,7 +170,7 @@ for (const profile of [sandboxProfile, realProfile]) {
     assert.equal(input.record.cleanup, "removed");
     assert.deepEqual(
       writes.map((write) => write.split(" ")[0]),
-      ["PATCH", "DELETE"]
+      ["PATCH", "GIT"]
     );
     assert.ok(
       writes.every(
@@ -183,7 +193,7 @@ for (const profile of [sandboxProfile, realProfile]) {
       assert.equal(live.exists, false);
       assert.deepEqual(
         writes.map((write) => write.split(" ")[0]),
-        ["PATCH", "DELETE"]
+        ["PATCH", "GIT"]
       );
     });
   }
@@ -221,13 +231,51 @@ for (const profile of [sandboxProfile, realProfile]) {
       assert.deepEqual(f.writes, []);
     }
   });
+  test(`${profile.name}: a branch move between its final read and deletion survives cleanup`, async () => {
+    const f = fixture(profile);
+    f.live.moveBeforeDelete = true;
+    await assert.rejects(
+      f.client.cancelIntegration(f.input),
+      /conditional deletion rejected stale SHA/u
+    );
+    assert.equal(f.live.state, "closed");
+    assert.equal(f.live.exists, true);
+    assert.equal(f.live.commit, "e".repeat(40));
+    assert.equal(f.input.record.state, "cleaning");
+    assert.equal(f.input.record.result, null);
+    assert.equal(f.input.record.cleanup, undefined);
+    await assert.rejects(
+      f.client.cancelIntegration(f.input),
+      /branch changed/u
+    );
+    assert.equal(f.live.exists, true);
+    assert.deepEqual(
+      f.writes.map((write) => write.split(" ")[0]),
+      ["PATCH", "GIT"]
+    );
+  });
+  test(`${profile.name}: an unavailable conditional transport cannot fall back to REST deletion`, async () => {
+    const f = fixture(profile, { conditionalDelete: false });
+    await assert.rejects(
+      f.client.cancelIntegration(f.input),
+      /REST deletion is not a fallback/u
+    );
+    assert.equal(f.live.state, "closed");
+    assert.equal(f.live.exists, true);
+    assert.equal(f.input.record.state, "cleaning");
+    assert.equal(f.input.record.cleanup, undefined);
+    assert.deepEqual(
+      f.writes.map((write) => write.split(" ")[0]),
+      ["PATCH"]
+    );
+  });
   test(`${profile.name}: an externally closed owned PR can be cleaned, but a late merge blocks branch deletion`, async () => {
     const f = fixture(profile);
     f.live.state = "closed";
     await f.client.cancelIntegration(f.input);
     assert.deepEqual(
       f.writes.map((write) => write.split(" ")[0]),
-      ["DELETE"]
+      ["GIT"]
     );
     const raced = fixture(profile);
     raced.input.save = async () => {

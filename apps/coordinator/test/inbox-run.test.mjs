@@ -696,6 +696,12 @@ test("profile, scope, report-file and old-command validation fails before reads 
       "--resume",
       "33333333-3333-4333-8333-333333333333",
       "--cancel-keep-current",
+      "--close-test"
+    ],
+    [
+      "--resume",
+      "33333333-3333-4333-8333-333333333333",
+      "--cancel-keep-current",
       "--review-stop"
     ],
     [

@@ -116,11 +116,6 @@ export async function processInbox({
       "Stopping a review requires the saved run to be awaiting review."
     );
   if (cancelKeepCurrent) {
-    serviceAssert(
-      resume && !reviewStop && !stagingChange,
-      "release-cancel",
-      "Cancellation requires the saved run and cannot request restoration."
-    );
     const saved = state.batches?.[run.batch_fingerprint];
     serviceAssert(
       saved?.execution,

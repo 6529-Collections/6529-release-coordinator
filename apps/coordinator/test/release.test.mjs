@@ -1493,6 +1493,19 @@ test("keep-current cancellation without saved release execution refuses before p
   assert.equal(h.events.length, eventCount);
 });
 
+test("processor cancellation exclusivity is checked before acquiring a journal lease", async () => {
+  for (const options of [
+    {},
+    { resume: "saved-run", reviewStop: true },
+    { resume: "saved-run", stagingChange: "restore" }
+  ])
+    await assert.rejects(
+      processInbox({ cancelKeepCurrent: true, ...options }),
+      (error) =>
+        error instanceof ServiceError && error.code === "release-cancel"
+    );
+});
+
 test("cancellation refuses DB changes, uncertain merges, other production steps, and conflicting choices", async () => {
   const { batch, options } = await cancellableProductionFixture();
   for (const change of [
@@ -1621,6 +1634,19 @@ test("a cancelled multi-ticket attempt closes every selected ticket and releases
         sandboxProfile
       ),
     /stale batches can retain only terminal evidence/u
+  );
+  const cancelling = structuredClone(savedBatch);
+  cancelling.execution.status = "cancelling";
+  cancelling.execution.completed_at = null;
+  const pendingState = {
+    tickets: {},
+    batches: { [cancelling.fingerprint]: cancelling }
+  };
+  assert.deepEqual(archiveFinished(pendingState, sandboxProfile), []);
+  assert.ok(pendingState.batches[cancelling.fingerprint]);
+  assert.equal(
+    pendingState.history?.batches?.[cancelling.fingerprint],
+    undefined
   );
   assert.equal(
     savedBatch.execution.operations["staging:integrate:backend"].cleanup,

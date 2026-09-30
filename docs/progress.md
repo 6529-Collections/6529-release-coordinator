@@ -69,8 +69,13 @@ and focused tests for incomplete cleanup, partial refs, missing cancellation
 fields, late-merge state, non-selected terminal ticket preservation,
 post-cleanup observation failure/resume, missing saved execution, and preservation
 of cancelled (but not unfinished) evidence if the old batch later becomes stale.
+CodeRabbit's later branch-deletion race finding is addressed with an explicit
+saved-SHA Git lease and no unconditional REST fallback. Real Git tests prove
+that an intervening push survives deletion refusal; both profile adapters also
+retain cleanup ownership in that race. This new transport has offline proof only,
+not acceptance from the earlier live cancellation's source hashes.
 The independent closed-PR readback remains mandatory before branch deletion.
-Full local checks passed 686 tests with three optional Docker skips, and the
+Full local checks passed 694 tests with three optional Docker skips, and the
 locked dependency audit reported no vulnerabilities.
 These follow-up additions are offline-only; they were not used in the real cleanup.
 After the Coordinator change is merged, use a fresh ticket

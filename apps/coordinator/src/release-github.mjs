@@ -15,6 +15,7 @@ import { assertProductCommitActor } from "./product-commit-signoff.mjs";
 import { activeWorkflowRunStatuses } from "./release-state.mjs";
 import { runEvent } from "./run-log.mjs";
 import { hasApprovalBypass } from "./approval-bypass.mjs";
+import { deleteOwnedRemoteBranch } from "./owned-branch-delete.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -84,6 +85,9 @@ export function createReleaseGitHub({
   profile,
   runtime = sandboxReleaseRuntime,
   execute = executeGitHub,
+  deleteBranch = execute === executeGitHub
+    ? deleteOwnedRemoteBranch
+    : undefined,
   logs = readServiceLogs,
   gates = createRehearsalGitHub(profile),
   signal,
@@ -206,7 +210,17 @@ export function createReleaseGitHub({
         "release-ownership",
         `The saved ${environmentLabel} release branch moved; it was not deleted.`
       );
-      await call(role, "DELETE", `/git/refs/heads/${name}`, undefined, [204]);
+      serviceAssert(
+        typeof deleteBranch === "function",
+        "release-cleanup",
+        "This transport must provide conditional owned-branch deletion; REST deletion is not a fallback."
+      );
+      await deleteBranch({
+        repository: profile.repositories[role],
+        branch: name,
+        commit,
+        signal
+      });
     }
     let consecutiveMissing = 0;
     for (let attempt = 0; attempt < 4; attempt++) {
