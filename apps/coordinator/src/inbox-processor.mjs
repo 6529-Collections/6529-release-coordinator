@@ -11,6 +11,7 @@ import {
 } from "./inbox-preparation.mjs";
 import { presentRunTicket } from "./inbox-ticket-writer.mjs";
 import { serviceAssert } from "./service-contract.mjs";
+import { assertCancellableRelease } from "./release-cancellation.mjs";
 import {
   createInboxSelection,
   filterInboxRequests,
@@ -29,6 +30,7 @@ export async function processInbox({
   resume,
   stagingChange,
   reviewStop = false,
+  cancelKeepCurrent = false,
   rehearsal,
   services,
   batch,
@@ -45,6 +47,11 @@ export async function processInbox({
   inspect = inspectIssue,
   observe = inspectReadiness
 }) {
+  serviceAssert(
+    !cancelKeepCurrent || (resume && !reviewStop && !stagingChange),
+    "release-cancel",
+    "Cancellation requires the saved run and cannot request restoration."
+  );
   const requestedSelection = resume
     ? undefined
     : createInboxSelection(selectionMode ?? "inbox", issueNumbers, actorLogin);
@@ -108,6 +115,20 @@ export async function processInbox({
       "release-review",
       "Stopping a review requires the saved run to be awaiting review."
     );
+  if (cancelKeepCurrent) {
+    serviceAssert(
+      resume && !reviewStop && !stagingChange,
+      "release-cancel",
+      "Cancellation requires the saved run and cannot request restoration."
+    );
+    const saved = state.batches?.[run.batch_fingerprint];
+    serviceAssert(
+      saved?.execution,
+      "release-cancel",
+      "No saved release to cancel."
+    );
+    assertCancellableRelease(saved.execution, saved);
+  }
   serviceAssert(
     !resume || selectionMode === undefined || selection.mode === selectionMode,
     "run-scope",
@@ -156,7 +177,8 @@ export async function processInbox({
               "awaiting-review",
               "awaiting-staging-choice",
               "reconciling-staging",
-              "recovering"
+              "recovering",
+              "cancelling"
             ].includes(record.execution.status))
       );
       if (active.length > 1)
@@ -239,6 +261,7 @@ export async function processInbox({
                 ...options,
                 stagingChange,
                 reviewStop,
+                cancelKeepCurrent,
                 operator: actor
               })
           : undefined
@@ -270,6 +293,7 @@ export async function processInbox({
     if (
       batchResult?.status !== "awaiting-staging-choice" &&
       batchResult?.status !== "awaiting-review" &&
+      batchResult?.status !== "cancelling" &&
       batchResult?.release?.staging_drift?.status !== "failed"
     )
       await loggedStep(

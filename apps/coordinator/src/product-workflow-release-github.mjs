@@ -1407,6 +1407,7 @@ export function createProductWorkflowReleaseGitHub({
         versions: generic.versions
       };
     },
+    cancelIntegration: (args) => base.cancelIntegration(args),
     async integrate(args) {
       await waitForQuiet(
         args.record.step.role,

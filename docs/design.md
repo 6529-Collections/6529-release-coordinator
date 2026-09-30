@@ -424,6 +424,19 @@ The Coordinator never silently resolves review threads or bypasses a rule for
 this wait. An ambiguous block is reported as such, not claimed to be solely a
 missing review.
 
+An operator may instead explicitly cancel a confirmed no-database-change
+attempt at its owned, unmerged integration PR and keep current code. This
+separate `--cancel-keep-current` choice can also finish an interrupted review
+stop, but refuses other production operations, recovery or database uncertainty.
+It records durable cancellation intent before closing the exact owned PR and
+removing its uniquely owned branch. It does not merge, deploy, restore or alter
+shared staging/main refs. External branch movement therefore does not authorize
+promotion and does not prevent verified cleanup. Unknown PR/branch ownership or
+a merged PR retains the lane for a person. Only confirmed cleanup and ticket
+presentation release the lane normally; an interrupted cancellation resumes
+only cancellation. Earlier staging work remains, selected tickets close as
+cancelled (not successfully released), and changed code requires a fresh request.
+
 One lane serializes this Coordinator; it cannot stop unrelated humans or Actions.
 Check current refs and conflicting runs before mutations and match deployed
 versions to E2E. Shared staging may contain other changes: inspect and record its

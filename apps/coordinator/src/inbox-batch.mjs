@@ -60,26 +60,29 @@ function releasedDecision(decision, result) {
       )
   );
   const completed = result.status === "completed";
+  const cancelled = result.code === "release-cancelled";
   const waiting = result.status === "waiting";
   const reason = {
     code: result.code,
     message: result.message,
-    action: completed
-      ? "No further action is required for this release request."
-      : waiting
-        ? result.code === "release-staging-changed"
-          ? "A Coordinator maintainer must inspect the external deployment. If the guarded frontend-only case applies, resume this run with --staging-change retest or --staging-change restore; otherwise reconcile manually. No production work starts without a safe decision."
-          : result.code === "release-review-pending"
-            ? "Inspect the linked integration PR. Resolve its review or merge blocker, then resume this saved run; or explicitly resume with --review-stop to close the PR and start ordinary recovery."
-            : "Recheck the saved batch and release evidence before continuing."
-        : result.execution?.staging_drift?.status === "restored"
-          ? "The frontend staging change was restored and checked. Inspect the stopped request before submitting a new release."
-          : result.execution?.recovery?.status === "completed"
-            ? "The affected branches were restored. Inspect the failed release before submitting changed code."
-            : result.execution?.message?.includes("changes the database")
-              ? "A person must inspect the database-changing release and staging state before another release."
-              : "Inspect the affected environments and failed release before another release starts.",
-    owner: completed ? "None" : "Coordinator maintainers"
+    action: cancelled
+      ? "This attempt is cancelled with current code preserved. Submit a fresh ticket for a new release."
+      : completed
+        ? "No further action is required for this release request."
+        : waiting
+          ? result.code === "release-staging-changed"
+            ? "A Coordinator maintainer must inspect the external deployment. If the guarded frontend-only case applies, resume this run with --staging-change retest or --staging-change restore; otherwise reconcile manually. No production work starts without a safe decision."
+            : result.code === "release-review-pending"
+              ? "Inspect the linked integration PR. Resolve its review or merge blocker, then resume this saved run; or explicitly resume with --review-stop to close the PR and start ordinary recovery."
+              : "Recheck the saved batch and release evidence before continuing."
+          : result.execution?.staging_drift?.status === "restored"
+            ? "The frontend staging change was restored and checked. Inspect the stopped request before submitting a new release."
+            : result.execution?.recovery?.status === "completed"
+              ? "The affected branches were restored. Inspect the failed release before submitting changed code."
+              : result.execution?.message?.includes("changes the database")
+                ? "A person must inspect the database-changing release and staging state before another release."
+                : "Inspect the affected environments and failed release before another release starts.",
+    owner: completed || cancelled ? "None" : "Coordinator maintainers"
   };
   next.reasons.push(reason);
   const batch = next.batch ?? {};
@@ -107,7 +110,13 @@ function releasedDecision(decision, result) {
       }))
     }
   };
-  next.status = completed ? "completed" : waiting ? "waiting" : "action-needed";
+  next.status = cancelled
+    ? "closed"
+    : completed
+      ? "completed"
+      : waiting
+        ? "waiting"
+        : "action-needed";
   next.next_action = reason.action;
   next.action_owner = reason.owner;
   next.submitter_action = "None currently required.";
@@ -150,7 +159,9 @@ export async function coordinateInboxBatch({
       active.stop?.status !== "stale" &&
       release &&
       (!active.execution ||
-        !["completed", "needs-human"].includes(active.execution.status))
+        !["completed", "needs-human", "cancelled"].includes(
+          active.execution.status
+        ))
     )
       await release?.({
         batch: active,
@@ -167,7 +178,9 @@ export async function coordinateInboxBatch({
       (value) =>
         active.inputs.some((input) => input.number === value.number) &&
         value.decision &&
-        !terminal(value.decision)
+        (!terminal(value.decision) ||
+          (active.execution?.status === "cancelled" &&
+            active.selected.includes(value.number)))
     )) {
       item.decision = batchDecision(
         item.decision,

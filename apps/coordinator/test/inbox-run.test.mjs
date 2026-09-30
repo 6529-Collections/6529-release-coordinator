@@ -691,6 +691,20 @@ test("profile, scope, report-file and old-command validation fails before reads 
     ["--plan", "x"],
     ["--staging-change", "retest"],
     ["--review-stop"],
+    ["--cancel-keep-current"],
+    [
+      "--resume",
+      "33333333-3333-4333-8333-333333333333",
+      "--cancel-keep-current",
+      "--review-stop"
+    ],
+    [
+      "--resume",
+      "33333333-3333-4333-8333-333333333333",
+      "--cancel-keep-current",
+      "--staging-change",
+      "restore"
+    ],
     [
       "--resume",
       "33333333-3333-4333-8333-333333333333",
@@ -976,6 +990,35 @@ test("an explicit review stop reaches the resumed release", async () => {
   });
   assert.equal(result.code, 0);
   assert.equal(observed, true);
+});
+
+test("explicit keep-current cancellation reaches the saved release without review-stop or restore", async () => {
+  for (const profile of [sandboxProfile, realProfile]) {
+    const f = fixture(profile);
+    let observed;
+    const result = await invoke(f, {
+      args: [
+        "--resume",
+        "33333333-3333-4333-8333-333333333333",
+        "--cancel-keep-current",
+        "--json"
+      ],
+      env: { RELEASE_COORDINATOR_SCOPE: "filtered" },
+      createReleaseClient: () => ({}),
+      executeReleaseSequence: async (options) => {
+        observed = options.cancelKeepCurrent;
+        assert.equal(options.reviewStop, undefined);
+        assert.equal(options.stagingChange, undefined);
+        return { status: "cancelled" };
+      },
+      run: async (options) => {
+        await options.release({ cancelKeepCurrent: options.cancelKeepCurrent });
+        return { run_id: options.resume, requests: [] };
+      }
+    });
+    assert.equal(result.code, 0);
+    assert.equal(observed, true);
+  }
 });
 
 test("a staged-change decision keeps the saved run lock while its ticket is presented", async () => {

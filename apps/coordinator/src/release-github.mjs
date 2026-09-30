@@ -347,6 +347,8 @@ export function createReleaseGitHub({
       ).data;
       verifyPull(pr, record, candidate, { allowClosed: true });
     }
+    pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
+    verifyPull(pr, record, candidate, { allowClosed: true });
     serviceAssert(
       pr.state === "closed" && pr.merged === false,
       "release-cleanup",
@@ -687,6 +689,46 @@ export function createReleaseGitHub({
         runtime: workflows,
         versions
       };
+    },
+    async cancelIntegration({ record, candidate, save }) {
+      serviceAssert(
+        record.step.kind === "integrate" &&
+          candidate?.role === record.step.role &&
+          candidate.changed === true &&
+          sha(candidate.commit) &&
+          sha(candidate.tree) &&
+          uuid(record.release_id) &&
+          !record.step.recovery &&
+          ["checking", "cleaning", "completed"].includes(record.state) &&
+          record.cleanup_reason === "review-stop" &&
+          record.branch === branch(record) &&
+          record.target_branch === target(runtime, record.step.environment) &&
+          positive(record.number) &&
+          sha(record.base) &&
+          sha(record.integration_commit) &&
+          record.integration_version === 1 &&
+          JSON.stringify(record.integration_input) ===
+            JSON.stringify(integrationCommitInput(record, candidate)),
+        "release-cancel",
+        "Cancellation lacks an exact, uniquely owned integration PR."
+      );
+      // Unlike integrate(), cleanup must never recreate a commit or branch.
+      const pr = (
+        await call(record.step.role, "GET", `/pulls/${record.number}`)
+      ).data;
+      verifyPull(pr, record, candidate, { allowClosed: true });
+      const owned = await ref(record.step.role, record.branch, [200, 404]);
+      serviceAssert(
+        owned.status === 200
+          ? owned.data?.object?.sha === record.integration_commit
+          : pr.state === "closed",
+        "release-ownership",
+        "The owned cancellation branch changed or disappeared before its PR closed."
+      );
+      record.state = "cleaning";
+      record.result = null;
+      await save();
+      return cleanupFailedPull(record.step.role, record, candidate, save);
     },
     async integrate({
       record,
