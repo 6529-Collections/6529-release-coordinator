@@ -252,8 +252,8 @@ reuse old test results, or submit a new execution around the unfinished release.
 
 The user subsequently authorized implementing, testing and applying a separate
 cancel-without-rollback option. `--resume RUN_ID --cancel-keep-current` uses the
-same engine and exact-owned-PR cleanup in both profiles. It requires confirmed
-no database change and an owned unmerged integration PR, or its interrupted stop;
+same engine and exact-owned-PR cleanup in both profiles. It requires confirmation
+of no database change and an owned unmerged integration PR, or its interrupted stop;
 it refuses other production operations or recovery. Intent and the operator are
 saved before cleanup. It does not merge, dispatch, recreate a branch, restore
 code or modify shared staging/main refs. Interrupted cancellation can only

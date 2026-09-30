@@ -31,7 +31,7 @@ authorized same-run resume are separate evidence; see the
 [September 30 run record](./testing/real-production-ticket-275-2026-09-30.md).
 Source PR #4120 subsequently received its tested keyboard fix at `bc220ad0f6c0`.
 At 10:57 UTC, the user-authorized `--review-stop` command resumed only the old
-#275 run. Other developers have advanced frontend `main` and both staging refs;
+Issue #275 run. Other developers have advanced frontend `main` and both staging refs;
 those changes must be preserved. Receipt verification passed, but the stop
 invocation exited 2 at 11:05 UTC: its pre-production staging guard also prevents closing the
 still-unmerged owned PR after external staging drift. Journal revision 430 saves
@@ -60,9 +60,18 @@ The real cancelled record remains in the working journal, inactive and complete.
 After that run, local history handling was extended so verified cancellations
 archive normally at a later ordinary closeout; this addition has offline proof,
 not live archive acceptance yet. No replacement request or fresh release has
-started. The implementation, tests and evidence are prepared for PR review;
-the change is not merged or published. Next: finish GitHub checks and reviews
-before merging the Coordinator change, then use a fresh ticket
+started. The implementation, tests and evidence are in
+[PR #282](https://github.com/6529-Collections/6529-release-coordinator/pull/282),
+not yet merged or published. Review follow-up adds an explicit missing-operation
+guard, structured `release-state` errors for corrupt cancellation journals,
+and focused tests for incomplete cleanup, partial refs, missing cancellation
+fields, late-merge state and non-selected terminal ticket preservation.
+The independent closed-PR readback remains mandatory before branch deletion.
+Full local checks passed 684 tests with three optional Docker skips, and the
+locked dependency audit reported no vulnerabilities.
+These follow-up additions are offline-only; they were not used in the real cleanup.
+Next: finish GitHub checks and reviews before merging the Coordinator change,
+then use a fresh ticket
 and new matching evidence for the fixed frontend version.
 The September 29 observations below predate merged Coordinator PR #270 and
 Issue #266's manually delivered disposition; their original run state is historical.

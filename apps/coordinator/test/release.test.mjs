@@ -1267,6 +1267,18 @@ test("explicit cancellation preserves moved staging/main and closes, not complet
       value.cancellation.observed_after = undefined;
     },
     (value) => {
+      delete value.cancellation.observed_after.prod;
+    },
+    (value) => {
+      delete value.cancellation.observed_before.staging.frontend;
+    },
+    (value) => {
+      value.cancellation.step_id = "prod:deploy:frontend:frontend";
+    },
+    (value) => {
+      value.cancellation.requested_at = "later";
+    },
+    (value) => {
       value.operations["prod:integrate:frontend"].cleanup = "pending";
     },
     (value) => {
@@ -1274,6 +1286,9 @@ test("explicit cancellation preserves moved staging/main and closes, not complet
     },
     (value) => {
       value.cancellation.actor = null;
+    },
+    (value) => {
+      value.cancellation.actor.login = "invalid actor";
     }
   ]) {
     const corrupted = structuredClone(cancelled);
@@ -1328,6 +1343,72 @@ test("uncertain cancellation cleanup keeps the saved intent and refuses a termin
   });
   await assert.rejects(executeRelease(options), /cleanup was not confirmed/u);
   assert.equal(batch.execution.status, "cancelling");
+  options.client.cancelIntegration = async () => ({
+    status: "failed",
+    kind: "review-stop"
+  });
+  await assert.rejects(executeRelease(options), /cleanup was not confirmed/u);
+  assert.equal(batch.execution.status, "cancelling");
+  assert.equal(batch.execution.completed_at, null);
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+});
+
+test("a cancelling journal without its saved stop choice is rejected as invalid state", async () => {
+  const { batch, options } = await cancellableProductionFixture();
+  options.client.cancelIntegration = async () => {
+    throw new Error("interrupted cleanup");
+  };
+  await assert.rejects(
+    executeRelease({ ...options, cancelKeepCurrent: true }),
+    /interrupted cleanup/u
+  );
+  assert.equal(batch.execution.status, "cancelling");
+  const corrupted = structuredClone(batch.execution);
+  delete corrupted.operations["prod:integrate:frontend"].cleanup_reason;
+  assert.throws(
+    () => validateReleaseExecution(corrupted, batch),
+    (error) => error instanceof ServiceError && error.code === "release-state"
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+});
+
+test("cancelled batch projection preserves terminal decisions of non-selected inputs", async () => {
+  const { batch, options } = await cancellableProductionFixture();
+  await executeRelease({ ...options, cancelKeepCurrent: true });
+  // Exercise only the finished-batch projection: one selected ticket and an
+  // already closed input outside the selected group.
+  const active = {
+    ...batch,
+    inputs: [...batch.inputs, { ...batch.inputs[0], number: 2 }]
+  };
+  const unselected = {
+    number: 2,
+    decision: {
+      status: "closed",
+      reasons: [{ code: "outdated-commit", message: "Already closed." }]
+    }
+  };
+  const original = structuredClone(unselected.decision);
+  const selected = {
+    number: 1,
+    decision: { status: "closed", reasons: [] }
+  };
+  const result = await coordinateInboxBatch({
+    items: [selected, unselected],
+    state: { batches: { [active.fingerprint]: active } },
+    run: { batch_fingerprint: active.fingerprint },
+    profile: sandboxProfile,
+    release: async () => assert.fail("A cancelled release cannot restart")
+  });
+  assert.equal(result.status, "cancelled");
+  assert.equal(selected.decision.status, "closed");
+  assert.ok(
+    selected.decision.reasons.some(
+      (reason) => reason.code === "release-cancelled"
+    )
+  );
+  assert.deepEqual(unselected.decision, original);
+  assert.equal(releaseTicketResult(active, 2), null);
 });
 
 test("cancellation refuses DB changes, uncertain merges, other production steps, and conflicting choices", async () => {

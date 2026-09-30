@@ -3,6 +3,8 @@ import test from "node:test";
 import { createReleaseGitHub } from "../src/release-github.mjs";
 import { createProductWorkflowReleaseGitHub } from "../src/product-workflow-release-github.mjs";
 import { integrationCommitInput } from "../src/release-plan.mjs";
+import { assertCancellableRelease } from "../src/release-cancellation.mjs";
+import { ServiceError } from "../src/service-contract.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import {
   productWorkflowRuntime,
@@ -129,6 +131,25 @@ function fixture(profile) {
   return { client, input, live, writes };
 }
 
+test("cancellation rejects a missing saved operation with a structured error", () => {
+  for (const record of [undefined, null, []])
+    assert.throws(
+      () =>
+        assertCancellableRelease(
+          {
+            plan: { steps: [{ id: "prod:integrate:frontend" }] },
+            step_index: 0,
+            operations: { "prod:integrate:frontend": record }
+          },
+          {}
+        ),
+      (error) =>
+        error instanceof ServiceError &&
+        error.code === "release-cancel" &&
+        /saved integration PR record/u.test(error.message)
+    );
+});
+
 for (const profile of [sandboxProfile, realProfile]) {
   test(`${profile.name}: cancellation closes only its exact owned PR/branch despite main moving`, async () => {
     const { client, input, live, writes } = fixture(profile);
@@ -215,6 +236,8 @@ for (const profile of [sandboxProfile, realProfile]) {
     };
     await assert.rejects(raced.client.cancelIntegration(raced.input));
     assert.deepEqual(raced.writes, []);
+    assert.equal(raced.input.record.state, "cleaning");
+    assert.equal(raced.input.record.result, null);
     assert.equal(raced.live.exists, true);
   });
 }

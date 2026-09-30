@@ -347,6 +347,8 @@ export function createReleaseGitHub({
       ).data;
       verifyPull(pr, record, candidate, { allowClosed: true });
     }
+    // Confirm server state independently of the close response before deleting
+    // the owned branch; an already closed PR needs the same fresh readback.
     pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
     verifyPull(pr, record, candidate, { allowClosed: true });
     serviceAssert(

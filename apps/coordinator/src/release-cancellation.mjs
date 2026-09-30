@@ -10,9 +10,18 @@ const versions = (value) =>
 
 // This is abandonment, not recovery. Never abandon an uncertain production
 // operation or a database-changing release by clearing its journal lock.
-export function assertCancellableRelease(execution, batch) {
+export function assertCancellableRelease(
+  execution,
+  batch,
+  code = "release-cancel"
+) {
   const step = execution?.plan?.steps?.[execution.step_index];
   const record = execution?.operations?.[step?.id];
+  serviceAssert(
+    record && typeof record === "object" && !Array.isArray(record),
+    code,
+    "Cancellation requires its saved integration PR record."
+  );
   serviceAssert(
     selectedPreparation(batch).prepared.service_plan.database.observed ===
       "no" &&
@@ -36,7 +45,7 @@ export function assertCancellableRelease(execution, batch) {
         (operation) =>
           operation.step.environment === "prod" && operation !== record
       ),
-    "release-cancel",
+    code,
     "Keeping current code requires a no-database-change release paused at an owned, unmerged integration PR (or its interrupted stop), with no other production operation or recovery."
   );
   return record;
@@ -51,7 +60,7 @@ export function validateReleaseCancellation(execution, batch) {
     "Cancellation evidence must remain in its cancellation state."
   );
   if (!cancellation) return;
-  const record = assertCancellableRelease(execution, batch);
+  const record = assertCancellableRelease(execution, batch, "release-state");
   serviceAssert(
     cancellation.mode === "keep-current" &&
       cancellation.step_id === record.step.id &&

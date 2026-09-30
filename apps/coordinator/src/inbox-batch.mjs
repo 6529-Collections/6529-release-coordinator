@@ -196,6 +196,7 @@ export async function coordinateInboxBatch({
         (active.selected.length ? "release-unverified" : "no-candidate"),
       selected: active.selected,
       release: active.execution ?? null,
+      // A cancelled attempt is closed, not a successfully executed release.
       release_executed: active.execution?.status === "completed",
       release_authorized: false
     };
