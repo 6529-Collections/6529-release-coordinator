@@ -93,6 +93,7 @@ import { validateBatchHistory } from "../src/batch-state.mjs";
 import { validateReleaseExecution } from "../src/release-state.mjs";
 import { batchStatuses } from "../src/ticket-presentation.mjs";
 import { inboxRunExitCode } from "../src/inbox-run-cli.mjs";
+import { archiveFinished, verifyArchive } from "../src/inbox-history.mjs";
 
 const runFile = promisify(execFile);
 
@@ -1177,6 +1178,499 @@ test("an interrupted saved review stop cannot turn into a merge on ordinary resu
     stopped.operations["staging:integrate:backend"].result.kind,
     "review-stop"
   );
+});
+
+async function cancellableProductionFixture() {
+  const batch = await frontendOnlyProductionBatch();
+  const calls = [];
+  const releaseClient = client(calls);
+  const integrate = releaseClient.integrate;
+  releaseClient.integrate = async (args) => {
+    if (args.record.step.environment !== "prod") return integrate(args);
+    const record = args.record;
+    record.base = args.expectedBase;
+    record.target_branch = "main";
+    record.branch = `codex/release-${record.release_id}-prod-frontend`;
+    record.integration_version = 1;
+    record.integration_input = integrationCommitInput(record, args.candidate);
+    record.integration_commit = serviceHash(record.integration_input).slice(
+      0,
+      40
+    );
+    record.number = 42;
+    record.url =
+      "https://github.com/6529-Collections/release-coordinator-test-frontend/pull/42";
+    record.state = "checking";
+    return { status: "waiting-review", url: record.url };
+  };
+  releaseClient.cancelIntegration = async ({ record }) => {
+    calls.push("cancel:owned-pr");
+    record.cleanup = "removed";
+    return { status: "failed", kind: "review-stop", url: record.url };
+  };
+  const options = {
+    batch,
+    client: releaseClient,
+    operator: { id: "456", login: "tester" },
+    guard: async () => {},
+    save: async () => {}
+  };
+  await executeRelease(options);
+  assert.equal(batch.execution.status, "awaiting-review");
+  // Both environments can move independently. No saved promotion evidence is
+  // reused, and cancellation must not restore either environment.
+  const observed = {
+    staging: { backend: "1".repeat(40), frontend: "2".repeat(40) },
+    prod: { backend: "3".repeat(40), frontend: "4".repeat(40) }
+  };
+  releaseClient.environmentVersions = async (environment) => ({
+    ...observed[environment]
+  });
+  releaseClient.integrate = async () =>
+    assert.fail("cancellation must not integrate");
+  releaseClient.run = async () =>
+    assert.fail("cancellation must not deploy or test");
+  releaseClient.restore = async () =>
+    assert.fail("cancellation must not restore");
+  calls.length = 0;
+  return { batch, calls, options, observed };
+}
+
+test("explicit cancellation preserves moved staging/main and closes, not completes, the ticket", async () => {
+  const { batch, calls, options, observed } =
+    await cancellableProductionFixture();
+  const savedVersions = structuredClone(batch.execution.versions);
+  const cancelled = await executeRelease({
+    ...options,
+    cancelKeepCurrent: true
+  });
+  assert.equal(cancelled.status, "cancelled");
+  assert.deepEqual(calls, ["cancel:owned-pr"]);
+  assert.deepEqual(cancelled.versions, savedVersions);
+  assert.deepEqual(cancelled.cancellation.observed_before, observed);
+  assert.deepEqual(cancelled.cancellation.observed_after, observed);
+  assert.equal(cancelled.recovery, undefined);
+  assert.equal(cancelled.review_pause, undefined);
+  assert.equal(releaseTicketResult(batch, 1).code, "release-cancelled");
+  assert.equal(releaseTicketResult(batch, 1).status, "closed");
+  assert.equal(releaseTicketResult(batch, 1).batch_status, "passed");
+  assert.equal(cancelled.cancellation.mode, "keep-current");
+  const cleaned = cancelled.operations["prod:integrate:frontend"];
+  assert.equal(cleaned.cleanup_reason, "review-stop");
+  assert.equal(cleaned.result.status, "failed");
+  assert.equal(cleaned.result.kind, "review-stop");
+  const laterStale = structuredClone(batch);
+  laterStale.stop = { status: "stale" };
+  assert.equal(releaseTicketResult(laterStale, 1).code, "release-cancelled");
+  assert.doesNotThrow(() => validateReleaseExecution(cancelled, batch));
+  await executeRelease(options);
+  assert.deepEqual(calls, ["cancel:owned-pr"]);
+  for (const change of [
+    (value) => {
+      value.cancellation = undefined;
+    },
+    (value) => {
+      value.cancellation.observed_after = undefined;
+    },
+    (value) => {
+      delete value.cancellation.observed_after.prod;
+    },
+    (value) => {
+      delete value.cancellation.observed_before.staging.frontend;
+    },
+    (value) => {
+      value.cancellation.step_id = "prod:deploy:frontend:frontend";
+    },
+    (value) => {
+      value.cancellation.requested_at = "later";
+    },
+    (value) => {
+      value.operations["prod:integrate:frontend"].cleanup = "pending";
+    },
+    (value) => {
+      value.status = "running";
+    },
+    (value) => {
+      value.cancellation.actor = null;
+    },
+    (value) => {
+      value.cancellation.actor.login = "invalid actor";
+    }
+  ]) {
+    const corrupted = structuredClone(cancelled);
+    change(corrupted);
+    assert.throws(() => validateReleaseExecution(corrupted, batch));
+  }
+});
+
+test("cancellation can take over an interrupted review-stop, saves intent, and ordinary resume only cancels", async () => {
+  const { batch, calls, options } = await cancellableProductionFixture();
+  batch.execution.status = "running";
+  delete batch.execution.review_pause;
+  batch.execution.operations["prod:integrate:frontend"].cleanup_reason =
+    "review-stop";
+  await assert.rejects(
+    executeRelease({
+      ...options,
+      cancelKeepCurrent: true,
+      save: async (message) => {
+        assert.doesNotThrow(() =>
+          validateReleaseExecution(batch.execution, batch)
+        );
+        if (message === "cancel release while keeping current code")
+          throw new Error("lost cancellation save response");
+      }
+    }),
+    /lost cancellation save response/u
+  );
+  assert.equal(batch.execution.status, "cancelling");
+  assert.deepEqual(calls, []);
+  const resumed = await executeRelease(options);
+  assert.equal(resumed.status, "cancelled");
+  assert.deepEqual(calls, ["cancel:owned-pr"]);
+  assert.doesNotThrow(() => validateReleaseExecution(resumed, batch));
+});
+
+test("uncertain cancellation cleanup keeps the saved intent and refuses a terminal result", async () => {
+  const { batch, options } = await cancellableProductionFixture();
+  options.client.cancelIntegration = async () => {
+    throw new Error("lost cleanup response");
+  };
+  await assert.rejects(
+    executeRelease({ ...options, cancelKeepCurrent: true }),
+    /lost cleanup response/u
+  );
+  assert.equal(batch.execution.status, "cancelling");
+  assert.equal(batch.execution.completed_at, null);
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+  options.client.cancelIntegration = async () => ({
+    status: "passed",
+    kind: "merge"
+  });
+  await assert.rejects(executeRelease(options), /cleanup was not confirmed/u);
+  assert.equal(batch.execution.status, "cancelling");
+  options.client.cancelIntegration = async () => ({
+    status: "failed",
+    kind: "review-stop"
+  });
+  await assert.rejects(executeRelease(options), /cleanup was not confirmed/u);
+  assert.equal(batch.execution.status, "cancelling");
+  assert.equal(batch.execution.completed_at, null);
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+});
+
+test("a cancelling journal without its saved stop choice is rejected as invalid state", async () => {
+  const { batch, options } = await cancellableProductionFixture();
+  options.client.cancelIntegration = async () => {
+    throw new Error("interrupted cleanup");
+  };
+  await assert.rejects(
+    executeRelease({ ...options, cancelKeepCurrent: true }),
+    /interrupted cleanup/u
+  );
+  assert.equal(batch.execution.status, "cancelling");
+  const corrupted = structuredClone(batch.execution);
+  delete corrupted.operations["prod:integrate:frontend"].cleanup_reason;
+  assert.throws(
+    () => validateReleaseExecution(corrupted, batch),
+    (error) => error instanceof ServiceError && error.code === "release-state"
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+});
+
+test("cancelled batch projection preserves terminal decisions of non-selected inputs", async () => {
+  const { batch, options } = await cancellableProductionFixture();
+  await executeRelease({ ...options, cancelKeepCurrent: true });
+  // Exercise only the finished-batch projection: one selected ticket and an
+  // already closed input outside the selected group.
+  const active = {
+    ...batch,
+    inputs: [...batch.inputs, { ...batch.inputs[0], number: 2 }]
+  };
+  const unselected = {
+    number: 2,
+    decision: {
+      status: "closed",
+      reasons: [{ code: "outdated-commit", message: "Already closed." }]
+    }
+  };
+  const original = structuredClone(unselected.decision);
+  const selected = {
+    number: 1,
+    decision: { status: "closed", reasons: [] }
+  };
+  const result = await coordinateInboxBatch({
+    items: [selected, unselected],
+    state: { batches: { [active.fingerprint]: active } },
+    run: { batch_fingerprint: active.fingerprint },
+    profile: sandboxProfile,
+    release: async () => assert.fail("A cancelled release cannot restart")
+  });
+  assert.equal(result.status, "cancelled");
+  assert.equal(result.release_executed, false);
+  assert.equal(selected.decision.status, "closed");
+  assert.ok(
+    selected.decision.reasons.some(
+      (reason) => reason.code === "release-cancelled"
+    )
+  );
+  assert.deepEqual(unselected.decision, original);
+  assert.equal(releaseTicketResult(active, 2), null);
+});
+
+test("post-cleanup observation failure keeps cancellation resumable without promotion", async () => {
+  const { batch, calls, options } = await cancellableProductionFixture();
+  const cleanup = options.client.cancelIntegration;
+  options.client.cancelIntegration = async (args) => {
+    args.record.state = "cleaning";
+    await args.save();
+    const result = await cleanup(args);
+    await args.save();
+    return result;
+  };
+  const observe = options.client.environmentVersions;
+  let observations = 0;
+  options.client.environmentVersions = async (environment) => {
+    if (++observations === 3) throw new Error("lost post-cleanup ref read");
+    return observe(environment);
+  };
+  const record = batch.execution.operations["prod:integrate:frontend"];
+  await assert.rejects(
+    executeRelease({ ...options, cancelKeepCurrent: true }),
+    /lost post-cleanup ref read/u
+  );
+  assert.deepEqual(calls, ["cancel:owned-pr"]);
+  assert.equal(batch.execution.status, "cancelling");
+  assert.equal(batch.execution.completed_at, null);
+  assert.equal(
+    batch.execution.operations["prod:integrate:frontend"].cleanup,
+    "removed"
+  );
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+  const resumed = await executeRelease(options);
+  assert.equal(resumed.status, "cancelled");
+  assert.equal(resumed.operations["prod:integrate:frontend"].id, record.id);
+  assert.equal(resumed.operations["prod:integrate:frontend"].number, 42);
+  assert.deepEqual(calls, ["cancel:owned-pr", "cancel:owned-pr"]);
+  assert.doesNotThrow(() => validateReleaseExecution(resumed, batch));
+});
+
+test("keep-current cancellation without saved release execution refuses before product or ticket work", async () => {
+  const h = harness(1);
+  h.options.release = async () => {
+    throw new Error("interrupted before release execution");
+  };
+  await assert.rejects(
+    processInbox(h.options),
+    /interrupted before release execution/u
+  );
+  const original = structuredClone(h.f.state());
+  const issues = structuredClone(h.f.issues);
+  const eventCount = h.events.length;
+  assert.ok(original.lock.run_id);
+  const saved = original.batches[original.lock.batch_fingerprint];
+  assert.equal(saved.execution, undefined);
+  await assert.rejects(
+    processInbox({
+      ...h.options,
+      resume: original.lock.run_id,
+      cancelKeepCurrent: true
+    }),
+    (error) =>
+      error instanceof ServiceError &&
+      error.code === "release-cancel" &&
+      error.message === "No saved release to cancel."
+  );
+  // Resuming renews the journal lease before checking the requested action.
+  // That normal lease write must not clear ownership or alter tickets/batches.
+  const current = h.f.state();
+  assert.equal(current.lock.run_id, original.lock.run_id);
+  assert.equal(current.lock.batch_fingerprint, original.lock.batch_fingerprint);
+  assert.deepEqual(current.lock.scope, original.lock.scope);
+  assert.deepEqual(current.batches, original.batches);
+  assert.deepEqual(current.tickets, original.tickets);
+  assert.deepEqual(h.f.issues, issues);
+  assert.equal(h.events.length, eventCount);
+});
+
+test("processor cancellation exclusivity is checked before acquiring a journal lease", async () => {
+  for (const options of [
+    {},
+    { resume: "saved-run", reviewStop: true },
+    { resume: "saved-run", stagingChange: "restore" }
+  ])
+    await assert.rejects(
+      processInbox({ cancelKeepCurrent: true, ...options }),
+      (error) =>
+        error instanceof ServiceError && error.code === "release-cancel"
+    );
+});
+
+test("cancellation refuses DB changes, uncertain merges, other production steps, and conflicting choices", async () => {
+  const { batch, options } = await cancellableProductionFixture();
+  for (const change of [
+    (value) => {
+      value.execution.operations["prod:integrate:frontend"].state = "merging";
+    },
+    (value) => {
+      value.execution.status = "running";
+      delete value.execution.review_pause;
+    },
+    (value) => {
+      value.execution.operations.other = { step: { environment: "prod" } };
+    },
+    (value) => {
+      value.execution.recovery = {};
+    },
+    (value) => {
+      value.execution.staging_drift = {};
+    },
+    (value) => {
+      value.attempts.find(
+        (attempt) => attempt.phase === "git"
+      ).result.service_plan.database.observed = "yes";
+    }
+  ]) {
+    const unsafe = structuredClone(batch);
+    change(unsafe);
+    await assert.rejects(
+      executeRelease({ ...options, batch: unsafe, cancelKeepCurrent: true })
+    );
+  }
+  await assert.rejects(
+    executeRelease({ ...options, cancelKeepCurrent: true, reviewStop: true }),
+    /cannot be combined/u
+  );
+  await assert.rejects(
+    executeRelease({
+      ...options,
+      cancelKeepCurrent: true,
+      stagingChange: "restore"
+    }),
+    /cannot be combined/u
+  );
+  await assert.rejects(
+    executeRelease({
+      ...options,
+      cancelKeepCurrent: true,
+      operator: undefined
+    }),
+    /verified operator/u
+  );
+});
+
+test("a cancelled multi-ticket attempt closes every selected ticket and releases the normal inbox lock", async () => {
+  const h = harness(2);
+  let closed = false;
+  const releaseClient = client([]);
+  releaseClient.integrate = async ({ record, candidate, expectedBase }) => {
+    record.base = expectedBase;
+    record.target_branch = "1a-staging";
+    record.branch = `codex/release-${record.release_id}-staging-${record.step.role}`;
+    record.integration_version = 1;
+    record.integration_input = integrationCommitInput(record, candidate);
+    record.integration_commit = serviceHash(record.integration_input).slice(
+      0,
+      40
+    );
+    record.number = 42;
+    record.url =
+      "https://github.com/6529-Collections/release-coordinator-test-backend/pull/42";
+    record.state = "checking";
+    return { status: "waiting-review", url: record.url };
+  };
+  releaseClient.cancelIntegration = async ({ record }) => {
+    closed = true;
+    record.cleanup = "removed";
+    return { status: "failed", kind: "review-stop", url: record.url };
+  };
+  h.options.release = (options) =>
+    executeRelease({ ...options, client: releaseClient });
+  const paused = await processInbox(h.options);
+  assert.equal(paused.batch.status, "awaiting-review");
+  assert.equal(h.f.state().lock.run_id, paused.run_id);
+  const cancelled = await processInbox({
+    ...h.options,
+    resume: paused.run_id,
+    cancelKeepCurrent: true
+  });
+  assert.equal(cancelled.batch.status, "cancelled");
+  assert.equal(cancelled.release_executed, false);
+  assert.equal(closed, true);
+  assert.equal(h.f.state().lock, null);
+  assert.equal(cancelled.requests.length, 2);
+  assert.equal(inboxRunExitCode(cancelled), 0);
+  const history = h.f.state().history.batches[cancelled.batch.fingerprint];
+  assert.equal(history.status, "cancelled");
+  assert.equal(h.f.state().batches[cancelled.batch.fingerprint], undefined);
+  const savedArchive = h.f.file(history.path);
+  const savedBatch = verifyArchive(
+    savedArchive,
+    "batches",
+    cancelled.batch.fingerprint,
+    history,
+    sandboxProfile
+  );
+  assert.equal(savedBatch.execution.status, "cancelled");
+  const laterStale = structuredClone(savedBatch);
+  laterStale.stop = {
+    status: "stale",
+    kind: "inputs",
+    message: "Old source inputs changed after cancellation."
+  };
+  assert.doesNotThrow(() =>
+    validateBatchHistory(
+      { [laterStale.fingerprint]: laterStale },
+      sandboxProfile
+    )
+  );
+  const unfinishedStale = structuredClone(laterStale);
+  unfinishedStale.execution.status = "cancelling";
+  unfinishedStale.execution.completed_at = null;
+  assert.throws(
+    () =>
+      validateBatchHistory(
+        { [unfinishedStale.fingerprint]: unfinishedStale },
+        sandboxProfile
+      ),
+    /stale batches can retain only terminal evidence/u
+  );
+  const cancelling = structuredClone(savedBatch);
+  cancelling.execution.status = "cancelling";
+  cancelling.execution.completed_at = null;
+  const pendingState = {
+    tickets: {},
+    batches: { [cancelling.fingerprint]: cancelling }
+  };
+  assert.deepEqual(archiveFinished(pendingState, sandboxProfile), []);
+  assert.ok(pendingState.batches[cancelling.fingerprint]);
+  assert.equal(
+    pendingState.history?.batches?.[cancelling.fingerprint],
+    undefined
+  );
+  assert.equal(
+    savedBatch.execution.operations["staging:integrate:backend"].cleanup,
+    "removed"
+  );
+  const unfinished = structuredClone(savedBatch);
+  unfinished.execution.operations["staging:integrate:backend"].cleanup =
+    "pending";
+  const unsafeState = {
+    tickets: h.f.state().tickets,
+    batches: { [unfinished.fingerprint]: unfinished }
+  };
+  assert.throws(() => archiveFinished(unsafeState, sandboxProfile));
+  assert.ok(unsafeState.batches[unfinished.fingerprint]);
+  for (const item of cancelled.requests) {
+    assert.equal(item.status, "closed");
+    assert.equal(item.applied, true);
+    assert.equal(h.f.issues[item.issue_number - 1].state, "closed");
+    assert.ok(
+      h.f.issues[item.issue_number - 1].labels.some(
+        (label) => (label.name ?? label) === "reason:release-cancelled"
+      )
+    );
+  }
 });
 
 test("failed staging E2E restores staging and stops before prod", async () => {

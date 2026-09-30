@@ -15,6 +15,7 @@ import { assertProductCommitActor } from "./product-commit-signoff.mjs";
 import { activeWorkflowRunStatuses } from "./release-state.mjs";
 import { runEvent } from "./run-log.mjs";
 import { hasApprovalBypass } from "./approval-bypass.mjs";
+import { deleteOwnedRemoteBranch } from "./owned-branch-delete.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -84,6 +85,9 @@ export function createReleaseGitHub({
   profile,
   runtime = sandboxReleaseRuntime,
   execute = executeGitHub,
+  deleteBranch = execute === executeGitHub
+    ? deleteOwnedRemoteBranch
+    : undefined,
   logs = readServiceLogs,
   gates = createRehearsalGitHub(profile),
   signal,
@@ -206,7 +210,17 @@ export function createReleaseGitHub({
         "release-ownership",
         `The saved ${environmentLabel} release branch moved; it was not deleted.`
       );
-      await call(role, "DELETE", `/git/refs/heads/${name}`, undefined, [204]);
+      serviceAssert(
+        typeof deleteBranch === "function",
+        "release-cleanup",
+        "This transport must provide conditional owned-branch deletion; REST deletion is not a fallback."
+      );
+      await deleteBranch({
+        repository: profile.repositories[role],
+        branch: name,
+        commit,
+        signal
+      });
     }
     let consecutiveMissing = 0;
     for (let attempt = 0; attempt < 4; attempt++) {
@@ -347,6 +361,10 @@ export function createReleaseGitHub({
       ).data;
       verifyPull(pr, record, candidate, { allowClosed: true });
     }
+    // Confirm server state independently of the close response before deleting
+    // the owned branch; an already closed PR needs the same fresh readback.
+    pr = (await call(role, "GET", `/pulls/${record.number}`)).data;
+    verifyPull(pr, record, candidate, { allowClosed: true });
     serviceAssert(
       pr.state === "closed" && pr.merged === false,
       "release-cleanup",
@@ -687,6 +705,46 @@ export function createReleaseGitHub({
         runtime: workflows,
         versions
       };
+    },
+    async cancelIntegration({ record, candidate, save }) {
+      serviceAssert(
+        record.step.kind === "integrate" &&
+          candidate?.role === record.step.role &&
+          candidate.changed === true &&
+          sha(candidate.commit) &&
+          sha(candidate.tree) &&
+          uuid(record.release_id) &&
+          !record.step.recovery &&
+          ["checking", "cleaning", "completed"].includes(record.state) &&
+          record.cleanup_reason === "review-stop" &&
+          record.branch === branch(record) &&
+          record.target_branch === target(runtime, record.step.environment) &&
+          positive(record.number) &&
+          sha(record.base) &&
+          sha(record.integration_commit) &&
+          record.integration_version === 1 &&
+          JSON.stringify(record.integration_input) ===
+            JSON.stringify(integrationCommitInput(record, candidate)),
+        "release-cancel",
+        "Cancellation lacks an exact, uniquely owned integration PR."
+      );
+      // Unlike integrate(), cleanup must never recreate a commit or branch.
+      const pr = (
+        await call(record.step.role, "GET", `/pulls/${record.number}`)
+      ).data;
+      verifyPull(pr, record, candidate, { allowClosed: true });
+      const owned = await ref(record.step.role, record.branch, [200, 404]);
+      serviceAssert(
+        owned.status === 200
+          ? owned.data?.object?.sha === record.integration_commit
+          : pr.state === "closed",
+        "release-ownership",
+        "The owned cancellation branch changed or disappeared before its PR closed."
+      );
+      record.state = "cleaning";
+      record.result = null;
+      await save();
+      return cleanupFailedPull(record.step.role, record, candidate, save);
     },
     async integrate({
       record,

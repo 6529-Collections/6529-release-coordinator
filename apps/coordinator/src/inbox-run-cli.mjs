@@ -23,6 +23,7 @@ RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=filtered npm 
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --staging-change retest|restore [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --review-stop [--json]
+RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --cancel-keep-current [--json]
 
 Writes managed labels, titles, submitter assignment, one status comment, justified
 Issue closures, and the selected inbox's codex/inbox-state journal branch. Runs once.
@@ -50,6 +51,12 @@ staging E2E passes. In real profile these are real product changes and deploymen
   --review-stop  For a run awaiting integration PR review only: explicitly
                  close its owned PR, then apply ordinary release recovery.
                  Requires --resume; never discards an uncertain PR or branch.
+  --cancel-keep-current
+                 Cancel a no-database-change attempt paused at its owned PR,
+                 or its interrupted stop. Close that unmerged PR and remove
+                 its exact branch. Do not restore, merge or deploy code.
+                 Requires --resume; closes selected tickets as not planned,
+                 not as a completed release. Other production work refuses cancellation.
   --json         Print structured results; live progress goes to stderr.
                  Per-run logs are saved under ~/.6529-release-coordinator/logs/.
   --help         Show this help without contacting GitHub.
@@ -106,6 +113,7 @@ export async function runInboxRunCli(
         "--resume",
         "--staging-change",
         "--review-stop",
+        "--cancel-keep-current",
         "--json"
       ].includes(key)
     ) {
@@ -155,12 +163,15 @@ export async function runInboxRunCli(
         return 2;
       }
     } else if (key === "--review-stop") options.reviewStop = true;
+    else if (key === "--cancel-keep-current") options.cancelKeepCurrent = true;
     else if (key === "--close-test") options.closeTest = true;
   }
   if (
     (options.closeTest && options.issueNumbers.length !== 1) ||
     (options.stagingChange && !options.resume) ||
     (options.reviewStop && (!options.resume || options.stagingChange)) ||
+    (options.cancelKeepCurrent &&
+      (!options.resume || options.reviewStop || options.stagingChange)) ||
     (options.resume &&
       (options.issueNumbers.length || options.actorLogin || options.closeTest))
   ) {

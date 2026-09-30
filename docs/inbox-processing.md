@@ -198,6 +198,7 @@ explanation. Reasons are not permissions.
 | `reason:batch-target-deferred`   | Keep the complete ticket queued for a later run because the current batch uses the other release target.                                                                                                                                                                                                          |
 | `reason:release-completed`       | The exact release plan reached its requested target and every matching check passed. Close the ticket as completed.                                                                                                                                                                                               |
 | `reason:release-failed`          | A confirmed release step failed after execution began. Stop later steps and hand the saved partial state to a person.                                                                                                                                                                                             |
+| `reason:release-cancelled`       | An explicit keep-current cancellation verified the owned PR closed unmerged and its branch removed. Close selected tickets as not planned; current code remains, with no release-completion or rollback claim. |
 | `reason:release-unverified`      | The selected release is unfinished or its effect is uncertain. Keep the ticket waiting and reconcile the saved operation before retrying.                                                                                                                                                                         |
 | `reason:cancelled`               | Close after an authorized cancellation is recorded.                                                                                                                                                                                                                                                               |
 | `reason:replaced`                | Close with an explicit replacement request link and recorded replacement decision.                                                                                                                                                                                                                                |
@@ -633,7 +634,7 @@ After a person handles the PR, ordinary `--resume RUN_ID` rechecks its exact
 head, base, checks, rules, and branch before a merge; a still-blocked PR stays
 paused. `--resume RUN_ID --review-stop` explicitly closes the verified owned
 PR and follows the normal release recovery path. A moved target branch blocks
-ordinary resume but not explicit cleanup of the still-verified owned PR. An
+ordinary resume; ordinary stop may also refuse unsafe staging drift or restoration. An
 uncertain identity or moved Coordinator-owned PR branch keeps the lock for manual
 investigation. Neither command ignores a
 review thread, auto-resumes, or imposes a pause timeout. Other releases in the
@@ -641,6 +642,53 @@ same profile wait; the separate sandbox and real journals do not block each
 other. Once a stop choice is saved, an interrupted stop uses ordinary
 `--resume RUN_ID` to continue that saved cleanup; it cannot turn back into a
 merge merely because the GitHub review changes meanwhile.
+
+`--resume RUN_ID --cancel-keep-current` is a separate explicit choice: abandon
+this attempt without undoing any code. It supports a confirmed no-database-change
+release paused at its exact owned, unmerged integration PR, including an
+interrupted `--review-stop` whose intent is already saved. No other production
+operation, database uncertainty or recovery may be present. It is not a general
+override for arbitrary failures or deployments already in progress.
+
+The journal saves the operator, decision, step and observed staging/main refs
+before cleanup. The same adapter in both profiles verifies the unique PR, saved
+head, author, body, destination and exact owned branch, closes it unmerged, and
+verifies branch removal. It never recreates a missing branch, merges code,
+dispatches a workflow, restores snapshots or changes either shared branch.
+Other developers may continue moving those branches; before/after observations
+are not deployment or health proof. Uncertain ownership, an already merged PR,
+or unverified cleanup retains the lock for inspection.
+
+An interrupted cancellation stays `cancelling`. Ordinary resume can only finish
+that saved cancellation. Confirmed cleanup records `cancelled`, closes every
+selected ticket as `not_planned` with `reason:release-cancelled`, and releases the
+original lane through normal journal closeout. Earlier staging work is preserved;
+no rollback or completed production release is claimed. Changed code needs a
+fresh request and new matching release evidence. This choice cannot be combined
+with `--review-stop` or `--staging-change`.
+Verified cancelled batches can be archived by the normal journal closeout,
+with the explicit `cancelled` disposition and their complete operation history.
+Unverified cleanup or ticket presentation prevents archival. See progress for
+the distinction between live cancellation and this archive path's offline proof.
+The integration operation reuses the existing `review-stop` cleanup reason and
+result contract. The parent execution's explicit `cancellation.mode: keep-current`
+and `status: cancelled` distinguish cancellation from ordinary stop/recovery.
+Likewise, `batch_status: passed` describes the earlier selected-combination checks,
+not a successful release: ticket status is `closed`, execution status is
+`cancelled`, history summary is `cancelled`, and `release_executed` is false.
+Exact before/after refs are required audit observations, not deployment proof.
+If their readback fails after PR cleanup, the saved cancellation retains its lock
+and ordinary resume re-verifies that same cleanup; it never promotes code.
+Branch deletion uses an explicit saved-SHA Git lease, not REST's unconditional
+reference deletion. A push to that temporary branch between readback and delete
+therefore refuses deletion and retains ownership. The adapter uses an isolated
+empty bare repository and the same GitHub CLI credential identity over HTTPS;
+it does not use an operator checkout, hooks, SSH identity or global Git config.
+If Git access fails, there is no REST fallback. This transport hardening has
+real-Git offline race proof, not live GitHub cancellation acceptance yet.
+The contract follows [Git's explicit lease](https://git-scm.com/docs/git-push)
+because [GitHub ref deletion](https://docs.github.com/en/rest/git/refs#delete-a-reference)
+does not accept an expected SHA.
 
 The [v0.1 run logs](./design.md#next-step-v01-run-logging) add local step history
 and live progress, separate from this journal. They explain started, verified and

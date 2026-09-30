@@ -337,6 +337,7 @@ export function createProductWorkflowReleaseGitHub({
   profile,
   runtime,
   execute = executeGitHub,
+  deleteBranch,
   base,
   process = runRehearsalProcess,
   download = (input) => downloadProductArtifact(input, process),
@@ -390,6 +391,7 @@ export function createProductWorkflowReleaseGitHub({
     profile,
     runtime,
     execute,
+    deleteBranch,
     signal,
     wait,
     now,
@@ -1407,6 +1409,7 @@ export function createProductWorkflowReleaseGitHub({
         versions: generic.versions
       };
     },
+    cancelIntegration: (args) => base.cancelIntegration(args),
     async integrate(args) {
       await waitForQuiet(
         args.record.step.role,

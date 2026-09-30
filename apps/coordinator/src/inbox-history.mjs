@@ -94,8 +94,10 @@ function summary(archive) {
     checksum,
     status:
       kind === "batches"
-        ? (record.stop?.status ??
-          (record.selected.length ? "passed" : "no-candidate"))
+        ? record.execution?.status === "cancelled"
+          ? "cancelled"
+          : (record.stop?.status ??
+            (record.selected.length ? "passed" : "no-candidate"))
         : record.result.report.status,
     tickets: bindings.map(({ issue_number, request_id, checksum }) => ({
       number: issue_number,
@@ -150,7 +152,7 @@ function historyComplete(kind, record) {
     record.status === "finished" &&
     (!isReleaseBatchPolicy(record.policy) ||
       !record.selected.length ||
-      record.execution?.status === "completed") &&
+      ["completed", "cancelled"].includes(record.execution?.status)) &&
     record.attempts.every(
       (attempt) =>
         attempt.result &&

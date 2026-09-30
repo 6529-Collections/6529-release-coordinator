@@ -1,20 +1,85 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-30** for real Issue #275's frontend staging runtime-pin
-stop and the narrow Coordinator pin refresh.
+Last reviewed: **2026-09-30** for real Issue #275's staging proof, production
+review block, and explicit keep-current cancellation.
 
 Real [Issue #275](https://github.com/6529-Collections/6529-release-coordinator/issues/275)
 passed exact frontend PR rehearsal and all 20 temporary candidate checks, then
 stopped before any release merge or deployment because frontend staging added
 `NEXT_PUBLIC_FEATURE_MULTI_COMPETITION: "true"` to its deployment workflow.
-The local refresh approves that exact staging blob independently while retaining
+Coordinator [PR #277](https://github.com/6529-Collections/6529-release-coordinator/pull/277)
+merged the refresh at `1337a0ab156a80884b4fa7bdec1239f8dd29983a`. It approves
+that exact staging blob independently while retaining
 the existing `main` blob. It leaves product code and workflow steps unchanged;
 runtime verification remains mandatory. Full local checks passed 665 tests with
 three optional Docker skips. The separate required npm audit passed after updating
 ESLint's development-only `brace-expansion` lock entry to patched `5.0.12`.
-Tests, remote delivery and the authorized
-same-run resume are separate evidence; see the
+Required GitHub checks and the main reviews passed; the user explicitly accepted
+the unavailable optional GLM advisory review. The updated `main` checkout passed
+the full local check again. The original filtered run resumed at 09:00 UTC on
+September 30 and retained only #275 / `simo6529`. After waiting for existing
+frontend deployment/test workflows, it merged staging integration PR #4133 at
+09:30 UTC. Staging deployment 36696554520 and its matching E2E 36697661172
+passed and were accepted. Production integration PR #4134 passed all 20 checks,
+then paused on an unresolved reviewer thread about keyboard expansion inside
+clickable quoted posts. The process exited at 10:03 UTC; journal revision 428
+retains `awaiting-review`, the same PR/branch and the #275-only lock. Production
+is unchanged, with no production deployment or E2E started. Resolve the linked
+PR's review blocker before resuming the saved run; do not start a new run or
+manually clear its lock. This is not a completed production release. Tests, remote delivery and the
+authorized same-run resume are separate evidence; see the
 [September 30 run record](./testing/real-production-ticket-275-2026-09-30.md).
+Source PR #4120 subsequently received its tested keyboard fix at `bc220ad0f6c0`.
+At 10:57 UTC, the user-authorized `--review-stop` command resumed only the old
+Issue #275 run. Other developers have advanced frontend `main` and both staging refs;
+those changes must be preserved. Receipt verification passed, but the stop
+invocation exited 2 at 11:05 UTC: its pre-production staging guard also prevents closing the
+still-unmerged owned PR after external staging drift. Journal revision 430 saves
+the stop choice and retains the lane with unfinished `running` state; the process
+is stopped, PR #4134 remains open, and no product merge/deploy/restoration occurred.
+No replacement request or release has started.
+The user then authorized a separate `--cancel-keep-current` cleanup choice.
+Local source now implements it for a confirmed no-database-change attempt at
+its owned unmerged integration PR, or an interrupted review stop, with no other
+production operation or recovery. It records durable cancellation intent,
+verifies and closes only the owned PR, removes its exact temporary branch,
+preserves current shared code and closes selected tickets as cancelled, not
+released. Interrupted cleanup retains the lock and can only resume cancellation.
+The full local check passed with 681 tests and three optional Docker skips;
+both-profile cancellation simulations and a read-only simulation using #275's
+actual saved journal passed. The approved real filtered cancellation then
+finished at 12:01 UTC with exit 0: PR #4134 closed unmerged, its exact owned
+temporary branch was removed, and #275 closed as `not_planned` with
+`reason:release-cancelled`. Independent readback of journal revision 438,
+commit `21c5df35bb4007e97ae33cef8e66d5236c27a4c1`, confirms `cancelled`, verified
+ticket presentation and no lock. The cancellation's before/after refs and the
+independent readback match; no shared staging/main code was altered, restored,
+merged or deployed by cancellation. The owned integration commit remains
+readable, and source PR #4120 stays open at its fixed `bc220ad0f6c0` head.
+The real cancelled record remains in the working journal, inactive and complete.
+After that run, local history handling was extended so verified cancellations
+archive normally at a later ordinary closeout; this addition has offline proof,
+not live archive acceptance yet. No replacement request or fresh release has
+started. The implementation, tests and evidence are in
+[PR #282](https://github.com/6529-Collections/6529-release-coordinator/pull/282),
+with remote delivery tracked by that PR; no package publication is claimed.
+Review follow-up adds an explicit missing-operation
+guard, structured `release-state` errors for corrupt cancellation journals,
+and focused tests for incomplete cleanup, partial refs, missing cancellation
+fields, late-merge state, non-selected terminal ticket preservation,
+post-cleanup observation failure/resume, missing saved execution, and preservation
+of cancelled (but not unfinished) evidence if the old batch later becomes stale.
+CodeRabbit's later branch-deletion race finding is addressed with an explicit
+saved-SHA Git lease and no unconditional REST fallback. Real Git tests prove
+that an intervening push survives deletion refusal; both profile adapters also
+retain cleanup ownership in that race. This new transport has offline proof only,
+not acceptance from the earlier live cancellation's source hashes.
+The independent closed-PR readback remains mandatory before branch deletion.
+Full local checks passed 694 tests with three optional Docker skips, and the
+locked dependency audit reported no vulnerabilities.
+These follow-up additions are offline-only; they were not used in the real cleanup.
+After the Coordinator change is merged, use a fresh ticket
+and new matching evidence for the fixed frontend version.
 The September 29 observations below predate merged Coordinator PR #270 and
 Issue #266's manually delivered disposition; their original run state is historical.
 
@@ -990,7 +1055,7 @@ snapshot is historical, not a fresh scan.
 | [Fake-production restoration](./testing/fake-production-restoration-2026-09-16.md)                                                   | Test `main` restored before staging through protected undo PRs, matching builds/E2E, final ref/tree readback, the large-journal blob fallback and the still-failed ticket.                                                                                                                              |
 | [Sample monitoring deployment](./testing/sandbox-monitoring-2026-09-17.md)                                                           | Monitoring deployed for staging and prod after the test-main merge and before production application deployments, installed templates bound to builds and artifact records, a controlled monitoring failure restored with monitoring redeployed, and the intake pin, allowlist and moved-base findings. |
 | [Branch-aligned monitoring acceptance](./testing/monitoring-branch-contract-2026-09-23.md)                                           | Merged test-mirror branch contract, exact staging/prod monitoring sources, full success release, staging and production controlled failures, protected restoration, matching E2E and final branch-tree readback.                                                                                        |
-| [Real ticket #266 runtime-pin stop](./testing/real-production-ticket-266-2026-09-29.md)                                               | Filtered real run, exact PR rehearsal, passing temporary combined checks, changed backend deploy-workflow pins, retained journal lock and no product release operation. |
+| [Real ticket #266 runtime-pin stop](./testing/real-production-ticket-266-2026-09-29.md)                                              | Filtered real run, exact PR rehearsal, passing temporary combined checks, changed backend deploy-workflow pins, retained journal lock and no product release operation.                                                                                                                                 |
 
 Keep current status and next steps here. Update behavior in its owning guide;
 keep dated acceptance reports unchanged unless explicitly recording a new run.

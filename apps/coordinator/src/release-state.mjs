@@ -11,6 +11,7 @@ import {
   validateRecoveryPlan
 } from "./release-plan.mjs";
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
+import { validateReleaseCancellation } from "./release-cancellation.mjs";
 
 const uuid = (value) =>
   /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(value ?? "");
@@ -101,6 +102,8 @@ export function validateReleaseExecution(execution, batch) {
         "awaiting-staging-choice",
         "reconciling-staging",
         "recovering",
+        "cancelling",
+        "cancelled",
         "completed",
         "needs-human"
       ].includes(execution.status) &&
@@ -121,6 +124,7 @@ export function validateReleaseExecution(execution, batch) {
     `Invalid ${execution?.plan?.profile === "real" ? "product" : "sandbox"} release execution state.`
   );
   validateReleasePlan(execution.plan, batch);
+  validateReleaseCancellation(execution, batch);
   if (execution.status !== "prepared")
     serviceAssert(
       execution.actor?.id &&

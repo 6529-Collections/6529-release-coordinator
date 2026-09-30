@@ -240,7 +240,9 @@ export function validateBatchHistory(batches, profile) {
         isReleaseBatchPolicy(batch.policy) &&
           batch.selected.length &&
           (batch.stop?.status !== "stale" ||
-            ["completed", "needs-human"].includes(batch.execution.status)),
+            ["completed", "needs-human", "cancelled"].includes(
+              batch.execution.status
+            )),
         "release-state",
         "Only a selected release-capable batch can own release execution; stale batches can retain only terminal evidence."
       );

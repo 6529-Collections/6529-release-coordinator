@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  createReleaseGitHub,
   integrationGateChecks,
   integrationPullPasses,
   integrationPullWaitsForReview
 } from "../src/release-github.mjs";
+import { createMockReleaseGitHub as createReleaseGitHub } from "./release-github-mock.mjs";
 import {
   makeReleaseBuild,
   makeReleaseOperation,

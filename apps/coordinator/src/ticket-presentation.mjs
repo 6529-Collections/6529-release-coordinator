@@ -53,6 +53,7 @@ export const reasons = [
   "release-completed",
   "release-failed",
   "release-stopped",
+  "release-cancelled",
   "release-staging-changed",
   "release-review-pending",
   "release-unverified"

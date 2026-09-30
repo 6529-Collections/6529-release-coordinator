@@ -650,6 +650,16 @@ on or remains paused. To abandon this paused PR deliberately, use
 then applies its normal recovery rules. A database-changing release is not
 automatically restored. Do not use either form while the previous process is
 still running.
+To cancel the attempt while leaving current code alone, use
+`--resume RUN_ID --cancel-keep-current`. This separate option requires a
+confirmed no-database-change release at its owned unmerged integration PR,
+or an interrupted review stop, with no other production operation or recovery.
+It closes only that verified PR and removes its exact temporary branch. It
+does not restore, merge, deploy or change staging/main. It records cancellation
+and closes the selected tickets as not planned, not as a completed release.
+An uncertain result keeps the lock. After an interruption, ordinary resume
+continues the saved cancellation and cannot promote code. Stop the original
+process and settle its requests first; new code needs a fresh ticket afterward.
 If the Coordinator records that backend staging moved during a frontend-only
 E2E or after E2E passed but before the first production action, it updates the
 ticket with `release-staging-changed` and retains the lock.

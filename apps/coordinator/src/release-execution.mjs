@@ -10,6 +10,7 @@ import {
   validateReleasePlan
 } from "./release-plan.mjs";
 import { serviceAssert } from "./service-contract.mjs";
+import { assertCancellableRelease } from "./release-cancellation.mjs";
 
 const successful = (result) => result?.status === "passed";
 const requestsMonitoring = (batch) =>
@@ -32,6 +33,17 @@ function monitoringNote(batch, execution) {
 export function releaseTicketResult(batch, number) {
   const execution = batch.execution;
   if (!batch.selected.includes(number)) return null;
+  // Cancellation is not a claim that stale code passed release checks.
+  // Preserve its verified terminal disposition even if inputs change later.
+  if (execution?.status === "cancelled")
+    return {
+      status: "closed",
+      // The selected combination passed rehearsal; its release was cancelled.
+      batch_status: "passed",
+      code: "release-cancelled",
+      message: execution.message,
+      execution
+    };
   if (batch.stop?.status === "stale")
     return {
       status: "waiting",
@@ -107,6 +119,7 @@ export async function executeRelease({
   signal,
   stagingChange,
   reviewStop = false,
+  cancelKeepCurrent = false,
   operator,
   uuid = randomUUID,
   now = () => new Date()
@@ -144,7 +157,14 @@ export async function executeRelease({
     "release-review",
     "An explicit review stop requires a saved release awaiting review."
   );
-  if (["completed", "needs-human"].includes(execution.status)) return execution;
+  serviceAssert(
+    !(cancelKeepCurrent && (reviewStop || stagingChange)),
+    "release-cancel",
+    "Cancellation cannot be combined with recovery or staging reconciliation."
+  );
+  if (cancelKeepCurrent) assertCancellableRelease(execution, batch);
+  if (["completed", "needs-human", "cancelled"].includes(execution.status))
+    return execution;
   const persist = async (message) => {
     signal?.throwIfAborted();
     await guard();
@@ -153,6 +173,88 @@ export async function executeRelease({
   };
   const sameVersions = (left, right) =>
     ["backend", "frontend"].every((role) => left?.[role] === right?.[role]);
+  // Handle cancellation before any promotion or restoration guard. Ref drift
+  // cannot authorize a merge here: this path has no merge/deploy/restore call.
+  if (cancelKeepCurrent || execution.status === "cancelling") {
+    const record = assertCancellableRelease(execution, batch);
+    serviceAssert(
+      typeof client.cancelIntegration === "function" &&
+        typeof client.environmentVersions === "function",
+      "release-cancel",
+      "The selected adapter cannot verify and clean up an owned integration PR."
+    );
+    const observedVersions = async () => {
+      const observed = {
+        staging: await client.environmentVersions("staging"),
+        prod: await client.environmentVersions("prod")
+      };
+      serviceAssert(
+        Object.values(observed).every((pair) =>
+          ["backend", "frontend"].every((role) =>
+            /^[0-9a-f]{40}$/u.test(pair?.[role] ?? "")
+          )
+        ),
+        "release-cancel",
+        "Cancellation requires exact current staging and production refs."
+      );
+      return observed;
+    };
+    if (!execution.cancellation) {
+      serviceAssert(
+        /^[1-9][0-9]*$/u.test(String(operator?.id ?? "")) &&
+          /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u.test(
+            operator?.login ?? ""
+          ),
+        "release-cancel",
+        "Cancellation requires the verified operator identity."
+      );
+      execution.cancellation = {
+        mode: "keep-current",
+        actor: { id: String(operator.id), login: operator.login },
+        requested_at: now().toISOString(),
+        step_id: record.step.id,
+        observed_before: await observedVersions()
+      };
+      record.cleanup_reason = "review-stop";
+      execution.status = "cancelling";
+      execution.message =
+        "Cancelling this attempt without restoring, merging or deploying code.";
+      delete execution.review_pause;
+      await persist("cancel release while keeping current code");
+    }
+    const result = await loggedStep(
+      {
+        step: "release.cancel",
+        operation_id: record.id,
+        role: record.step.role,
+        message: "Close only the owned unmerged PR and remove its exact branch."
+      },
+      () =>
+        client.cancelIntegration({
+          record,
+          candidate: execution.plan.candidates[record.step.role],
+          save: () => persist("cancel owned integration PR progress")
+        })
+    );
+    serviceAssert(
+      result?.status === "failed" &&
+        result.kind === "review-stop" &&
+        record.cleanup === "removed",
+      "release-cancel",
+      "The owned integration PR cleanup was not confirmed; the lock stays held."
+    );
+    record.result = result;
+    record.state = "completed";
+    execution.cancellation.observed_after = await observedVersions();
+    execution.status = "cancelled";
+    execution.completed_at = now().toISOString();
+    execution.message =
+      "The release attempt was cancelled. Its owned integration PR closed unmerged and its temporary branch was removed. Current staging and production code was left alone; nothing was restored, merged or deployed by cancellation. Any earlier staging work was left as is. This is not a completed release. Submit a fresh ticket to release changed code.";
+    await persist(
+      `release ${execution.plan.release_id} cancelled; current code preserved`
+    );
+    return execution;
+  }
   let chosenStagingChange = false;
   const stagingDrift = async (record) => {
     const observed = await client.environmentVersions?.("staging");

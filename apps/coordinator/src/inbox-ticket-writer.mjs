@@ -315,18 +315,19 @@ export async function presentRunTicket(
           const freshIssue = await response(api, "GET", `/issues/${number}`);
           if (receiptHash(freshIssue) !== ticket.receipt_hash)
             throw new Error("Receipt changed before closure.");
-          if (
-            latest(ticket).decision.reasons.some(
-              (reason) => reason.code === "release-completed"
-            )
-          ) {
+          const releaseReason = latest(ticket).decision.reasons.find((reason) =>
+            ["release-completed", "release-cancelled"].includes(reason.code)
+          );
+          if (releaseReason) {
             const fingerprint = latest(ticket).decision.batch?.fingerprint;
             const saved = state.batches?.[fingerprint];
             if (
               !saved ||
               !saved.selected.includes(number) ||
               validateReleaseExecution(saved.execution, saved).status !==
-                "completed"
+                (releaseReason.code === "release-cancelled"
+                  ? "cancelled"
+                  : "completed")
             )
               throw new Error(
                 `Saved ${profile.name} release evidence changed before closure.`
