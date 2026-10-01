@@ -246,3 +246,14 @@ and three optional Docker skips. Lint, formatting, docs/workflow policy and the
 packed CLI smoke check passed. The exact shared lockfile audit also reported
 zero vulnerabilities. These local results remain distinct from the latest
 PR head's GitHub checks and review availability.
+
+The partial GLM testing slice prompted additional same-count regressions:
+candidate verification rejects a changed parent SHA, reordered parents and a
+changed tree as well as a missing parent; the resume test confirms the saved
+production frontend integration passed before interruption and checks journal
+reasons as well as labels; non-behind states cannot receive source-integration
+admission; and unsupported history policy shapes must fail with `batch-policy`.
+The cancellation fixture deliberately supplies a fixed API-free plan stub, so
+its exact read count is deterministic. An ancestry flag alone is not an
+admission/merge grant; the independently audited source-only certificate and
+fresh exact candidate checks remain authoritative.

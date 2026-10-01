@@ -31,6 +31,10 @@ test("resume after original PRs enter main still finishes deploy and E2E, not al
   assert.ok(stopped.lock);
   assert.equal(h.f.issues[0].state, "open");
   const before = stopped.batches[stopped.lock.batch_fingerprint].execution;
+  assert.equal(
+    before.operations["prod:integrate:frontend"].result.status,
+    "passed"
+  );
   assert.equal(before.operations["prod:e2e"], undefined);
   const observe = h.options.observe;
   h.options.observe = async (entry) => {
@@ -59,7 +63,9 @@ test("resume after original PRs enter main still finishes deploy and E2E, not al
     !h.f
       .state()
       .tickets[1].transitions.at(-1)
-      .decision.reasons.some((reason) => reason.code === "release-unverified")
+      .decision.reasons.some((reason) =>
+        ["release-unverified", "already-merged"].includes(reason.code)
+      )
   );
   assert.equal(h.f.state().lock, null);
 });

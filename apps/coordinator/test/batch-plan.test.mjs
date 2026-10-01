@@ -23,8 +23,9 @@ test("history-preserving policies never reuse old copy-based publication proof",
     assert.equal(trustedBatchPolicy(structuredClone(old)), old);
     assert.equal(trustedBatchPolicy(structuredClone(current)), current);
     assert.notEqual(serviceHash(old), serviceHash(current));
-    assert.throws(() =>
-      trustedBatchPolicy({ ...old, preserve_source_history: false })
+    assert.throws(
+      () => trustedBatchPolicy({ ...old, preserve_source_history: false }),
+      { code: "batch-policy" }
     );
   }
 });

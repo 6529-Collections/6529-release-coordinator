@@ -22,8 +22,21 @@ test("published candidate preserves every selected original head and rejects los
     "2".repeat(40)
   ]);
   assert.equal((await f.client.result(f.record)).status, "passed");
-  f.tested.parents.pop();
-  await assert.rejects(f.client.result(f.record), /saved exact tested tree/);
+  const parents = structuredClone(f.tested.parents);
+  for (const mutate of [
+    (tested) => tested.parents.pop(),
+    (tested) => {
+      tested.parents[1].sha = "f".repeat(40);
+    },
+    (tested) => tested.parents.reverse(),
+    (tested) => {
+      tested.tree.sha = "f".repeat(40);
+    }
+  ]) {
+    f.tested.parents = structuredClone(parents);
+    mutate(f.tested);
+    await assert.rejects(f.client.result(f.record), /saved exact tested tree/);
+  }
 });
 
 test("temporary PR writer saves exact identity, verifies checks, and only removes its own trial", async () => {

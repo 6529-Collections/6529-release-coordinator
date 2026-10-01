@@ -52,6 +52,8 @@ export async function refreshedPreparationPlans(
       return null;
     const current = await plan(entry);
     signal?.throwIfAborted();
+    // Only base SHAs may differ: any non-deterministic or changed non-base
+    // field fails this comparison before it can trigger another preparation.
     if (digest(withoutBases(current)) !== digest(withoutBases(item.input)))
       return null;
     moved ||= digest(current) !== digest(item.input);

@@ -55,6 +55,11 @@ test("behind source admission audits every gate but never grants an integration 
   value.sourceIntegration = sourceIntegrationEvidence(input);
   assert.equal(hasSourceIntegration(value), true);
   assert.equal(hasApprovalBypass(value), false);
+  for (const mergeStateStatus of ["CLEAN", "BLOCKED", "UNKNOWN"]) {
+    const other = structuredClone(input);
+    other.pr.mergeStateStatus = mergeStateStatus;
+    assert.equal(sourceIntegrationEvidence(other), null);
+  }
   for (const id of ["github_merge_gate", "required_checks", "reviews"])
     assert.equal(
       inspectPull(
@@ -527,8 +532,11 @@ function advancedMainClient({
 
 test("audit uses live main separately from GitHub's retained original PR base", async () => {
   for (const options of [
+    // Behind source: current main is pinned for fresh candidate testing only.
     { source: true, strict: true },
+    // Soft freshness: the existing approval exception does not require main ancestry.
     { strict: false },
+    // Strict direct merge: a source lacking current main must remain blocked.
     { strict: true }
   ]) {
     const { value, client, currentMain } = advancedMainClient(options);
