@@ -8,6 +8,9 @@ below retains its recorded September 30 date.
 ## October 1 — frontend PR-CI pin refresh (local)
 
 Branch `codex/frontend-ci-pin-refresh` updates only the real frontend
+PR-check contract. Source delivery is tracked by
+[Coordinator PR #290](https://github.com/6529-Collections/6529-release-coordinator/pull/290).
+It updates the
 `.github/workflows/app-pr-ci.yml` pin from
 `874b4eb0070101202d0d3eda081d5e616e87cabd` to
 `2cc4f7a5e36ba3d056b1f4b43d534f13f2ebde9a`, after a complete blob comparison.
@@ -32,8 +35,10 @@ migrated. Unknown workflow blobs remain refused.
 Offline regression coverage includes unchanged/moved main, saved-lock resume,
 fresh CI identity, old-policy readability, preserved attempts and budgets,
 idempotent second resume, changed code/check blockers, and exclusion of owned
-trials or release execution. The full local `npm run check` passed **725 tests**,
-with three optional Docker tests skipped (728 total), including lint, formatting,
+trials or release execution. Review hardening adds the explicit backend-pin
+drift refusal regression and clarifies same-policy snapshot de-duplication.
+The full local `npm run check` passed **726 tests**,
+with three optional Docker tests skipped (729 total), including lint, formatting,
 documentation/workflow policy and packed-CLI checks. The locked dependency audit
 reported zero vulnerabilities. This is local source/test coverage, not GitHub PR
 CI or live acceptance. No npm publication, product edit, release resume or

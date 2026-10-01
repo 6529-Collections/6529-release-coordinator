@@ -10,6 +10,24 @@ import {
 
 import { fixture } from "./batch-github-fixture.mjs";
 
+test("frontend pin refresh never accepts unreviewed backend PR workflow drift", async () => {
+  const f = fixture({ profile: realProfile, role: "backend" });
+  const path = ".github/workflows/on-pull-request.yml";
+  assert.equal(
+    (await f.client.identity("backend", f.record.base)).workflow_id,
+    null
+  );
+  f.workflowBlobs[path] = "cb4754bf078b883d7620f0d26cdb2c92b8058f70";
+  await assert.rejects(f.client.identity("backend", f.record.base), {
+    code: "batch-runtime"
+  });
+  assert.ok(f.calls.every((call) => call.method === "GET"));
+  assert.equal(
+    realBatchPolicy.workflow_blobs.backend[path],
+    priorRealBatchPolicy.workflow_blobs.backend[path]
+  );
+});
+
 test("real frontend accepts only the reviewed CI pin, never an old or unknown workflow", async () => {
   const path = ".github/workflows/app-pr-ci.yml";
   const f = fixture({ profile: realProfile, role: "frontend" });

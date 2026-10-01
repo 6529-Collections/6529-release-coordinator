@@ -29,6 +29,8 @@ export async function refreshedPreparationPlans(
   }
 ) {
   const plans = {};
+  // A reviewed policy change can retest an unchanged base. The caller supplies
+  // only current-policy priorInputs, so same-policy snapshots still cannot repeat.
   let moved = policyChanged;
   for (const item of items.filter(
     (item) => item.input && !item.recordedTerminal
