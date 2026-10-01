@@ -1,4 +1,8 @@
-import { isReleaseBatchPolicy } from "./batch-plan.mjs";
+import {
+  batchPolicyForProfile,
+  canRefreshBatchPreparationPolicy,
+  isReleaseBatchPolicy
+} from "./batch-plan.mjs";
 import { bindRunLog, loggedStep, runEvent } from "./run-log.mjs";
 import { realProfile } from "./profiles.mjs";
 import { readInbox, inspectIssue } from "./inbox-reader.mjs";
@@ -10,7 +14,7 @@ import {
   verifyBatchInputs
 } from "./inbox-preparation.mjs";
 import { presentRunTicket } from "./inbox-ticket-writer.mjs";
-import { serviceAssert } from "./service-contract.mjs";
+import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { assertCancellableRelease } from "./release-cancellation.mjs";
 import { refreshedPreparationPlans } from "./preparation-refresh.mjs";
 import {
@@ -295,6 +299,11 @@ export async function processInbox({
         used("checks") >= stale.policy.max_check_attempts
       )
         break;
+      const currentPolicy = batchPolicyForProfile(profile);
+      const policyChanged = canRefreshBatchPreparationPolicy(
+        stale,
+        currentPolicy
+      );
       const freshPlans = await refreshedPreparationPlans(preparedTickets, {
         api,
         inspect,
@@ -304,9 +313,17 @@ export async function processInbox({
         github,
         plan,
         signal,
-        priorInputs: [...previous, stale].map((saved) => saved.inputs)
+        policyChanged,
+        priorInputs: [...previous, stale]
+          .filter(
+            (saved) =>
+              !policyChanged ||
+              serviceHash(saved.policy) === serviceHash(currentPolicy)
+          )
+          .map((saved) => saved.inputs)
       });
-      if (!freshPlans) break;
+      if (!freshPlans || stale.inputs.some(({ number }) => !freshPlans[number]))
+        break;
       run.reprepared_batches ??= [];
       run.reprepared_batches.push(run.batch_fingerprint);
       state.lock.reprepared_batches = structuredClone(run.reprepared_batches);
@@ -317,13 +334,16 @@ export async function processInbox({
       await journal.save(
         state,
         run,
-        "reprepare unchanged tickets on current main; preserve old checks and budgets"
+        policyChanged
+          ? "reprepare unchanged tickets with reviewed PR workflow policy; preserve old checks and budgets"
+          : "reprepare unchanged tickets on current main; preserve old checks and budgets"
       );
       runEvent({
         step: "batch.refresh",
         outcome: "succeeded",
-        message:
-          "Main changed before release execution. Rebuilding and retesting the same requested PR commits; old candidate proof is not reused."
+        message: policyChanged
+          ? "Reviewed PR workflow policy changed before publication. Rebuilding and retesting the same requested PR commits; old candidate proof is not reused."
+          : "Main changed before release execution. Rebuilding and retesting the same requested PR commits; old candidate proof is not reused."
       });
     }
     for (const item of preparedTickets) {

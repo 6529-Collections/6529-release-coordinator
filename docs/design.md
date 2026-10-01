@@ -211,6 +211,19 @@ ticket/actor scope and journal evidence. Resume rechecks current runtime files
 and release inputs; approving one environment does not approve future changes
 or a different file on the other branch.
 
+The real candidate PR-check policy separately pins the product's PR workflows.
+The reviewed October 1 frontend native-competition lane changes only the
+`app-pr-ci.yml` pin; required checks and all other pins remain unchanged. Its
+exact prior history-preserving policy remains readable. A stopped preparation
+can move through this explicit policy transition only before release execution,
+with no selected candidate, recorded trial PR or service attempt. It retires the
+old check attempt as stale, confirms cleanup, revalidates the same receipt,
+actor, source heads and gates, then rebuilds/retests under a new policy hash.
+Main need not change for this transition. Old attempts stay in the journal and
+count against the same run's budgets. This does not migrate copy-based work,
+published trials, selected candidates or existing releases, and never accepts
+an arbitrary workflow change. Unreviewed pins still stop execution.
+
 <a id="proposed-batch-testing-and-selection"></a>
 
 ## Batch testing and selection

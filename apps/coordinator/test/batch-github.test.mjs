@@ -2,9 +2,63 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createBatchGitHub } from "../src/batch-github.mjs";
 import { realProfile } from "../src/profiles.mjs";
-import { previousBatchPolicy } from "../src/batch-plan.mjs";
+import {
+  previousBatchPolicy,
+  priorRealBatchPolicy,
+  realBatchPolicy
+} from "../src/batch-plan.mjs";
 
 import { fixture } from "./batch-github-fixture.mjs";
+
+test("frontend pin refresh never accepts unreviewed backend PR workflow drift", async () => {
+  const f = fixture({ profile: realProfile, role: "backend" });
+  const path = ".github/workflows/on-pull-request.yml";
+  assert.equal(
+    (await f.client.identity("backend", f.record.base)).workflow_id,
+    null
+  );
+  f.workflowBlobs[path] = "cb4754bf078b883d7620f0d26cdb2c92b8058f70";
+  await assert.rejects(f.client.identity("backend", f.record.base), {
+    code: "batch-runtime"
+  });
+  assert.ok(f.calls.every((call) => call.method === "GET"));
+  assert.equal(
+    realBatchPolicy.workflow_blobs.backend[path],
+    priorRealBatchPolicy.workflow_blobs.backend[path]
+  );
+});
+
+test("real frontend accepts only the reviewed CI pin, never an old or unknown workflow", async () => {
+  const path = ".github/workflows/app-pr-ci.yml";
+  const f = fixture({ profile: realProfile, role: "frontend" });
+  assert.equal(
+    (await f.client.identity("frontend", f.record.base)).workflow_id,
+    null
+  );
+  for (const blob of [
+    priorRealBatchPolicy.workflow_blobs.frontend[path],
+    "f".repeat(40)
+  ]) {
+    f.workflowBlobs[path] = blob;
+    await assert.rejects(f.client.identity("frontend", f.record.base), {
+      code: "batch-runtime"
+    });
+  }
+  const historical = fixture({
+    profile: realProfile,
+    role: "frontend",
+    policy: priorRealBatchPolicy
+  });
+  historical.workflowBlobs[path] =
+    realBatchPolicy.workflow_blobs.frontend[path];
+  await assert.rejects(
+    historical.client.identity("frontend", historical.record.base),
+    { code: "batch-runtime" }
+  );
+  assert.ok(
+    [...f.calls, ...historical.calls].every((call) => call.method === "GET")
+  );
+});
 
 test("published candidate preserves every selected original head and rejects lost history", async () => {
   const f = fixture({ profile: realProfile });

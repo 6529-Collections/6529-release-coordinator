@@ -3,17 +3,85 @@ import assert from "node:assert/strict";
 import {
   batchPolicyForProfile,
   batchPolicyProfile,
+  canRefreshBatchPreparationPolicy,
   batchPolicy,
   copiedBatchPolicy,
   copiedRealBatchPolicy,
   earlierElapsedBatchPolicy,
   previousBatchPolicy,
+  priorRealBatchPolicy,
   realBatchPolicy,
   realServicePlan,
   trustedBatchPolicy
 } from "../src/batch-plan.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import { serviceHash } from "../src/service-contract.mjs";
+
+test("reviewed frontend workflow refresh changes only its pin and keeps both historical policies trusted", () => {
+  const expected = structuredClone(priorRealBatchPolicy);
+  expected.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"] =
+    "2cc4f7a5e36ba3d056b1f4b43d534f13f2ebde9a";
+  assert.deepEqual(realBatchPolicy, expected);
+  for (const historical of [copiedRealBatchPolicy, priorRealBatchPolicy])
+    assert.equal(trustedBatchPolicy(structuredClone(historical)), historical);
+  assert.equal(
+    priorRealBatchPolicy.workflow_blobs.frontend[
+      ".github/workflows/app-pr-ci.yml"
+    ],
+    "874b4eb0070101202d0d3eda081d5e616e87cabd"
+  );
+  assert.notEqual(
+    serviceHash(priorRealBatchPolicy),
+    serviceHash(realBatchPolicy)
+  );
+  const unknown = structuredClone(realBatchPolicy);
+  unknown.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"] =
+    "f".repeat(40);
+  assert.throws(() => trustedBatchPolicy(unknown), { code: "batch-policy" });
+});
+
+test("policy refresh is limited to the reviewed unpublished preparation, not owned work or release history", () => {
+  const batch = {
+    policy: structuredClone(priorRealBatchPolicy),
+    status: "searching",
+    selected: [],
+    attempts: [{ progress: { prs: [], service_attempts: {} } }]
+  };
+  assert.equal(canRefreshBatchPreparationPolicy(batch, realBatchPolicy), true);
+  const retired = { ...batch, status: "finished", stop: { status: "stale" } };
+  assert.equal(
+    canRefreshBatchPreparationPolicy(retired, realBatchPolicy),
+    true
+  );
+  for (const change of [
+    { policy: copiedRealBatchPolicy },
+    { policy: realBatchPolicy },
+    { execution: { status: "prepared" } },
+    { execution: { status: "completed" } },
+    { status: "finished" },
+    { selected: [1] },
+    {
+      attempts: [
+        { progress: { prs: [{ cleanup: "removed" }], service_attempts: {} } }
+      ]
+    },
+    {
+      attempts: [{ progress: { prs: [], service_attempts: { candidate: {} } } }]
+    }
+  ])
+    assert.equal(
+      canRefreshBatchPreparationPolicy(
+        { ...batch, ...change },
+        realBatchPolicy
+      ),
+      false
+    );
+  assert.equal(
+    canRefreshBatchPreparationPolicy(batch, priorRealBatchPolicy),
+    false
+  );
+  assert.equal(canRefreshBatchPreparationPolicy(batch, batchPolicy), false);
+});
 
 test("history-preserving policies never reuse old copy-based publication proof", () => {
   for (const [old, current] of [
