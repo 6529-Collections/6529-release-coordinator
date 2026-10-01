@@ -1,9 +1,52 @@
 # Progress and next steps
 
-Last reviewed: **2026-10-01** for behind-main source admission, original-PR
+Last reviewed: **2026-10-01** for candidate blob publication, behind-main source admission, original-PR
 history publication, completed sandbox acceptance, and the local frontend PR-CI
 pin refresh. The real #275 evidence
 below retains its recorded September 30 date.
+
+## October 1 — missing combined-file upload (local)
+
+Branch `codex/publish-merged-candidate-blobs` repairs real trial publication when
+Git creates combined file contents that do not yet exist in GitHub. The writer
+recreates missing bytes from the saved exact main/source heads in an owned
+temporary Git workspace, verifies the complete saved tree and SHA-only patch,
+cleans the workspace, then uploads only missing hash-verified blobs before the
+ordinary exact-tree/parent commit and PR creation. Byte-exact base64 uploads also
+preserve binary data. No product edits, policy-pin refresh, journal migration,
+source-head change or new limit is part of this fix. Sandbox inline publication
+and every later check/review/deployment/E2E gate stay unchanged.
+
+The stopped real #285 attempt exposed two combined help-index blobs missing from
+GitHub. The resumed command exited 2 on HTTP 422 during trial creation at
+12:21 UTC. Independently read journal revision 571 retains the same filtered
+#285/`simo6529` run and lock, exact source `bc220ad0f6c0`, and unpublished check
+attempt `dea415ce-281b-4095-8601-f2754ff7dfa4`. No release execution exists in
+that saved attempt. Its preceding trial #4146 was closed and its owned branch
+removed after main moved; those attempts and spent budgets remain preserved.
+The follow-up watcher is paused. This code change does not resume that run,
+clear its lock, change its request, or start any release or other ticket.
+
+Offline regressions reproduce a genuinely new merged help-index blob using real
+temporary Git repositories and independently rebuild the server-side tree from
+uploaded objects. They cover binary bytes/executable modes, SHA deduplication,
+deletions, saved-check resume after a lost upload response, refusal of bad bytes
+or identities, main/authority/interruption guards, and owned cleanup. The full
+local `npm run check` passed **736 tests**, with three optional Docker tests
+skipped (739 total); lint, formatting, documentation/workflow policy and the
+packed CLI smoke test passed. The locked dependency audit found zero
+vulnerabilities.
+
+A separate read-only reconstruction used #285's actual saved preparation from
+journal commit `b441fc9c81cf0a55293727edd19c0aaa8ac7fa81`. It reproduced tree
+`67c4fc3b698d0dc951b404fa88f996dc38ac55e5` and both missing blobs exactly:
+`04494223f162d24f3dcc2683b754460705163e24` (602,480 bytes) and
+`47daec2dea42ccb1e98966b589b4a22be75e60e2` (602,169 bytes). Owned temporary Git
+cleanup completed and the authoritative journal commit remained unchanged.
+This check read product Git objects but made no GitHub writes or inbox invocation.
+It is reconstruction proof only, not upload/deployment acceptance. No new
+Coordinator PR, merge, npm publication or live staging/production acceptance is
+claimed.
 
 ## October 1 — frontend PR-CI pin refresh (local)
 

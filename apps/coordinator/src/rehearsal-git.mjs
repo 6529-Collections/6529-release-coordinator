@@ -295,6 +295,19 @@ export async function createRehearsalGit({
           await supportedTree(commit);
         }
         return {
+          async blobBytes(sha) {
+            if (!isSha(sha))
+              throw new RehearsalError(
+                "invalid_snapshot",
+                "Invalid blob input."
+              );
+            return (
+              await repoGit(["cat-file", "blob", sha], {
+                maxOutput: 1024 * 1024,
+                encoding: null
+              })
+            ).stdout;
+          },
           tree: (commit) => {
             if (!isSha(commit))
               throw new RehearsalError("invalid_commit", "Invalid tree input.");

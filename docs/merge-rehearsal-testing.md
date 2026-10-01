@@ -264,6 +264,32 @@ must pass its selected profile into the Git transport; the
 [September 24 ticket-mode record](./testing/real-ticket-rehearsal-mode-2026-09-24.md)
 documents why this needs a separate integration regression.
 
+Real candidate patches stay SHA-only. A clean local merge can create a new blob
+whose bytes are absent from GitHub even though both source commits are present.
+Before publishing a trial tree, the real adapter checks each distinct non-deleted
+patch blob in the target repository. For missing blobs it recreates the merge in
+an isolated, authenticated partial-fetch workspace, using only the saved main
+and ordered original source heads. Both the complete tree and complete patch
+must equal the saved preparation. It reads the missing bytes without UTF-8
+conversion, verifies their Git blob hashes, and completes owned workspace cleanup
+before uploading them through GitHub's base64 blob endpoint. The writer verifies
+the returned hashes, rechecks main and the journal guard, then publishes the same
+tree and original-head parents through the existing trial flow. File content is
+not added to the journal, reports or logs; executable modes and deletions remain
+unchanged. Existing transport/storage/output limits still apply; no new policy
+limit is introduced.
+
+An interrupted upload retains the same prepared/check attempt and lock. On an
+explicit safe resume, uploaded objects are recognized by their immutable hashes;
+only still-missing bytes are recreated/uploaded. Already recorded commits/PRs
+follow their existing reconciliation path without another upload. Historical
+SHA-only preparations with original heads need no format or policy migration.
+If those heads are unavailable, or the reconstruction, bytes, cleanup, guard or
+GitHub identity cannot be verified, publication stops. It never guesses content
+or edits a source branch to make publication succeed. Sandbox inline sample
+patches and later checked-candidate release/deployment gates are unchanged.
+These are implementation/offline boundaries, not proof that a real release ran.
+
 For real product trial PRs, required GitHub checks may be either check runs
 (`name`) or status contexts (`context`), and jobs may appear after the PR is
 created. The trial reader waits within its existing poll budget for absent

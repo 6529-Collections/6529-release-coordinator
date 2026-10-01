@@ -13,6 +13,7 @@ export function runRehearsalProcess(
     signal,
     timeout = 30_000,
     maxOutput = 16 * 1024 * 1024,
+    encoding = "utf8",
     allowedCodes = [0],
     watch
   } = {}
@@ -107,7 +108,13 @@ export function runRehearsalProcess(
             "A rehearsal operation failed; check repository access and the requested objects."
           )
         );
-      else resolve({ code, stdout: Buffer.concat(chunks).toString("utf8") });
+      else {
+        const output = Buffer.concat(chunks);
+        resolve({
+          code,
+          stdout: encoding === null ? output : output.toString(encoding)
+        });
+      }
     });
     child.stdin.end(input);
   });

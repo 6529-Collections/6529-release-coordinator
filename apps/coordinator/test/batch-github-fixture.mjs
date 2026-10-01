@@ -1,12 +1,17 @@
 import { createBatchGitHub } from "../src/batch-github.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
 import { batchPolicy, realBatchPolicy } from "../src/batch-plan.mjs";
+import { blobHash } from "../src/service-contract.mjs";
 
 export function fixture({
   guard = async () => {},
   after = async () => {},
   role = "backend",
   archived = false,
+  signal,
+  candidateBlobs,
+  missingBlobs = new Set(),
+  baseTree = "e".repeat(40),
   profile = sandboxProfile,
   policy = profile.name === "real" ? realBatchPolicy : batchPolicy
 } = {}) {
@@ -32,6 +37,7 @@ export function fixture({
     saved = [];
   const workflowBlobs = structuredClone(policy.workflow_blobs?.[role] ?? {});
   let ref = null,
+    mainCommit = null,
     pr = null,
     loseResponse = false;
   const run = {
@@ -122,15 +128,24 @@ export function fixture({
         state: "active"
       };
     else if (path === "/git/ref/heads/main")
-      data = { object: { sha: record.base } };
+      data = { object: { sha: mainCommit ?? record.base } };
     else if (path === `/git/ref/heads/${record.branch}`) {
       status = ref ? 200 : 404;
       data = ref;
     } else if (path === `/git/commits/${record.base}`)
-      data = { tree: { sha: "e".repeat(40) } };
-    else if (path === "/git/trees" && method === "POST") {
+      data = { tree: { sha: baseTree } };
+    else if (path.startsWith("/git/blobs/") && method === "GET") {
+      const sha = path.split("/").at(-1);
+      status = missingBlobs.has(sha) ? 404 : 200;
+      data = status === 200 ? { sha } : {};
+    } else if (path === "/git/blobs" && method === "POST") {
       status = 201;
-      data = { sha: record.tree };
+      const sha = blobHash(Buffer.from(body.content, body.encoding));
+      missingBlobs.delete(sha);
+      data = { sha };
+    } else if (path === "/git/trees" && method === "POST") {
+      status = body.tree.some((file) => missingBlobs.has(file.sha)) ? 422 : 201;
+      data = status === 201 ? { sha: record.tree } : {};
     } else if (path === "/git/commits" && method === "POST") {
       status = 201;
       data = {
@@ -178,15 +193,17 @@ export function fixture({
       ref = null;
       status = 204;
     } else throw new Error(`Unexpected fixture call: ${method} ${path}`);
-    await after({ method, path, body });
+    await after({ method, path, body, response: data });
     return `HTTP/2 ${status} OK\r\ncontent-type: application/json\r\n\r\n${data === undefined ? "" : JSON.stringify(data)}`;
   };
   const client = createBatchGitHub({
     profile,
+    signal,
     guard,
     execute,
     gates: { pullRequest: async () => structuredClone(gate) },
     policy,
+    candidateBlobs,
     logs: async () =>
       `2026-09-10T12:00:00.000Z [command]/usr/bin/git log -1 --format=%H\n2026-09-10T12:00:00.000Z ${merge.sha}\n2026-09-10T12:00:01.000Z ##[group]Run npm test\n` +
       '2026-09-10 {"status":"blocked","steps":[{"unit":"api","status":"blocked"}],"errors":[{"code":"service-failed"}],"cleanup":{"status":"removed"}}\n'
@@ -224,6 +241,9 @@ export function fixture({
     pr: () => pr,
     move: () => {
       ref.object.sha = "f".repeat(40);
+    },
+    moveMain: () => {
+      mainCommit = "f".repeat(40);
     }
   };
 }
