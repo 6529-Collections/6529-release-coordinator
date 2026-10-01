@@ -26,6 +26,8 @@ const branchName = (value) =>
     value ?? ""
   );
 const positive = (value) => Number.isSafeInteger(value) && value > 0;
+// The recorded order is intentional: main first, then requested source heads.
+// Commit creation and resume verification must preserve that exact order.
 const parentsFor = (record) => [
   ...new Set([record.base, ...(record.source_prs ?? []).map((pr) => pr.commit)])
 ];
@@ -37,9 +39,10 @@ const hasParents = (commit, record) =>
 // identities in the selected trusted repositories, never source or shared refs.
 export function createBatchGitHub({
   profile,
+  signal,
   execute = executeGitHub,
   logs = readServiceLogs,
-  gates = createRehearsalGitHub(profile),
+  gates = createRehearsalGitHub(profile, { signal }),
   guard = async () => {},
   policy = batchPolicy
 } = {}) {
@@ -178,6 +181,7 @@ export function createBatchGitHub({
       sourcePrs: record.source_prs,
       base: record.base,
       candidate: record.commit,
+      signal,
       ignored: record.number ? [record.number] : []
     });
   }

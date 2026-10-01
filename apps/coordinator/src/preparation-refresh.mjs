@@ -15,13 +15,24 @@ const withoutBases = (plan) => ({
 // Reuse the receipt and source heads, never a newly pushed developer version.
 export async function refreshedPreparationPlans(
   items,
-  { api, inspect, get, profile, observe, github, plan }
+  {
+    api,
+    inspect,
+    get,
+    profile,
+    observe,
+    github,
+    plan,
+    priorInputs = [],
+    signal
+  }
 ) {
   const plans = {};
   let moved = false;
   for (const item of items.filter(
     (item) => item.input && !item.recordedTerminal
   )) {
+    signal?.throwIfAborted();
     const issue = await response(api, "GET", `/issues/${item.number}`);
     if (
       issue.state !== "open" ||
@@ -40,10 +51,21 @@ export async function refreshedPreparationPlans(
     if (!canRehearse(entry, observation, decideTicket(entry, observation)))
       return null;
     const current = await plan(entry);
+    signal?.throwIfAborted();
     if (digest(withoutBases(current)) !== digest(withoutBases(item.input)))
       return null;
     moved ||= digest(current) !== digest(item.input);
     plans[item.number] = current;
   }
-  return moved ? plans : null;
+  // A repeated base snapshot cannot justify spending the same run's budgets
+  // again. This is evidence de-duplication, not a new retry or time limit.
+  const repeated = priorInputs.some(
+    (inputs) =>
+      inputs.length > 0 &&
+      inputs.every(
+        ({ number, input }) =>
+          plans[number] && digest(plans[number]) === digest(input)
+      )
+  );
+  return moved && !repeated ? plans : null;
 }

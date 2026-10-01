@@ -219,6 +219,10 @@ export function sourceIntegrationEvidence(input) {
     )
       return null;
     if (approvalRequired || pr.reviewDecision === "REVIEW_REQUIRED") {
+      // Defer only strict base freshness for candidate admission. The existing
+      // missing-approval audit still requires the same exact head/base, trusted
+      // bypass actor, known rules, successful checks and resolved review threads.
+      // Its result is nested here, never granted to the owned integration PR.
       bypass = approvalBypassEvidence({
         ...input,
         pr: { ...pr, mergeStateStatus: "BLOCKED" },

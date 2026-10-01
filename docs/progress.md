@@ -17,6 +17,18 @@ the saved deployment/E2E sequence. Exact older copy-based policies remain readab
 The journal preserves `inbox-run-v7` and fences older writers with the trusted
 `source_history: original-pr-v1` field, including after archival.
 
+Source delivery is tracked by
+[Coordinator PR #288](https://github.com/6529-Collections/6529-release-coordinator/pull/288).
+Review hardening threads cancellation through source-history scans and
+re-preparation, filters open PR scans to main, caches repeated immutable SHA
+comparisons and rejects a previously attempted preparation snapshot. The
+unselected-history check now runs before both staging and main integrations.
+No page, retry, time or attempt policy limit was added. Focused regression
+tests cover each change; sandbox acceptance below predates these final review
+hardening checks and is not a new real-product acceptance.
+The final review-hardened local check passed **716 tests**, with three optional
+Docker skips (719 total), and the exact lockfile audit reported zero vulnerabilities.
+
 Main-only movement during preparation can clean old trials and rebuild/retest the
 same frozen ticket pool within the existing per-run budgets; source/receipt/actor
 changes and movement after release execution begins still stop normally.

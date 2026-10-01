@@ -218,3 +218,31 @@ candidate preparation, automatic cleanup/re-preparation budgets, changed source
 gates, unchanged-tree roles and both-profile safety cases have offline regression
 coverage; this report does not claim fresh live acceptance of those additional
 failure/recovery paths or any real-product release.
+
+## PR review hardening
+
+[Coordinator PR #288](https://github.com/6529-Collections/6529-release-coordinator/pull/288)
+adds abort checkpoints around every source-history page/comparison response and
+preparation refresh, a main-only server-side PR filter, per-scan caching of
+immutable SHA comparisons, and refusal to re-attempt an already recorded base
+snapshot. The unselected-history guard now runs before staging as well as main
+merges. Focused tests cover cancellation, reduced duplicate comparisons,
+repeated preparation evidence and both shared-ref guard placements. Existing
+count budgets and the user-agreed no-limit waits are unchanged; no page/time/
+retry cap was added.
+
+Read-only live GitHub comparisons confirmed that `base_commit.sha` is the first
+requested SHA for both `behind` (backend main to original B) and `diverged`
+(frontend original B to original A); the merge-base SHA is distinct as expected.
+At review, main-target open PR counts were 35 frontend and 19 backend. Exact
+ancestry of each unselected unique head still needs a compare; these reads cannot
+be safely replaced with an assumption that a head is unrelated. A failed or
+rate-limited read fails closed. These are review-time readbacks, not mutable
+future guarantees. No new sandbox release or real-product run was executed for
+the review hardening changes.
+
+The review-hardened full local check passed 719 tests: 716 passed, zero failures
+and three optional Docker skips. Lint, formatting, docs/workflow policy and the
+packed CLI smoke check passed. The exact shared lockfile audit also reported
+zero vulnerabilities. These local results remain distinct from the latest
+PR head's GitHub checks and review availability.

@@ -211,6 +211,7 @@ export async function processInbox({
     });
     let preparedTickets;
     for (;;) {
+      signal?.throwIfAborted();
       preparedTickets = await prepareRunTickets({
         ...scanned,
         activeBatch: run.batch_fingerprint
@@ -301,7 +302,9 @@ export async function processInbox({
         profile,
         observe,
         github,
-        plan
+        plan,
+        signal,
+        priorInputs: [...previous, stale].map((saved) => saved.inputs)
       });
       if (!freshPlans) break;
       run.reprepared_batches ??= [];

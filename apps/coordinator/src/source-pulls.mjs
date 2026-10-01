@@ -2,20 +2,11 @@ import { inspectPull, validatePull } from "./readiness.mjs";
 import { serviceAssert } from "./service-contract.mjs";
 
 export async function assertSourcePulls({ sources, repository, pullRequest }) {
+  const name = repository.full_name.split("/")[1];
   for (const source of sources) {
     const pr = await pullRequest(source.number);
-    validatePull(
-      pr,
-      repository.full_name.split("/")[1],
-      source.number,
-      repository.full_name
-    );
-    const checks = inspectPull(
-      pr,
-      source,
-      repository.full_name.split("/")[1],
-      repository.full_name
-    );
+    validatePull(pr, name, source.number, repository.full_name);
+    const checks = inspectPull(pr, source, name, repository.full_name);
     serviceAssert(
       pr.baseRefName === "main" &&
         checks.every((check) => check.status === "pass"),

@@ -94,3 +94,50 @@ test("refresh changes only main and retains the same receipt, actor and pinned P
   });
   assert.equal(await refreshedPreparationPlans([original], failedGate), null);
 });
+
+test("refresh refuses a previously attempted base snapshot without spending another budget", async () => {
+  const original = item();
+  const current = await options(original).plan();
+  assert.equal(
+    await refreshedPreparationPlans([original], {
+      ...options(original),
+      priorInputs: [[{ number: original.number, input: current }]]
+    }),
+    null
+  );
+  assert.ok(
+    await refreshedPreparationPlans([original], {
+      ...options(original),
+      priorInputs: [[{ number: original.number, input: original.input }]]
+    })
+  );
+});
+
+test("cancellation prevents refreshed preparation before reads and after planning", async () => {
+  for (const phase of ["before", "planned"]) {
+    const original = item(),
+      controller = new AbortController();
+    const configured = options(original);
+    let reads = 0;
+    const api = configured.api,
+      plan = configured.plan;
+    if (phase === "before") controller.abort(new Error("cancel refresh"));
+    await assert.rejects(
+      refreshedPreparationPlans([original], {
+        ...configured,
+        signal: controller.signal,
+        api: async (...args) => {
+          reads++;
+          return api(...args);
+        },
+        plan: async (...args) => {
+          const result = await plan(...args);
+          controller.abort(new Error("cancel refresh"));
+          return result;
+        }
+      }),
+      /cancel refresh/
+    );
+    assert.equal(reads, phase === "before" ? 0 : 1);
+  }
+});

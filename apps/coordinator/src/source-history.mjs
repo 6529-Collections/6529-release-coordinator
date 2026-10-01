@@ -9,13 +9,20 @@ export async function assertSelectedSourceHistory({
   sourcePrs,
   base,
   candidate,
-  ignored = []
+  ignored = [],
+  signal
 }) {
   const selected = new Set(sourcePrs.map((pr) => pr.number));
   const seen = new Set();
+  const comparisons = new Map();
   const ancestor = async (head, target) => {
+    signal?.throwIfAborted();
+    if (head === target) return true;
+    const identity = `${head}...${target}`;
+    if (comparisons.has(identity)) return comparisons.get(identity);
     // Only ancestry is needed; do not download the full commit/diff history.
     const comparison = await get(`/compare/${head}...${target}?per_page=1`);
+    signal?.throwIfAborted();
     serviceAssert(
       comparison?.base_commit?.sha === head &&
         ["ahead", "behind", "identical", "diverged"].includes(
@@ -27,16 +34,23 @@ export async function assertSelectedSourceHistory({
       "source-history",
       "Cannot verify which original PR histories would enter main."
     );
-    return ["ahead", "identical"].includes(comparison.status);
+    const result = ["ahead", "identical"].includes(comparison.status);
+    comparisons.set(identity, result);
+    return result;
   };
   for (let page = 1; ; page++) {
-    const pulls = await get(`/pulls?state=open&per_page=100&page=${page}`);
+    signal?.throwIfAborted();
+    const pulls = await get(
+      `/pulls?state=open&base=main&per_page=100&page=${page}`
+    );
+    signal?.throwIfAborted();
     serviceAssert(
       Array.isArray(pulls),
       "source-history",
       "Open source PR listing is incomplete."
     );
     for (const pr of pulls) {
+      signal?.throwIfAborted();
       serviceAssert(
         Number.isSafeInteger(pr?.number) &&
           pr.number > 0 &&

@@ -131,7 +131,7 @@ export async function checkBatch(
     signal,
     profile = sandboxProfile,
     policy = batchPolicy,
-    client = createBatchGitHub({ profile, guard, policy }),
+    client = createBatchGitHub({ profile, guard, policy, signal }),
     serviceClient = profile.name === "sandbox"
       ? createServiceGitHub({ profile })
       : null,

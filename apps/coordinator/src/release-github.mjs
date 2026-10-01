@@ -1029,17 +1029,14 @@ export function createReleaseGitHub({
             repository: profile.repositories[role],
             pullRequest: (number) => gates.pullRequest(role, number)
           });
-        if (
-          record.step.environment === "prod" &&
-          !record.step.recovery &&
-          candidate.source_prs?.length
-        )
+        if (!record.step.recovery && candidate.source_prs?.length)
           await assertSelectedSourceHistory({
             get: async (suffix) => (await call(role, "GET", suffix)).data,
             repository: profile.repositories[role],
             sourcePrs: candidate.source_prs,
             base: record.base,
             candidate: integrationCommit,
+            signal,
             ignored: [record.number]
           });
         const finalDestination = await ref(role, targetBranch);
