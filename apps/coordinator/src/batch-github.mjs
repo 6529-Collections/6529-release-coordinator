@@ -7,8 +7,13 @@ import {
   batchPolicyProfile,
   trustedBatchPolicy
 } from "./batch-plan.mjs";
-import { serviceAssert, ServiceError } from "./service-contract.mjs";
-import { serviceFiles } from "./service-contract.mjs";
+import {
+  blobHash,
+  serviceAssert,
+  ServiceError,
+  serviceFiles
+} from "./service-contract.mjs";
+import { readCandidateBlobs } from "./candidate-blobs.mjs";
 import { releaseMonitoringPaths } from "./release-contract.mjs";
 import { assertSelectedSourceHistory } from "./source-history.mjs";
 import {
@@ -35,14 +40,22 @@ const hasParents = (commit, record) =>
   JSON.stringify(commit?.parents?.map((parent) => parent.sha)) ===
   JSON.stringify(parentsFor(record));
 
-// This writer has no merge endpoint. It publishes only saved temporary trial
-// identities in the selected trusted repositories, never source or shared refs.
+/**
+ * Publish only saved temporary trial identities in trusted repositories.
+ * This writer has no merge endpoint and never updates source or shared refs.
+ */
 export function createBatchGitHub({
   profile,
   signal,
   execute = executeGitHub,
   logs = readServiceLogs,
   gates = createRehearsalGitHub(profile, { signal }),
+  candidateBlobs = (record, patch, missing) =>
+    readCandidateBlobs(record, patch, missing, {
+      profile,
+      signal,
+      authentication: () => gates.gitAuthentication()
+    }),
   guard = async () => {},
   policy = batchPolicy
 } = {}) {
@@ -66,13 +79,18 @@ export function createBatchGitHub({
     "batch-profile",
     `Temporary batch PRs require the ${batchPolicyProfile(policy)} profile.`
   );
+  /** Check cancellation at request boundaries and after the awaited write-authority guard. */
   async function call(role, method, suffix, body, allowed = [200]) {
+    signal?.throwIfAborted();
     serviceAssert(
       ["frontend", "backend"].includes(role),
       "batch-profile",
       "Invalid batch repository role."
     );
-    if (method !== "GET") await guard();
+    if (method !== "GET") {
+      await guard();
+      signal?.throwIfAborted();
+    }
     const prefix = `repos/${profile.repositories[role].full_name}`;
     const args = [
       "api",
@@ -172,6 +190,71 @@ export function createBatchGitHub({
       expected: record.base,
       observed: ref.data?.object?.sha
     });
+  }
+  /** Reconstruct and publish only missing immutable objects from the exact saved candidate. */
+  async function uploadMissingBlobs(record, patch) {
+    // Blob identity depends only on bytes. An explicit resume can recognize a
+    // completed upload even if its response was lost; no new attempt or mutable
+    // upload progress is needed in the journal.
+    const missing = [];
+    for (const oid of new Set(patch.map((file) => file.sha).filter(Boolean))) {
+      signal?.throwIfAborted();
+      const observed = await call(
+        record.role,
+        "GET",
+        `/git/blobs/${oid}`,
+        undefined,
+        [200, 404]
+      );
+      if (observed.status === 404) missing.push(oid);
+      else
+        serviceAssert(
+          observed.data?.sha === oid,
+          "batch-blob-content",
+          "GitHub returned a different candidate blob identity."
+        );
+    }
+    signal?.throwIfAborted();
+    if (!missing.length) return;
+    const blobs = await candidateBlobs(record, patch, missing);
+    serviceAssert(
+      Array.isArray(blobs) &&
+        blobs.length === missing.length &&
+        new Set(blobs.map((blob) => blob.sha)).size === missing.length &&
+        blobs.every((blob) => {
+          if (
+            !missing.includes(blob.sha) ||
+            blob.encoding !== "base64" ||
+            typeof blob.content !== "string"
+          )
+            return false;
+          const bytes = Buffer.from(blob.content, "base64");
+          return (
+            bytes.toString("base64") === blob.content &&
+            blobHash(bytes) === blob.sha
+          );
+        }),
+      "batch-blob-content",
+      "Only verified missing candidate blob bytes may be uploaded."
+    );
+    for (const blob of blobs) {
+      signal?.throwIfAborted();
+      await unchanged(record);
+      const published = (
+        await call(
+          record.role,
+          "POST",
+          "/git/blobs",
+          { content: blob.content, encoding: "base64" },
+          [201]
+        )
+      ).data;
+      serviceAssert(
+        published?.sha === blob.sha,
+        "batch-blob-content",
+        "Uploaded candidate blob differs from its saved Git identity."
+      );
+    }
   }
   async function selectedHistory(record) {
     if (!record.source_prs?.length) return;
@@ -311,6 +394,10 @@ export function createBatchGitHub({
           "batch-tree",
           "The saved base tree is unavailable."
         );
+        if (profile.name === "real") {
+          await uploadMissingBlobs(record, patch);
+          await unchanged(record);
+        }
         const tree = (
           await call(
             record.role,

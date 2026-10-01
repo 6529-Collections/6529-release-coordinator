@@ -1,8 +1,11 @@
 import { spawn } from "node:child_process";
 import { RehearsalError } from "./rehearsal-plan.mjs";
 
-// Only trusted adapters supply executable/argument arrays. Never expose stderr
-// or spawn errors: Git/GitHub errors can contain credentials and input content.
+/**
+ * Run trusted executable/argument arrays with shared interruption/output guards.
+ * UTF-8 is the default; encoding null preserves raw stdout bytes. Never expose
+ * stderr or spawn errors, which can contain credentials and input content.
+ */
 export function runRehearsalProcess(
   file,
   args,
@@ -13,6 +16,7 @@ export function runRehearsalProcess(
     signal,
     timeout = 30_000,
     maxOutput = 16 * 1024 * 1024,
+    encoding = "utf8",
     allowedCodes = [0],
     watch
   } = {}
@@ -20,6 +24,15 @@ export function runRehearsalProcess(
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(new RehearsalError("interrupted", "Rehearsal was interrupted."));
+      return;
+    }
+    if (encoding !== null && encoding !== "utf8") {
+      reject(
+        new RehearsalError(
+          "invalid_encoding",
+          "Rehearsal output must be UTF-8 text or raw bytes."
+        )
+      );
       return;
     }
     const child = spawn(file, args, {
@@ -107,7 +120,13 @@ export function runRehearsalProcess(
             "A rehearsal operation failed; check repository access and the requested objects."
           )
         );
-      else resolve({ code, stdout: Buffer.concat(chunks).toString("utf8") });
+      else {
+        const output = Buffer.concat(chunks);
+        resolve({
+          code,
+          stdout: encoding === null ? output : output.toString(encoding)
+        });
+      }
     });
     child.stdin.end(input);
   });
