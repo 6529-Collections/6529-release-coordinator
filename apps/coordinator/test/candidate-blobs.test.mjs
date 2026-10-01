@@ -326,6 +326,46 @@ test("moved main or lost journal authority prevents uploading a missing blob", a
   }
 });
 
+test("cancellation during a known-blob lookup, destination read or write guard prevents publication", async () => {
+  for (const boundary of ["blob", "destination", "guard"]) {
+    const controller = new AbortController();
+    let probed = false;
+    const f = fixture({
+      profile: realProfile,
+      signal: controller.signal,
+      existingBlobs: new Set([sha]),
+      candidateBlobs: () => assert.fail("Known bytes need no reconstruction"),
+      after: ({ method, path, response }) => {
+        if (method === "GET" && path === `/git/blobs/${sha}`) {
+          assert.equal(response.sha, sha);
+          probed = true;
+          if (boundary === "blob") controller.abort();
+        }
+        if (
+          probed &&
+          path === "/git/ref/heads/main" &&
+          boundary === "destination"
+        )
+          controller.abort();
+      },
+      guard: async () => {
+        if (boundary === "guard") controller.abort();
+      }
+    });
+    f.patch[0].sha = sha;
+    await assert.rejects(f.client.open(f.record, f.patch, f.save), {
+      name: "AbortError"
+    });
+    assert.equal(probed, true);
+    assert.equal(
+      f.calls.some((call) => call.method !== "GET"),
+      false
+    );
+    assert.equal(f.saved.length, 0);
+    assert.equal(f.record.commit, undefined);
+  }
+});
+
 /** Build a genuine local-only merge blob, then remove its preparation workspace before testing resume. */
 async function mergedFixture(t) {
   const git = await rehearsalFixture(t);

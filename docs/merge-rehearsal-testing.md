@@ -281,7 +281,10 @@ limit is introduced.
 
 An interrupted upload retains the same prepared/check attempt and lock. On an
 explicit safe resume, uploaded objects are recognized by their immutable hashes;
-only still-missing bytes are recreated/uploaded. Already recorded commits/PRs
+only still-missing bytes are recreated/uploaded. Cancellation is checked after
+the blob probes and before requests, including after the awaited write-authority
+guard, so an abort during a read or guard prevents subsequent publication.
+Already recorded commits/PRs
 follow their existing reconciliation path without another upload. Historical
 SHA-only preparations with original heads need no format or policy migration.
 If those heads are unavailable, or the reconstruction, bytes, cleanup, guard or

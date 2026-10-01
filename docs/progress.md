@@ -59,6 +59,15 @@ The final local check passed **738 tests**, with three optional Docker skips
 (741 total), including lint, formatting, documentation/workflow checks and the
 packed-CLI smoke test. Remote checks and reviews remain separate evidence.
 
+The final CodeRabbit review identified cancellation during the last known-blob
+lookup. A regression first reproduced that publication could continue after the
+abort. The writer now checks cancellation after probing and before every request,
+including after its awaited write-authority guard. Tests abort during the blob
+lookup, destination read and write guard and require no publication or saved
+commit. The updated full local check passed **739 tests**, with three optional
+Docker skips (742 total); all other repository checks passed. This cancellation
+fix does not claim a merge, resumed run or product deployment.
+
 ## October 1 — frontend PR-CI pin refresh (local)
 
 Branch `codex/frontend-ci-pin-refresh` updates only the real frontend

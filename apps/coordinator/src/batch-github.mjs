@@ -79,13 +79,18 @@ export function createBatchGitHub({
     "batch-profile",
     `Temporary batch PRs require the ${batchPolicyProfile(policy)} profile.`
   );
+  /** Check cancellation at request boundaries and after the awaited write-authority guard. */
   async function call(role, method, suffix, body, allowed = [200]) {
+    signal?.throwIfAborted();
     serviceAssert(
       ["frontend", "backend"].includes(role),
       "batch-profile",
       "Invalid batch repository role."
     );
-    if (method !== "GET") await guard();
+    if (method !== "GET") {
+      await guard();
+      signal?.throwIfAborted();
+    }
     const prefix = `repos/${profile.repositories[role].full_name}`;
     const args = [
       "api",
@@ -209,6 +214,7 @@ export function createBatchGitHub({
           "GitHub returned a different candidate blob identity."
         );
     }
+    signal?.throwIfAborted();
     if (!missing.length) return;
     const blobs = await candidateBlobs(record, patch, missing);
     serviceAssert(
