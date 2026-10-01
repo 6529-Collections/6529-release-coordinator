@@ -285,10 +285,15 @@ only still-missing bytes are recreated/uploaded. Already recorded commits/PRs
 follow their existing reconciliation path without another upload. Historical
 SHA-only preparations with original heads need no format or policy migration.
 If those heads are unavailable, or the reconstruction, bytes, cleanup, guard or
-GitHub identity cannot be verified, publication stops. It never guesses content
+GitHub identity cannot be verified, publication stops. An owned-cleanup failure
+takes precedence over a reconstruction failure and reports the leftover path;
+no bytes are returned. It never guesses content
 or edits a source branch to make publication succeed. Sandbox inline sample
 patches and later checked-candidate release/deployment gates are unchanged.
 These are implementation/offline boundaries, not proof that a real release ran.
+The byte reader retains the existing 1 MiB per-file subprocess output budget
+(stdout plus stderr), already used for candidate file reads. A crossed budget
+fails closed; this fix does not raise it or add a new size policy.
 
 For real product trial PRs, required GitHub checks may be either check runs
 (`name`) or status contexts (`context`), and jobs may appear after the PR is

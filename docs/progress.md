@@ -16,11 +16,13 @@ ordinary exact-tree/parent commit and PR creation. Byte-exact base64 uploads als
 preserve binary data. No product edits, policy-pin refresh, journal migration,
 source-head change or new limit is part of this fix. Sandbox inline publication
 and every later check/review/deployment/E2E gate stay unchanged.
+Source delivery is tracked by
+[Coordinator PR #291](https://github.com/6529-Collections/6529-release-coordinator/pull/291).
 
 The stopped real #285 attempt exposed two combined help-index blobs missing from
 GitHub. The resumed command exited 2 on HTTP 422 during trial creation at
 12:21 UTC. Independently read journal revision 571 retains the same filtered
-#285/`simo6529` run and lock, exact source `bc220ad0f6c0`, and unpublished check
+`#285`/`simo6529` run and lock, exact source `bc220ad0f6c0`, and unpublished check
 attempt `dea415ce-281b-4095-8601-f2754ff7dfa4`. No release execution exists in
 that saved attempt. Its preceding trial #4146 was closed and its owned branch
 removed after main moved; those attempts and spent budgets remain preserved.
@@ -44,9 +46,18 @@ journal commit `b441fc9c81cf0a55293727edd19c0aaa8ac7fa81`. It reproduced tree
 `47daec2dea42ccb1e98966b589b4a22be75e60e2` (602,169 bytes). Owned temporary Git
 cleanup completed and the authoritative journal commit remained unchanged.
 This check read product Git objects but made no GitHub writes or inbox invocation.
-It is reconstruction proof only, not upload/deployment acceptance. No new
-Coordinator PR, merge, npm publication or live staging/production acceptance is
-claimed.
+It is reconstruction proof only, not upload/deployment acceptance. No merge,
+npm publication or live staging/production acceptance is claimed by that check.
+
+Review hardening adds interrupted multi-blob/reordered-upload coverage with an
+explicitly seeded server object set, an explicit subprocess text/Buffer contract
+and pre-spawn encoding validation, refusal of a reordered saved patch, and
+cleanup-error precedence. The fixture independently builds the server tree in
+its owned bare workspace without writing loose objects into its source checkout.
+Git is a required offline-check prerequisite, not an optional skipped gate.
+The final local check passed **738 tests**, with three optional Docker skips
+(741 total), including lint, formatting, documentation/workflow checks and the
+packed-CLI smoke test. Remote checks and reviews remain separate evidence.
 
 ## October 1 — frontend PR-CI pin refresh (local)
 

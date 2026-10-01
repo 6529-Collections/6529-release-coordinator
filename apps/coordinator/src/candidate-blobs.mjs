@@ -6,9 +6,12 @@ import {
   ServiceError
 } from "./service-contract.mjs";
 
-// Recover bytes from immutable inputs, not from a product checkout or saved
-// report. This also works for existing SHA-only preparations after their owned
-// rehearsal directories have been removed. No content enters the journal.
+/**
+ * Recover verified bytes from immutable inputs, not a product checkout or
+ * saved report. Existing SHA-only preparations survive rehearsal cleanup;
+ * owned reconstruction cleanup must finish before bytes can be returned.
+ * No content enters the journal.
+ */
 export async function readCandidateBlobs(
   record,
   patch,

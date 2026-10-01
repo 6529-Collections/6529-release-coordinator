@@ -3,6 +3,7 @@ import { sandboxProfile } from "../src/profiles.mjs";
 import { batchPolicy, realBatchPolicy } from "../src/batch-plan.mjs";
 import { blobHash } from "../src/service-contract.mjs";
 
+/** Model trial publication; an existingBlobs set opts into explicit server object presence. */
 export function fixture({
   guard = async () => {},
   after = async () => {},
@@ -11,6 +12,7 @@ export function fixture({
   signal,
   candidateBlobs,
   missingBlobs = new Set(),
+  existingBlobs,
   baseTree = "e".repeat(40),
   profile = sandboxProfile,
   policy = profile.name === "real" ? realBatchPolicy : batchPolicy
@@ -136,15 +138,26 @@ export function fixture({
       data = { tree: { sha: baseTree } };
     else if (path.startsWith("/git/blobs/") && method === "GET") {
       const sha = path.split("/").at(-1);
-      status = missingBlobs.has(sha) ? 404 : 200;
+      status = (existingBlobs ? existingBlobs.has(sha) : !missingBlobs.has(sha))
+        ? 200
+        : 404;
       data = status === 200 ? { sha } : {};
     } else if (path === "/git/blobs" && method === "POST") {
       status = 201;
       const sha = blobHash(Buffer.from(body.content, body.encoding));
+      existingBlobs?.add(sha);
       missingBlobs.delete(sha);
       data = { sha };
     } else if (path === "/git/trees" && method === "POST") {
-      status = body.tree.some((file) => missingBlobs.has(file.sha)) ? 422 : 201;
+      status = body.tree.some(
+        (file) =>
+          file.sha &&
+          (existingBlobs
+            ? !existingBlobs.has(file.sha)
+            : missingBlobs.has(file.sha))
+      )
+        ? 422
+        : 201;
       data = status === 201 ? { sha: record.tree } : {};
     } else if (path === "/git/commits" && method === "POST") {
       status = 201;

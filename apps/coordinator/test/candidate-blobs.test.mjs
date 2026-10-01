@@ -55,6 +55,7 @@ test("real trial uploads a missing merged blob before publishing the exact saved
 test("existing blobs, duplicate SHAs and deletions need no reconstruction or upload", async () => {
   const f = fixture({
     profile: realProfile,
+    existingBlobs: new Set(["e".repeat(40)]),
     candidateBlobs: () => assert.fail("No missing blobs")
   });
   f.patch.push({ ...f.patch[0], path: "other.txt", mode: "100755" });
@@ -76,6 +77,95 @@ test("existing blobs, duplicate SHAs and deletions need no reconstruction or upl
   assert.deepEqual(
     f.calls.find((call) => call.path === "/git/trees").body.tree,
     f.patch
+  );
+});
+
+test("partial multi-blob publication resumes only remaining bytes and creates one tree", async () => {
+  const secondBytes = Buffer.from("second merged file\n");
+  const second = {
+    sha: blobHash(secondBytes),
+    content: secondBytes.toString("base64"),
+    encoding: "base64"
+  };
+  const payloads = new Map([
+    [sha, blob],
+    [second.sha, second]
+  ]);
+  const existingBlobs = new Set();
+  const reconstructed = [];
+  let interrupted = false;
+  const f = fixture({
+    profile: realProfile,
+    existingBlobs,
+    candidateBlobs: async (_record, _patch, missing) => {
+      reconstructed.push([...missing]);
+      // Upload order is deliberately different from the patch order.
+      return missing.map((oid) => payloads.get(oid)).reverse();
+    },
+    after: ({ method, path }) => {
+      if (method === "POST" && path === "/git/blobs" && !interrupted) {
+        interrupted = true;
+        throw Error("Interrupted between uploads");
+      }
+    }
+  });
+  f.patch[0].sha = sha;
+  f.patch.push({ ...f.patch[0], path: "second.txt", sha: second.sha });
+  f.record.source_prs = [
+    { number: 1, branch: "codex/a", commit: "1".repeat(40) }
+  ];
+  const before = serviceHash({
+    patch: f.patch,
+    source_prs: f.record.source_prs
+  });
+  await assert.rejects(
+    f.client.open(f.record, f.patch, f.save),
+    /Interrupted between uploads/
+  );
+  assert.deepEqual([...existingBlobs], [second.sha]);
+  assert.equal(
+    f.calls.some((call) => call.path === "/git/trees"),
+    false
+  );
+  assert.equal(f.record.commit, undefined);
+  await f.client.open(f.record, f.patch, f.save);
+  assert.deepEqual(reconstructed, [[sha, second.sha], [sha]]);
+  assert.deepEqual(
+    f.calls
+      .filter((call) => call.method === "POST" && call.path === "/git/blobs")
+      .map((call) => blobHash(Buffer.from(call.body.content, "base64"))),
+    [second.sha, sha]
+  );
+  for (const path of ["/git/trees", "/git/commits", "/git/refs", "/pulls"])
+    assert.equal(
+      f.calls.filter((call) => call.method === "POST" && call.path === path)
+        .length,
+      1
+    );
+  assert.equal(
+    serviceHash({ patch: f.patch, source_prs: f.record.source_prs }),
+    before
+  );
+});
+
+test("subprocess text and raw-byte contracts are explicit and unsupported encodings fail before spawning", async () => {
+  const expected = Buffer.from([0, 255, 128, 13, 10]);
+  const args = ["-e", "process.stdout.write(Buffer.from([0,255,128,13,10]));"];
+  for (const encoding of [null, undefined, "utf8"]) {
+    const result = await runRehearsalProcess(process.execPath, args, {
+      encoding
+    });
+    if (encoding === null) {
+      assert.equal(Buffer.isBuffer(result.stdout), true);
+      assert.deepEqual(result.stdout, expected);
+    } else {
+      assert.equal(typeof result.stdout, "string");
+      assert.equal(result.stdout, expected.toString("utf8"));
+    }
+  }
+  await assert.rejects(
+    runRehearsalProcess("not-a-tool", [], { encoding: "invalid" }),
+    { code: "invalid_encoding" }
   );
 });
 
@@ -236,6 +326,7 @@ test("moved main or lost journal authority prevents uploading a missing blob", a
   }
 });
 
+/** Build a genuine local-only merge blob, then remove its preparation workspace before testing resume. */
 async function mergedFixture(t) {
   const git = await rehearsalFixture(t);
   const ancestor = await git.branch("frontend", "fixture/ancestor", {
@@ -343,7 +434,7 @@ test("actual Git recreates a missing combined help index after cleanup and publi
       if (method === "POST" && path === "/git/blobs") {
         const uploaded = await runRehearsalProcess(
           "git",
-          ["hash-object", "-w", "--stdin"],
+          ["hash-object", "--stdin"],
           { cwd, env: git.env, input: Buffer.from(body.content, "base64") }
         );
         assert.equal(uploaded.stdout.trim(), response.sha);
@@ -433,6 +524,10 @@ test("reconstruction refuses a different saved tree or patch and still cleans it
     readCandidateBlobs(record, patch.slice(0, 1), missing, options),
     { code: "batch-blob-patch" }
   );
+  await assert.rejects(
+    readCandidateBlobs(record, [...patch].reverse(), missing, options),
+    { code: "batch-blob-patch" }
+  );
   assert.deepEqual(
     (await readdir(git.directory)).filter((name) =>
       name.startsWith("6529-rehearsal-")
@@ -488,6 +583,8 @@ test("failed owned reconstruction cleanup blocks returning any upload bytes", as
     (error) =>
       error instanceof ServiceError &&
       error.code === "cleanup_failed" &&
+      error.message ===
+        "Failed to remove owned candidate directory: /fixture/owned" &&
       error.owned_path === "/fixture/owned"
   );
 });

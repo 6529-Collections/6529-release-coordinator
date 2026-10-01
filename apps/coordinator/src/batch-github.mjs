@@ -40,8 +40,10 @@ const hasParents = (commit, record) =>
   JSON.stringify(commit?.parents?.map((parent) => parent.sha)) ===
   JSON.stringify(parentsFor(record));
 
-// This writer has no merge endpoint. It publishes only saved temporary trial
-// identities in the selected trusted repositories, never source or shared refs.
+/**
+ * Publish only saved temporary trial identities in trusted repositories.
+ * This writer has no merge endpoint and never updates source or shared refs.
+ */
 export function createBatchGitHub({
   profile,
   signal,
@@ -184,6 +186,7 @@ export function createBatchGitHub({
       observed: ref.data?.object?.sha
     });
   }
+  /** Reconstruct and publish only missing immutable objects from the exact saved candidate. */
   async function uploadMissingBlobs(record, patch) {
     // Blob identity depends only on bytes. An explicit resume can recognize a
     // completed upload even if its response was lost; no new attempt or mutable

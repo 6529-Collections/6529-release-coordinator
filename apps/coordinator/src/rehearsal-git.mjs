@@ -9,6 +9,7 @@ import {
 import { runRehearsalProcess } from "./rehearsal-process.mjs";
 import { releaseMonitoringPaths } from "./release-contract.mjs";
 
+/** Create an isolated, guarded Git object workspace with explicit cleanup ownership. */
 export async function createRehearsalGit({
   signal,
   execute = runRehearsalProcess,
@@ -295,6 +296,7 @@ export async function createRehearsalGit({
           await supportedTree(commit);
         }
         return {
+          /** Read exact blob bytes without text conversion under existing process/storage guards. */
           async blobBytes(sha) {
             if (!isSha(sha))
               throw new RehearsalError(
