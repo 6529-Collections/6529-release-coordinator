@@ -1,8 +1,43 @@
 # Progress and next steps
 
 Last reviewed: **2026-10-01** for behind-main source admission, original-PR
-history publication, and completed sandbox acceptance. The real #275 evidence
+history publication, completed sandbox acceptance, and the local frontend PR-CI
+pin refresh. The real #275 evidence
 below retains its recorded September 30 date.
+
+## October 1 — frontend PR-CI pin refresh (local)
+
+Branch `codex/frontend-ci-pin-refresh` updates only the real frontend
+`.github/workflows/app-pr-ci.yml` pin from
+`874b4eb0070101202d0d3eda081d5e616e87cabd` to
+`2cc4f7a5e36ba3d056b1f4b43d534f13f2ebde9a`, after a complete blob comparison.
+The product added an optional native-competition browser lane and its dispatch
+output/step; the existing required checks, permissions and security gates did
+not change. Debt-ratchet and backend pins are not refreshed by this change.
+The current backend PR-CI blob also differs from its saved pin; that separate
+unreviewed change remains a blocker for backend-containing candidates.
+
+Real filtered [ticket #285](https://github.com/6529-Collections/6529-release-coordinator/issues/285)
+passed individual and combined Git preparation, then stopped on the changed
+frontend PR-CI pin before recording any trial PR or release execution. Run
+`b16e62c4-fcf9-414a-b7eb-1d6add579d9e` retained its filtered #285/`simo6529`
+scope and journal lock at revision 541. This local change preserves that exact
+historical policy and permits only its explicitly reviewed, unpublished
+preparation transition: retire/clean the old check attempt, reverify unchanged
+receipts/actors/heads/gates, and perform fresh preparation and CI under the new
+policy hash. Main may stay unchanged or advance; prior attempts still count
+against the same run's budgets. Published work and existing releases are not
+migrated. Unknown workflow blobs remain refused.
+
+Offline regression coverage includes unchanged/moved main, saved-lock resume,
+fresh CI identity, old-policy readability, preserved attempts and budgets,
+idempotent second resume, changed code/check blockers, and exclusion of owned
+trials or release execution. The full local `npm run check` passed **725 tests**,
+with three optional Docker tests skipped (728 total), including lint, formatting,
+documentation/workflow policy and packed-CLI checks. The locked dependency audit
+reported zero vulnerabilities. This is local source/test coverage, not GitHub PR
+CI or live acceptance. No npm publication, product edit, release resume or
+staging/production deployment is part of this update.
 
 ## October 1 — behind-main PR preparation
 

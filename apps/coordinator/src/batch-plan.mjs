@@ -139,10 +139,44 @@ export const copiedRealBatchPolicy = Object.freeze({
   })
 });
 
-export const realBatchPolicy = Object.freeze({
+export const priorRealBatchPolicy = Object.freeze({
   ...copiedRealBatchPolicy,
   preserve_source_history: true
 });
+
+// Reviewed frontend native-competition CI lane. Keep the complete old policy
+// readable; a new hash requires fresh candidate preparation and check evidence.
+export const realBatchPolicy = Object.freeze({
+  ...priorRealBatchPolicy,
+  workflow_blobs: Object.freeze({
+    ...priorRealBatchPolicy.workflow_blobs,
+    frontend: Object.freeze({
+      ...priorRealBatchPolicy.workflow_blobs.frontend,
+      ".github/workflows/app-pr-ci.yml":
+        "2cc4f7a5e36ba3d056b1f4b43d534f13f2ebde9a"
+    })
+  })
+});
+
+// Only this explicitly reviewed transition can replace an unpublished
+// preparation. Never migrate copied-history work, owned resources or releases.
+export function canRefreshBatchPreparationPolicy(batch, currentPolicy) {
+  return Boolean(
+    batch &&
+    !batch.execution &&
+    (batch.status === "searching" || batch.stop?.status === "stale") &&
+    batch.selected?.length === 0 &&
+    serviceHash(batch.policy) === serviceHash(priorRealBatchPolicy) &&
+    serviceHash(currentPolicy) === serviceHash(realBatchPolicy) &&
+    Array.isArray(batch.attempts) &&
+    batch.attempts.every(
+      (attempt) =>
+        !attempt.progress ||
+        (attempt.progress.prs?.length === 0 &&
+          Object.keys(attempt.progress.service_attempts ?? {}).length === 0)
+    )
+  );
+}
 
 export const databaseBatchPolicies = Object.freeze([
   databaseBatchPolicy.version,
@@ -195,6 +229,7 @@ export function trustedBatchPolicy(policy) {
     copiedBatchPolicy,
     copiedRealBatchPolicy,
     batchPolicy,
+    priorRealBatchPolicy,
     realBatchPolicy
   ].find(
     (candidate) =>

@@ -30,6 +30,7 @@ export function fixture({
   };
   const calls = [],
     saved = [];
+  const workflowBlobs = structuredClone(policy.workflow_blobs?.[role] ?? {});
   let ref = null,
     pr = null,
     loseResponse = false;
@@ -109,7 +110,7 @@ export function fixture({
         path: filePath,
         sha:
           profile.name === "real"
-            ? policy.workflow_blobs[role][filePath]
+            ? workflowBlobs[filePath]
             : typeof policy.workflow_blob === "string"
               ? policy.workflow_blob
               : policy.workflow_blob[record.role]
@@ -205,6 +206,7 @@ export function fixture({
   };
   return {
     authenticatedActor,
+    workflowBlobs,
     record,
     calls,
     saved,

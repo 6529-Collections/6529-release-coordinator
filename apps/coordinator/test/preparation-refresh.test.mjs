@@ -113,6 +113,62 @@ test("refresh refuses a previously attempted base snapshot without spending anot
   );
 });
 
+test("a reviewed policy change still rechecks identity and gates when main is unchanged", async () => {
+  const original = item();
+  const configured = options(original, (fresh) => {
+    fresh.input = structuredClone(original.input);
+  });
+  assert.equal(
+    await refreshedPreparationPlans([], { ...configured, policyChanged: true }),
+    null
+  );
+  assert.deepEqual(
+    await refreshedPreparationPlans([original], {
+      ...configured,
+      policyChanged: true
+    }),
+    { 1: original.input }
+  );
+  assert.equal(
+    await refreshedPreparationPlans([original], {
+      ...configured,
+      policyChanged: true,
+      priorInputs: [[{ number: 1, input: original.input }]]
+    }),
+    null,
+    "a snapshot already tried under the current policy cannot repeat"
+  );
+  for (const mutate of [
+    (fresh) => {
+      fresh.issue.body = "edited receipt";
+    },
+    (fresh) => {
+      fresh.entry.github_actor.id = "2";
+    },
+    (fresh) => {
+      fresh.input.repositories[0].pull_requests[0].commit = "d".repeat(40);
+    }
+  ])
+    assert.equal(
+      await refreshedPreparationPlans([original], {
+        ...options(original, mutate),
+        policyChanged: true
+      }),
+      null
+    );
+  assert.equal(
+    await refreshedPreparationPlans([original], {
+      ...configured,
+      policyChanged: true,
+      observe: async () => ({
+        checks: [{ id: "release_parts", status: "fail" }],
+        pull_requests: []
+      })
+    }),
+    null
+  );
+});
+
 test("cancellation prevents refreshed preparation before reads and after planning", async () => {
   for (const phase of ["before", "planned"]) {
     const original = item(),

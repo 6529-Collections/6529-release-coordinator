@@ -23,12 +23,13 @@ export async function refreshedPreparationPlans(
     observe,
     github,
     plan,
+    policyChanged = false,
     priorInputs = [],
     signal
   }
 ) {
   const plans = {};
-  let moved = false;
+  let moved = policyChanged;
   for (const item of items.filter(
     (item) => item.input && !item.recordedTerminal
   )) {
@@ -59,6 +60,7 @@ export async function refreshedPreparationPlans(
     moved ||= digest(current) !== digest(item.input);
     plans[item.number] = current;
   }
+  if (!Object.keys(plans).length) return null;
   // A repeated base snapshot cannot justify spending the same run's budgets
   // again. This is evidence de-duplication, not a new retry or time limit.
   const repeated = priorInputs.some(

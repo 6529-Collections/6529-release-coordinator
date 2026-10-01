@@ -3,6 +3,7 @@ import { buildServicePlan } from "./service-plan.mjs";
 import {
   batchPolicyForProfile,
   batchPolicyProfile,
+  canRefreshBatchPreparationPolicy,
   databaseBatchPolicies,
   legacyBatchPolicy,
   isReleaseBatchPolicy,
@@ -151,12 +152,20 @@ export async function coordinateInboxBatch({
     ? await loadBatch(run.batch_fingerprint)
     : null;
   const candidatePolicy = active?.policy ?? batchPolicyForProfile(profile);
+  const policyRefresh = canRefreshBatchPreparationPolicy(
+    active,
+    batchPolicyForProfile(profile)
+  );
   serviceAssert(
     batchPolicyProfile(candidatePolicy) === profile.name,
     "batch-profile",
     "The saved batch policy belongs to a different profile."
   );
-  if (isReleaseBatchPolicy(active?.policy) && active.status === "finished") {
+  if (
+    isReleaseBatchPolicy(active?.policy) &&
+    active.status === "finished" &&
+    !policyRefresh
+  ) {
     if (
       active.selected.length &&
       active.stop?.status !== "stale" &&
@@ -509,7 +518,17 @@ export async function coordinateInboxBatch({
     policy,
     signal,
     guard,
-    verify: inputsChanged ? async () => false : () => verify(inputs),
+    verify: policyRefresh
+      ? async () => {
+          throw new ServiceError(
+            "batch-stale",
+            "The reviewed product PR workflow policy changed before publication; fresh candidate checks are required.",
+            "stale"
+          );
+        }
+      : inputsChanged
+        ? async () => false
+        : () => verify(inputs),
     prepare: (group) => prepare(group, { profile, signal, policy }),
     check: (prepared, options) => check(prepared, { ...options, profile }),
     revalidate: (prepared, progress, options) =>
