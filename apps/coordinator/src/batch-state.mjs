@@ -209,8 +209,9 @@ export function validateBatchHistory(batches, profile) {
                   progress.service_attempts.candidate.plan_hash ===
                     prepared.service_plan?.fingerprint)) &&
               progress.prs.length ===
-                prepared.publications.filter((repo) => repo.patch.length)
-                  .length &&
+                prepared.publications.filter(
+                  (repo) => repo.patch.length || repo.source_prs?.length
+                ).length &&
               progress.prs.every(
                 (pr) =>
                   pr.cleanup === "removed" && pr.result?.status === "passed"

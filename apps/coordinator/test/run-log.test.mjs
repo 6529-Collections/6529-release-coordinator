@@ -402,7 +402,7 @@ test("real Git candidate plus main movement reports exact repository/commits and
   );
 });
 
-test("the real inbox verification carries backend movement and cleanup truth to both tickets", async (t) => {
+test("main movement before execution rebuilds the same tickets and preserves cleaned old evidence", async (t) => {
   const root = await rootFor(t),
     h = harness(),
     plan = h.options.plan;
@@ -415,25 +415,36 @@ test("the real inbox verification carries backend movement and cleanup truth to 
     return result;
   };
   const result = await cli(h, root);
-  assert.equal(result.code, 3);
-  assert.deepEqual(result.report.batch.selected, []);
-  assert.match(result.report.batch.stop.message, /backend main changed/);
+  assert.equal(result.code, 0);
+  assert.deepEqual(result.report.batch.selected, [1, 2]);
+  const state = h.f.state();
+  const stale = Object.values(state.batches).filter(
+    (batch) => batch.stop?.status === "stale"
+  );
+  assert.equal(stale.length, 1);
+  const old = stale[0];
+  assert.equal(old.execution, undefined);
+  assert.match(old.stop.message, /backend main changed/);
   assert.match(
-    result.report.batch.stop.message,
+    old.stop.message,
     /All recorded temporary trial PRs and branches were verified removed/
   );
-  for (const issue of h.f.state().tickets
-    ? Object.values(h.f.state().tickets)
-    : []) {
-    const reason = issue.transitions
-      .at(-1)
-      .decision.reasons.find((reason) =>
-        reason.message.includes("backend main changed")
-      );
-    assert.ok(reason);
-    assert.ok(reason.message.includes("b".repeat(40)));
-    assert.ok(reason.message.includes("f".repeat(40)));
-  }
+  const current =
+    state.batches[result.report.batch.fingerprint] ??
+    h.f.file(state.history.batches[result.report.batch.fingerprint].path)
+      .record;
+  assert.notEqual(old.fingerprint, current.fingerprint);
+  assert.ok(
+    current.inputs.every(
+      (input) =>
+        input.input.repositories.find((repo) => repo.role === "backend")
+          .destination.commit === "f".repeat(40)
+    )
+  );
+  assert.ok(old.stop.message.includes("b".repeat(40)));
+  assert.ok(old.stop.message.includes("f".repeat(40)));
+  assert.equal(h.dispatches(), 2);
+  assert.equal(current.execution.status, "completed");
 });
 
 test("partial PR cleanup never logs all resources removed", async (t) => {

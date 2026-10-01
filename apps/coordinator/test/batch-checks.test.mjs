@@ -18,6 +18,43 @@ import { sandboxFrontendServiceProtocol } from "../src/service-plan.mjs";
 
 import { checkHarness } from "./checks-harness.mjs";
 
+test("an unchanged-tree role still gets CI and preserves its selected original PR history", async (t) => {
+  const f = await batchFixture(t);
+  const item = await f.ticket();
+  const pr = item.entry.request.release_parts.find(
+    (part) => part.id === "backend"
+  ).pull_requests[0];
+  const repo = f.git.repositories.backend;
+  await f.git.git(repo.cwd, ["checkout", pr.branch]);
+  await f.git.git(repo.cwd, ["revert", "--no-edit", pr.commit]);
+  pr.commit = await f.git.git(repo.cwd, ["rev-parse", "HEAD"]);
+  item.input = await generateInboxPlan(item.entry, {
+    profile: sandboxProfile,
+    github: f.git.github
+  });
+  const prepared = await f.prepare([item]);
+  const backend = prepared.publications.find(
+    (publication) => publication.role === "backend"
+  );
+  assert.equal(backend.patch.length, 0);
+  assert.equal(backend.tree, backend.base_tree);
+  assert.deepEqual(backend.source_prs, [pr]);
+  const h = checkHarness(prepared);
+  const selected = await selectBatch({
+    items: [item],
+    prepare: async () => prepared,
+    check: (_prepared, options) => h.run(options),
+    guard: async () => {},
+    verify: async () => true,
+    save: async () => {}
+  });
+  assert.deepEqual(selected.selected, [1]);
+  assert.ok(h.events.includes("open:backend"));
+  assert.doesNotThrow(() =>
+    validateBatchHistory({ [selected.fingerprint]: selected }, sandboxProfile)
+  );
+});
+
 test("frontend-only sandbox batch checks its exact PR without inventing backend service work", async (t) => {
   const f = await batchFixture(t);
   const item = await f.ticket({}, { frontendOnly: true });

@@ -6,6 +6,64 @@ import { createJournal, inboxWorkflow } from "../src/inbox-journal.mjs";
 import { harness } from "./inbox-batch-harness.mjs";
 import { batchMergePlan } from "../src/batch-plan.mjs";
 
+test("resume after original PRs enter main still finishes deploy and E2E, not already-merged closure", async () => {
+  const h = harness(1);
+  h.samples[0].entry.request.target = "production";
+  const release = h.options.release;
+  let interrupted = false;
+  h.options.release = (options) =>
+    release({
+      ...options,
+      save: async (message) => {
+        await options.save(message);
+        if (
+          !interrupted &&
+          options.batch.execution.operations["prod:integrate:frontend"]?.result
+            ?.status === "passed"
+        ) {
+          interrupted = true;
+          throw new Error("interrupted after source PRs entered main");
+        }
+      }
+    });
+  await assert.rejects(processInbox(h.options), /interrupted after source/);
+  const stopped = h.f.state();
+  assert.ok(stopped.lock);
+  assert.equal(h.f.issues[0].state, "open");
+  const before = stopped.batches[stopped.lock.batch_fingerprint].execution;
+  assert.equal(before.operations["prod:e2e"], undefined);
+  const observe = h.options.observe;
+  h.options.observe = async (entry) => {
+    const observation = await observe(entry);
+    for (const pr of observation.pull_requests) {
+      pr.checks.find((check) => check.id === "pr_state").evidence = {
+        state: "MERGED"
+      };
+    }
+    return observation;
+  };
+  const resumed = await processInbox({
+    ...h.options,
+    resume: stopped.lock.run_id
+  });
+  assert.equal(resumed.batch.status, "completed");
+  assert.equal(
+    resumed.batch.release.operations["prod:e2e"].result.status,
+    "passed"
+  );
+  assert.equal(h.f.issues[0].state, "closed");
+  assert.ok(h.f.issues[0].labels.includes("reason:release-completed"));
+  assert.ok(!h.f.issues[0].labels.includes("reason:already-merged"));
+  assert.ok(!h.f.issues[0].labels.includes("reason:release-unverified"));
+  assert.ok(
+    !h.f
+      .state()
+      .tickets[1].transitions.at(-1)
+      .decision.reasons.some((reason) => reason.code === "release-unverified")
+  );
+  assert.equal(h.f.state().lock, null);
+});
+
 test("one unscoped sandbox command finishes all cheap work, tests one group and updates the same tickets", async () => {
   const h = harness();
   const first = await processInbox(h.options);

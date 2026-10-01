@@ -16,6 +16,8 @@ import { activeWorkflowRunStatuses } from "./release-state.mjs";
 import { runEvent } from "./run-log.mjs";
 import { hasApprovalBypass } from "./approval-bypass.mjs";
 import { deleteOwnedRemoteBranch } from "./owned-branch-delete.mjs";
+import { assertSelectedSourceHistory } from "./source-history.mjs";
+import { assertSourcePulls, mergedSourcePulls } from "./source-pulls.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -1021,6 +1023,31 @@ export function createReleaseGitHub({
           "The exact checked integration tree is unavailable."
         );
         record.checked_tree = testMerge.tree.sha;
+        if (!record.step.recovery && candidate.source_prs?.length)
+          await assertSourcePulls({
+            sources: candidate.source_prs,
+            repository: profile.repositories[role],
+            pullRequest: (number) => gates.pullRequest(role, number)
+          });
+        if (
+          record.step.environment === "prod" &&
+          !record.step.recovery &&
+          candidate.source_prs?.length
+        )
+          await assertSelectedSourceHistory({
+            get: async (suffix) => (await call(role, "GET", suffix)).data,
+            repository: profile.repositories[role],
+            sourcePrs: candidate.source_prs,
+            base: record.base,
+            candidate: integrationCommit,
+            ignored: [record.number]
+          });
+        const finalDestination = await ref(role, targetBranch);
+        serviceAssert(
+          finalDestination.data?.object?.sha === record.base,
+          "release-stale",
+          "Shared branch changed before its exact checked merge."
+        );
         record.state = "merging";
         await save();
         await call(
@@ -1061,6 +1088,19 @@ export function createReleaseGitHub({
       );
       record.state = "merged";
       await save();
+      if (
+        record.step.environment === "prod" &&
+        !record.step.recovery &&
+        candidate.source_prs?.length
+      ) {
+        record.source_merges = await mergedSourcePulls({
+          sources: candidate.source_prs,
+          repository: profile.repositories[role],
+          get: async (number) =>
+            (await call(role, "GET", `/pulls/${number}`)).data
+        });
+        await save();
+      }
       if (!resumedMerged)
         await deleteOwnedBranch(role, record.branch, integrationCommit);
       record.cleanup = "removed";

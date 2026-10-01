@@ -135,8 +135,9 @@ export function fixture({
       data = {
         sha: run.head_sha,
         tree: { sha: record.tree },
-        parents: [{ sha: record.base }]
+        parents: body.parents.map((sha) => ({ sha }))
       };
+      tested.parents = structuredClone(data.parents);
     } else if (path === `/git/commits/${run.head_sha}`) data = tested;
     else if (path === "/git/refs" && method === "POST") {
       status = 201;

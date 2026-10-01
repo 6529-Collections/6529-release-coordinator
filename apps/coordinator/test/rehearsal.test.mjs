@@ -134,6 +134,47 @@ test("MR-03/MR-05: exact destination matters even when GitHub's PR base is clean
   );
 });
 
+test("newer main is rehearsed with an unchanged source head and retained original PR base", async (t) => {
+  const { f, pr, input } = await single(t);
+  const currentMain = await f.branch("frontend", "other-release", {
+    "main-only.txt": "Earlier release is already live.\n"
+  });
+  await f.git(f.repositories.frontend.cwd, [
+    "update-ref",
+    "refs/heads/main",
+    currentMain.commit
+  ]);
+  input.repositories[0].destination.commit = currentMain.commit;
+  const report = await f.run(input);
+  assert.equal(report.status, "pass");
+  assert.equal(report.release_authorized, false);
+  assert.equal(
+    report.repositories[0].initial.pulls[0].baseRefOid,
+    f.repositories.frontend.base
+  );
+  assert.equal(
+    report.repositories[0].initial.destination.commit,
+    currentMain.commit
+  );
+  assert.equal(
+    report.repositories[0].merges[0].base_commit,
+    currentMain.commit
+  );
+  assert.equal(report.repositories[0].merges[0].head_commit, pr.commit);
+  assert.equal(
+    checks(report).find((c) => c.id === "destination_gate").status,
+    "pass"
+  );
+  assert.equal(
+    await f.git(f.repositories.frontend.cwd, [
+      "rev-parse",
+      `refs/heads/${pr.branch}`
+    ]),
+    pr.commit
+  );
+  assert.equal(report.cleanup.status, "removed");
+});
+
 test("MR-04: PRs that merge separately can conflict together", async (t) => {
   const { f, pr, input } = await single(t, "frontend", {
     "shared.txt": "one\n"

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   approvalBypassEvidence,
-  hasApprovalBypass
+  hasApprovalBypass,
+  sourceIntegrationEvidence,
+  hasSourceIntegration
 } from "../src/approval-bypass.mjs";
 import { createRehearsalGitHub } from "../src/rehearsal-github.mjs";
 import { createReadinessGitHub } from "../src/readiness-github.mjs";
@@ -36,6 +38,87 @@ const pr = () => ({
       conclusion: "SUCCESS"
     }
   ]
+});
+
+test("behind source admission audits every gate but never grants an integration merge bypass", () => {
+  const value = pr();
+  value.mergeStateStatus = "BEHIND";
+  const input = evidence(value);
+  input.rules.push({
+    type: "required_status_checks",
+    parameters: {
+      required_status_checks: [{ context: "Sandbox check" }],
+      strict_required_status_checks_policy: true
+    }
+  });
+  input.branchProtection.requiresStrictStatusChecks = true;
+  value.sourceIntegration = sourceIntegrationEvidence(input);
+  assert.equal(hasSourceIntegration(value), true);
+  assert.equal(hasApprovalBypass(value), false);
+  for (const id of ["github_merge_gate", "required_checks", "reviews"])
+    assert.equal(
+      inspectPull(
+        value,
+        { branch: value.headRefName, commit: head },
+        "release-coordinator-test-frontend",
+        repo.full_name
+      ).find((check) => check.id === id).status,
+      "pass"
+    );
+  for (const mutate of [
+    (input) => {
+      input.unresolvedThreads = 1;
+    },
+    (input) => {
+      input.pr.checks[0].conclusion = "FAILURE";
+    },
+    (input) => {
+      input.pr.reviewDecision = "CHANGES_REQUESTED";
+    },
+    (input) => {
+      input.ruleset.current_user_can_bypass = "never";
+    },
+    (input) => {
+      input.rules.push({ type: "required_deployments" });
+    },
+    (input) => {
+      input.rules
+        .at(-1)
+        .parameters.required_status_checks.push({ context: "Missing" });
+    },
+    (input) => {
+      input.pr.mergeable = "CONFLICTING";
+    },
+    (input) => {
+      input.pr.isDraft = true;
+    }
+  ]) {
+    const changed = structuredClone(input);
+    mutate(changed);
+    assert.equal(sourceIntegrationEvidence(changed), null);
+  }
+  value.headRefOid = "c".repeat(40);
+  assert.equal(hasSourceIntegration(value), false);
+});
+
+test("approved behind source works without relying on a bypass actor", () => {
+  const value = {
+    ...pr(),
+    mergeStateStatus: "BEHIND",
+    reviewDecision: "APPROVED"
+  };
+  const input = {
+    ...evidence(value),
+    ruleset: null,
+    reviewCount: 1,
+    reviewStates: ["APPROVED"]
+  };
+  value.sourceIntegration = sourceIntegrationEvidence(input);
+  assert.equal(hasSourceIntegration(value), true);
+  assert.equal(value.sourceIntegration.approval_bypass, null);
+  const changed = structuredClone(input);
+  delete changed.rules[0].parameters.required_approving_review_count;
+  assert.equal(sourceIntegrationEvidence(changed), null);
 });
 
 function evidence(value = pr()) {
@@ -368,6 +451,106 @@ test("GitHub adapter binds rules, token eligibility and review threads to one PR
     `repos/${repo.full_name}/rules/branches/main`,
     `repos/${repo.full_name}/rulesets/${rulesetId}`
   ]);
+});
+
+function advancedMainClient({
+  source = false,
+  strict = false,
+  moving = false
+}) {
+  const currentMain = "c".repeat(40);
+  const value = { ...pr(), mergeStateStatus: source ? "BEHIND" : "BLOCKED" };
+  let pages = 0;
+  const client = createRehearsalGitHub(sandboxProfile, {
+    execute: async (_file, args) => {
+      const endpoint = args[args.indexOf("--method") + 2];
+      if (endpoint === "graphql") {
+        pages++;
+        return {
+          stdout: JSON.stringify({
+            data: {
+              repository: {
+                databaseId: repo.id,
+                nameWithOwner: repo.full_name,
+                isPrivate: repo.private,
+                ref: {
+                  name: "main",
+                  target: {
+                    oid: moving && pages > 1 ? "d".repeat(40) : currentMain
+                  },
+                  branchProtectionRule: {
+                    ...evidence().branchProtection,
+                    requiresStrictStatusChecks: strict
+                  }
+                },
+                pullRequest: {
+                  number: value.number,
+                  headRefOid: head,
+                  baseRefOid: base,
+                  reviews: { totalCount: 0 },
+                  reviewThreads: {
+                    pageInfo: {
+                      hasNextPage: moving && pages === 1,
+                      endCursor: moving && pages === 1 ? "next" : null
+                    },
+                    nodes: []
+                  }
+                }
+              }
+            }
+          })
+        };
+      }
+      if (endpoint.endsWith("/rules/branches/main"))
+        return { stdout: JSON.stringify(evidence().rules) };
+      if (endpoint.endsWith(`/rulesets/${rulesetId}`))
+        return { stdout: JSON.stringify(evidence().ruleset) };
+      if (endpoint.includes("/compare/")) {
+        assert.equal(source, false, "source freshness belongs to fresh CI");
+        assert.ok(
+          endpoint.endsWith(`/compare/${currentMain}...${head}?per_page=1`)
+        );
+        return {
+          stdout: JSON.stringify({
+            base_commit: { sha: currentMain },
+            merge_base_commit: { sha: base },
+            behind_by: 1,
+            status: "diverged"
+          })
+        };
+      }
+      assert.fail(endpoint);
+    }
+  });
+  return { value, client, currentMain };
+}
+
+test("audit uses live main separately from GitHub's retained original PR base", async () => {
+  for (const options of [
+    { source: true, strict: true },
+    { strict: false },
+    { strict: true }
+  ]) {
+    const { value, client, currentMain } = advancedMainClient(options);
+    const result = options.source
+      ? await client.sourceIntegration("frontend", value)
+      : await client.approvalBypass("frontend", value);
+    if (!options.source && options.strict) {
+      assert.equal(result, null, "direct merge still requires current main");
+      continue;
+    }
+    assert.equal(result.status, "eligible");
+    assert.equal(result.base_commit, base);
+    assert.equal(result.audited_base_commit, currentMain);
+  }
+});
+
+test("live main moving between audit pages remains a stop", async () => {
+  const { value, client } = advancedMainClient({ source: true, moving: true });
+  await assert.rejects(
+    client.sourceIntegration("frontend", value),
+    /PR or destination moved/
+  );
 });
 
 test("GitHub adapter verifies every comment-only review page before bypass", async () => {

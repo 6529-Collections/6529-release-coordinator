@@ -124,6 +124,8 @@ export function harness(
     executeRelease({
       ...options,
       client: {
+        environmentVersions: async (environment) =>
+          structuredClone(options.batch.execution.versions[environment]),
         identity: async () => ({
           actor: { id: "456", login: "tester" },
           runtime: {

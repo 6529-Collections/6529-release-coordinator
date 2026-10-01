@@ -470,6 +470,15 @@ visible with `batch:waiting` or `batch:blocked`, reasons and links. A+B failing
 does not mark both tickets broken. A batch pass is input to the saved release
 plan; it is not itself deployment evidence.
 
+A behind-main source PR need not be rewritten by its developer. After independently
+auditing its exact checks and reviews, the Coordinator tests a fresh combination
+with current main. New candidate commits preserve original PR history, so the
+source PR is indirectly marked merged when the release reaches main. Deploy/E2E
+must still finish before the ticket completes. Unselected inherited PRs are
+refused. Main-only drift before release execution can trigger same-run
+re-preparation after verified trial cleanup, within the unchanged count budgets;
+source changes and later release drift still stop normally.
+
 For the selected sandbox batch, the command saves one release identity and then
 runs these steps in order for each required environment:
 

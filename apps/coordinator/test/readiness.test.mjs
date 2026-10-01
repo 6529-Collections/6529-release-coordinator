@@ -21,6 +21,7 @@ import {
 } from "../src/readiness.mjs";
 import { effectiveRequiredChecks } from "../src/github-checks.mjs";
 import { runReadinessCli } from "../src/readiness-cli.mjs";
+import { sourceIntegrationEvidence } from "../src/approval-bypass.mjs";
 
 const head = "a".repeat(40);
 const base = "b".repeat(40);
@@ -112,6 +113,44 @@ const allChecks = (result) => [
 ];
 const getCheck = (result, id) =>
   allChecks(result).find((item) => item.id === id);
+
+test("behind source admission passes readiness only with independently verified source evidence", () => {
+  const f = fixture();
+  f.pr.mergeStateStatus = "BEHIND";
+  const requested = f.request.release_parts[0].pull_requests[0];
+  assert.equal(
+    inspectPull(f.pr, requested, repo).find(
+      (check) => check.id === "github_merge_gate"
+    ).status,
+    "blocked"
+  );
+  f.pr.sourceIntegration = sourceIntegrationEvidence({
+    pr: f.pr,
+    rules: [],
+    branchProtection: null,
+    unresolvedThreads: 0,
+    reviewCount: 0,
+    reviewStates: [],
+    expectedChecks: ["Build"]
+  });
+  assert.ok(
+    inspectPull(f.pr, requested, repo).every((check) => check.status === "pass")
+  );
+  f.pr.checks[0].conclusion = "FAILURE";
+  assert.equal(
+    inspectPull(f.pr, requested, repo).find(
+      (check) => check.id === "required_checks"
+    ).status,
+    "blocked"
+  );
+  f.pr.headRefOid = "d".repeat(40);
+  assert.equal(
+    inspectPull(f.pr, requested, repo).find(
+      (check) => check.id === "github_merge_gate"
+    ).status,
+    "blocked"
+  );
+});
 
 test("passing observed checks never imply release permission or invented lifecycle history", async () => {
   const f = fixture();

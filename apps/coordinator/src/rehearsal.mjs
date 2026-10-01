@@ -158,11 +158,10 @@ export async function rehearseMerge(
         item.checks.push({
           ...check(
             "destination_gate",
-            pr.baseRefName === repo.destination.branch &&
-              pr.baseRefOid === repo.destination.commit
-              ? "pass"
-              : "unknown",
-            "GitHub gates refer to the PR base only; a different destination has no inferred gate proof.",
+            pr.baseRefName === repo.destination.branch ? "pass" : "unknown",
+            pr.baseRefName === repo.destination.branch
+              ? "Source PR targets this same branch; its retained old base may differ from current main. Source gates do not prove the new combination: fresh candidate CI is still required."
+              : "GitHub gates refer to the PR base branch only; another destination branch has no inferred gate proof.",
             { pr_base: pr.baseRefName, pr_base_commit: pr.baseRefOid }
           ),
           pr_number: pr.number

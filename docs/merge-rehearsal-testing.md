@@ -17,6 +17,20 @@ The v6 release sequence also has
 Each stage's evidence is separate from the original MR milestone.
 Documentation alone is not permission to execute external changes.
 
+The October 1 behind-main/history fixture adds the explicit developer command
+`node apps/coordinator/sandbox/prepare-cases.mjs --create-behind-history-prs`.
+It prepares two independent backend/frontend pairs from the same mains, then
+normal complete requests are submitted through `request:submit`. Release A with
+an issue/actor filter, prove B's original heads did not move, and release B with
+fresh combined checks after A advances main. Temporarily enabling frontend test
+main's strict freshness flag exercises a genuine `BEHIND` gate; preserve its
+required check/app identity and restore the original flag after testing. Verify
+original PR merge flags separately from deploy/E2E and ticket completion. Offline
+tests cover changed inputs/gates, unselected ancestry, cleanup, same-run
+re-preparation budgets, and resume after indirect source merges. The
+[dated acceptance record](./testing/behind-main-history-2026-10-01.md) owns live
+outcomes; none of this authorizes or proves a real-product release.
+
 As of September 23, test `1a-staging` no longer has branch protection, matching
 the real staging branches. `Sandbox check` still runs on test staging PRs, but
 the Coordinator checks its result itself even though GitHub marks it optional.
@@ -222,8 +236,11 @@ pass the rehearsal if one repository is conflicted, stale, or unverified.
 GitHub check/review gates describe each PR against its own base branch; record
 that branch. They do not prove the combined tree passed CI or that another
 destination's rules were satisfied. Cases intended to pass use PRs targeting
-the explicit destination. For a different destination, retain the local merge
-finding but leave destination gate evidence unknown unless separately verified.
+the explicit destination branch. That branch may have advanced beyond GitHub's
+retained original PR base: pin and re-read current main, rehearse the original
+heads on it, and require fresh candidate CI before release execution. For another
+destination branch, retain the local merge finding but leave destination gate
+evidence unknown unless separately verified.
 
 The final observation does not lock GitHub. Later execution must revalidate
 the same destinations, commits, order, and method. A different merge method,

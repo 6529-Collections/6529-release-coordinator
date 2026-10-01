@@ -12,7 +12,7 @@ import {
 } from "./readiness-dependencies.mjs";
 import { catalogPath } from "./readiness-github.mjs";
 import { effectiveRequiredChecks } from "./github-checks.mjs";
-import { hasApprovalBypass } from "./approval-bypass.mjs";
+import { hasApprovalBypass, hasSourceIntegration } from "./approval-bypass.mjs";
 
 const sha = /^[0-9a-f]{40}$/u;
 const mergeStates = [
@@ -174,8 +174,12 @@ export function inspectPull(
     )
   );
   const bypass = hasApprovalBypass(pr);
+  const integration = hasSourceIntegration(pr);
   const gatePass =
-    open && (["CLEAN", "UNSTABLE"].includes(pr.mergeStateStatus) || bypass);
+    open &&
+    (["CLEAN", "UNSTABLE"].includes(pr.mergeStateStatus) ||
+      bypass ||
+      integration);
   const gateBlocked =
     open &&
     ["BEHIND", "BLOCKED", "DIRTY", "DRAFT"].includes(pr.mergeStateStatus);
@@ -183,10 +187,16 @@ export function inspectPull(
     check(
       "github_merge_gate",
       gatePass ? "pass" : gateBlocked ? "blocked" : "unknown",
-      bypass
-        ? "GitHub reports a review block. This account has a verified PR-only ruleset bypass; all other known gates remain independently checked."
-        : `GitHub merge state for the PR base: ${pr.mergeStateStatus}. This is GitHub's summary, not an independent rules audit.`,
-      bypass ? pr.approvalBypass : undefined
+      integration
+        ? "Source PR is behind main; exact checks and reviews were audited. Only a fresh combined candidate may proceed; this is not source-PR merge permission."
+        : bypass
+          ? "GitHub reports a review block. This account has a verified PR-only ruleset bypass; all other known gates remain independently checked."
+          : `GitHub merge state for the PR base: ${pr.mergeStateStatus}. This is GitHub's summary, not an independent rules audit.`,
+      integration
+        ? pr.sourceIntegration
+        : bypass
+          ? pr.approvalBypass
+          : undefined
     )
   );
 
@@ -225,9 +235,12 @@ export function inspectPull(
     check(
       "reviews",
       review === "CHANGES_REQUESTED" ||
-        (review === "REVIEW_REQUIRED" && !bypass)
+        (review === "REVIEW_REQUIRED" && !bypass && !integration)
         ? "blocked"
-        : review === "APPROVED" || bypass || (review === null && gatePass)
+        : review === "APPROVED" ||
+            bypass ||
+            integration ||
+            (review === null && gatePass)
           ? "pass"
           : "unknown",
       bypass
