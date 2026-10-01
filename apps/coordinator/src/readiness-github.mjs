@@ -1,6 +1,9 @@
 import { realProfile, repositoryRole } from "./profiles.mjs";
 import { createRehearsalGitHub } from "./rehearsal-github.mjs";
-import { needsApprovalBypass } from "./approval-bypass.mjs";
+import {
+  needsApprovalBypass,
+  needsSourceIntegration
+} from "./approval-bypass.mjs";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -55,6 +58,18 @@ export function createReadinessGitHub({
     )
   );
   async function withApprovalBypass(repository, pr) {
+    if (needsSourceIntegration(pr)) {
+      let sourceIntegration = null;
+      try {
+        sourceIntegration = await approvalGitHub.sourceIntegration(
+          repositoryRole(repository, profile),
+          pr
+        );
+      } catch {
+        /* Missing proof stays blocked. */
+      }
+      return { ...pr, sourceIntegration };
+    }
     if (!needsApprovalBypass(pr)) return pr;
     const role = repositoryRole(repository, profile);
     let approvalBypass = null;

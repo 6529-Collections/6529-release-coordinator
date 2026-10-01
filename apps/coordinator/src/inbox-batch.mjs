@@ -55,9 +55,12 @@ function releasedDecision(decision, result) {
   const next = structuredClone(decision);
   next.reasons = next.reasons.filter(
     (reason) =>
-      !["coordinator-incomplete", "batch-selected", result.code].includes(
-        reason.code
-      )
+      ![
+        "coordinator-incomplete",
+        "batch-selected",
+        "release-unverified",
+        result.code
+      ].includes(reason.code)
   );
   const completed = result.status === "completed";
   const cancelled = result.code === "release-cancelled";
@@ -466,6 +469,16 @@ export async function coordinateInboxBatch({
   state.lock.batch_fingerprint = fingerprint;
   await save("save batch selection identity");
   state.batches ??= {};
+  const refreshedHistory = await Promise.all(
+    (run.reprepared_batches ?? []).map((hash) => loadBatch(hash))
+  );
+  serviceAssert(
+    refreshedHistory.every(
+      (saved) => saved && !saved.execution && saved.stop?.status === "stale"
+    ),
+    "batch-state",
+    "Missing or unsafe prior preparation history."
+  );
   const batch = await select({
     items: inputsChanged
       ? original.inputs.map((value) => ({
@@ -481,6 +494,18 @@ export async function coordinateInboxBatch({
         }))
       : suitable,
     previous: original,
+    spent: Object.fromEntries(
+      ["git", "checks"].map((phase) => [
+        phase,
+        refreshedHistory.reduce(
+          (sum, saved) =>
+            sum +
+            (saved.attempts.filter((attempt) => attempt.phase === phase)
+              .length ?? 0),
+          0
+        )
+      ])
+    ),
     policy,
     signal,
     guard,

@@ -43,6 +43,15 @@ export async function verifySavedBatch(
     "Saved batch evidence or cleanup is incomplete."
   );
   for (const record of state.prs) {
+    const spec = prepared.publications.find(
+      (value) => value.role === record.role
+    );
+    serviceAssert(
+      spec &&
+        JSON.stringify(record.source_prs) === JSON.stringify(spec.source_prs),
+      "batch-evidence",
+      "Saved source PR history differs from the exact candidate."
+    );
     await guard();
     const identity = await client.identity(record.role, record.base);
     const result = await client.result(record, { closed: true });
@@ -122,7 +131,7 @@ export async function checkBatch(
     signal,
     profile = sandboxProfile,
     policy = batchPolicy,
-    client = createBatchGitHub({ profile, guard, policy }),
+    client = createBatchGitHub({ profile, guard, policy, signal }),
     serviceClient = profile.name === "sandbox"
       ? createServiceGitHub({ profile })
       : null,
@@ -225,8 +234,14 @@ export async function checkBatch(
       }
     }
     for (const spec of prepared.publications) {
-      if (!spec.patch.length) continue; // Unchanged repository tree; integration still checks both roles.
+      if (!spec.patch.length && !spec.source_prs?.length) continue;
       let record = state.prs.find((value) => value.role === spec.role);
+      if (record)
+        serviceAssert(
+          JSON.stringify(record.source_prs) === JSON.stringify(spec.source_prs),
+          "batch-state",
+          "Saved source PR history changed during resume."
+        );
       if (record && !record.result) {
         const identity = await client.identity(spec.role, spec.base);
         serviceAssert(
@@ -244,6 +259,9 @@ export async function checkBatch(
           role: spec.role,
           base: spec.base,
           tree: spec.tree,
+          ...(spec.source_prs
+            ? { source_prs: structuredClone(spec.source_prs) }
+            : {}),
           branch: `codex/batch-trial-${id}`,
           created_at: state.created_at,
           ...identity,

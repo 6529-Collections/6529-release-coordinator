@@ -291,7 +291,53 @@ Each candidate rebuilds the full service graph. Its identity includes exact
 intake bindings, membership/order, code and test/runtime configuration. A changed
 PR head never silently replaces accepted code; corrected code requires a new
 request. Changed main or gates invalidate the usable candidate. Owned temporary
-PRs are reconciled/closed before a fresh run can start.
+PRs are reconciled/closed before any replacement tests start. If only main moved,
+all receipts/actors/source heads and gates still match, cleanup is confirmed, and
+release execution has not started, the same run captures new main commits and
+rebuilds/retests its frozen ticket pool. It preserves every previous candidate
+and charges its attempts to the existing per-run count budgets, including on
+resume. A change after release execution begins still uses the existing stop and
+reconciliation rules; this is not automatic recovery or branch rewriting.
+This automatic refresh covers stale combined-candidate preparation. A main
+change during the earlier individual Git rehearsal still stops that invocation;
+start a fresh filtered run for the same unchanged ticket, not a new request.
+
+### Behind-main source PRs and original history
+
+A source PR may be behind main without asking its author to update the branch.
+Admission requires independent exact-head checks, effective known rules, reviews
+and resolved review threads. Only source-base freshness is deferred to a newly
+tested combination of latest main and the pinned original PR commits. A
+source-admission certificate never authorizes merging a behind integration PR;
+the owned candidate and staging/main integration PRs retain their normal gates.
+The existing narrowly audited missing-approval bypass is unchanged.
+GitHub can retain the source PR's original `baseRefOid` after main advances. Audit
+the current destination ref separately, require it to stay stable across audit
+pages, and use that live ref for ordinary strict-freshness comparisons. A saved
+old PR base never proves that a direct merge is up to date.
+
+New sandbox and real batch policies preserve source history: the published
+candidate has the saved main and selected original heads as parents, with the
+exact locally rehearsed tree. Integration wrappers retain that ancestry. No
+source branch is edited, rebased or force-pushed. Before publication and main
+integration, inspect other open main PRs; refuse a candidate that would also
+indirectly merge an unselected PR not already contained in main. Source checks,
+head identity and reviews are re-read immediately before shared integration.
+
+When that history enters main, GitHub indirectly marks the selected original PRs
+merged. The adapter reads back their exact heads/repositories and saves those
+links. This is not deployment proof: the ticket completes only after the saved
+production deploys and matching E2E. Resume must not retire its own indirectly
+merged sources as an externally completed release. A later no-database-change
+restoration keeps the ordinary failure/recovery result; it does not reopen source
+PRs or erase main's merge history.
+
+The new complete policy hashes cannot reuse copy-based candidate proof. Exact
+previous policy shapes and their active attempts remain readable and keep their
+original publication contract. The journal retains `inbox-run-v7` and adds the
+trusted `source_history: original-pr-v1` marker. Older writers reject that
+top-level field even after new batches archive. Sandbox acceptance is separate from real-product
+authorization and evidence.
 
 ### Bounded splitting and failure attribution
 

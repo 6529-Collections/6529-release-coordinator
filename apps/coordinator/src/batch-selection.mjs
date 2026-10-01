@@ -29,9 +29,17 @@ export async function selectBatch({
   guard,
   signal,
   policy = batchPolicy,
+  spent = { git: 0, checks: 0 },
   now = () => Date.now(),
   uuid = randomUUID
 }) {
+  serviceAssert(
+    ["git", "checks"].every(
+      (phase) => Number.isSafeInteger(spent[phase]) && spent[phase] >= 0
+    ),
+    "batch-state",
+    "Invalid prior preparation budget."
+  );
   const ordered = [...items].sort(
     (a, b) => a.entry.issue_number - b.entry.issue_number
   );
@@ -106,6 +114,7 @@ export async function selectBatch({
       );
   };
   const counts = (phase) =>
+    (spent[phase] ?? 0) +
     state.attempts.filter((attempt) => attempt.phase === phase).length;
   const limit = (phase) =>
     counts(phase) >=

@@ -4,6 +4,8 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   createJournal,
   inboxWorkflow,
+  validateJournal,
+  sourceHistoryMarker,
   appendDecision
 } from "../src/inbox-journal.mjs";
 import { archiveFinished, historyReady } from "../src/inbox-history.mjs";
@@ -29,6 +31,35 @@ const inboxScope = () => ({
 });
 const currentBatch = (f) =>
   f.file(Object.values(f.state().history.batches)[0].path).record;
+
+test("resume retains preparation budgets and the writer marker survives archive closeout", async () => {
+  const f = fixture(sandboxProfile);
+  const journal = writer(f);
+  const { state, run } = await journal.acquire(await f.identity(), undefined, {
+    ...inboxScope(),
+    workflow: inboxWorkflow
+  });
+  state.lock.reprepared_batches = ["a".repeat(64)];
+  await journal.save(state, run, "save prior preparation identity");
+  const resumed = await writer(f).acquire(await f.identity(), run.run_id, {
+    ...inboxScope(),
+    workflow: inboxWorkflow
+  });
+  assert.deepEqual(resumed.run.reprepared_batches, ["a".repeat(64)]);
+  await writer(f).read();
+  assert.equal(resumed.state.source_history, sourceHistoryMarker);
+  assert.throws(
+    () =>
+      validateJournal(
+        { ...resumed.state, source_history: "future" },
+        sandboxProfile
+      ),
+    /corrupt/
+  );
+  resumed.state.lock = null;
+  assert.equal(resumed.state.source_history, sourceHistoryMarker);
+  validateJournal(resumed.state, sandboxProfile);
+});
 function presented(ticket, change) {
   const {
     id: _id,

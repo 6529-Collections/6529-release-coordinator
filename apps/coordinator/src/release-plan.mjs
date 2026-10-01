@@ -51,7 +51,7 @@ export function selectedPreparation(batch) {
         publication &&
           sha(publication.base) &&
           sha(publication.tree) &&
-          (publication.patch.length === 0
+          (publication.patch.length === 0 && !publication.source_prs?.length
             ? (sha(publication.base_tree) &&
                 publication.tree === publication.base_tree) ||
               savedLegacyUnchanged
@@ -67,7 +67,11 @@ export function selectedPreparation(batch) {
           base: publication.base,
           tree: publication.tree,
           commit: trial?.commit ?? publication.base,
-          changed: publication.patch.length > 0
+          changed:
+            publication.patch.length > 0 || publication.source_prs?.length > 0,
+          ...(publication.source_prs
+            ? { source_prs: publication.source_prs }
+            : {})
         }
       ];
     })

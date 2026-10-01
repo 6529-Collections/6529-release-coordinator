@@ -86,7 +86,7 @@ export const databaseBatchPolicy = Object.freeze({
 // v6 batches record each ticket's operational deployments so the release plan
 // can deploy sample monitoring after the test-main merge. The backend check
 // workflow also builds the sample monitoring package on every PR.
-export const batchPolicy = Object.freeze({
+export const copiedBatchPolicy = Object.freeze({
   ...commonBatchPolicy,
   version: "sandbox-batch-v6",
   workflow_blob: Object.freeze({
@@ -95,10 +95,18 @@ export const batchPolicy = Object.freeze({
   })
 });
 
+// The complete policy hash separates history-preserving candidates from saved
+// copy-based attempts. Older writers reject this new shape; saved attempts keep
+// their original publication contract when resumed.
+export const batchPolicy = Object.freeze({
+  ...copiedBatchPolicy,
+  preserve_source_history: true
+});
+
 // The product profile uses the same bounded candidate search and exact-tree
 // PR rehearsal. Product repositories supply their own required PR checks, so
 // there is no sandbox-only service workflow or sample artifact contract here.
-export const realBatchPolicy = Object.freeze({
+export const copiedRealBatchPolicy = Object.freeze({
   max_tickets: commonBatchPolicy.max_tickets,
   max_prs_per_repository: commonBatchPolicy.max_prs_per_repository,
   max_git_attempts: commonBatchPolicy.max_git_attempts,
@@ -129,6 +137,11 @@ export const realBatchPolicy = Object.freeze({
         "8de45e342ad45535577299b089d64e11601e9e4d"
     })
   })
+});
+
+export const realBatchPolicy = Object.freeze({
+  ...copiedRealBatchPolicy,
+  preserve_source_history: true
 });
 
 export const databaseBatchPolicies = Object.freeze([
@@ -179,6 +192,8 @@ export function trustedBatchPolicy(policy) {
     previousBatchPolicy,
     priorBatchPolicy,
     databaseBatchPolicy,
+    copiedBatchPolicy,
+    copiedRealBatchPolicy,
     batchPolicy,
     realBatchPolicy
   ].find(
@@ -354,6 +369,15 @@ export async function prepareBatch(
     base: repo.destination.commit,
     base_tree: repo.service_source.base_tree,
     tree: repo.final_tree,
+    ...(policy.preserve_source_history
+      ? {
+          source_prs: repo.pull_requests.map(({ number, branch, commit }) => ({
+            number,
+            branch,
+            commit
+          }))
+        }
+      : {}),
     patch: repo.service_source.patch
   }));
   if (profile.name === "real")

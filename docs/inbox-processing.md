@@ -352,6 +352,21 @@ The general future outcomes below also cover capabilities beyond this first
 stage, including cross-ticket dependency groups and reassessment after a real
 release. Those capabilities are not implied by the new sandbox labels.
 
+Behind-main source PRs may enter fresh candidate testing after an independent
+checks/rules/reviews/thread audit; failed or unfinished required checks, a changed
+requested head, unresolved reviews, conflicts and unknown policy remain stops.
+The developer branch and immutable request stay unchanged. New candidates retain
+the original PR commits, so main integration indirectly marks those PRs merged.
+That expected source transition does not close an active release ticket: resume
+must finish its saved deploy/E2E proof. An unselected open main PR inherited by a
+candidate is refused rather than silently consumed by the issue filter.
+
+If main moves during preparation only, the Coordinator can clean its old trials,
+verify the same receipt/actor/source inputs and rebuild/retest on new main in the
+same run. Old proof and its counts remain saved; no checks or budgets are reset.
+Once release execution exists, automatic re-preparation is forbidden. Ordinary
+stale-release reconciliation still applies.
+
 Leaving a ticket out of a candidate keeps its PRs and Issue open. Keep the entire
 ticket and any inseparable dependency group together. Selection or a passing
 batch test never means completed; only the matching saved release sequence can

@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import {
   batchPolicyForProfile,
   batchPolicyProfile,
+  batchPolicy,
+  copiedBatchPolicy,
+  copiedRealBatchPolicy,
   earlierElapsedBatchPolicy,
   previousBatchPolicy,
   realBatchPolicy,
@@ -10,6 +13,22 @@ import {
   trustedBatchPolicy
 } from "../src/batch-plan.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
+import { serviceHash } from "../src/service-contract.mjs";
+
+test("history-preserving policies never reuse old copy-based publication proof", () => {
+  for (const [old, current] of [
+    [copiedBatchPolicy, batchPolicy],
+    [copiedRealBatchPolicy, realBatchPolicy]
+  ]) {
+    assert.equal(trustedBatchPolicy(structuredClone(old)), old);
+    assert.equal(trustedBatchPolicy(structuredClone(current)), current);
+    assert.notEqual(serviceHash(old), serviceHash(current));
+    assert.throws(
+      () => trustedBatchPolicy({ ...old, preserve_source_history: false }),
+      { code: "batch-policy" }
+    );
+  }
+});
 
 test("the exact earlier v2 policy remains readable after its workflow changed", () => {
   assert.equal(

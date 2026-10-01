@@ -6,6 +6,39 @@ import { previousBatchPolicy } from "../src/batch-plan.mjs";
 
 import { fixture } from "./batch-github-fixture.mjs";
 
+test("published candidate preserves every selected original head and rejects lost history", async () => {
+  const f = fixture({ profile: realProfile });
+  f.record.source_prs = [
+    { number: 1, branch: "codex/a", commit: "1".repeat(40) },
+    { number: 2, branch: "codex/b", commit: "2".repeat(40) }
+  ];
+  await f.client.open(f.record, f.patch, f.save);
+  const commit = f.calls.find(
+    (call) => call.path === "/git/commits" && call.method === "POST"
+  ).body;
+  assert.deepEqual(commit.parents, [
+    f.record.base,
+    "1".repeat(40),
+    "2".repeat(40)
+  ]);
+  assert.equal((await f.client.result(f.record)).status, "passed");
+  const parents = structuredClone(f.tested.parents);
+  for (const mutate of [
+    (tested) => tested.parents.pop(),
+    (tested) => {
+      tested.parents[1].sha = "f".repeat(40);
+    },
+    (tested) => tested.parents.reverse(),
+    (tested) => {
+      tested.tree.sha = "f".repeat(40);
+    }
+  ]) {
+    f.tested.parents = structuredClone(parents);
+    mutate(f.tested);
+    await assert.rejects(f.client.result(f.record), /saved exact tested tree/);
+  }
+});
+
 test("temporary PR writer saves exact identity, verifies checks, and only removes its own trial", async () => {
   const f = fixture();
   assert.equal(

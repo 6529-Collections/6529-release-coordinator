@@ -10,6 +10,7 @@ import {
 import { serviceAssert, ServiceError } from "./service-contract.mjs";
 import { serviceFiles } from "./service-contract.mjs";
 import { releaseMonitoringPaths } from "./release-contract.mjs";
+import { assertSelectedSourceHistory } from "./source-history.mjs";
 import {
   effectiveAllChecks,
   effectiveRequiredChecks
@@ -25,14 +26,23 @@ const branchName = (value) =>
     value ?? ""
   );
 const positive = (value) => Number.isSafeInteger(value) && value > 0;
+// The recorded order is intentional: main first, then requested source heads.
+// Commit creation and resume verification must preserve that exact order.
+const parentsFor = (record) => [
+  ...new Set([record.base, ...(record.source_prs ?? []).map((pr) => pr.commit)])
+];
+const hasParents = (commit, record) =>
+  JSON.stringify(commit?.parents?.map((parent) => parent.sha)) ===
+  JSON.stringify(parentsFor(record));
 
-// This writer has no merge endpoint and cannot write to product repositories,
-// source branches, main, or workflows. Only saved temporary trial identities.
+// This writer has no merge endpoint. It publishes only saved temporary trial
+// identities in the selected trusted repositories, never source or shared refs.
 export function createBatchGitHub({
   profile,
+  signal,
   execute = executeGitHub,
   logs = readServiceLogs,
-  gates = createRehearsalGitHub(profile),
+  gates = createRehearsalGitHub(profile, { signal }),
   guard = async () => {},
   policy = batchPolicy
 } = {}) {
@@ -112,6 +122,14 @@ export function createBatchGitHub({
         sha(record.base) &&
         sha(record.tree) &&
         (!record.commit || sha(record.commit)) &&
+        (!record.source_prs ||
+          (Array.isArray(record.source_prs) &&
+            record.source_prs.every(
+              (pr) =>
+                positive(pr.number) &&
+                typeof pr.branch === "string" &&
+                sha(pr.commit)
+            ))) &&
         positive(Number(record.actor?.id)) &&
         (profile.name !== "real" ||
           /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/u.test(
@@ -153,6 +171,18 @@ export function createBatchGitHub({
       repository: profile.repositories[record.role].full_name,
       expected: record.base,
       observed: ref.data?.object?.sha
+    });
+  }
+  async function selectedHistory(record) {
+    if (!record.source_prs?.length) return;
+    await assertSelectedSourceHistory({
+      get: async (suffix) => (await call(record.role, "GET", suffix)).data,
+      repository: profile.repositories[record.role],
+      sourcePrs: record.source_prs,
+      base: record.base,
+      candidate: record.commit,
+      signal,
+      ignored: record.number ? [record.number] : []
     });
   }
   return {
@@ -242,7 +272,7 @@ export function createBatchGitHub({
       }
       serviceAssert(
         Array.isArray(patch) &&
-          patch.length > 0 &&
+          (patch.length > 0 || record.source_prs?.length > 0) &&
           (profile.name === "real" || patch.length <= 40) &&
           patch.every(
             (file) =>
@@ -319,7 +349,7 @@ export function createBatchGitHub({
             "/git/commits",
             {
               tree: tree.sha,
-              parents: [record.base],
+              parents: parentsFor(record),
               ...commitIdentity
             },
             [201]
@@ -328,14 +358,15 @@ export function createBatchGitHub({
         serviceAssert(
           sha(commit.sha) &&
             commit.tree?.sha === record.tree &&
-            commit.parents?.length === 1 &&
-            commit.parents[0].sha === record.base,
+            hasParents(commit, record),
           "batch-tree",
           "Temporary commit identity is invalid."
         );
         record.commit = commit.sha;
         await save(record); // Exact head is durable before branch creation.
       }
+      await selectedHistory(record);
+      await unchanged(record);
       let ref = await call(
         record.role,
         "GET",
@@ -435,8 +466,7 @@ export function createBatchGitHub({
         serviceAssert(
           tested.sha === record.commit &&
             tested.tree?.sha === record.tree &&
-            tested.parents?.length === 1 &&
-            tested.parents[0].sha === record.base,
+            hasParents(tested, record),
           "batch-check-inputs",
           "The product PR head is not the saved exact tested tree on its saved base."
         );

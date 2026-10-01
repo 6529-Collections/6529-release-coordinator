@@ -314,6 +314,26 @@ export async function prepareRunTickets({
         () => observe(entry, { github, profile })
       );
       decision = decideTicket(entry, observation);
+      // Source PRs can become indirectly merged by this saved release. Do not
+      // mistake that expected transition for an externally completed release.
+      if (
+        activeBatch.selected?.includes(number) &&
+        activeBatch.execution &&
+        decision.status === "closed" &&
+        decision.reasons.every((reason) => reason.code === "already-merged")
+      ) {
+        decision.status = "waiting";
+        decision.reasons = [
+          {
+            code: "release-unverified",
+            owner: "Coordinator",
+            message:
+              "Original PRs entered main while this saved release remains active. Verify its own integration, deployments and E2E before completing the ticket.",
+            action:
+              "Continue the saved release and verify its recorded operations."
+          }
+        ];
+      }
       rehearsalResult = {
         status: "passed",
         message:

@@ -6,6 +6,20 @@ import { ServiceError } from "../src/service-contract.mjs";
 
 import { harness, items } from "./selection-harness.mjs";
 
+test("re-preparation keeps the existing per-run budgets instead of resetting them", async () => {
+  const h = harness();
+  const result = await h.run({ spent: { git: 39, checks: 11 } });
+  assert.deepEqual(result.selected, [1, 2, 3, 4]);
+  assert.equal(result.attempts.length, 2);
+  const exhausted = await h.run({ spent: { git: 40, checks: 12 } });
+  assert.equal(exhausted.selected.length, 0);
+  assert.equal(exhausted.attempts.length, 0);
+  await assert.rejects(
+    h.run({ spent: { git: -1, checks: 0 } }),
+    /prior preparation budget/
+  );
+});
+
 test("compatible tickets receive one combined expensive run after the cheap pass", async () => {
   const h = harness();
   const result = await h.run();

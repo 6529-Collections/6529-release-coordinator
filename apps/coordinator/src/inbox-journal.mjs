@@ -37,6 +37,7 @@ export const receiptHash = (issue) =>
 const validSha = (value) =>
   typeof value === "string" && /^[0-9a-f]{40}$/u.test(value);
 export const inboxWorkflow = "inbox-run-v7";
+export const sourceHistoryMarker = "original-pr-v1";
 const workflows = [
   "inbox-run-v1",
   "inbox-run-v2",
@@ -65,12 +66,15 @@ export function validateJournal(state, profile = realProfile) {
           "lock",
           "tickets",
           "workflow",
+          "source_history",
           "service_attempts",
           "batches",
           "history"
         ].includes(key)
     ) ||
-    (state.workflow !== undefined && !workflows.includes(state.workflow))
+    (state.workflow !== undefined && !workflows.includes(state.workflow)) ||
+    (state.source_history !== undefined &&
+      state.source_history !== sourceHistoryMarker)
   )
     throw new Error("Unsupported or corrupt inbox journal.");
   if (state.workflow === inboxWorkflow && state.profile !== profile.name)
@@ -88,6 +92,16 @@ export function validateJournal(state, profile = realProfile) {
     } catch {
       throw new Error("Invalid inbox lock scope.");
     }
+    if (
+      state.lock.reprepared_batches !== undefined &&
+      (!Array.isArray(state.lock.reprepared_batches) ||
+        new Set(state.lock.reprepared_batches).size !==
+          state.lock.reprepared_batches.length ||
+        state.lock.reprepared_batches.some(
+          (hash) => !/^[0-9a-f]{64}$/u.test(hash)
+        ))
+    )
+      throw new Error("Invalid prior preparation history.");
   }
   if (state.service_attempts !== undefined) {
     if (
@@ -476,6 +490,13 @@ export function createJournal(
         ...(workflow === inboxWorkflow
           ? {
               plans: resume ? structuredClone(state.lock.plans ?? {}) : {},
+              ...(resume && state.lock.reprepared_batches
+                ? {
+                    reprepared_batches: structuredClone(
+                      state.lock.reprepared_batches
+                    )
+                  }
+                : {}),
               ...(resume && state.lock.batch_fingerprint
                 ? { batch_fingerprint: state.lock.batch_fingerprint }
                 : {}),
@@ -489,7 +510,12 @@ export function createJournal(
       // when a passing decision has no new reason code. Preserve all history.
       if (workflow) {
         state.workflow = workflow;
-        if (workflow === inboxWorkflow) state.profile = profile.name;
+        if (workflow === inboxWorkflow) {
+          state.profile = profile.name;
+          // Older v7 writers reject this top-level field even after all new
+          // batches have archived. Keep the existing workflow marker as well.
+          state.source_history = sourceHistoryMarker;
+        }
       }
       state.lock = run;
       await write(state, `${resume ? "resume" : "acquire"} ${run.run_id}`);

@@ -16,6 +16,7 @@ import {
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import { realProductWorkflowRuntime } from "../src/product-workflow-runtime-config.mjs";
 import { integrationCommitInput } from "../src/release-plan.mjs";
+import { fixture as sourceFixture } from "./processing-fixture.mjs";
 
 const runtime = {
   workflow: "sandbox-release.yml",
@@ -820,6 +821,163 @@ test("staging movement stops before an integration branch or PR is created", asy
     /staging changed after this release captured/u
   );
   assert.deepEqual(writes, []);
+});
+
+test("staging and main both refuse newly inherited unselected PR history before merging", async () => {
+  for (const environment of ["staging", "prod"]) {
+    const f = sourceFixture(sandboxProfile),
+      source = f.request.release_parts[0].pull_requests[0];
+    const candidate = {
+      role: "backend",
+      base: "e".repeat(40),
+      commit: "c".repeat(40),
+      tree: "d".repeat(40),
+      changed: true,
+      source_prs: [source]
+    };
+    const targetBranch = environment === "staging" ? "1a-staging" : "main";
+    const record = {
+      id: "22222222-2222-4222-8222-222222222222",
+      release_id: "11111111-1111-4111-8111-111111111111",
+      step: {
+        id: `${environment}:integrate:backend`,
+        kind: "integrate",
+        environment,
+        role: "backend"
+      },
+      state: "checking",
+      created_at: "2026-09-11T12:00:00.000Z",
+      actor: { id: "456", login: "tester" },
+      target_branch: targetBranch,
+      branch: `codex/release-11111111-1111-4111-8111-111111111111-${environment}-backend`,
+      body: "Sandbox release test",
+      base: candidate.base,
+      integration_version: 1,
+      integration_commit: "9".repeat(40),
+      number: 7,
+      url: "https://example.invalid/pr/7"
+    };
+    record.integration_input = integrationCommitInput(record, candidate);
+    const writes = [],
+      reads = [],
+      unselectedHead = "2".repeat(40);
+    const client = createReleaseGitHub({
+      profile: sandboxProfile,
+      runtime,
+      wait: async () => {},
+      gates: {
+        pullRequest: async (_role, number) =>
+          number === source.number
+            ? f.pr
+            : {
+                headRefOid: record.integration_commit,
+                headRefName: record.branch,
+                baseRefOid: candidate.base,
+                baseRefName: targetBranch,
+                state: "OPEN",
+                isDraft: false,
+                mergeable: "MERGEABLE",
+                mergeStateStatus: "CLEAN",
+                checks: [
+                  {
+                    __typename: "CheckRun",
+                    name: "Sandbox check",
+                    isRequired: true,
+                    status: "COMPLETED",
+                    conclusion: "SUCCESS"
+                  }
+                ]
+              }
+      },
+      execute: async (args) => {
+        const method = args[args.indexOf("--method") + 1],
+          endpoint = args[args.indexOf("--method") + 2];
+        if (method !== "GET") writes.push({ method, endpoint });
+        reads.push(endpoint);
+        if (method === "POST" && endpoint.endsWith("/git/commits"))
+          return apiResponse("201 Created", {
+            sha: record.integration_commit,
+            tree: { sha: candidate.tree },
+            parents: [{ sha: candidate.commit }]
+          });
+        let data;
+        if (endpoint.endsWith(`/git/ref/heads/${targetBranch}`))
+          data = { object: { sha: candidate.base } };
+        else if (endpoint.endsWith(`/git/ref/heads/${record.branch}`))
+          data = { object: { sha: record.integration_commit } };
+        else if (endpoint.endsWith(`/git/commits/${record.integration_commit}`))
+          data = {
+            sha: record.integration_commit,
+            tree: { sha: candidate.tree },
+            parents: [{ sha: candidate.commit }]
+          };
+        else if (endpoint.endsWith("/pulls/7"))
+          data = {
+            number: 7,
+            html_url: record.url,
+            head: {
+              repo: sandboxProfile.repositories.backend,
+              ref: record.branch,
+              sha: record.integration_commit
+            },
+            base: {
+              repo: sandboxProfile.repositories.backend,
+              ref: targetBranch
+            },
+            user: { id: 456 },
+            body: record.body,
+            state: "open",
+            merged: false,
+            merge_commit_sha: "8".repeat(40)
+          };
+        else if (endpoint.endsWith(`/git/commits/${"8".repeat(40)}`))
+          data = { tree: { sha: candidate.tree } };
+        else if (endpoint.includes("/runs?"))
+          data = { total_count: 0, workflow_runs: [] };
+        else if (endpoint.includes("/pulls?state=open"))
+          data = [
+            {
+              number: 42,
+              base: { repo: sandboxProfile.repositories.backend, ref: "main" },
+              head: { sha: unselectedHead }
+            }
+          ];
+        else if (endpoint.includes("/compare/"))
+          data = {
+            status: endpoint.includes(`...${candidate.base}`)
+              ? "diverged"
+              : "ahead",
+            base_commit: { sha: unselectedHead },
+            merge_base_commit: {
+              sha: endpoint.includes(`...${candidate.base}`)
+                ? "f".repeat(40)
+                : unselectedHead
+            }
+          };
+        else throw new Error(`Unexpected guard test: ${method} ${endpoint}`);
+        return apiResponse("200 OK", data);
+      }
+    });
+    await assert.rejects(
+      client.integrate({
+        record,
+        candidate,
+        actor: record.actor,
+        expectedBase: candidate.base,
+        save: async () => {}
+      }),
+      /Unselected PR #42/
+    );
+    assert.ok(
+      writes.every(
+        ({ method, endpoint }) =>
+          method === "POST" && endpoint.endsWith("/git/commits")
+      )
+    );
+    assert.ok(
+      reads.some((path) => path.includes("/pulls?state=open&base=main"))
+    );
+  }
 });
 
 test("integration uses a unique checked commit with the exact candidate tree", async () => {

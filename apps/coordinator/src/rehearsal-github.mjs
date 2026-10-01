@@ -5,7 +5,9 @@ import {
 import { isBranch, isSha, RehearsalError } from "./rehearsal-plan.mjs";
 import {
   approvalBypassEvidence,
-  needsApprovalBypass
+  needsApprovalBypass,
+  needsSourceIntegration,
+  sourceIntegrationEvidence
 } from "./approval-bypass.mjs";
 
 const query = `query RehearsalPull($owner: String!, $name: String!, $number: Int!, $cursor: String) {
@@ -164,9 +166,13 @@ export function createRehearsalGitHub(
       );
     }
   }
-  async function approvalBypass(role, pr) {
+  async function approvalBypass(role, pr, sourceIntegration = false) {
     const repo = identity(role);
-    if (!repo.approval_bypass_ruleset_id || !needsApprovalBypass(pr))
+    if (
+      sourceIntegration
+        ? !needsSourceIntegration(pr)
+        : !repo.approval_bypass_ruleset_id || !needsApprovalBypass(pr)
+    )
       return null;
     if (!isBranch(pr.baseRefName) || !isSha(pr.headRefOid))
       throw new RehearsalError(
@@ -176,6 +182,7 @@ export function createRehearsalGitHub(
     const cursors = new Set();
     let cursor;
     let protection;
+    let auditedBaseCommit;
     let reviewCount;
     let unresolvedThreads = 0;
     for (;;) {
@@ -189,7 +196,9 @@ export function createRehearsalGitHub(
       verify(result, repo);
       if (
         result.ref?.name !== pr.baseRefName ||
-        result.ref.target?.oid !== pr.baseRefOid ||
+        !isSha(result.ref.target?.oid) ||
+        (auditedBaseCommit !== undefined &&
+          result.ref.target.oid !== auditedBaseCommit) ||
         result.pullRequest?.number !== pr.number ||
         result.pullRequest.headRefOid !== pr.headRefOid ||
         result.pullRequest.baseRefOid !== pr.baseRefOid
@@ -198,6 +207,10 @@ export function createRehearsalGitHub(
           "moving_pages",
           "PR or destination moved during approval-bypass verification."
         );
+      // GitHub retains a source PR's original baseRefOid after main advances.
+      // Audit the live branch separately; never mistake that normal lag for
+      // moving pages or use the old PR base to prove strict freshness.
+      auditedBaseCommit = result.ref.target.oid;
       const nextProtection = result.ref.branchProtectionRule;
       if (
         protection !== undefined &&
@@ -313,22 +326,22 @@ export function createRehearsalGitHub(
       repo,
       `/rules/branches/${encodeURIComponent(pr.baseRefName)}`
     );
-    const ruleset = await rest(
-      repo,
-      `/rulesets/${repo.approval_bypass_ruleset_id}`
-    );
+    const ruleset = repo.approval_bypass_ruleset_id
+      ? await rest(repo, `/rulesets/${repo.approval_bypass_ruleset_id}`)
+      : null;
     let baseIsAncestor = false;
     if (
-      rules.some(
+      !sourceIntegration &&
+      (rules.some(
         (rule) =>
           rule.type === "required_status_checks" &&
           rule.parameters?.strict_required_status_checks_policy === true
       ) ||
-      protection?.requiresStrictStatusChecks === true
+        protection?.requiresStrictStatusChecks === true)
     ) {
       const compare = await rest(
         repo,
-        `/compare/${pr.baseRefOid}...${pr.headRefOid}?per_page=1`
+        `/compare/${auditedBaseCommit}...${pr.headRefOid}?per_page=1`
       );
       // Behind/diverged are valid API shapes, but cannot prove ancestry below.
       if (
@@ -342,12 +355,14 @@ export function createRehearsalGitHub(
           "GitHub returned incomplete branch-ancestry evidence."
         );
       baseIsAncestor =
-        compare.base_commit?.sha === pr.baseRefOid &&
-        compare.merge_base_commit?.sha === pr.baseRefOid &&
+        compare.base_commit?.sha === auditedBaseCommit &&
+        compare.merge_base_commit?.sha === auditedBaseCommit &&
         compare.behind_by === 0 &&
         ["ahead", "identical"].includes(compare.status);
     }
-    return approvalBypassEvidence({
+    return (
+      sourceIntegration ? sourceIntegrationEvidence : approvalBypassEvidence
+    )({
       pr,
       rules,
       ruleset,
@@ -355,17 +370,21 @@ export function createRehearsalGitHub(
       unresolvedThreads,
       reviewCount,
       reviewStates,
+      auditedBaseCommit,
       baseIsAncestor,
       rulesetId: repo.approval_bypass_ruleset_id,
       expectedChecks: repo.required_checks
     });
   }
   async function withApprovalBypass(role, pr) {
+    if (needsSourceIntegration(pr))
+      return { ...pr, sourceIntegration: await approvalBypass(role, pr, true) };
     if (!needsApprovalBypass(pr)) return pr;
     return { ...pr, approvalBypass: await approvalBypass(role, pr) };
   }
   return {
     approvalBypass,
+    sourceIntegration: (role, pr) => approvalBypass(role, pr, true),
     async destination(role, branch) {
       const repo = identity(role);
       if (!isBranch(branch))

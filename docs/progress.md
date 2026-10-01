@@ -1,7 +1,78 @@
 # Progress and next steps
 
-Last reviewed: **2026-09-30** for real Issue #275's staging proof, production
-review block, and explicit keep-current cancellation.
+Last reviewed: **2026-10-01** for behind-main source admission, original-PR
+history publication, and completed sandbox acceptance. The real #275 evidence
+below retains its recorded September 30 date.
+
+## October 1 — behind-main PR preparation
+
+Implementation branch `codex/behind-pr-release-history` allows an independently audited
+behind-main source PR to enter fresh testing without changing its requested head
+or developer branch. New sandbox/real candidate policies preserve the original
+commits through CI-checked staging and protected main integrations; main indirectly marks
+the selected source PRs merged. Other gates remain enforced, and unselected
+inherited open PRs are refused. Source checks/reviews are read again before
+integration. A merged source is not a completed release: resume must still verify
+the saved deployment/E2E sequence. Exact older copy-based policies remain readable.
+The journal preserves `inbox-run-v7` and fences older writers with the trusted
+`source_history: original-pr-v1` field, including after archival.
+
+Source delivery is tracked by
+[Coordinator PR #288](https://github.com/6529-Collections/6529-release-coordinator/pull/288).
+Review hardening threads cancellation through source-history scans and
+re-preparation, filters open PR scans to main, caches repeated immutable SHA
+comparisons and rejects a previously attempted preparation snapshot. The
+unselected-history check now runs before both staging and main integrations.
+No page, retry, time or attempt policy limit was added. Focused regression
+tests cover each change; sandbox acceptance below predates these final review
+hardening checks and is not a new real-product acceptance.
+The final review-hardened local check passed **716 tests**, with three optional
+Docker skips (719 total), and the exact lockfile audit reported zero vulnerabilities.
+
+Main-only movement during preparation can clean old trials and rebuild/retest the
+same frozen ticket pool within the existing per-run budgets; source/receipt/actor
+changes and movement after release execution begins still stop normally.
+Automatic refresh covers the combined-candidate phase; if the earlier individual
+Git rehearsal itself goes stale, a fresh filtered run still uses the same ticket.
+Full local checks passed **711 tests**, with three optional Docker tests skipped.
+Focused tests also cover strict source admission, changed heads/checks/reviews,
+unselected ancestry, parent preservation, an unchanged-tree role's CI, safe
+main-only re-preparation, budget/resume preservation, and resume after originals
+enter main but before production E2E, including removal of the superseded waiting
+reason when the release completes.
+
+Sandbox production tickets **#56 (A)** and **#55 (B)** were submitted through the
+normal CLI with verified `simo6529` receipts. Both pairs of source PRs started on
+the same saved mains. Frontend test-main strict freshness was temporarily enabled
+to exercise a genuine `BEHIND` gate, with its original check/app identity retained;
+its original `strict: false` was restored and verified at 08:41 UTC. A's first invocation stopped
+on a GitHub transport error before release execution. Its saved candidate parents,
+owned branch, absent trial PR and unchanged mains were read back before the
+same-run resume. A completed every staging/production deployment and matching E2E
+at 07:18 UTC; both original PRs were marked merged at their requested heads and
+journal revision 4525 has no lock. At that point B retained its original heads,
+with frontend genuinely `BEHIND`. The live test exposed GitHub retaining an old PR base
+commit: the audit now pins live main separately and strict direct-merge checks
+compare against that current main. B's first filtered run also exposed rehearsal
+requiring an old PR base to equal current main; it stopped before CI/deployment
+and released its lock. Rehearsal now binds the same branch while independently
+pinning live main; old CI still cannot prove the new combination. An actual-Git
+regression test passed, and the same-ticket retry started at 07:29 UTC. B passed
+fresh candidate CI/services, staging deployment/E2E and production integrations
+without modifying its original heads. Another transport interruption after both
+originals entered main was independently inspected before same-run resume. The
+resume preserved scope and completed production deployment/E2E without repeating
+finished integrations. B exited 0 at 08:38 UTC. Both tickets are closed completed,
+all four originals are marked merged, and journal revision 4657 has no lock with
+both completed archives checksum-verified. A superseded interim reason on B's
+completed presentation was fixed with a regression test. The ordinary guarded
+writer appended one repair decision for #55 only, preserving completed release
+evidence and its archive checksum; revision 4661 again has no lock. Final local
+checks passed 711 tests with three optional Docker skips. Details belong in the
+[October 1 sandbox record](./testing/behind-main-history-2026-10-01.md).
+Sandbox acceptance is separate from Coordinator PR checks and remote delivery.
+This source change does not publish an npm package or authorize or prove a
+real-product release.
 
 Real [Issue #275](https://github.com/6529-Collections/6529-release-coordinator/issues/275)
 passed exact frontend PR rehearsal and all 20 temporary candidate checks, then

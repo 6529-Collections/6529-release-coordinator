@@ -12,6 +12,7 @@ import {
 import { presentRunTicket } from "./inbox-ticket-writer.mjs";
 import { serviceAssert } from "./service-contract.mjs";
 import { assertCancellableRelease } from "./release-cancellation.mjs";
+import { refreshedPreparationPlans } from "./preparation-refresh.mjs";
 import {
   createInboxSelection,
   filterInboxRequests,
@@ -208,58 +209,121 @@ export async function processInbox({
       api,
       inspect
     });
-    const preparedTickets = await prepareRunTickets({
-      ...scanned,
-      activeBatch: run.batch_fingerprint
-        ? state.batches?.[run.batch_fingerprint]
-        : null,
-      signal,
-      state,
-      results,
-      closeTest,
-      actor,
-      observe,
-      github,
-      profile,
-      rehearsal,
-      run,
-      plan,
-      api,
-      journal,
-      services,
-      batching
-    });
-    if (batching) {
-      batchResult = await batch({
-        items: preparedTickets,
+    let preparedTickets;
+    for (;;) {
+      signal?.throwIfAborted();
+      preparedTickets = await prepareRunTickets({
+        ...scanned,
+        activeBatch: run.batch_fingerprint
+          ? state.batches?.[run.batch_fingerprint]
+          : null,
+        signal,
+        state,
+        results,
+        closeTest,
+        actor,
+        observe,
+        github,
+        profile,
+        rehearsal,
+        run,
+        plan,
+        api,
+        journal,
+        services,
+        batching
+      });
+      if (batching) {
+        batchResult = await batch({
+          items: preparedTickets,
+          state,
+          run,
+          profile,
+          signal,
+          guard: () => journal.guard(run),
+          save: (message) => journal.save(state, run, message),
+          loadBatch: (hash) => journal.loadHistory(state, run, "batches", hash),
+          verify: (inputs) =>
+            verifyBatchInputs(inputs, {
+              preparedTickets,
+              api,
+              inspect,
+              get,
+              profile,
+              observe,
+              github,
+              plan
+            }),
+          release: release
+            ? (options) =>
+                release({
+                  ...options,
+                  stagingChange,
+                  reviewStop,
+                  cancelKeepCurrent,
+                  operator: actor
+                })
+            : undefined
+        });
+      }
+      if (batchResult?.stop?.status !== "stale" || batchResult.release) break;
+      const stale = state.batches[run.batch_fingerprint];
+      if (
+        !stale ||
+        stale.execution ||
+        stale.attempts.some(
+          (attempt) =>
+            attempt.progress && attempt.progress.cleanup !== "removed"
+        )
+      )
+        break;
+      const previous = await Promise.all(
+        (run.reprepared_batches ?? []).map((hash) =>
+          journal.loadHistory(state, run, "batches", hash)
+        )
+      );
+      const used = (phase) =>
+        [...previous, stale].reduce(
+          (sum, saved) =>
+            sum +
+            (saved?.attempts.filter((attempt) => attempt.phase === phase)
+              .length ?? 0),
+          0
+        );
+      if (
+        used("git") >= stale.policy.max_git_attempts ||
+        used("checks") >= stale.policy.max_check_attempts
+      )
+        break;
+      const freshPlans = await refreshedPreparationPlans(preparedTickets, {
+        api,
+        inspect,
+        get,
+        profile,
+        observe,
+        github,
+        plan,
+        signal,
+        priorInputs: [...previous, stale].map((saved) => saved.inputs)
+      });
+      if (!freshPlans) break;
+      run.reprepared_batches ??= [];
+      run.reprepared_batches.push(run.batch_fingerprint);
+      state.lock.reprepared_batches = structuredClone(run.reprepared_batches);
+      run.plans = freshPlans;
+      state.lock.plans = structuredClone(freshPlans);
+      delete run.batch_fingerprint;
+      delete state.lock.batch_fingerprint;
+      await journal.save(
         state,
         run,
-        profile,
-        signal,
-        guard: () => journal.guard(run),
-        save: (message) => journal.save(state, run, message),
-        loadBatch: (hash) => journal.loadHistory(state, run, "batches", hash),
-        verify: (inputs) =>
-          verifyBatchInputs(inputs, {
-            preparedTickets,
-            api,
-            inspect,
-            get,
-            profile,
-            observe,
-            github,
-            plan
-          }),
-        release: release
-          ? (options) =>
-              release({
-                ...options,
-                stagingChange,
-                reviewStop,
-                cancelKeepCurrent,
-                operator: actor
-              })
-          : undefined
+        "reprepare unchanged tickets on current main; preserve old checks and budgets"
+      );
+      runEvent({
+        step: "batch.refresh",
+        outcome: "succeeded",
+        message:
+          "Main changed before release execution. Rebuilding and retesting the same requested PR commits; old candidate proof is not reused."
       });
     }
     for (const item of preparedTickets) {
