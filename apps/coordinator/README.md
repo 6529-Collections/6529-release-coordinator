@@ -479,6 +479,20 @@ refused. Main-only drift before release execution can trigger same-run
 re-preparation after verified trial cleanup, within the unchanged count budgets;
 source changes and later release drift still stop normally.
 
+New forward staging integrations also prepare a separate ordinary merge of the
+captured `1a-staging` tip and that exact main-based candidate. Staging-only work
+and source ancestry are preserved. Conflicts name the affected files and stop
+before any GitHub publication; no side is chosen automatically. The resulting
+version-two integration has its own exact tree, parents and fresh staging checks.
+Resume reconciles the same saved preparation rather than substituting a newer
+staging tip or candidate. Production and restoration keep their existing
+contracts, and older saved integrations keep their original identities.
+See [shared-branch preparation](../../docs/design.md#how-shared-branches-are-changed)
+for the implementation contract and the
+[dated sandbox acceptance](../../docs/testing/staging-preparation-2026-10-02.md)
+for its tested boundary. This does not resume a stopped ticket or authorize a
+sandbox/product release.
+
 For the selected sandbox batch, the command saves one release identity and then
 runs these steps in order for each required environment:
 

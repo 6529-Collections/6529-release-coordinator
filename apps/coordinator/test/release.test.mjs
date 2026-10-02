@@ -2527,6 +2527,54 @@ test("integration commit recovery state stays bound to the exact candidate", asy
   record.state = "branch-prepared";
   record.integration_commit = "9".repeat(40);
   assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+
+  // New staging preparations remain separate from the selected main candidate.
+  record.base = "b".repeat(40);
+  record.profile = execution.plan.profile;
+  record.integration_version = 2;
+  record.staging_preparation = {
+    version: "staging-merge-v1",
+    profile: record.profile,
+    role: step.role,
+    base: record.base,
+    base_tree: "c".repeat(40),
+    candidate_commit: candidate.commit,
+    candidate_tree: candidate.tree,
+    tree: "7".repeat(40),
+    patch: []
+  };
+  assert.notEqual(record.staging_preparation.tree, candidate.tree);
+  record.integration_input = integrationCommitInput(record, candidate);
+  assert.deepEqual(record.integration_input.parents, [
+    record.base,
+    candidate.commit
+  ]);
+  assert.equal(record.integration_input.tree, record.staging_preparation.tree);
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+  for (const mutate of [
+    (value) => {
+      value.staging_preparation.candidate_commit = "0".repeat(40);
+    },
+    (value) => {
+      value.integration_input.parents.reverse();
+    },
+    (value) => {
+      value.integration_version = 1;
+    },
+    (value) => {
+      value.checked_tree = candidate.tree;
+    },
+    (value) => {
+      value.staging_preparation = null;
+    }
+  ]) {
+    const bad = structuredClone(execution);
+    mutate(bad.operations[step.id]);
+    assert.throws(() => validateReleaseExecution(bad, batch));
+  }
+  record.state = "commit-prepared";
+  delete record.integration_commit;
+  assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
 });
 
 test("a malformed resumed run scope fails with a controlled error", async () => {
@@ -2547,6 +2595,41 @@ test("a malformed resumed run scope fails with a controlled error", async () => 
     }),
     (error) => error.code === "run-scope"
   );
+});
+
+test("a staging merge conflict reaches the final stop and ticket explanation without running later steps", async () => {
+  const batch = await selectedBatch();
+  const calls = [];
+  const adapter = client(calls);
+  const conflicts = ["src/quote.test.txt", "src/composer.test.txt"];
+  adapter.integrate = async ({ record }) => {
+    calls.push(record.step.id);
+    return {
+      status: "failed",
+      kind: "merge-conflict",
+      commit: null,
+      url: null,
+      conflicts,
+      message: `Staging has merge conflicts: ${conflicts.join(", ")}. No shared branch was changed.`
+    };
+  };
+  batch.execution = await executeRelease({
+    batch,
+    client: adapter,
+    guard: async () => {},
+    save: async () => {}
+  });
+  assert.equal(batch.execution.status, "needs-human");
+  assert.deepEqual(calls, ["staging:integrate:backend"]);
+  assert.match(
+    batch.execution.message,
+    /merge conflicts: src\/quote.test.txt, src\/composer.test.txt/u
+  );
+  assert.doesNotMatch(batch.execution.message, /checks failed/u);
+  const projected = releaseTicketResult(batch, batch.selected[0]);
+  assert.equal(projected.message, batch.execution.message);
+  assert.equal(projected.code, "release-failed");
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
 });
 
 test("a terminal failed release is not adopted by the next unscoped run", async () => {

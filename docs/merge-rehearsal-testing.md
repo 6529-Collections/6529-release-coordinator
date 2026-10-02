@@ -249,6 +249,28 @@ when real `main` changes or how production artifacts are built.
 
 ## Local execution boundaries
 
+Forward staging preparation uses the same isolated Git transport and resource
+guards. It fetches only the captured staging commit and selected published
+candidate, preserves their histories through an ordinary merge, and saves a
+SHA-only patch before publication. A conflict stops with exact paths before any
+GitHub object, branch or PR write. Production's selected candidate remains
+separate. The offline `staging-merge.test.mjs` fixtures independently reconstruct
+the published Git tree and commits; they cover staging-only content, merged
+blobs, source ancestry, conflicts, changed tips, wrong check/tree/parent identity,
+lost responses, review cancellation and owned cleanup. Simulated GitHub calls
+are not live sandbox acceptance. Existing unfinished integrations retain their
+saved version-one contract; no historical attempt is replaced.
+
+The [October 2 live sandbox record](./testing/staging-preparation-2026-10-02.md)
+adds actual filtered frontend acceptance: a deliberate conflict stopped before
+publication without changing shared refs; a clean divergent merge preserved five
+staging-only documents, passed fresh integration CI and matching fake staging
+deployment/E2E, then passed separate main integration and fake-production
+deployment/E2E with those staging-only documents excluded. Exact source merge,
+ticket closeout, owned cleanup, archive checksum and a clear journal lane were
+independently verified. This does not promote the remaining offline edge cases
+to live proof, merge the Coordinator change or authorize a real release.
+
 Use a dedicated temporary directory per run, with cleanup in failure paths.
 Do not run Git inside a user's product checkout or borrow its index, branches,
 worktrees, hooks, or configuration. Fetch only from the explicit trusted

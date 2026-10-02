@@ -788,12 +788,39 @@ is never implied by account ownership, a profile switch, or a passing sandbox
 test. The September 24 implementation pins only the sandbox rulesets; real
 product bypass remains unconfigured and lacks live acceptance.
 
-Shared `1a-staging` may differ from `main`. Rehearsing only against `main`, as the
-current sandbox does, is insufficient proof for an actual staging merge. Inspect
-staging contents and candidate merge before pushing; frontend staging pushes can
-start deployment immediately. Keep backend dependencies ready before the
-frontend merge. Likewise, do not merge all of staging into production: use the
-selected PR changes and verify the actual production composition.
+Shared `1a-staging` may differ from `main`. Rehearsing only against `main` is
+insufficient proof for an actual staging merge. New forward staging integrations
+now rehearse an ordinary merge of the exact captured staging tip and the exact
+selected main-based candidate in an owned Git workspace. Save the resulting
+SHA-only patch, tree and input identities before publishing any GitHub objects.
+Publish a distinct staging integration commit with both histories as parents;
+never attach staging as a parent to an unchanged candidate tree or overwrite
+staging-only work. Genuine conflicts stop before publication, name their files,
+and require a person. There is no automatic ours/theirs resolution.
+
+Missing merged blobs are reconstructed from the same immutable inputs, checked
+against the saved tree/patch and blob hashes, and uploaded only after workspace
+cleanup succeeds. Recheck the staging tip before publication and shared merge.
+The configured staging checks must pass on this fresh integration head; GitHub's
+test merge and final shared merge must match the prepared tree and pinned
+parents. Existing optional staging gates, source reviews, workflow quiet waits,
+deployments and matching E2E remain required as before. A merge conflict is
+reported as such, not as a failed test merely because the merge gate refused it.
+
+The saved `integration_version: 2` staging input is validated on resume, including
+across lost upload, PR-creation and merge responses. Previous version-one
+integrations retain their original identities and reconciliation rules; they
+are not rewritten or upgraded in place. Restoration and production retain the
+existing exact-tree contract. In particular, production still integrates only
+the selected current-main candidate, never the staging preparation. The
+[October 2 sandbox acceptance](./testing/staging-preparation-2026-10-02.md)
+verified a genuine named conflict stop without environment changes and a clean
+divergent staging merge through matching fake staging and production deployments
+and E2E, with staging-only content preserved and excluded from main. Interrupted
+responses, new-blob reconstruction and cancellation remain offline coverage.
+This uncommitted-source acceptance is not a Coordinator merge or real-product
+proof. Frontend staging pushes can start deployment immediately. Keep backend
+dependencies ready before the frontend merge.
 
 If only part of a cross-repository merge or deployment succeeds, save exactly
 which refs/services changed and stop advancement. Recover that recorded state;
@@ -1159,7 +1186,7 @@ release notes rather than creating parallel implementations.
 ## Remaining integration decisions
 
 - Authorized real execution identity and existing repository merge rules.
-- Actual product staging/main composition handling, including unrelated staging changes.
+- Real-product acceptance of staging-aware preparation and operator resolution of genuine source conflicts. Sandbox preservation and named conflict-stop acceptance passed October 2; the Coordinator never resolves genuine conflicts automatically.
 - Trusted product workflow/run/result and runtime-version contracts for each service.
 - Existing E2E trigger and deployed-version coverage, especially backend-only
   releases; required production-safe tests and existing health completion signals.

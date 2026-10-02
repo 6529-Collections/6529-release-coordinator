@@ -2,9 +2,57 @@
 
 Last reviewed: **2026-10-02** for the reviewed frontend release-runtime refresh,
 candidate blob publication, behind-main source admission, original-PR
-history publication, completed sandbox acceptance, and the local frontend PR-CI
-pin refresh. The real #275 evidence
+history publication, completed sandbox acceptance, the local frontend PR-CI
+pin refresh, and staging-aware preparation's local review and sandbox acceptance. The real #275 evidence
 below retains its recorded September 30 date.
+
+## October 2 — staging-aware merge preparation (local and sandbox acceptance)
+
+Local, uncommitted Coordinator-only code now prepares new forward staging
+integrations against the captured `1a-staging` tip, preserving staging-only work
+and the selected candidate's original source ancestry. Its separate version-two
+input records the exact merged tree and SHA-only patch. New merged blobs are
+reconstructed and hash-verified in an owned workspace before publication;
+staging checks, GitHub's test merge and the final merge bind to that exact
+composition. Production's selected current-main candidate, restoration,
+workflow pins, required gates and existing policy budgets are unchanged.
+Genuine conflicts still stop for a person before publication; failed GitHub
+mergeability is reported as a conflict rather than a failed test.
+
+The offline regression uses the two #285 conflict paths and proves that no side
+is guessed and no GitHub write occurs. Other cases cover clean divergent merges,
+staging-only content, exact source ancestry, new merged blobs, stale checks,
+wrong trees/parents, moved staging, lost upload/PR/merge responses, cancellation
+and cleanup. Nineteen new staging-merge tests and a final-stop/ticket-message
+regression supplement the existing integration and journal-state coverage.
+The full non-fixing `npm run check` passed on Node 22.16.0 in a disposable local
+checkout containing only these twelve changed files over base
+`73d8747dc55c842905903a1195093cf414d78230`: **773 tests passed**, three optional
+Docker tests skipped (776 total), plus lint, formatting, documentation/workflow
+policy and packed-CLI smoke checks. The source snapshot remained unchanged.
+The shared checkout also passed with 860 tests and the same three skips, but
+that result includes unrelated concurrent changes; those changes were left alone.
+At that implementation checkpoint, no live sandbox acceptance, commit, push or
+PR publication had occurred for this fix. The separately authorized October 2
+local review repeated the isolated full gate (773 passes, three optional Docker
+skips) and found no blocker. The [staging-preparation sandbox record](./testing/staging-preparation-2026-10-02.md)
+records completed acceptance for new filtered test tickets #57/#58. The deliberate
+conflict named its file, published no staging PR, changed no environment and
+released the lane. The clean case kept all five staging-only document blobs,
+passed fresh staging CI and matching fake deployment/E2E, then separately passed
+main CI and matching fake-production deployment/E2E without importing those
+staging-only files. Source PR #168 was marked merged at its exact pinned head;
+ticket #58 closed completed, all owned temporary branches were removed, and
+journal revision 4749 has a null lock with checksum-verified archived evidence.
+Backend refs and real journal revision 598 remain unchanged. This is acceptance
+of the isolated, uncommitted source, not a Coordinator PR merge, configured
+final-head bot reviews, npm publication or real-product release proof.
+
+Ticket #285 remains stopped at its saved failed staging integration. Its source
+head `bc220ad0f6c05f98259940cd295e0089709b330b`, journal revision 598, prior
+attempts and cleanup, and paused watcher are untouched. This general preparation
+fix does not resolve its two genuine test conflicts or authorize a retry,
+ticket submission, journal/lock write, product merge, deployment or npm publication.
 
 ## October 2 — frontend release-runtime refresh (source update)
 
