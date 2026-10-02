@@ -14,6 +14,7 @@ import {
   releaseEnvironmentsForTarget
 } from "./release-target.mjs";
 import { productCommitSignoff } from "./product-commit-signoff.mjs";
+import { validateStagingMerge } from "./staging-merge.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -383,6 +384,10 @@ export function validateRecoveryPlan(plan, execution, batch) {
 }
 
 export function integrationCommitInput(record, candidate) {
+  const staging =
+    record.integration_version === 2
+      ? validateStagingMerge(record, candidate)
+      : null;
   const profile = record.profile ?? record.operation?.profile ?? "sandbox";
   serviceAssert(
     profile !== "real" ||
@@ -412,8 +417,10 @@ export function integrationCommitInput(record, candidate) {
         };
   return {
     message: commitIdentity.message,
-    tree: candidate.tree,
-    parents: [candidate.commit],
+    tree: staging?.tree ?? candidate.tree,
+    parents: staging
+      ? [...new Set([staging.base, candidate.commit])]
+      : [candidate.commit],
     author: commitIdentity.author,
     committer: commitIdentity.committer
   };

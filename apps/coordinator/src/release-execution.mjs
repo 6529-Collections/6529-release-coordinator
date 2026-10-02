@@ -777,7 +777,20 @@ export async function executeRelease({
             reviewStop,
             save: () => persist(`release step ${step.id} progress`)
           }),
-        (value) => ({ outcome: logOutcome(value.status), url: value.url })
+        (value) => ({
+          outcome: logOutcome(value.status),
+          url: value.url,
+          ...(value.kind === "merge-conflict"
+            ? {
+                message: [
+                  value.message,
+                  "The exact integration has a merge conflict; a person must resolve it. No passing check can authorize this merge."
+                ]
+                  .filter(Boolean)
+                  .join(" ")
+              }
+            : {})
+        })
       );
       if (successful(result)) {
         execution.versions[step.environment] = {
@@ -895,6 +908,8 @@ export async function executeRelease({
       execution.message = databaseChange
         ? `${step.id} failed. This ticket changes the database. The release stopped without automatic restoration; a person must inspect the ${step.environment} state before another release.`
         : `${step.id} failed. The release stopped; no later environment was changed.`;
+      if (result?.kind === "merge-conflict")
+        execution.message += ` ${result.message}`;
       execution.completed_at = now().toISOString();
       await persist(`release step ${step.id} failed`);
       return execution;

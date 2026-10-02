@@ -8,7 +8,7 @@ import {
   validateReleaseOperation,
   verifyReleaseReport
 } from "./release-contract.mjs";
-import { serviceAssert, ServiceError } from "./service-contract.mjs";
+import { blobHash, serviceAssert, ServiceError } from "./service-contract.mjs";
 import { effectiveAllChecks } from "./github-checks.mjs";
 import { integrationCommitInput } from "./release-plan.mjs";
 import { assertProductCommitActor } from "./product-commit-signoff.mjs";
@@ -18,6 +18,7 @@ import { hasApprovalBypass } from "./approval-bypass.mjs";
 import { deleteOwnedRemoteBranch } from "./owned-branch-delete.mjs";
 import { assertSelectedSourceHistory } from "./source-history.mjs";
 import { assertSourcePulls, mergedSourcePulls } from "./source-pulls.mjs";
+import { prepareStagingMerge, validateStagingMerge } from "./staging-merge.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -92,6 +93,13 @@ export function createReleaseGitHub({
     : undefined,
   logs = readServiceLogs,
   gates = createRehearsalGitHub(profile),
+  stagingMerge = (record, candidate, options) =>
+    prepareStagingMerge(record, candidate, {
+      profile,
+      signal,
+      authentication: () => gates.gitAuthentication(),
+      ...options
+    }),
   signal,
   wait = (ms, options) => delay(ms, undefined, options),
   now = () => new Date(),
@@ -136,6 +144,7 @@ export function createReleaseGitHub({
     "The pinned release runtime is unavailable; a different profile is never a fallback."
   );
   async function call(role, method, suffix, body, allowed = [200]) {
+    signal?.throwIfAborted();
     serviceAssert(
       ["backend", "frontend"].includes(role),
       "release-github",
@@ -184,6 +193,107 @@ export function createReleaseGitHub({
   }
   async function ref(role, name, allowed = [200]) {
     return call(role, "GET", `/git/ref/heads/${name}`, undefined, allowed);
+  }
+  async function unchangedStaging(record) {
+    signal?.throwIfAborted();
+    serviceAssert(
+      (await ref(record.step.role, record.target_branch)).data?.object?.sha ===
+        record.base,
+      "release-stale",
+      "Staging changed after its exact merge preparation."
+    );
+    signal?.throwIfAborted();
+  }
+  async function publishStagingTree(record, candidate) {
+    const prepared = validateStagingMerge(record, candidate);
+    const role = record.step.role;
+    const missing = [];
+    for (const oid of new Set(
+      prepared.patch.map((file) => file.sha).filter(Boolean)
+    )) {
+      const observed = await call(
+        role,
+        "GET",
+        `/git/blobs/${oid}`,
+        undefined,
+        [200, 404]
+      );
+      if (observed.status === 404) missing.push(oid);
+      else
+        serviceAssert(
+          observed.data?.sha === oid,
+          "release-ownership",
+          "GitHub returned a different staging blob identity."
+        );
+    }
+    signal?.throwIfAborted();
+    if (missing.length) {
+      const recovered = await stagingMerge(record, candidate, {
+        expected: prepared,
+        missing
+      });
+      serviceAssert(
+        releaseHash(recovered.preparation) === releaseHash(prepared) &&
+          Array.isArray(recovered.blobs) &&
+          recovered.blobs.length === missing.length &&
+          new Set(recovered.blobs.map((blob) => blob.sha)).size ===
+            missing.length &&
+          recovered.blobs.every((blob) => {
+            if (
+              !missing.includes(blob.sha) ||
+              blob.encoding !== "base64" ||
+              typeof blob.content !== "string"
+            )
+              return false;
+            const bytes = Buffer.from(blob.content, "base64");
+            return (
+              bytes.toString("base64") === blob.content &&
+              blobHash(bytes) === blob.sha
+            );
+          }),
+        "release-ownership",
+        "Only reconstructed, hash-verified staging blobs may be published."
+      );
+      for (const blob of recovered.blobs) {
+        await unchangedStaging(record);
+        const published = (
+          await call(
+            role,
+            "POST",
+            "/git/blobs",
+            { content: blob.content, encoding: "base64" },
+            [201]
+          )
+        ).data;
+        serviceAssert(
+          published?.sha === blob.sha,
+          "release-ownership",
+          "Uploaded staging blob identity changed."
+        );
+      }
+    }
+    await unchangedStaging(record);
+    const base = (await call(role, "GET", `/git/commits/${record.base}`)).data;
+    serviceAssert(
+      base?.sha === record.base && base.tree?.sha === prepared.base_tree,
+      "release-ownership",
+      "Staging base tree differs from its preparation."
+    );
+    await unchangedStaging(record);
+    const tree = (
+      await call(
+        role,
+        "POST",
+        "/git/trees",
+        { base_tree: prepared.base_tree, tree: prepared.patch },
+        [201]
+      )
+    ).data;
+    serviceAssert(
+      tree?.sha === prepared.tree,
+      "release-ownership",
+      "Published staging tree differs from its exact prepared merge."
+    );
   }
   async function verifyRuntime(role, commit, environment) {
     serviceAssert(
@@ -382,12 +492,14 @@ export function createReleaseGitHub({
     const stopped = record.cleanup_reason === "review-stop";
     return {
       status: "failed",
-      kind: stopped ? "review-stop" : "checks",
+      kind: stopped ? "review-stop" : (record.failure_kind ?? "checks"),
       commit: null,
       url: record.url,
       message: stopped
         ? "The paused integration PR was closed at the operator's request."
-        : `The ${environmentLabel} integration PR checks failed.`
+        : record.failure_kind === "merge-conflict"
+          ? "The integration PR has a merge conflict; passing checks do not resolve it."
+          : `The ${environmentLabel} integration PR checks failed.`
     };
   }
   const runTitle = (id) => `Sandbox release ${id}`;
@@ -724,7 +836,7 @@ export function createReleaseGitHub({
           positive(record.number) &&
           sha(record.base) &&
           sha(record.integration_commit) &&
-          record.integration_version === 1 &&
+          [1, 2].includes(record.integration_version) &&
           JSON.stringify(record.integration_input) ===
             JSON.stringify(integrationCommitInput(record, candidate)),
         "release-cancel",
@@ -793,7 +905,6 @@ export function createReleaseGitHub({
         "release-state",
         `${releaseLabel} integration destination changed.`
       );
-      record.branch ??= branch(record);
       record.body ??= record.step.recovery
         ? `${sandbox ? "Sandbox" : "Product"} restoration for failed release ${record.release_id}\n\nRestore ${record.step.environment} tree ${candidate.tree}`
         : `${releaseLabel} ${record.release_id}\n\nBatch: ${candidate.tree}`;
@@ -840,6 +951,37 @@ export function createReleaseGitHub({
         assertProductCommitActor(actor, observed);
         assertProductCommitActor(record.actor, observed);
       }
+      record.profile ??= profile.name;
+      if (
+        !record.integration_version &&
+        record.step.environment === "staging" &&
+        !record.step.recovery
+      ) {
+        const prepared = await stagingMerge(record, candidate);
+        await unchangedStaging(record);
+        if (prepared.conflicts) {
+          return {
+            status: "failed",
+            kind: "merge-conflict",
+            commit: null,
+            url: null,
+            conflicts: prepared.conflicts,
+            message: `Staging cannot merge the selected candidate without resolving conflicts: ${prepared.conflicts.join(", ")}. No shared branch was changed.`
+          };
+        }
+        record.staging_preparation = prepared.preparation;
+        record.integration_version = 2;
+        validateStagingMerge(record, candidate);
+        record.integration_input = integrationCommitInput(record, candidate);
+        record.state = "commit-prepared";
+        await save();
+      }
+      serviceAssert(
+        !record.staging_preparation || record.integration_version === 2,
+        "release-state",
+        "Staging preparation requires its matching integration version."
+      );
+      record.branch ??= branch(record);
       const commitInput = integrationCommitInput(record, candidate);
       if (!record.integration_version) {
         record.integration_version = 1;
@@ -848,12 +990,16 @@ export function createReleaseGitHub({
         await save();
       }
       serviceAssert(
-        record.integration_version === 1 &&
+        [1, 2].includes(record.integration_version) &&
           JSON.stringify(record.integration_input) ===
             JSON.stringify(commitInput),
         "release-state",
         `${releaseLabel} integration commit input changed.`
       );
+      if (record.integration_version === 2 && !record.integration_commit) {
+        await publishStagingTree(record, candidate);
+        await unchangedStaging(record);
+      }
       const created = (
         await call(
           role,
@@ -865,9 +1011,11 @@ export function createReleaseGitHub({
       ).data;
       serviceAssert(
         sha(created?.sha) &&
-          created.tree?.sha === candidate.tree &&
-          created.parents?.length === 1 &&
-          created.parents[0].sha === candidate.commit,
+          created.tree?.sha === commitInput.tree &&
+          created.parents?.length === commitInput.parents.length &&
+          created.parents.every(
+            (parent, index) => parent.sha === commitInput.parents[index]
+          ),
         "release-ownership",
         `GitHub did not create the exact ${environmentLabel} integration commit.`
       );
@@ -887,13 +1035,21 @@ export function createReleaseGitHub({
       ).data;
       serviceAssert(
         observedCommit?.sha === record.integration_commit &&
-          observedCommit.tree?.sha === candidate.tree &&
-          observedCommit.parents?.length === 1 &&
-          observedCommit.parents[0].sha === candidate.commit,
+          observedCommit.tree?.sha === commitInput.tree &&
+          observedCommit.parents?.length === commitInput.parents.length &&
+          observedCommit.parents.every(
+            (parent, index) => parent.sha === commitInput.parents[index]
+          ),
         "release-ownership",
         `${releaseLabel} integration commit no longer contains the exact candidate tree.`
       );
       const integrationCommit = record.integration_commit;
+      if (
+        record.integration_version === 2 &&
+        !reviewStopRequested &&
+        !["merging", "merged"].includes(record.state)
+      )
+        await unchangedStaging(record);
       const resumedMerged = record.state === "merged";
       if (resumedMerged)
         await deleteOwnedBranch(role, record.branch, integrationCommit);
@@ -982,6 +1138,11 @@ export function createReleaseGitHub({
               message:
                 "GitHub blocks this integration PR after its required checks passed. Inspect its reviews and merge rules."
             };
+          record.failure_kind =
+            checked.observed?.mergeable === "CONFLICTING" ||
+            checked.observed?.mergeStateStatus === "DIRTY"
+              ? "merge-conflict"
+              : "checks";
           record.state = "cleaning";
           await save();
           return cleanupFailedPull(role, record, candidate, save);
@@ -998,6 +1159,11 @@ export function createReleaseGitHub({
               message:
                 "GitHub blocks this integration PR after its required checks passed. Inspect its reviews and merge rules."
             };
+          record.failure_kind =
+            finalGate.observed?.mergeable === "CONFLICTING" ||
+            finalGate.observed?.mergeStateStatus === "DIRTY"
+              ? "merge-conflict"
+              : "checks";
           record.state = "cleaning";
           await save();
           return cleanupFailedPull(role, record, candidate, save);
@@ -1018,7 +1184,12 @@ export function createReleaseGitHub({
           await call(role, "GET", `/git/commits/${pr.merge_commit_sha}`)
         ).data;
         serviceAssert(
-          sha(testMerge.tree?.sha),
+          sha(testMerge.tree?.sha) &&
+            (record.integration_version !== 2 ||
+              (testMerge.tree.sha === commitInput.tree &&
+                testMerge.parents?.length === 2 &&
+                testMerge.parents[0].sha === record.base &&
+                testMerge.parents[1].sha === integrationCommit)),
           "release-checks",
           "The exact checked integration tree is unavailable."
         );
@@ -1078,6 +1249,8 @@ export function createReleaseGitHub({
       serviceAssert(
         destination.data?.object?.sha === pr.merge_commit_sha &&
           merged.tree?.sha === record.checked_tree &&
+          (record.integration_version !== 2 ||
+            merged.tree.sha === commitInput.tree) &&
           merged.parents?.some((parent) => parent.sha === record.base) &&
           merged.parents?.some((parent) => parent.sha === integrationCommit),
         "release-merge",
