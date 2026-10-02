@@ -1022,26 +1022,34 @@ for (const environment of ["staging", "prod"]) {
       )
     );
 
-    const rejected = directHarness(descriptor, operation, {
-      profile: realProfile,
-      returnRunDetails: true,
-      mutateRuntimeFile: (file) => {
-        if (file.path === ".github/workflows/deploy-staging.yml") {
-          file.sha =
-            realProductWorkflowRuntime.repositories.frontend.files[file.path][
-              staging ? "prod" : "staging"
-            ];
-        }
+    for (const [path, superseded] of Object.entries({
+      ".github/workflows/deploy-staging.yml":
+        "36d10cd5f855d1510c5f2c6ffced7baf86db3987",
+      ".github/workflows/production-build-artifact.yml":
+        "22bafb14740b35388d7f6e07f67af01c42486c11",
+      ".github/workflows/production-e2e.yml":
+        "93c6e39132308f9733eab70ba1191e8a4bd9cd15"
+    })) {
+      // Both branches legitimately have the same staging-workflow blob now.
+      // Refuse stale and unknown blobs, not an otherwise approved other-branch pin.
+      for (const unapproved of [superseded, "e".repeat(40)]) {
+        const rejected = directHarness(descriptor, operation, {
+          profile: realProfile,
+          returnRunDetails: true,
+          mutateRuntimeFile: (file) => {
+            if (file.path === path) file.sha = unapproved;
+          }
+        });
+        await assert.rejects(
+          run(rejected),
+          /pinned product workflow or evidence file changed/u
+        );
+        assert.equal(
+          rejected.calls.some(({ method }) => method !== "GET"),
+          false
+        );
       }
-    });
-    await assert.rejects(
-      run(rejected),
-      /pinned product workflow or evidence file changed/u
-    );
-    assert.equal(
-      rejected.calls.some(({ method }) => method !== "GET"),
-      false
-    );
+    }
   });
 }
 

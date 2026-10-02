@@ -946,6 +946,25 @@ merge. The real frontend profile now pins its existing `main` ruleset and
 required check names; the real backend remains unpinned. No real-product
 bypass, merge, or deployment has been executed.
 
+### Updating reviewed real workflow files
+
+Real workflow/evidence files are exact code-owned Git-blob pins. A product
+workflow change requires reviewing the complete old/new blob comparison and
+its dispatch, provenance, permission and result contracts before updating the
+Coordinator; a matching filename or green product PR is not sufficient.
+Branch-specific pins remain independent even when their approved bytes happen
+to be equal. New accepted bytes do not authorize unknown future bytes, weaken
+matching deployment/E2E checks, refresh other product policies or migrate
+unfinished execution evidence.
+
+The [October 2 frontend review](./testing/frontend-runtime-refresh-2026-10-02.md)
+refreshes three frontend files only. Its offline admission/dispatch tests prove
+acceptance of the reviewed versions and rejection of old/unknown versions
+before writes. Updating these pins does not start or resume an inbox run; an
+operator must separately authorize release continuation and reverify the saved
+run, current product refs, ordinary gates and matching evidence. No product
+workflow, sandbox runtime or backend policy is changed by this refresh.
+
 ### Paused integration review mirror
 
 The [September 29 sandbox acceptance](./testing/review-pause-2026-09-29.md)

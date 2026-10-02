@@ -142,11 +142,11 @@ export const realProductWorkflowRuntime = Object.freeze({
       ]),
       stagingIntegrationChecks: Object.freeze(["DCO", "security/snyk (6529)"]),
       files: Object.freeze({
-        // Staging enables multi-competition; main still has the older file.
-        // Approving staging must not silently approve a change on main.
+        // Both branches now carry the reviewed multi-competition setting.
+        // Keep independent pins: a future change on one does not approve the other.
         ".github/workflows/deploy-staging.yml": Object.freeze({
           staging: "c573f80b55aa46b2bb96259dee07b98c231d30b7",
-          prod: "36d10cd5f855d1510c5f2c6ffced7baf86db3987"
+          prod: "c573f80b55aa46b2bb96259dee07b98c231d30b7"
         }),
         ".github/workflows/staging-e2e-dispatch.yml":
           "07c0f501372f013300e2be44d6724238df760c5f",
@@ -155,7 +155,7 @@ export const realProductWorkflowRuntime = Object.freeze({
         ".github/workflows/build-upload-deploy-prod.yml":
           "8b2c3cc8dd2351a877c919d99c1def8ec0089c25",
         ".github/workflows/production-build-artifact.yml":
-          "22bafb14740b35388d7f6e07f67af01c42486c11",
+          "5df8df3da1a50336a7b9f4816b79fbe639d0a3e1",
         ".github/workflows/production-artifact-metadata.yml":
           "ca7e80eaa4d2cccb53b4d87b0abaeca103fbc0c6",
         ".github/workflows/production-artifact-verifier.yml":
@@ -163,7 +163,7 @@ export const realProductWorkflowRuntime = Object.freeze({
         ".github/workflows/production-e2e-dispatch.yml":
           "d89f00759703c6de7bb2773540c9517a49f181a6",
         ".github/workflows/production-e2e.yml":
-          "93c6e39132308f9733eab70ba1191e8a4bd9cd15",
+          "29346bd8d8c9816f40388801943b006e21f3f6ef",
         "ops/scripts/verify-deployment-version.cjs":
           "683ad00ff450ed3bdce617997cd99bec14b2a0b8"
       }),

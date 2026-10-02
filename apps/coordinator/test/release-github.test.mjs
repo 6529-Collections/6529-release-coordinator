@@ -2313,9 +2313,18 @@ for (const target of [
     path: ".github/workflows/deploy-staging.yml",
     pins: {
       staging: "c573f80b55aa46b2bb96259dee07b98c231d30b7",
-      prod: "36d10cd5f855d1510c5f2c6ffced7baf86db3987"
+      prod: "c573f80b55aa46b2bb96259dee07b98c231d30b7"
     },
     override: false
+  },
+  {
+    // Preserve the branch-independence regression even though the current
+    // reviewed product files now happen to have equal bytes on both branches.
+    name: "distinct frontend environment pins without cross-approval",
+    role: "frontend",
+    path: ".github/workflows/deploy-staging.yml",
+    pins: { staging: "8".repeat(40), prod: "7".repeat(40) },
+    override: true
   }
 ]) {
   test(`real runtime checks ${target.name} against each branch`, async () => {
