@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -94,6 +94,7 @@ import { validateReleaseExecution } from "../src/release-state.mjs";
 import { batchStatuses } from "../src/ticket-presentation.mjs";
 import { inboxRunExitCode } from "../src/inbox-run-cli.mjs";
 import { archiveFinished, verifyArchive } from "../src/inbox-history.mjs";
+import { createRunLog } from "../src/run-log.mjs";
 
 const runFile = promisify(execFile);
 
@@ -2597,7 +2598,7 @@ test("a malformed resumed run scope fails with a controlled error", async () => 
   );
 });
 
-test("a staging merge conflict reaches the final stop and ticket explanation without running later steps", async () => {
+test("a staging merge conflict reaches the log, final stop and ticket explanation without running later steps", async (t) => {
   const batch = await selectedBatch();
   const calls = [];
   const adapter = client(calls);
@@ -2613,12 +2614,41 @@ test("a staging merge conflict reaches the final stop and ticket explanation wit
       message: `Staging has merge conflicts: ${conflicts.join(", ")}. No shared branch was changed.`
     };
   };
-  batch.execution = await executeRelease({
-    batch,
-    client: adapter,
-    guard: async () => {},
-    save: async () => {}
+  const root = await mkdtemp(path.join(os.tmpdir(), "release-conflict-log-"));
+  let terminal = "";
+  const log = createRunLog({
+    root,
+    profile: sandboxProfile,
+    env: {},
+    stderr: (text) => {
+      terminal += text;
+    }
   });
+  t.after(async () => {
+    log.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  batch.execution = await log.run(() =>
+    executeRelease({
+      batch,
+      client: adapter,
+      guard: async () => {},
+      save: async () => {}
+    })
+  );
+  const events = (await readFile(log.snapshot().file, "utf8"))
+    .trim()
+    .split("\n")
+    .map(JSON.parse);
+  const failed = events.find(
+    (event) => event.step === "release.integrate" && event.outcome === "failed"
+  );
+  assert.ok(failed);
+  for (const name of conflicts) {
+    assert.ok(failed.message.includes(name));
+    assert.ok(terminal.includes(name));
+  }
+  assert.match(failed.message, /a person must resolve/u);
   assert.equal(batch.execution.status, "needs-human");
   assert.deepEqual(calls, ["staging:integrate:backend"]);
   assert.match(

@@ -54,6 +54,27 @@ attempts and cleanup, and paused watcher are untouched. This general preparation
 fix does not resolve its two genuine test conflicts or authorize a retry,
 ticket submission, journal/lock write, product merge, deployment or npm publication.
 
+### Publication and review follow-up
+
+[Coordinator PR #293](https://github.com/6529-Collections/6529-release-coordinator/pull/293)
+was opened from signed commit `990a1ad59bedd1768b1bcd1f3292f68f653d9633`.
+Its initial Node 20/22/24, package, CodeQL and Snyk checks passed. Primary reviews
+reported no findings, but general/deployment context omitted five changed files;
+that is limited coverage, not an exhaustive review. CodeRabbit completed its
+included review and identified two valid issues: the integration log omitted
+conflict paths, and version-two staging drift prevented explicit review-stop
+cleanup. Both were reproduced with failing offline regressions before the narrow
+fixes. The branch now logs the conflict details and allows review-stop cleanup
+after staging moves without allowing an ordinary resume to merge stale inputs.
+Coverage includes sandbox and real-profile actual-Git fixtures, an interrupted
+stop save, immutable preparation identity and no shared-branch write during cleanup.
+The full non-fixing gate passed again: **775 tests passed**, three optional Docker
+skips (778 total), plus lint, formatting, documentation/workflow policy and the
+packed-CLI smoke check. Fresh final-head CI and reviews remain required; this PR
+is not merged and #285 is not resumed. The live sandbox acceptance above belongs
+to the preceding source snapshot; these review follow-ups have offline coverage,
+not new live acceptance.
+
 ## October 2 — frontend release-runtime refresh (source update)
 
 Branch `codex/frontend-release-runtime-refresh` updates only the Coordinator's

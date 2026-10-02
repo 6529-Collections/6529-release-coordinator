@@ -654,6 +654,61 @@ test("a prepared staging PR can wait for review and cancel without recreating or
   );
 });
 
+for (const profile of ["sandbox", "real"]) {
+  test(`${profile}: review-stop cleans the exact paused staging PR after staging moves`, async (t) => {
+    const f = await fixture(t, { profile });
+    f.setGate((gate) => ({ ...gate, mergeStateStatus: "BLOCKED" }));
+    const paused = await f.client.integrate(f.input);
+    assert.equal(paused.status, "waiting-review");
+    assert.equal(f.record.state, "checking");
+    assert.equal(f.record.integration_version, 2);
+    const preparation = serviceHash(f.record.staging_preparation);
+    const integration = serviceHash(f.record.integration_input);
+    f.move();
+    await assert.rejects(
+      f.client.integrate(f.input),
+      /changed before integration/u
+    );
+    const before = f.calls.length;
+    let once = false;
+    const stopInput = {
+      ...f.input,
+      reviewStop: true,
+      save: async () => {
+        await f.input.save();
+        if (!once && f.record.state === "cleaning") {
+          once = true;
+          throw Error("Lost review-stop save");
+        }
+      }
+    };
+    await assert.rejects(
+      f.client.integrate(stopInput),
+      /Lost review-stop save/u
+    );
+    assert.equal(f.record.cleanup_reason, "review-stop");
+    const stopped = await f.client.integrate(f.input);
+    assert.equal(stopped.kind, "review-stop");
+    assert.equal(f.record.cleanup, "removed");
+    assert.equal(serviceHash(f.record.staging_preparation), preparation);
+    assert.equal(serviceHash(f.record.integration_input), integration);
+    const writes = f.calls
+      .slice(before)
+      .filter((call) => call.method !== "GET");
+    assert.ok(writes.some((call) => call.method === "PATCH"));
+    assert.ok(writes.some((call) => call.method === "DELETE"));
+    assert.ok(
+      writes.every(
+        (call) =>
+          (call.method === "POST" && call.suffix === "/git/commits") ||
+          (call.method === "PATCH" && call.suffix === "/pulls/99") ||
+          (call.method === "DELETE" &&
+            call.suffix === `/git/refs/heads/${f.record.branch}`)
+      )
+    );
+  });
+}
+
 test("owned workspace cleanup failure cannot return a reusable staging preparation", async (t) => {
   const f = await fixture(t);
   f.record.base = f.staging.commit;

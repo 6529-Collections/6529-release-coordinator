@@ -1046,6 +1046,7 @@ export function createReleaseGitHub({
       const integrationCommit = record.integration_commit;
       if (
         record.integration_version === 2 &&
+        !reviewStopRequested &&
         !["merging", "merged"].includes(record.state)
       )
         await unchangedStaging(record);
