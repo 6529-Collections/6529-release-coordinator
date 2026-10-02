@@ -29,6 +29,16 @@ const versions = {
 const response = (data) =>
   `HTTP/2 200 OK\nContent-Type: application/json\n\n${JSON.stringify(data)}`;
 
+/**
+ * Build a GET-only GitHub fixture for the actual real-profile identity client.
+ * Refreshed frontend responses use independently reviewed blob literals, not
+ * active pins. An optional mutation replaces one file in one environment to
+ * exercise refusal without contacting GitHub, writing state or deploying.
+ * Other files and workflow identities retain their configured reviewed values.
+ *
+ * @param {{environment: "staging" | "prod", path: string, sha: string}} [mutation]
+ * @returns {object} Recorded requests and the product identity client.
+ */
 function identityHarness(mutation) {
   const calls = [];
   const execute = async (args) => {
@@ -110,7 +120,9 @@ test("real runtime identity accepts the reviewed frontend refresh on both branch
     for (const [path, expected] of Object.entries(reviewedFrontendFiles)) {
       const pin = realProductWorkflowRuntime.repositories.frontend.files[path];
       assert.equal(typeof pin === "string" ? pin : pin[environment], expected);
-      // Both the shared release admission and product adapter verify each file.
+      // Intentionally protect both current, independent admission layers.
+      // A future shared cache requires reviewing this contract, not just weakening
+      // the assertion to let one layer's file verification disappear unnoticed.
       assert.equal(
         harness.calls.filter(({ endpoint }) =>
           endpoint.endsWith(

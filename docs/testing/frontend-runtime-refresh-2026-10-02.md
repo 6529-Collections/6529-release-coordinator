@@ -117,6 +117,27 @@ deployment, restored-environment proof or authorization to continue #285.
 The authoritative journal ref stayed
 `21046a9273f56f561cebd4f049ca2196684fe9cc`, and the follow-up stayed `PAUSED`.
 
+## PR review follow-up
+
+[Coordinator PR #292](https://github.com/6529-Collections/6529-release-coordinator/pull/292)
+initial head `8f073e1186bf62cf4ca35cba793848851f039ad8` passed the full GitHub
+Node 20/22/24 checks, package gate, both CodeQL language checks and Snyk. Its
+exact-head general, security and deployment/Actions reviews reported no
+blocking findings. CodeRabbit completed its exact-head review without
+actionable code comments, but warned that the new test helper lacked a
+docstring. The follow-up documents the helper's independent response literals,
+single-environment mutation and GET-only offline boundary, without changing
+test or execution behavior.
+
+GLM advisory coverage was partial: two of four internal slices returned empty
+output. Its available observation about the exact two-read assertion was
+independently assessed. That assertion intentionally protects verification by
+both current admission layers, alongside exact commit/blob and GET-only
+assertions; removing one layer must not silently pass this regression. A future
+deduplicating cache needs its own reviewed evidence contract. The test now
+explains this intent. New commits still require fresh configured reviews and
+CI; initial-head reviews do not substitute for final-head coverage.
+
 No real workflow was dispatched and no sandbox GitHub resources were changed. Local tests,
 read-only runtime observations, remote CI/reviews, merge, npm publication and
 live release acceptance are separate outcomes.

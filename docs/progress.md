@@ -6,7 +6,7 @@ history publication, completed sandbox acceptance, and the local frontend PR-CI
 pin refresh. The real #275 evidence
 below retains its recorded September 30 date.
 
-## October 2 — frontend release-runtime refresh (local)
+## October 2 — frontend release-runtime refresh (source update)
 
 Branch `codex/frontend-release-runtime-refresh` updates only the Coordinator's
 trusted real frontend file versions after complete immutable-blob comparisons.
@@ -43,8 +43,12 @@ checks. The exact locked dependency audit found zero vulnerabilities. A separate
 read-only call to the actual shared/product runtime identity admission also
 passed against both environments, without invoking the inbox or dispatching a
 workflow. Journal revision 584 and the paused watcher remain unchanged.
-This is a local source update, not a merge, npm
-publication or live release acceptance. Per the user's explicit instruction,
+The PR review follow-up documents the offline identity helper and explains why
+its exact two-read assertion deliberately protects both existing admission
+layers. No execution behavior is changed by that follow-up. Remote merge is
+tracked in [Coordinator PR #292](https://github.com/6529-Collections/6529-release-coordinator/pull/292);
+this source update is not npm publication or live release acceptance.
+Per the user's explicit instruction,
 **do not resume #285**: its saved journal and paused follow-up remain untouched.
 
 ## October 1 — missing combined-file upload (local)
