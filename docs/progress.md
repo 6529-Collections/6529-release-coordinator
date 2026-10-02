@@ -1,9 +1,51 @@
 # Progress and next steps
 
-Last reviewed: **2026-10-01** for candidate blob publication, behind-main source admission, original-PR
+Last reviewed: **2026-10-02** for the reviewed frontend release-runtime refresh,
+candidate blob publication, behind-main source admission, original-PR
 history publication, completed sandbox acceptance, and the local frontend PR-CI
 pin refresh. The real #275 evidence
 below retains its recorded September 30 date.
+
+## October 2 — frontend release-runtime refresh (local)
+
+Branch `codex/frontend-release-runtime-refresh` updates only the Coordinator's
+trusted real frontend file versions after complete immutable-blob comparisons.
+Both product branches now carry the previously reviewed staging
+multi-competition build setting. The production build adds that same setting;
+production E2E adds GET-only retries for transport/server failures while keeping
+its exact successful deployment, canonical job, live-version and source checks.
+Workflow identities, dispatch inputs, permissions, required integration checks,
+serialization and matching staging/production E2E gates are unchanged. Sandbox
+files and backend workflow/PR-CI pins are not refreshed. Details and exact
+versions are in the [October 2 review record](./testing/frontend-runtime-refresh-2026-10-02.md).
+
+Coordinator PR #291 merged at `f256b73fac62cefd71e99dee714919eacdb50813`.
+The authorized same-run #285 resume then published temporary frontend PR #4148
+at `8c2bbae6df7325754d2b0080f8fdd6d32fa2e047`, passed all required combined
+checks, closed that PR unmerged and removed its exact owned branch. It stopped
+at release-runtime identity verification at 14:41 UTC on October 1. Independently
+read journal revision 584 at `21046a9273f56f561cebd4f049ca2196684fe9cc`
+retains the same filtered #285/`simo6529` run and lock, selected ticket [285],
+passed original attempts and cleanup, and no release execution. No staging or
+production deployment was started by that attempt. Those tests do not prove a
+future candidate or a completed release.
+
+Thirteen new offline tests reproduce the old identity refusal, accept the exact
+reviewed frontend versions on both branches, and refuse every superseded or
+unknown blob independently before writes. Existing per-operation tests likewise
+refuse all three stale/unknown files before a dispatch in each environment.
+The 82 focused shared/product runtime, adapter, recovery and bundle checks pass,
+including distinct-environment pin independence after the current branches
+became byte-identical. The full non-fixing `npm run check` passed on Node 22.16.0:
+**753 tests passed**, with three optional Docker tests skipped (756 total), plus
+lint, formatting, documentation/workflow policy and packed-CLI
+checks. The exact locked dependency audit found zero vulnerabilities. A separate
+read-only call to the actual shared/product runtime identity admission also
+passed against both environments, without invoking the inbox or dispatching a
+workflow. Journal revision 584 and the paused watcher remain unchanged.
+This is a local source update, not a merge, npm
+publication or live release acceptance. Per the user's explicit instruction,
+**do not resume #285**: its saved journal and paused follow-up remain untouched.
 
 ## October 1 — missing combined-file upload (local)
 
