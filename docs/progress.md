@@ -75,6 +75,17 @@ is not merged and #285 is not resumed. The live sandbox acceptance above belongs
 to the preceding source snapshot; these review follow-ups have offline coverage,
 not new live acceptance.
 
+The exact-head GLM advisory was partial: three reviewer slices returned empty
+output. Its proposed log-flush race was checked against the synchronous
+`writeSync`/`fsyncSync` path; the regression reads durable events after `run()`
+resolves, so no asynchronous flush race exists. Its test-cleanup suggestion was
+accepted: register root cleanup before logger construction and assert nonempty
+log contents before parsing. These are test-only safeguards, not runtime changes.
+CodeRabbit acknowledged both corrected functional findings in their threads;
+that acknowledgement is not a fresh full review of subsequent commits. Its
+automatic docstring-percentage warning is advisory and is not the repository's
+required CI gate. No review configuration or documentation threshold was changed.
+
 ## October 2 — frontend release-runtime refresh (source update)
 
 Branch `codex/frontend-release-runtime-refresh` updates only the Coordinator's

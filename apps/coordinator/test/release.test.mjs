@@ -2615,18 +2615,19 @@ test("a staging merge conflict reaches the log, final stop and ticket explanatio
     };
   };
   const root = await mkdtemp(path.join(os.tmpdir(), "release-conflict-log-"));
+  let log;
+  t.after(async () => {
+    log?.close();
+    await rm(root, { recursive: true, force: true });
+  });
   let terminal = "";
-  const log = createRunLog({
+  log = createRunLog({
     root,
     profile: sandboxProfile,
     env: {},
     stderr: (text) => {
       terminal += text;
     }
-  });
-  t.after(async () => {
-    log.close();
-    await rm(root, { recursive: true, force: true });
   });
   batch.execution = await log.run(() =>
     executeRelease({
@@ -2636,10 +2637,12 @@ test("a staging merge conflict reaches the log, final stop and ticket explanatio
       save: async () => {}
     })
   );
-  const events = (await readFile(log.snapshot().file, "utf8"))
-    .trim()
-    .split("\n")
-    .map(JSON.parse);
+  const contents = (await readFile(log.snapshot().file, "utf8")).trim();
+  assert.ok(
+    contents,
+    "Expected durable release log events after run resolved."
+  );
+  const events = contents.split("\n").map(JSON.parse);
   const failed = events.find(
     (event) => event.step === "release.integrate" && event.outcome === "failed"
   );
