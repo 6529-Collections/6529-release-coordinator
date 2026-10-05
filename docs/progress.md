@@ -79,6 +79,17 @@ documentation/workflow policy and packed-CLI checks. The check wrapper confirmed
 unchanged source. Touched test callbacks now document their simulated delay,
 cancellation and persistence boundaries; review configuration is unchanged.
 
+CodeRabbit's completed review of `10dbaa6` found no actionable code issue but
+retained an aggregate docstring warning. Its subsequent source inspection
+confirmed valid JSDoc on the named helpers and callbacks and could not provide
+the checker’s nine-function diagnostics. The already-documented test helpers
+now use ordinary named function declarations to avoid ambiguous comment attachment;
+their response behavior is unchanged. The new failed-wrapper pin check also
+explains why its `prod` argument selects the trusted `main` runner's files,
+including for staging. GLM's remaining hardcoded-environment lead was independently
+rejected against that execution-ref contract; two advisory slices were empty.
+These are scoped documentation/readability follow-ups, not a pin or policy change.
+
 ## October 2 — staging-aware merge preparation (local and sandbox acceptance)
 
 Local, uncommitted Coordinator-only code now prepares new forward staging

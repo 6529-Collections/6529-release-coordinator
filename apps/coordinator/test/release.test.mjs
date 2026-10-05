@@ -1063,7 +1063,9 @@ for (const database of [false, true]) {
     const options = {
       batch,
       client: releaseClient,
+      /** Isolate engine failure routing from external admission checks. */
       guard: async () => {},
+      /** Preserve execution state in the batch object without journal writes. */
       save: async () => {}
     };
     const execution = await executeRelease(options);

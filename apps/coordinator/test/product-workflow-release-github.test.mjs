@@ -135,7 +135,7 @@ function directHarness(
   const run = runFixture(descriptor, { conclusion, profile });
   mutateRun?.(run);
   /** Advance one simulated run observation, with optional drift or cancellation. */
-  const readRun = () => {
+  function readRun() {
     const status = runStatuses[runReads++] ?? run.status;
     const observed = {
       ...run,
@@ -144,7 +144,7 @@ function directHarness(
     };
     observeRun?.(observed, runReads);
     return observed;
-  };
+  }
   const manifest = build(descriptor.buildRole, descriptor.sourceCommit);
   mutateManifest?.(manifest);
   const artifact = {
@@ -160,7 +160,7 @@ function directHarness(
     workflow_run: { id: run.id }
   };
   /** Serve only the expected direct-workflow requests and retain dispatch evidence. */
-  const execute = async (args, body) => {
+  async function execute(args, body) {
     const method = args[args.indexOf("--method") + 1];
     const endpoint = args[args.indexOf("--method") + 2];
     calls.push({ method, endpoint, body });
@@ -253,7 +253,7 @@ function directHarness(
         : apiResponse("204 No Content");
     }
     throw new Error(`Unexpected ${method} ${endpoint}`);
-  };
+  }
   const client = createProductWorkflowReleaseGitHub({
     profile,
     execute,
@@ -325,8 +325,8 @@ function backendWaitHarness(options = {}) {
 }
 
 /** Execute the fixture's saved direct operation with no external side effects. */
-const runDirectHarness = (harness) =>
-  harness.client.run({
+function runDirectHarness(harness) {
+  return harness.client.run({
     record: harness.record,
     actor,
     runtime: savedRuntime,
@@ -335,6 +335,7 @@ const runDirectHarness = (harness) =>
     /** The fixture keeps saved state in memory instead of writing a journal. */
     save: async () => {}
   });
+}
 
 for (const profile of [sandboxProfile, realProfile]) {
   test(`${profile.name} waits beyond sixty polls for the same confirmed deployment`, async () => {
@@ -1831,7 +1832,7 @@ function automaticHarness({
   const calls = [];
   const reads = { wrapper: 0, e2e: 0 };
   /** Advance the selected automatic phase without mutating its base identity. */
-  const readRun = (run, key, statuses) => {
+  function readRun(run, key, statuses) {
     const status = statuses[reads[key]++] ?? run.status;
     const observed = {
       ...run,
@@ -1840,9 +1841,9 @@ function automaticHarness({
     };
     observeRun?.(observed, key, reads[key]);
     return observed;
-  };
+  }
   /** Serve the automatic chain and fail if the adapter tries any write request. */
-  const execute = async (args) => {
+  async function execute(args) {
     const method = args[args.indexOf("--method") + 1];
     const endpoint = args[args.indexOf("--method") + 2];
     calls.push({ method, endpoint });
@@ -1925,7 +1926,7 @@ function automaticHarness({
         ]
       });
     throw new Error(`Unexpected endpoint ${endpoint}`);
-  };
+  }
   const client = createProductWorkflowReleaseGitHub({
     profile,
     execute,
@@ -1976,21 +1977,23 @@ function automaticHarness({
     }
   };
   /** Start an E2E record whose deployment-triggered chain may already exist. */
-  const makeRecord = () => ({
-    id: e2eOperation.operation_id,
-    release_id: releaseId,
-    step: steps[2],
-    state: "prepared",
-    actor,
-    // The automatic chain can finish before recovery saves its E2E operation.
-    // It remains valid because it was caused by the exact saved deployment.
-    created_at: "2026-09-21T16:05:00.000Z",
-    operation: e2eOperation
-  });
+  function makeRecord() {
+    return {
+      id: e2eOperation.operation_id,
+      release_id: releaseId,
+      step: steps[2],
+      state: "prepared",
+      actor,
+      // The automatic chain can finish before recovery saves its E2E operation.
+      // It remains valid because it was caused by the exact saved deployment.
+      created_at: "2026-09-21T16:05:00.000Z",
+      operation: e2eOperation
+    };
+  }
   const record = makeRecord();
   /** Follow the mutable saved fixture record, including interrupted-run snapshots. */
-  const run = () =>
-    client.run({
+  function run() {
+    return client.run({
       record,
       actor,
       runtime: savedRuntime,
@@ -1998,6 +2001,7 @@ function automaticHarness({
       steps,
       save
     });
+  }
   return {
     client,
     steps,

@@ -1302,6 +1302,8 @@ export function createProductWorkflowReleaseGitHub({
         );
       if (dispatchRun?.status === "completed") {
         if (dispatchRun.conclusion === "failure") {
+          // Automatic wrappers run from main, even for staging; "prod" selects
+          // trusted main-runner file pins, not the application's target.
           await verifyFiles("frontend", dispatchRun.head_sha, "prod");
           const jobs = await jobsFor("frontend", dispatchRun, {
             kind: "dispatch",
