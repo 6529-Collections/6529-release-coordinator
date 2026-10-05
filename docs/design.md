@@ -551,6 +551,14 @@ waiting longer for known work does not authorize blind redispatch. PR/check
 polling and the separate sample service-check wait are unchanged. This local
 implementation has offline regression coverage, not new live release proof.
 
+A completed automatic E2E wrapper with a verified failure conclusion and matching
+failed job returns failed-only `e2e-dispatch` evidence. The report names the actual
+wrapper, contains no build/deployment claims and cannot claim that E2E ran or
+passed. It enters the existing release failure path and its existing database
+safety policy; a terminal same-run resume does not repeat operations. A cancelled
+or timed-out wrapper, contradictory jobs or otherwise uncertain evidence still
+stops for reconciliation rather than triggering recovery from an assumed result.
+
 Verified integration references on September 11: frontend
 [`deploy-6529`](https://github.com/6529-Collections/6529seize-frontend/blob/faf4aa616bc3a25ccab5a0db8162980d9cdaedd1/ops/skills/deploy-6529/SKILL.md),
 [`Web Deploy - STAGING`](https://github.com/6529-Collections/6529seize-frontend/blob/faf4aa616bc3a25ccab5a0db8162980d9cdaedd1/.github/workflows/deploy-staging.yml),

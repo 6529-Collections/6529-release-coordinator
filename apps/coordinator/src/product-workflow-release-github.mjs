@@ -812,12 +812,14 @@ export function createProductWorkflowReleaseGitHub({
     };
   }
 
+  /** Build operation-bound evidence without claiming outputs from a failed stage. */
   function reportFor({
     operation,
     run,
     status,
     builds = {},
-    deployments = {}
+    deployments = {},
+    failureStage
   }) {
     return {
       protocol: operation.protocol,
@@ -831,9 +833,13 @@ export function createProductWorkflowReleaseGitHub({
       role: operation.role,
       unit: operation.unit,
       status,
+      ...(failureStage ? { failure_stage: failureStage } : {}),
       checks: [
         {
-          name: "product-shaped-workflow",
+          name:
+            failureStage === "e2e-dispatch"
+              ? "automatic-e2e-dispatch"
+              : "product-shaped-workflow",
           status
         }
       ],
@@ -1295,6 +1301,37 @@ export function createProductWorkflowReleaseGitHub({
           "The matching automatic E2E dispatch wrapper could not be found; no replacement was dispatched."
         );
       if (dispatchRun?.status === "completed") {
+        if (dispatchRun.conclusion === "failure") {
+          await verifyFiles("frontend", dispatchRun.head_sha, "prod");
+          const jobs = await jobsFor("frontend", dispatchRun, {
+            kind: "dispatch",
+            environment: operation.environment
+          });
+          serviceAssert(
+            jobs.some((job) => job.conclusion === "failure"),
+            "release-workflow",
+            "The failed automatic E2E dispatch conclusion contradicts its jobs."
+          );
+          await verifyEnvironment(operation, "E2E dispatch failure acceptance");
+          const report = reportFor({
+            operation,
+            run: dispatchRun,
+            status: "failed",
+            failureStage: "e2e-dispatch"
+          });
+          verifyProductWorkflowReport(report, operation);
+          return {
+            status: "failed",
+            report_hash: releaseHash(report),
+            report,
+            workflow: { id: dispatchRun.id, url: dispatchRun.html_url },
+            dispatch_workflow: {
+              id: dispatchRun.id,
+              url: dispatchRun.html_url
+            },
+            deployment_workflow: dependencies.frontend.result.workflow
+          };
+        }
         serviceAssert(
           dispatchRun.conclusion === "success",
           "release-workflow",

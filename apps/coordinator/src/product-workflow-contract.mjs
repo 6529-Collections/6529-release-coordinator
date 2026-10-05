@@ -106,9 +106,11 @@ function installedMatches(report, operation) {
   );
 }
 
+/** Verify exact operation evidence; dispatch failure may never claim E2E success. */
 export function verifyProductWorkflowReport(report, operation) {
   validateProfileReleaseOperation(operation);
   const runtime = productWorkflowRuntimeForProfile({ name: operation.profile });
+  const dispatchFailure = report?.failure_stage === "e2e-dispatch";
   const requiredRoles =
     operation.operation === "e2e"
       ? Object.keys(report?.deployments ?? {})
@@ -141,7 +143,13 @@ export function verifyProductWorkflowReport(report, operation) {
     operation.operation === "e2e"
       ? `.github/workflows/${
           runtime.repositories.frontend.workflows[
-            operation.environment === "staging" ? "stagingE2e" : "prodE2e"
+            dispatchFailure
+              ? operation.environment === "staging"
+                ? "stagingDispatch"
+                : "prodDispatch"
+              : operation.environment === "staging"
+                ? "stagingE2e"
+                : "prodE2e"
           ].file
         }`
       : expectedWorkflow(
@@ -167,6 +175,16 @@ export function verifyProductWorkflowReport(report, operation) {
     report.role !== operation.role ||
     report.unit !== operation.unit ||
     !["passed", "failed"].includes(report.status) ||
+    (report.failure_stage !== undefined &&
+      (!dispatchFailure ||
+        report.adapter !== productWorkflowReleaseAdapter ||
+        operation.operation !== "e2e" ||
+        report.status !== "failed" ||
+        report.checks?.length !== 1 ||
+        report.checks[0]?.name !== "automatic-e2e-dispatch" ||
+        report.checks[0]?.status !== "failed" ||
+        buildEntries.length !== 0 ||
+        Object.keys(report.deployments ?? {}).length !== 0)) ||
     !Array.isArray(report.checks) ||
     !report.checks.length ||
     report.checks.some(

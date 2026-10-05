@@ -513,6 +513,7 @@ function dispatchingClient(
     ...(polls === undefined ? {} : { polls }),
     ...(wait ? { wait } : {}),
     ...(pollMs === undefined ? {} : { pollMs }),
+    /** Serve deterministic runtime, discovery, dispatch and exact-run responses. */
     execute: async (args, body) => {
       const method = args[args.indexOf("--method") + 1];
       const endpoint = args[args.indexOf("--method") + 2];
@@ -575,11 +576,13 @@ test("the generic sandbox follows the same known run beyond sixty polls", async 
   const { client, calls } = dispatchingClient(f, {
     polls: 2,
     runStatuses: ["queued", "waiting", ...Array(65).fill("in_progress")],
+    /** Count known-run polls without a real delay. */
     wait: async () => waits++
   });
   const result = await client.run({
     record: f.record,
     actor: f.record.actor,
+    /** The fixture's record is already the in-memory saved state. */
     save: async () => {}
   });
   assert.equal(result.status, "passed");
@@ -599,6 +602,7 @@ test("the generic sandbox's running wait is cancellable without another request"
   const { client, calls } = dispatchingClient(f, {
     runStatuses: Array(65).fill("in_progress"),
     signal: controller.signal,
+    /** Cancel the wait and record the last allowed API request boundary. */
     wait: async () => {
       callsAtAbort = calls.length;
       controller.abort();
@@ -608,6 +612,7 @@ test("the generic sandbox's running wait is cancellable without another request"
     client.run({
       record: f.record,
       actor: f.record.actor,
+      /** Preserve the fixture's mutated record for cancellation assertions. */
       save: async () => {}
     }),
     { name: "AbortError" }
@@ -623,12 +628,14 @@ test("a confirmed generic sandbox run disappearing stops without redispatch", as
   const { client, calls } = dispatchingClient(f, {
     runStatuses: Array(65).fill("in_progress"),
     missingKnownRunAfter: 1,
+    /** Advance the missing-run scenario without sleeping. */
     wait: async () => {}
   });
   await assert.rejects(
     client.run({
       record: f.record,
       actor: f.record.actor,
+      /** Keep the existing exact run ID in the shared fixture record. */
       save: async () => {}
     }),
     /404/u

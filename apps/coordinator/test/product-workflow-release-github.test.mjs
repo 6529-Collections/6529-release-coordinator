@@ -332,6 +332,7 @@ const runDirectHarness = (harness) =>
     runtime: savedRuntime,
     operations: {},
     steps: [harness.record.step],
+    /** The fixture keeps saved state in memory instead of writing a journal. */
     save: async () => {}
   });
 
@@ -341,6 +342,7 @@ for (const profile of [sandboxProfile, realProfile]) {
     const harness = backendWaitHarness({
       profile,
       runStatuses: ["queued", "waiting", ...Array(65).fill("in_progress")],
+      /** Count polls without delaying the offline test. */
       wait: async () => waits++
     });
     const result = await runDirectHarness(harness);
@@ -387,6 +389,7 @@ test("missing deployment discovery stays bounded without a replacement dispatch"
   let waits = 0;
   const harness = backendWaitHarness({
     missingRun: true,
+    /** Count only the bounded missing-run discovery polls. */
     wait: async () => waits++
   });
   await assert.rejects(
@@ -408,6 +411,7 @@ test("cancellation interrupts a known deployment even when the wait ignores its 
   const harness = backendWaitHarness({
     runStatuses: Array(65).fill("in_progress"),
     signal: controller.signal,
+    /** Abort a known-run wait even when the injected delay ignores its signal. */
     wait: async () => {
       callsAtAbort = harness.calls.length;
       controller.abort();
@@ -424,6 +428,7 @@ test("cancellation during the final deployment read cannot accept success", asyn
   const harness = backendWaitHarness({
     runStatuses: ["in_progress"],
     signal: controller.signal,
+    /** Abort as GitHub returns the terminal response, before it can be accepted. */
     observeRun: (run) => {
       if (run.status === "completed") controller.abort();
     }
@@ -478,6 +483,7 @@ for (const field of [
     const harness = backendWaitHarness({
       returnRunDetails: true,
       runStatuses: Array(65).fill("in_progress"),
+      /** Change one identity field after the run was already confirmed. */
       observeRun: (run, read) => {
         if (read === 4)
           run[field] =
@@ -1706,6 +1712,7 @@ function automaticHarness({
   profile = sandboxProfile,
   environment = "staging",
   wrapperStatuses = ["in_progress"],
+  wrapperJobConclusion,
   e2eStatuses = [],
   missingWrapper = false,
   missingE2e = false,
@@ -1894,7 +1901,7 @@ function automaticHarness({
             run_id: wrapper.id,
             head_sha: wrapper.head_sha,
             status: "completed",
-            conclusion: "success"
+            conclusion: wrapperJobConclusion ?? wrapper.conclusion
           }
         ]
       });
@@ -2019,6 +2026,7 @@ for (const profile of [sandboxProfile, realProfile]) {
             "waiting",
             ...Array(65).fill("in_progress")
           ],
+          /** Count long-chain polls without sleeping. */
           wait: async () => waits++
         });
         const result = await harness.run();
@@ -2050,6 +2058,7 @@ for (const phase of ["Wrapper", "E2e"]) {
     let waits = 0;
     const harness = automaticHarness({
       [`missing${phase}`]: true,
+      /** Count the discovery budget separately from known-run duration. */
       wait: async () => waits++
     });
     await assert.rejects(harness.run(), /could not be found/u);
@@ -2063,6 +2072,7 @@ test("cancellation leaves the exact E2E chain resumable without another dispatch
   const harness = automaticHarness({
     e2eStatuses: Array(65).fill("in_progress"),
     signal: controller.signal,
+    /** Interrupt only after the E2E run ID has been saved. */
     wait: async () => {
       if (harness.record.workflow_run_id) controller.abort();
     }
@@ -2085,7 +2095,9 @@ test("cancellation during the wrapper-only wait saves that exact run for resume"
   const harness = automaticHarness({
     wrapperStatuses: Array(65).fill("in_progress"),
     signal: controller.signal,
+    /** Interrupt before the wrapper has launched a discoverable E2E run. */
     wait: async () => controller.abort(),
+    /** Capture the exact persisted wrapper-only state for JSON round-trip resume. */
     save: async () => snapshots.push(structuredClone(harness.record))
   });
   await assert.rejects(harness.run(), { name: "AbortError" });
@@ -2112,6 +2124,7 @@ test("cancellation during the wrapper-only save makes no further API request", a
   const harness = automaticHarness({
     wrapperStatuses: ["in_progress"],
     signal: controller.signal,
+    /** Abort during persistence to detect any subsequent API request. */
     save: async () => {
       callsAtAbort = harness.calls.length;
       controller.abort();
@@ -2136,6 +2149,7 @@ for (const phase of ["wrapper", "e2e"]) {
       const harness = automaticHarness({
         [phase === "wrapper" ? "wrapperStatuses" : "e2eStatuses"]:
           Array(65).fill("in_progress"),
+        /** Corrupt one previously confirmed phase identity during polling. */
         observeRun: (run, key, read) => {
           if (key === phase && read === 4)
             run[field] =
@@ -2171,7 +2185,86 @@ for (const conclusion of ["cancelled", "timed_out"]) {
   });
 }
 
-for (const conclusion of ["failure", "cancelled", "timed_out"]) {
+for (const profile of [sandboxProfile, realProfile]) {
+  for (const environment of ["staging", "prod"]) {
+    test(`${profile.name} ${environment} confirmed wrapper failure returns genuine failed evidence without claiming E2E ran`, async () => {
+      const harness = automaticHarness({
+        profile,
+        environment,
+        wrapperStatuses: Array(65).fill("in_progress")
+      });
+      harness.wrapper.conclusion = "failure";
+      const result = await harness.run();
+      assert.equal(result.status, "failed");
+      assert.equal(result.report.failure_stage, "e2e-dispatch");
+      assert.equal(result.report.runner.run_id, 603);
+      assert.equal(result.report.runner.workflow, harness.wrapper.path);
+      assert.deepEqual(result.report.builds, {});
+      assert.deepEqual(result.report.deployments, {});
+      assert.equal(harness.record.workflow_run_id, undefined);
+      assert.equal(harness.record.dispatch_workflow_run_id, 603);
+      assert.equal(
+        harness.calls.some(({ endpoint }) =>
+          endpoint.includes(
+            `${environment === "staging" ? "staging" : "production"}-e2e.yml/runs?`
+          )
+        ),
+        false
+      );
+      assert.equal(
+        verifyProductWorkflowReport(result.report, harness.record.operation),
+        result.report
+      );
+      for (const change of [
+        { status: "passed" },
+        { failure_stage: "unknown" },
+        { checks: [{ name: "product-shaped-workflow", status: "failed" }] },
+        { checks: [{ name: "automatic-e2e-dispatch", status: "passed" }] },
+        { deployments: { frontend: {} } },
+        { builds: { frontend: {} } },
+        { adapter: "product-workflow-mirror-v1" },
+        { failure_stage: undefined }
+      ]) {
+        assert.throws(() =>
+          verifyProductWorkflowReport(
+            { ...result.report, ...change },
+            harness.record.operation
+          )
+        );
+      }
+    });
+  }
+}
+
+test("a failed wrapper with successful jobs remains uncertain rather than triggering recovery", async () => {
+  const harness = automaticHarness({ wrapperJobConclusion: "success" });
+  harness.wrapper.conclusion = "failure";
+  await assert.rejects(harness.run(), /contradicts its jobs/u);
+  assert.equal(harness.record.state, "running");
+  assert.equal(harness.record.dispatch_workflow_run_id, 603);
+  assert.equal(harness.record.workflow_run_id, undefined);
+});
+
+test("cancellation during the failed wrapper read cannot accept failed evidence", async () => {
+  const controller = new AbortController();
+  const harness = automaticHarness({
+    signal: controller.signal,
+    /** Interrupt precisely when the confirmed wrapper reports a terminal failure. */
+    observeRun: (run, key) => {
+      if (key === "wrapper" && run.status === "completed") controller.abort();
+    }
+  });
+  harness.wrapper.conclusion = "failure";
+  await assert.rejects(harness.run(), { name: "AbortError" });
+  assert.equal(
+    harness.calls.some(({ endpoint }) =>
+      endpoint.endsWith("/jobs?per_page=100")
+    ),
+    false
+  );
+});
+
+for (const conclusion of ["cancelled", "timed_out"]) {
   test(`a slow automatic dispatch wrapper ending ${conclusion} stops before E2E acceptance`, async () => {
     const harness = automaticHarness({
       wrapperStatuses: Array(65).fill("in_progress")
@@ -2192,6 +2285,7 @@ test("cancellation while reading the completed E2E result cannot accept it", asy
   const harness = automaticHarness({
     signal: controller.signal,
     e2eStatuses: ["in_progress"],
+    /** Cancel the completed E2E response before job evidence can be read. */
     observeRun: (run, key) => {
       if (key === "e2e" && run.status === "completed") controller.abort();
     }

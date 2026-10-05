@@ -61,6 +61,24 @@ The touched helpers now have purpose/boundary docstrings; no review threshold or
 configuration was changed. A new local completion bound was deliberately not
 added: the agreed behavior waits for GitHub while retaining explicit cancellation.
 
+The completed incremental CodeRabbit review then identified a second valid gap:
+a confirmed failed automatic E2E wrapper escaped as an error and left its saved
+operation running. Two profile regressions reproduced that behavior before the
+fix. A verified wrapper failure now returns failed-only `e2e-dispatch` evidence,
+with its actual wrapper identity and no claim that E2E ran or passed. Offline
+cases cover both profiles and environments, rejected success/build/deployment
+claims, contradictory jobs and cancellation. Engine tests verify existing
+no-database-change recovery versus database-changing human stop, and terminal
+same-run resume without repeated work. Cancellation, timeout and uncertain
+evidence remain reconciliation stops; no recovery policy or workflow pin changed.
+Final-head CI and review of this second follow-up remain required before merge.
+
+The second follow-up's full non-fixing local gate passed: **839 tests passed**,
+three optional Docker cases skipped (842 total), plus lint, formatting,
+documentation/workflow policy and packed-CLI checks. The check wrapper confirmed
+unchanged source. Touched test callbacks now document their simulated delay,
+cancellation and persistence boundaries; review configuration is unchanged.
+
 ## October 2 — staging-aware merge preparation (local and sandbox acceptance)
 
 Local, uncommitted Coordinator-only code now prepares new forward staging

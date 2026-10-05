@@ -551,6 +551,12 @@ Ctrl-C leaves the saved run resumable and never starts a replacement. The
 existing bounded search for an as-yet-unidentified run, PR/check polling and
 the separate sample service-check wait above are unchanged.
 
+A confirmed failed automatic E2E launcher is recorded as a launcher failure,
+not as an E2E test run. It reaches the existing release failure handling:
+confirmed no-database-change releases may restore through the normal recovery
+steps; database-changing releases stop for a person. Contradictory job evidence,
+cancellation and other uncertain outcomes remain stopped for reconciliation.
+
 After the final required E2E and owned-branch cleanup, selected tickets receive
 `status:completed` and `reason:release-completed` and close. This records only the
 fake sandbox result. The
