@@ -980,7 +980,7 @@ test("staging and main both refuse newly inherited unselected PR history before 
   }
 });
 
-test("integration uses a unique checked commit with the exact candidate tree", async () => {
+test("staging integration uses a unique checked merge with both pinned histories", async () => {
   const candidate = {
     role: "backend",
     base: "e".repeat(40),
@@ -1017,6 +1017,20 @@ test("integration uses a unique checked commit with the exact candidate tree", a
   const client = createReleaseGitHub({
     profile: sandboxProfile,
     runtime,
+    stagingMerge: async () => ({
+      preparation: {
+        version: "staging-merge-v1",
+        profile: "sandbox",
+        role: "backend",
+        base: candidate.base,
+        base_tree: "a".repeat(40),
+        candidate_commit: candidate.commit,
+        candidate_tree: candidate.tree,
+        tree: candidate.tree,
+        patch: []
+      },
+      blobs: []
+    }),
     wait: async () => {
       waited = true;
       order.push("wait");
@@ -1056,19 +1070,26 @@ test("integration uses a unique checked commit with the exact candidate tree", a
         return apiResponse("200 OK", {
           object: { sha: merged ? mergedCommit : candidate.base }
         });
+      if (endpoint.endsWith(`/git/commits/${candidate.base}`))
+        return apiResponse("200 OK", {
+          sha: candidate.base,
+          tree: { sha: "a".repeat(40) }
+        });
+      if (method === "POST" && endpoint.endsWith("/git/trees"))
+        return apiResponse("201 Created", { sha: candidate.tree });
       if (method === "POST" && endpoint.endsWith("/git/commits")) {
         commitBodies.push(body);
         return apiResponse("201 Created", {
           sha: integrationCommit,
           tree: { sha: candidate.tree },
-          parents: [{ sha: candidate.commit }]
+          parents: [{ sha: candidate.base }, { sha: candidate.commit }]
         });
       }
       if (endpoint.endsWith(`/git/commits/${integrationCommit}`))
         return apiResponse("200 OK", {
           sha: integrationCommit,
           tree: { sha: candidate.tree },
-          parents: [{ sha: candidate.commit }]
+          parents: [{ sha: candidate.base }, { sha: candidate.commit }]
         });
       if (endpoint.endsWith(`/git/ref/heads/${record.branch}`))
         return branch
@@ -1107,7 +1128,10 @@ test("integration uses a unique checked commit with the exact candidate tree", a
       if (method === "GET" && endpoint.endsWith("/pulls/7"))
         return apiResponse("200 OK", pr);
       if (endpoint.endsWith(`/git/commits/${testMerge}`))
-        return apiResponse("200 OK", { tree: { sha: candidate.tree } });
+        return apiResponse("200 OK", {
+          tree: { sha: candidate.tree },
+          parents: [{ sha: candidate.base }, { sha: integrationCommit }]
+        });
       if (endpoint.includes("/runs?"))
         return apiResponse(
           "200 OK",
@@ -1152,7 +1176,8 @@ test("integration uses a unique checked commit with the exact candidate tree", a
   assert.equal(record.integration_commit, integrationCommit);
   assert.equal(commitBodies.length, 1);
   assert.equal(commitBodies[0].tree, candidate.tree);
-  assert.deepEqual(commitBodies[0].parents, [candidate.commit]);
+  assert.deepEqual(commitBodies[0].parents, [candidate.base, candidate.commit]);
+  assert.equal(record.integration_version, 2);
   assert.notEqual(record.integration_commit, candidate.commit);
   assert.deepEqual(
     saved.slice(0, 3).map((value) => ({

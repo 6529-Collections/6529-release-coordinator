@@ -407,7 +407,8 @@ test("changed ticket or lost journal ownership during rehearsal cannot publish p
         else if (kind === "state") f.issue.state = "closed";
         else
           await createJournal(f.api, f.profile, {
-            workflow: inboxWorkflow
+            workflow: inboxWorkflow,
+            ticketConcurrency: true
           }).acquire(await f.identity(), f.state().lock.run_id);
         return report;
       }

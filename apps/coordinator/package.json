@@ -10,6 +10,7 @@
     "test": "node --test test/*.test.mjs",
     "inbox:read": "node bin/read-inbox.mjs",
     "inbox:run": "node bin/run-inbox.mjs",
+    "inbox:cleanup": "node bin/cleanup-inbox.mjs",
     "readiness:check": "node bin/check-readiness.mjs",
     "request:submit": "node bin/submit-request.mjs"
   }

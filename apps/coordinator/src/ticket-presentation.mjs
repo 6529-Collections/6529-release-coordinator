@@ -56,7 +56,10 @@ export const reasons = [
   "release-cancelled",
   "release-staging-changed",
   "release-review-pending",
-  "release-unverified"
+  "release-unverified",
+  "release-action-required",
+  "release-followup-required",
+  "release-reconciled"
 ];
 export const batchStatuses = [
   "passed",
@@ -150,13 +153,17 @@ export function desiredLabels(issue, decision, request) {
   ].sort();
 }
 
-export async function ensureLabels(api, names) {
+export async function ensureLabels(api, names, verified) {
   for (const name of names.filter((value) => managedLabels.has(value))) {
+    if (verified?.has(name)) continue;
     const found = await api({
       method: "GET",
       path: `/labels/${encodeURIComponent(name)}`
     });
-    if (found.status === 200) continue;
+    if (found.status === 200) {
+      verified?.add(name);
+      continue;
+    }
     if (found.status !== 404)
       throw new Error(`Could not inspect label ${name}.`);
     const color = name.startsWith("reason:")
@@ -169,7 +176,10 @@ export async function ensureLabels(api, names) {
       path: "/labels",
       body: { name, color }
     });
-    if (created.status === 201) continue;
+    if (created.status === 201) {
+      verified?.add(name);
+      continue;
+    }
     if (
       created.status === 422 &&
       (
@@ -178,8 +188,10 @@ export async function ensureLabels(api, names) {
           path: `/labels/${encodeURIComponent(name)}`
         })
       ).status === 200
-    )
+    ) {
+      verified?.add(name);
       continue;
+    }
     throw new Error(`Could not create label ${name}.`);
   }
 }

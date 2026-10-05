@@ -24,7 +24,10 @@ import { serviceFixture, serviceAdapter } from "./service-fixture.mjs";
 import { fixture } from "./processing-fixture.mjs";
 
 const writer = (f, workflow = inboxWorkflow) =>
-  createJournal(f.api, sandboxProfile, { workflow });
+  createJournal(f.api, sandboxProfile, {
+    workflow,
+    ticketConcurrency: workflow === inboxWorkflow
+  });
 const inboxScope = () => ({
   selection: { mode: "inbox", issue_numbers: [], actor_login: null },
   close_test: false
@@ -162,7 +165,8 @@ test("journal and archive remain readable when GitHub omits large file contents"
     return result;
   };
   const journal = createJournal(api, sandboxProfile, {
-    workflow: inboxWorkflow
+    workflow: inboxWorkflow,
+    ticketConcurrency: true
   });
   const { state, run } = await journal.acquire(
     await h.f.identity(),
@@ -384,7 +388,8 @@ for (const failure of ["missing", "changed", "profile", "summary"]) {
     }
     const selectedApi = failure === "summary" ? original : altered;
     const journal = createJournal(selectedApi, sandboxProfile, {
-      workflow: inboxWorkflow
+      workflow: inboxWorkflow,
+      ticketConcurrency: true
     });
     const acquired = await journal.acquire(
       await h.f.identity(),
@@ -615,7 +620,7 @@ test("competing compaction cannot replace another writer's state or discard its 
       takeover = await writer(h.f).acquire(await h.f.identity(), run.run_id);
     }
   };
-  await assert.rejects(journal.release(state, run), /concurrently/);
+  await assert.rejects(journal.release(state, run), /lock changed/);
   assert.equal(h.f.state().lock.token, takeover.run.token);
   assert.deepEqual(h.f.state().batches[record.fingerprint], record);
 });
@@ -654,7 +659,7 @@ for (const legacyWorkflow of ["inbox-run-v4", "inbox-run-v5", "inbox-run-v6"])
     const count = f.calls.filter((c) => c.method !== "GET").length;
     await assert.rejects(
       writer(f, legacyWorkflow).acquire(await f.identity()),
-      /older processor/
+      /updated Cooperative Coordinator/
     );
     assert.equal(f.calls.filter((c) => c.method !== "GET").length, count);
   });

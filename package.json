@@ -17,6 +17,7 @@
     "check:package": "node scripts/check-package.mjs",
     "inbox:read": "node apps/coordinator/bin/read-inbox.mjs",
     "inbox:run": "node apps/coordinator/bin/run-inbox.mjs",
+    "inbox:cleanup": "node apps/coordinator/bin/cleanup-inbox.mjs",
     "readiness:check": "node apps/coordinator/bin/check-readiness.mjs",
     "test": "node scripts/test.mjs",
     "request:submit": "node apps/coordinator/bin/submit-request.mjs"

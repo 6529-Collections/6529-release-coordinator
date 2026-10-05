@@ -194,6 +194,11 @@ export function validateReleaseExecution(execution, batch) {
     const hasIntegrationCommit = Object.hasOwn(record, "integration_commit");
     const hasIntegrationInput = Object.hasOwn(record, "integration_input");
     const hasIntegrationVersion = Object.hasOwn(record, "integration_version");
+    serviceAssert(
+      !record.staging_preparation || record.integration_version === 2,
+      "release-state",
+      "Staging preparation requires its matching integration version."
+    );
     const needsPreparedIntegrationInput =
       [
         "running",
@@ -236,7 +241,7 @@ export function validateReleaseExecution(execution, batch) {
       const candidate = execution.plan.candidates[record.step.role];
       serviceAssert(
         record.step.kind === "integrate" &&
-          record.integration_version === 1 &&
+          [1, 2].includes(record.integration_version) &&
           serviceHash(record.integration_input) ===
             serviceHash(integrationCommitInput(record, candidate)) &&
           (record.state === "commit-prepared"
@@ -245,7 +250,24 @@ export function validateReleaseExecution(execution, batch) {
         "release-state",
         "Invalid sandbox integration commit state."
       );
+      if (record.integration_version === 2)
+        serviceAssert(
+          (!record.checked_tree ||
+            record.checked_tree === record.staging_preparation.tree) &&
+            (record.result?.status !== "passed" ||
+              record.result.tree === record.staging_preparation.tree),
+          "release-state",
+          "Staging checks and merge result must name the exact prepared tree."
+        );
     }
+    if (record.failure_kind !== undefined)
+      serviceAssert(
+        record.step.kind === "integrate" &&
+          ["cleaning", "completed"].includes(record.state) &&
+          ["merge-conflict", "checks"].includes(record.failure_kind),
+        "release-state",
+        "Invalid saved integration failure reason."
+      );
     if (
       record.state === "completed" &&
       record.step.kind !== "integrate" &&
