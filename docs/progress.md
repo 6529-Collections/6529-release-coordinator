@@ -1,5 +1,25 @@
 # Progress and next steps
 
+## October 5 — cleanup and release-board publication checkpoint
+
+The existing local cleanup, cooperative ticket reservations, follow-up evidence,
+transport diagnostics and release-board work is now saved on
+`codex/publish-cleanup-dashboard`. Signed snapshot `0a56398` preserved all of the
+previously uncommitted files before integrating current remote main
+`b00542b503f2af190fce8cbafe0674d0503b111b` (merged staging-preparation PR #293).
+The final diff preserves #293's reviewed conflict logging, review-stop cleanup,
+tests and acceptance record rather than publishing older copies of those files.
+The other cleanup worktree and the separate workflow-wait PR #304 are unchanged;
+this branch does not include #304's unmerged fix.
+
+Fresh non-fixing `npm run check` on Node 22.16.0 passed **862 tests**, with three
+optional Docker tests skipped (865 total), plus lint, formatting,
+documentation/workflow policy and packed-CLI smoke checks. The source snapshot
+remained unchanged. These are local offline checks: remote PR CI/reviews and a
+merge remain separate gates. No cleanup command, live journal/ticket mutation,
+release resume, browser cleanup click, product merge/deployment, npm publication
+or runtime restart was performed for this publication checkpoint.
+
 ## Concurrent cleanup — local installation (October 2)
 
 The approved dashboard cleanup changes were installed locally from the managed
@@ -79,6 +99,38 @@ head `bc220ad0f6c05f98259940cd295e0089709b330b`, journal revision 598, prior
 attempts and cleanup, and paused watcher are untouched. This general preparation
 fix does not resolve its two genuine test conflicts or authorize a retry,
 ticket submission, journal/lock write, product merge, deployment or npm publication.
+
+### Publication and review follow-up
+
+[Coordinator PR #293](https://github.com/6529-Collections/6529-release-coordinator/pull/293)
+was opened from signed commit `990a1ad59bedd1768b1bcd1f3292f68f653d9633`.
+Its initial Node 20/22/24, package, CodeQL and Snyk checks passed. Primary reviews
+reported no findings, but general/deployment context omitted five changed files;
+that is limited coverage, not an exhaustive review. CodeRabbit completed its
+included review and identified two valid issues: the integration log omitted
+conflict paths, and version-two staging drift prevented explicit review-stop
+cleanup. Both were reproduced with failing offline regressions before the narrow
+fixes. The branch now logs the conflict details and allows review-stop cleanup
+after staging moves without allowing an ordinary resume to merge stale inputs.
+Coverage includes sandbox and real-profile actual-Git fixtures, an interrupted
+stop save, immutable preparation identity and no shared-branch write during cleanup.
+The full non-fixing gate passed again: **775 tests passed**, three optional Docker
+skips (778 total), plus lint, formatting, documentation/workflow policy and the
+packed-CLI smoke check. Fresh final-head CI and reviews remain required; this PR
+is not merged and #285 is not resumed. The live sandbox acceptance above belongs
+to the preceding source snapshot; these review follow-ups have offline coverage,
+not new live acceptance.
+
+The exact-head GLM advisory was partial: three reviewer slices returned empty
+output. Its proposed log-flush race was checked against the synchronous
+`writeSync`/`fsyncSync` path; the regression reads durable events after `run()`
+resolves, so no asynchronous flush race exists. Its test-cleanup suggestion was
+accepted: register root cleanup before logger construction and assert nonempty
+log contents before parsing. These are test-only safeguards, not runtime changes.
+CodeRabbit acknowledged both corrected functional findings in their threads;
+that acknowledgement is not a fresh full review of subsequent commits. Its
+automatic docstring-percentage warning is advisory and is not the repository's
+required CI gate. No review configuration or documentation threshold was changed.
 
 ## October 2 — frontend release-runtime refresh (source update)
 

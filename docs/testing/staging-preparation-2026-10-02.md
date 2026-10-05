@@ -35,6 +35,25 @@ Core implementation SHA-256 identities during acceptance:
 | `release-state.mjs` | `1576cf9e44f2fdbb384c9bd4f2c7d21c1844d2d823c827e424b14e88219b5b2c` |
 | `staging-merge.mjs` | `9308781794926d90366b6902515451d7027c03d68cfbf51b8dd0204fe9b9f609` |
 
+### Later PR review follow-up
+
+[Coordinator PR #293](https://github.com/6529-Collections/6529-release-coordinator/pull/293)
+published this acceptance snapshot in signed commit
+`990a1ad59bedd1768b1bcd1f3292f68f653d9633`. Its first completed CodeRabbit review
+found that conflict logs omitted the affected paths and that staging drift blocked
+explicit review-stop cleanup for version-two integrations. Failing offline tests
+reproduced both issues before the fixes. The follow-up keeps the detailed conflict
+message in the log and permits owned review-stop cleanup after staging movement,
+while ordinary forward resume still refuses that movement. Sandbox and real-profile
+actual-Git fixtures cover the stopped PR, interrupted stop save, unchanged saved
+preparation, and absence of a new PR or shared-branch merge. The fixes do not alter
+the ordinary merge composition or production inputs.
+The full non-fixing gate passed after these fixes with **775 tests passed** and
+three optional Docker skips (778 total), plus lint, formatting, documentation,
+workflow policy and packed-CLI smoke checks. The live cases below used the earlier recorded source identities; they are not
+fresh live acceptance of these review follow-ups. Final-head GitHub CI and reviews
+remain a separate publication gate, and the PR is not merged or deployed.
+
 ## Live sandbox boundary and inputs
 
 Only `release-coordinator-test-frontend` (ID `1362504370`) and the test inbox
@@ -95,7 +114,7 @@ started. Independent GitHub readback confirmed all four captured environment
 refs were unchanged and no matching deployment workflow was created.
 
 Trial #169 was closed unmerged and its exact owned branch was absent. Ticket
-#57 is open/action-needed, with the named conflict in its final Coordinator
+The conflict ticket is open/action-needed, with the named conflict in its final Coordinator
 comment. Journal revision **4687** at
 `e6ab7db9b73d020c3d12f25d98c3d91da84e753d` records the terminal release,
 preserved attempts and a null lock. The command ended with expected exit 1 at
@@ -139,8 +158,7 @@ session was `54455`. The command finished successfully with exit 0 at
 11:26:05 UTC.
 The saved run is `bb4cc3ca-37be-4ac8-b92e-c2868b64731c`; npm PID `90825`
 and Node PID `90847` were observed after startup. The local log is
-`logs/sandbox/1362580376/bb4cc3ca-37be-4ac8-b92e-c2868b64731c.jsonl`
-under the operator's Coordinator data directory.
+`~/.6529-release-coordinator/logs/sandbox/1362580376/bb4cc3ca-37be-4ac8-b92e-c2868b64731c.jsonl`.
 Its journal scope is exactly filtered #58/`simo6529`, verified actor
 `209783236`, `close_test: false`, `release_adapter: product-workflows`.
 Batch fingerprint is
@@ -241,8 +259,8 @@ No real ticket was run, no real journal lock was changed, no product source was
 pushed or deployed, and no npm publication or Coordinator PR merge is included.
 The real journal was independently re-read unchanged at revision 598 with a
 null lock, and the #285 watcher remains paused. The scoped Coordinator source
-and regression tests stayed unchanged throughout both runs and match their
-corresponding files in the shared checkout. Other concurrent changes were not
+and regression tests stayed unchanged throughout both runs and matched their
+corresponding files in the shared checkout at that acceptance checkpoint. Other concurrent changes were not
 used for acceptance or modified by this work.
 
 The app's existing 100-attachment limit prevented attaching new test PRs.

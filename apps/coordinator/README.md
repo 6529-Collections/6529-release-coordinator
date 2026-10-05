@@ -563,8 +563,10 @@ Resume reconciles the same saved preparation rather than substituting a newer
 staging tip or candidate. Production and restoration keep their existing
 contracts, and older saved integrations keep their original identities.
 See [shared-branch preparation](../../docs/design.md#how-shared-branches-are-changed)
-for the offline implementation boundary. This does not resume a stopped ticket
-or authorize a sandbox/product release.
+for the implementation contract and the
+[dated sandbox acceptance](../../docs/testing/staging-preparation-2026-10-02.md)
+for its tested boundary. This does not resume a stopped ticket or authorize a
+sandbox/product release.
 
 For the selected sandbox batch, the command saves one release identity and then
 runs these steps in order for each required environment:

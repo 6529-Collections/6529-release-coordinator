@@ -782,8 +782,12 @@ export async function executeRelease({
           url: value.url,
           ...(value.kind === "merge-conflict"
             ? {
-                message:
+                message: [
+                  value.message,
                   "The exact integration has a merge conflict; a person must resolve it. No passing check can authorize this merge."
+                ]
+                  .filter(Boolean)
+                  .join(" ")
               }
             : {})
         })
