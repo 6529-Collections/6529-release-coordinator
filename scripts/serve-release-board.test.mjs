@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { once } from "node:events";
-import { request } from "node:http";
+import { Agent, request } from "node:http";
 import { createReleaseBoardServer } from "./serve-release-board.mjs";
 
 async function serverFixture(t, cleanup, options = {}) {
@@ -130,6 +130,71 @@ test("runtime failures offer same-run resume only after the cleanup exits", asyn
   assert.equal(state.error, null);
   assert.equal(state.resume, null);
   assert.equal(state.result.run_id, id);
+});
+
+test("synchronous cleanup throws reset the board task and allow a later retry", async (t) => {
+  let calls = 0;
+  const f = await serverFixture(t, () => {
+    if (++calls === 1) throw new Error("Synchronous cleanup failure.");
+    return { run_id: "test", release_executed: false };
+  });
+  assert.equal((await f.start()).status, 202);
+  let state = await f.state();
+  assert.equal(state.running, false);
+  assert.equal(state.error, "Synchronous cleanup failure.");
+  assert.equal(state.resume, null);
+  assert.equal((await f.start()).status, 202);
+  state = await f.state();
+  assert.equal(calls, 2);
+  assert.equal(state.running, false);
+  assert.equal(state.error, null);
+  assert.equal(state.result.run_id, "test");
+});
+
+test("rejected POST bodies drain without blocking a subsequent request on the same socket", async (t) => {
+  let calls = 0;
+  const f = await serverFixture(t, () => {
+    calls++;
+  });
+  const agent = new Agent({ keepAlive: true, maxSockets: 1 });
+  t.after(() => agent.destroy());
+  const send = (method, headers = {}, body) =>
+    new Promise((resolve, reject) => {
+      const req = request(
+        `${f.origin}/api/cleanup`,
+        { method, agent, headers },
+        (response) => {
+          response.resume();
+          response.once("end", () =>
+            resolve({ status: response.statusCode, socket: req.socket })
+          );
+          response.once("error", reject);
+        }
+      );
+      req.once("error", reject);
+      req.end(body);
+    });
+  const body = Buffer.alloc(512 * 1024, "x");
+  for (const headers of [
+    { Host: "evil.example" },
+    { Origin: "https://example.com" },
+    { Origin: f.origin, "X-Release-Board-Token": "wrong" },
+    { Origin: f.origin, "X-Release-Board-Token": f.token }
+  ]) {
+    const rejected = await send(
+      "POST",
+      { ...headers, "Content-Length": body.length },
+      body
+    );
+    assert.equal(
+      rejected.status,
+      headers["X-Release-Board-Token"] === f.token ? 400 : 403
+    );
+    const next = await send("GET");
+    assert.equal(next.status, 200);
+    assert.equal(next.socket, rejected.socket);
+  }
+  assert.equal(calls, 0);
 });
 
 test("trusted stopped-run bootstrap shows Resume without starting cleanup or accepting a browser run ID", async (t) => {

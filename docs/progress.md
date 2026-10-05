@@ -59,6 +59,18 @@ only its correctness slice, with three empty slices; its activation concern
 does not apply because the claim is saved before any ticket update. Fresh
 remote gates for these latest fixes remain separate from local proof.
 
+The final documentation clarification distinguishes still-active older runs
+from completed ones. Additional characterization tests verify repeated distinct
+CLI issue flags in both profiles, synchronous board-task failure/retry, and
+large rejected HTTP bodies followed by a request on the same socket. Those
+advisory leads required no runtime changes. The full local gate passed **878
+tests**, with three optional Docker skips (881 total). Required GitHub CI at
+`8bcfbce` passed; its primary reviews were context-truncated and the GLM advisory
+had only its runtime slice available, with three empty slices. Superseded
+general-review claims and the advisory leads are answered with current code
+and test evidence on PR #307. Final-head remote review and merge remain separate
+from these local results; no live inbox or product operation was performed.
+
 ## Concurrent cleanup — local installation (October 2)
 
 The approved dashboard cleanup changes were installed locally from the managed

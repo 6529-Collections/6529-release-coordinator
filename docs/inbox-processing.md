@@ -75,9 +75,9 @@ identities, current staging/production refs, and complete workflow-run/job
 pagination from the earliest owned attempt's start. Separate activity reads
 have no date cutoff: the newest workflow page and every active-status count
 must be quiet both initially and on the final reread. Positive but unlisted
-counts, unreadable activity, or a run created before the original attempt block
-closure. Current staging must have a
-successful deployment and its unique automatic matching E2E chain; a production
+counts, unreadable activity, or a still-active run created before the original
+attempt block closure. Completed older runs do not block closure. Current
+staging must have a successful deployment and its unique automatic matching E2E chain; a production
 request also needs the corresponding current production chain. It checks approved
 workflow blobs, exact run/attempt identities, required successful jobs, triggers,
 actors and causal order. Backend deployment must match its current branch and
@@ -85,7 +85,7 @@ predate frontend validation. Every requested commit must be an ancestor of its
 merged PR head, and that merge must be included in the later delivered commit.
 Rebased or otherwise unprovable equivalence needs a person.
 
-Several saved attempts may name the same exact request. Every attempt must pass
+Several saved attempts may name the same pinned request. Every attempt must pass
 the stopped/no-database-change eligibility checks, and every attempt's temporary
 resources and original staging integrations must be accounted for independently.
 The current delivery chain can then prove that same request's inclusion once;

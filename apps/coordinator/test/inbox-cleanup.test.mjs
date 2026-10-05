@@ -751,3 +751,31 @@ test("CLI requires explicit profile/scope, accepts only cleanup arguments and ma
   }
   assert.equal(calls, 0);
 });
+
+test("cleanup CLI accepts multiple distinct issue flags and keeps the required actor", async () => {
+  for (const profile of ["real", "sandbox"]) {
+    let called;
+    assert.equal(
+      await runInboxCleanupCli(
+        ["--issue", "1", "--issue", "2", "--actor", "trusted-user", "--json"],
+        {
+          env: {
+            RELEASE_COORDINATOR_PROFILE: profile,
+            RELEASE_COORDINATOR_SCOPE: "filtered"
+          },
+          stdout: () => {},
+          stderr: () => assert.fail("Unexpected CLI failure"),
+          run: async (options) => {
+            called = options;
+            return { run_id: "test", requests: [], counts: {} };
+          }
+        }
+      ),
+      0
+    );
+    assert.deepEqual(called.issueNumbers, [1, 2]);
+    assert.equal(called.actorLogin, "trusted-user");
+    assert.equal(called.profile.name, profile);
+    assert.equal(called.selectionMode, "filtered");
+  }
+});
