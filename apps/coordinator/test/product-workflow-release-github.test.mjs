@@ -108,6 +108,12 @@ function directHarness(
     returnRunDetails = false,
     dispatchRunId,
     jobStatuses = [],
+    runStatuses = [],
+    missingRun = false,
+    observeRun,
+    signal,
+    polls = 2,
+    wait = async () => {},
     baseTree = "a".repeat(40),
     mutateManifest,
     mutateRun,
@@ -118,12 +124,23 @@ function directHarness(
   const calls = [];
   let dispatched = false;
   let jobReads = 0;
+  let runReads = 0;
   const runtime =
     profile.name === "real"
       ? realProductWorkflowRuntime
       : productWorkflowRuntime;
   const run = runFixture(descriptor, { conclusion, profile });
   mutateRun?.(run);
+  const readRun = () => {
+    const status = runStatuses[runReads++] ?? run.status;
+    const observed = {
+      ...run,
+      status,
+      conclusion: status === "completed" ? run.conclusion : null
+    };
+    observeRun?.(observed, runReads);
+    return observed;
+  };
   const manifest = build(descriptor.buildRole, descriptor.sourceCommit);
   mutateManifest?.(manifest);
   const artifact = {
@@ -157,7 +174,7 @@ function directHarness(
         tree: { sha: baseTree }
       });
     if (method === "GET" && endpoint.endsWith(`/actions/runs/${run.id}`))
-      return apiResponse("200 OK", run);
+      return apiResponse("200 OK", readRun());
     if (
       endpoint.includes("/actions/runs/") &&
       endpoint.endsWith("/jobs?per_page=100")
@@ -207,8 +224,8 @@ function directHarness(
         );
       if (query.has("event")) {
         const observed =
-          dispatched || descriptor.event === "push"
-            ? [run, ...concurrentRuns]
+          !missingRun && (dispatched || descriptor.event === "push")
+            ? [readRun(), ...concurrentRuns]
             : [];
         return apiResponse("200 OK", {
           total_count: priorRuns.length + observed.length,
@@ -233,9 +250,10 @@ function directHarness(
     profile,
     execute,
     base: {},
-    polls: 2,
+    polls,
     pollMs: 0,
-    wait: async () => {},
+    wait,
+    signal,
     download: async () => ({ manifest })
   });
   const record = {
@@ -260,6 +278,197 @@ function directHarness(
     operation
   };
   return { calls, client, record, run };
+}
+
+function backendWaitHarness(options = {}) {
+  const profile = options.profile ?? sandboxProfile;
+  const unit =
+    profile.name === "real" ? "worker" : "transactionsProcessingLoop";
+  const operation = makeProfileReleaseOperation({
+    profile: profile.name,
+    release_id: "11111111-1111-4111-8111-111111111111",
+    operation_id: "22222222-2222-4222-8222-222222222222",
+    operation: "deploy",
+    environment: "staging",
+    role: "backend",
+    unit: "worker",
+    backend_commit: commits.backend,
+    frontend_commit: commits.frontend
+  });
+  return directHarness(
+    {
+      kind: "backend",
+      role: "backend",
+      buildRole: "backend",
+      environment: "staging",
+      sourceCommit: commits.backend,
+      ref: "1a-staging",
+      event: "workflow_dispatch",
+      workflow: "deploy.yml",
+      workflowId: savedRuntime.backend.workflows.deploy.workflow_id,
+      title: `Deploy ${unit} to staging`,
+      unit,
+      jobs: [`Build and deploy ${unit} to staging`]
+    },
+    operation,
+    options
+  );
+}
+
+const runDirectHarness = (harness) =>
+  harness.client.run({
+    record: harness.record,
+    actor,
+    runtime: savedRuntime,
+    operations: {},
+    steps: [harness.record.step],
+    save: async () => {}
+  });
+
+for (const profile of [sandboxProfile, realProfile]) {
+  test(`${profile.name} waits beyond sixty polls for the same confirmed deployment`, async () => {
+    let waits = 0;
+    const harness = backendWaitHarness({
+      profile,
+      runStatuses: ["queued", "waiting", ...Array(65).fill("in_progress")],
+      wait: async () => waits++
+    });
+    const result = await runDirectHarness(harness);
+    assert.equal(result.status, "passed");
+    assert.equal(result.workflow.id, harness.run.id);
+    assert.ok(waits > 60);
+    assert.equal(
+      harness.calls.filter(({ method }) => method === "POST").length,
+      1
+    );
+  });
+}
+
+test("a slow confirmed deployment still reports its eventual failure", async () => {
+  const harness = backendWaitHarness({
+    runStatuses: Array(65).fill("in_progress"),
+    conclusion: "failure"
+  });
+  const result = await runDirectHarness(harness);
+  assert.equal(result.status, "failed");
+  assert.deepEqual(result.report.builds, {});
+  assert.equal(
+    harness.calls.filter(({ method }) => method === "POST").length,
+    1
+  );
+});
+
+test("a saved running deployment waits without redispatching on resume", async () => {
+  const harness = backendWaitHarness({ runStatuses: Array(65).fill("queued") });
+  Object.assign(harness.record, {
+    state: "running",
+    workflow_run_id: harness.run.id,
+    dispatch_after_run_id: 0
+  });
+  const result = await runDirectHarness(harness);
+  assert.equal(result.status, "passed");
+  assert.equal(
+    harness.calls.some(({ method }) => method === "POST"),
+    false
+  );
+});
+
+test("missing deployment discovery stays bounded without a replacement dispatch", async () => {
+  let waits = 0;
+  const harness = backendWaitHarness({
+    missingRun: true,
+    wait: async () => waits++
+  });
+  await assert.rejects(
+    runDirectHarness(harness),
+    /pending or ended without usable evidence/u
+  );
+  assert.equal(waits, 1);
+  assert.equal(
+    harness.calls.filter(({ method }) => method === "POST").length,
+    1
+  );
+  assert.equal(harness.record.state, "running");
+  assert.equal(harness.record.workflow_run_id, undefined);
+});
+
+test("cancellation interrupts a known deployment even when the wait ignores its signal", async () => {
+  const controller = new AbortController();
+  let callsAtAbort;
+  const harness = backendWaitHarness({
+    runStatuses: Array(65).fill("in_progress"),
+    signal: controller.signal,
+    wait: async () => {
+      callsAtAbort = harness.calls.length;
+      controller.abort();
+    }
+  });
+  await assert.rejects(runDirectHarness(harness), { name: "AbortError" });
+  assert.equal(harness.calls.length, callsAtAbort);
+  assert.equal(harness.record.workflow_run_id, harness.run.id);
+  assert.equal(harness.record.state, "running");
+});
+
+test("cancellation during the final deployment read cannot accept success", async () => {
+  const controller = new AbortController();
+  const harness = backendWaitHarness({
+    runStatuses: ["in_progress"],
+    signal: controller.signal,
+    observeRun: (run) => {
+      if (run.status === "completed") controller.abort();
+    }
+  });
+  await assert.rejects(runDirectHarness(harness), { name: "AbortError" });
+  assert.equal(
+    harness.calls.some(({ endpoint }) =>
+      endpoint.endsWith("/jobs?per_page=100")
+    ),
+    false
+  );
+});
+
+test("a completed run waits for its exact job evidence beyond the old poll window", async () => {
+  const harness = backendWaitHarness({
+    jobStatuses: Array(65).fill("in_progress")
+  });
+  assert.equal((await runDirectHarness(harness)).status, "passed");
+  assert.equal(
+    harness.calls.filter(({ endpoint }) =>
+      endpoint.endsWith("/jobs?per_page=100")
+    ).length,
+    66
+  );
+});
+
+for (const conclusion of [
+  "cancelled",
+  "timed_out",
+  "action_required",
+  "skipped"
+]) {
+  test(`confirmed deployment ending ${conclusion} never passes`, async () => {
+    const harness = backendWaitHarness({ conclusion });
+    await assert.rejects(
+      runDirectHarness(harness),
+      /ended without usable evidence/u
+    );
+  });
+}
+
+for (const field of ["id", "head_sha", "status"]) {
+  test(`waiting stops when a confirmed deployment's ${field} changes`, async () => {
+    const harness = backendWaitHarness({
+      returnRunDetails: true,
+      runStatuses: Array(65).fill("in_progress"),
+      observeRun: (run, read) => {
+        if (read === 4) run[field] = field === "id" ? 999 : "unexpected";
+      }
+    });
+    await assert.rejects(
+      runDirectHarness(harness),
+      /workflow identity, source, actor or dispatch boundary/u
+    );
+  });
 }
 
 test("product workflow contract dispatches staging services and monitoring from 1a-staging", async () => {
@@ -1393,7 +1602,13 @@ test("a monitoring build without its target template fails with a specific evide
   );
 });
 
-function dependencyReport(operation, role, runId, unit) {
+function dependencyReport(
+  operation,
+  role,
+  runId,
+  unit,
+  profile = sandboxProfile
+) {
   const sourceRole = role === "monitoring" ? "backend" : role;
   const sourceCommit = operation[`${sourceRole}_commit`];
   const environment = operation.environment;
@@ -1415,13 +1630,13 @@ function dependencyReport(operation, role, runId, unit) {
     source_commit: sourceCommit,
     unit,
     workflow,
-    repository: sandboxProfile.repositories[role].full_name,
+    repository: profile.repositories[role].full_name,
     run_id: runId,
-    artifact
+    ...(profile.name === "real" ? { run_attempt: 1 } : { artifact })
   };
   const report = {
     protocol: operation.protocol,
-    profile: "sandbox",
+    profile: profile.name,
     adapter: productWorkflowReleaseAdapter,
     release_id: operation.release_id,
     operation_id: operation.operation_id,
@@ -1432,11 +1647,11 @@ function dependencyReport(operation, role, runId, unit) {
     unit: operation.unit,
     status: "passed",
     checks: [{ name: "product-shaped-workflow", status: "passed" }],
-    builds: { [role]: { manifest, artifact } },
+    builds: profile.name === "real" ? {} : { [role]: { manifest, artifact } },
     deployments: { [role]: deployment },
     versions: { ...commits },
     runner: {
-      repository: sandboxProfile.repositories[role].full_name,
+      repository: profile.repositories[role].full_name,
       run_id: runId,
       attempt: 1,
       commit: sourceCommit,
@@ -1448,33 +1663,53 @@ function dependencyReport(operation, role, runId, unit) {
   return report;
 }
 
-test("automatic E2E is bound to the exact frontend deployment and saved backend deployment", async () => {
+function automaticHarness({
+  profile = sandboxProfile,
+  environment = "staging",
+  wrapperStatuses = ["in_progress"],
+  e2eStatuses = [],
+  missingWrapper = false,
+  missingE2e = false,
+  observeRun,
+  signal,
+  wait = async () => {}
+} = {}) {
+  const staging = environment === "staging";
+  const label = staging ? "Staging" : "Production";
+  const filePrefix = staging ? "staging" : "production";
+  const runtime =
+    profile.name === "real"
+      ? realProductWorkflowRuntime
+      : productWorkflowRuntime;
   const releaseId = "77777777-7777-4777-8777-777777777777";
-  const backendOperation = makeReleaseOperation({
+  const backendOperation = makeProfileReleaseOperation({
+    profile: profile.name,
     release_id: releaseId,
     operation_id: "88888888-8888-4888-8888-888888888888",
     operation: "deploy",
-    environment: "staging",
+    environment,
     role: "backend",
     unit: "api",
     backend_commit: commits.backend,
     frontend_commit: commits.frontend
   });
-  const frontendOperation = makeReleaseOperation({
+  const frontendOperation = makeProfileReleaseOperation({
+    profile: profile.name,
     release_id: releaseId,
     operation_id: "99999999-9999-4999-8999-999999999999",
     operation: "deploy",
-    environment: "staging",
+    environment,
     role: "frontend",
     unit: "frontend",
     backend_commit: commits.backend,
     frontend_commit: commits.frontend
   });
-  const e2eOperation = makeReleaseOperation({
+  const e2eOperation = makeProfileReleaseOperation({
+    profile: profile.name,
     release_id: releaseId,
     operation_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
     operation: "e2e",
-    environment: "staging",
+    environment,
     role: null,
     unit: null,
     backend_commit: commits.backend,
@@ -1484,48 +1719,50 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     backendOperation,
     "backend",
     601,
-    "api"
+    "api",
+    profile
   );
   const frontendReport = dependencyReport(
     frontendOperation,
     "frontend",
     602,
-    null
+    null,
+    profile
   );
   const wrapper = {
     id: 603,
     repository: {
-      id: sandboxProfile.repositories.frontend.id,
-      full_name: sandboxProfile.repositories.frontend.full_name
+      id: profile.repositories.frontend.id,
+      full_name: profile.repositories.frontend.full_name
     },
-    head_repository: { id: sandboxProfile.repositories.frontend.id },
+    head_repository: { id: profile.repositories.frontend.id },
     head_sha: "c".repeat(40),
     head_branch: "main",
     event: "workflow_run",
     run_attempt: 1,
-    path: ".github/workflows/staging-e2e-dispatch.yml",
-    display_title: "Staging E2E dispatch [602]",
+    path: `.github/workflows/${filePrefix}-e2e-dispatch.yml`,
+    display_title: `${label} E2E dispatch [602]`,
     actor,
-    workflow_id: savedRuntime.frontend.workflows.stagingDispatch.workflow_id,
+    workflow_id:
+      savedRuntime.frontend.workflows[
+        staging ? "stagingDispatch" : "prodDispatch"
+      ].workflow_id,
     status: "completed",
     conclusion: "success",
     html_url: "https://example.invalid/runs/603",
     created_at: "2026-09-21T16:00:00.000Z",
     updated_at: "2026-09-21T16:01:00.000Z"
   };
-  const listedWrapper = {
-    ...wrapper,
-    status: "in_progress",
-    conclusion: null
-  };
   const e2eRun = {
     ...wrapper,
     id: 604,
     event: "workflow_dispatch",
-    path: ".github/workflows/staging-e2e.yml",
-    display_title: "Staging E2E automatic 602",
-    actor: productWorkflowRuntime.githubActionsActor,
-    workflow_id: savedRuntime.frontend.workflows.stagingE2e.workflow_id,
+    path: `.github/workflows/${filePrefix}-e2e.yml`,
+    display_title: `${label} E2E automatic 602`,
+    actor: runtime.githubActionsActor,
+    workflow_id:
+      savedRuntime.frontend.workflows[staging ? "stagingE2e" : "prodE2e"]
+        .workflow_id,
     html_url: "https://example.invalid/runs/604",
     updated_at: "2026-09-21T16:02:00.000Z"
   };
@@ -1533,21 +1770,35 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     ...wrapper,
     id: 602,
     head_sha: commits.frontend,
-    head_branch: "1a-staging",
+    head_branch: staging ? "1a-staging" : "main",
     event: "push",
-    path: ".github/workflows/deploy-staging.yml",
-    display_title: "Staging deployment",
-    workflow_id: savedRuntime.frontend.workflows.stagingDeploy.workflow_id,
+    path: `.github/workflows/${staging ? "deploy-staging" : "build-upload-deploy-prod"}.yml`,
+    display_title: `${label} deployment`,
+    workflow_id:
+      savedRuntime.frontend.workflows[staging ? "stagingDeploy" : "prodDeploy"]
+        .workflow_id,
     created_at: "2026-09-21T15:59:00.000Z"
   };
   const automaticQueries = [];
+  const calls = [];
+  const reads = { wrapper: 0, e2e: 0 };
+  const readRun = (run, key, statuses) => {
+    const status = statuses[reads[key]++] ?? run.status;
+    const observed = {
+      ...run,
+      status,
+      conclusion: status === "completed" ? run.conclusion : null
+    };
+    observeRun?.(observed, key, reads[key]);
+    return observed;
+  };
   const execute = async (args) => {
+    const method = args[args.indexOf("--method") + 1];
     const endpoint = args[args.indexOf("--method") + 2];
+    calls.push({ method, endpoint });
+    assert.equal(method, "GET", "E2E must only adopt the automatic chain");
     if (endpoint.includes("/contents/"))
-      return apiResponse(
-        "200 OK",
-        runtimeFile(endpoint, productWorkflowRuntime, "staging")
-      );
+      return apiResponse("200 OK", runtimeFile(endpoint, runtime, environment));
     if (endpoint.includes("/git/ref/heads/")) {
       const role = repositoryRole(endpoint);
       return apiResponse("200 OK", { object: { sha: commits[role] } });
@@ -1555,17 +1806,27 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     if (endpoint.endsWith(`/actions/runs/${deploymentRun.id}`))
       return apiResponse("200 OK", deploymentRun);
     if (endpoint.endsWith(`/actions/runs/${wrapper.id}`))
-      return apiResponse("200 OK", wrapper);
-    if (endpoint.includes("staging-e2e-dispatch.yml/runs?")) {
+      return apiResponse(
+        "200 OK",
+        readRun(wrapper, "wrapper", wrapperStatuses)
+      );
+    if (endpoint.endsWith(`/actions/runs/${e2eRun.id}`))
+      return apiResponse("200 OK", readRun(e2eRun, "e2e", e2eStatuses));
+    if (endpoint.includes(`${filePrefix}-e2e-dispatch.yml/runs?`)) {
       automaticQueries.push(endpoint);
       return apiResponse("200 OK", {
-        total_count: 1,
-        workflow_runs: [listedWrapper]
+        total_count: missingWrapper ? 0 : 1,
+        workflow_runs: missingWrapper
+          ? []
+          : [readRun(wrapper, "wrapper", wrapperStatuses)]
       });
     }
-    if (endpoint.includes("staging-e2e.yml/runs?")) {
+    if (endpoint.includes(`${filePrefix}-e2e.yml/runs?`)) {
       automaticQueries.push(endpoint);
-      return apiResponse("200 OK", { total_count: 1, workflow_runs: [e2eRun] });
+      return apiResponse("200 OK", {
+        total_count: missingE2e ? 0 : 1,
+        workflow_runs: missingE2e ? [] : [readRun(e2eRun, "e2e", e2eStatuses)]
+      });
     }
     if (
       endpoint.endsWith(
@@ -1576,7 +1837,7 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
         total_count: 1,
         jobs: [
           {
-            name: "Dispatch successful staging deployment",
+            name: `Dispatch successful ${staging ? "staging" : "production"} deployment`,
             run_id: wrapper.id,
             head_sha: wrapper.head_sha,
             status: "completed",
@@ -1593,7 +1854,9 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
         total_count: 1,
         jobs: [
           {
-            name: "Staging E2E packs",
+            name: staging
+              ? "Staging E2E packs"
+              : "Production read-only E2E packs",
             run_id: e2eRun.id,
             head_sha: e2eRun.head_sha,
             status: "completed",
@@ -1604,31 +1867,33 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     throw new Error(`Unexpected endpoint ${endpoint}`);
   };
   const client = createProductWorkflowReleaseGitHub({
-    profile: sandboxProfile,
+    profile,
     execute,
     base: {},
     polls: 2,
-    wait: async () => {}
+    pollMs: 0,
+    signal,
+    wait
   });
   const steps = [
     {
-      id: "staging:deploy:backend:api",
+      id: `${environment}:deploy:backend:api`,
       kind: "deploy",
-      environment: "staging",
+      environment,
       role: "backend",
       unit: "api"
     },
     {
-      id: "staging:deploy:frontend:frontend",
+      id: `${environment}:deploy:frontend:frontend`,
       kind: "deploy",
-      environment: "staging",
+      environment,
       role: "frontend",
       unit: "frontend"
     },
     {
-      id: "staging:e2e",
+      id: `${environment}:e2e`,
       kind: "e2e",
-      environment: "staging",
+      environment,
       role: null
     }
   ];
@@ -1661,6 +1926,169 @@ test("automatic E2E is bound to the exact frontend deployment and saved backend 
     created_at: "2026-09-21T16:05:00.000Z",
     operation: e2eOperation
   });
+  const record = makeRecord();
+  const run = () =>
+    client.run({
+      record,
+      actor,
+      runtime: savedRuntime,
+      operations,
+      steps,
+      save: async () => {}
+    });
+  return {
+    client,
+    steps,
+    operations,
+    makeRecord,
+    record,
+    run,
+    wrapper,
+    e2eRun,
+    deploymentRun,
+    automaticQueries,
+    calls
+  };
+}
+
+for (const profile of [sandboxProfile, realProfile]) {
+  for (const environment of ["staging", "prod"]) {
+    for (const phase of ["wrapper", "e2e"]) {
+      test(`${profile.name} ${environment} automatic ${phase} waits past sixty polls without a new dispatch`, async () => {
+        let waits = 0;
+        const harness = automaticHarness({
+          profile,
+          environment,
+          [phase === "wrapper" ? "wrapperStatuses" : "e2eStatuses"]: [
+            "queued",
+            "waiting",
+            ...Array(65).fill("in_progress")
+          ],
+          wait: async () => waits++
+        });
+        const result = await harness.run();
+        assert.equal(result.status, "passed");
+        assert.equal(result.workflow.id, harness.e2eRun.id);
+        assert.ok(waits > 60);
+        assert.equal(
+          harness.calls.some(({ method }) => method !== "GET"),
+          false
+        );
+      });
+    }
+  }
+}
+
+test("slow automatic E2E keeps a genuine failure and its matching deployment", async () => {
+  const harness = automaticHarness({
+    e2eStatuses: Array(65).fill("in_progress")
+  });
+  harness.e2eRun.conclusion = "failure";
+  const result = await harness.run();
+  assert.equal(result.status, "failed");
+  assert.equal(result.deployment_workflow.id, 602);
+  assert.deepEqual(result.report.deployments, {});
+});
+
+for (const phase of ["Wrapper", "E2e"]) {
+  test(`automatic missing ${phase} discovery stays bounded`, async () => {
+    let waits = 0;
+    const harness = automaticHarness({
+      [`missing${phase}`]: true,
+      wait: async () => waits++
+    });
+    await assert.rejects(harness.run(), /chain does not match/u);
+    assert.ok(waits <= 2);
+    assert.equal(harness.record.workflow_run_id, undefined);
+  });
+}
+
+test("cancellation leaves the exact E2E chain resumable without another dispatch", async () => {
+  const controller = new AbortController();
+  const harness = automaticHarness({
+    e2eStatuses: Array(65).fill("in_progress"),
+    signal: controller.signal,
+    wait: async () => {
+      if (harness.record.workflow_run_id) controller.abort();
+    }
+  });
+  await assert.rejects(harness.run(), { name: "AbortError" });
+  assert.equal(harness.record.workflow_run_id, 604);
+  assert.equal(harness.record.dispatch_workflow_run_id, 603);
+  const resumed = automaticHarness({ e2eStatuses: Array(65).fill("queued") });
+  Object.assign(resumed.record, harness.record);
+  assert.equal((await resumed.run()).status, "passed");
+  assert.equal(
+    resumed.calls.some(({ endpoint }) => endpoint.includes("/runs?")),
+    false
+  );
+});
+
+for (const phase of ["wrapper", "e2e"]) {
+  test(`automatic ${phase} rejects changed identity while waiting`, async () => {
+    const harness = automaticHarness({
+      [phase === "wrapper" ? "wrapperStatuses" : "e2eStatuses"]:
+        Array(65).fill("in_progress"),
+      observeRun: (run, key, read) => {
+        if (key === phase && read === 4) run.id = 999;
+      }
+    });
+    await assert.rejects(harness.run(), /chain does not match/u);
+  });
+}
+
+for (const conclusion of ["cancelled", "timed_out"]) {
+  test(`automatic E2E ending ${conclusion} is never accepted`, async () => {
+    const harness = automaticHarness();
+    harness.e2eRun.conclusion = conclusion;
+    await assert.rejects(harness.run(), /ended without usable evidence/u);
+  });
+}
+
+for (const conclusion of ["failure", "cancelled", "timed_out"]) {
+  test(`a slow automatic dispatch wrapper ending ${conclusion} stops before E2E acceptance`, async () => {
+    const harness = automaticHarness({
+      wrapperStatuses: Array(65).fill("in_progress")
+    });
+    harness.wrapper.conclusion = conclusion;
+    await assert.rejects(harness.run(), /dispatch wrapper did not pass/u);
+    assert.equal(
+      harness.calls.some(({ endpoint }) =>
+        endpoint.includes("staging-e2e.yml/runs?")
+      ),
+      false
+    );
+  });
+}
+
+test("cancellation while reading the completed E2E result cannot accept it", async () => {
+  const controller = new AbortController();
+  const harness = automaticHarness({
+    signal: controller.signal,
+    e2eStatuses: ["in_progress"],
+    observeRun: (run, key) => {
+      if (key === "e2e" && run.status === "completed") controller.abort();
+    }
+  });
+  await assert.rejects(harness.run(), { name: "AbortError" });
+  assert.equal(
+    harness.calls.some(({ endpoint }) =>
+      endpoint.endsWith("/jobs?per_page=100")
+    ),
+    false
+  );
+});
+
+test("automatic E2E is bound to the exact frontend deployment and saved backend deployment", async () => {
+  const {
+    client,
+    steps,
+    operations,
+    makeRecord,
+    e2eRun,
+    deploymentRun,
+    automaticQueries
+  } = automaticHarness();
   const result = await client.run({
     record: makeRecord(),
     actor,

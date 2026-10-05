@@ -533,6 +533,24 @@ lock groups (`deploy-control-<env>` and `deploy-service-<env>-<service>`,
 Re-dispatching a Coordinator run that was cancelled before it started remains
 later work.
 
+On October 5 the operator approved removing the separate roughly ten-minute
+cutoff for completing a confirmed release workflow. Once a matching run has
+been identified, the product-shaped real/sandbox adapter follows that exact
+deployment, monitoring, automatic E2E wrapper or E2E run every ten seconds until
+GitHub finishes it. The generic sandbox fallback follows its own confirmed run
+the same way. Product-shaped job evidence must also settle for the exact run
+and attempt before it can be accepted. The release keeps its lane while waiting;
+GitHub's workflow/job timeouts remain authoritative and unchanged.
+
+This is not permission to ignore a failed, cancelled or timed-out workflow,
+retry it, substitute another run or accept a changed identity. Unusable evidence
+and API errors still stop advancement. Local cancellation remains interruptible,
+preserves the saved run for inspected explicit resume and cannot accept a result
+received during cancellation. Missing-run discovery retains its existing bound:
+waiting longer for known work does not authorize blind redispatch. PR/check
+polling and the separate sample service-check wait are unchanged. This local
+implementation has offline regression coverage, not new live release proof.
+
 Verified integration references on September 11: frontend
 [`deploy-6529`](https://github.com/6529-Collections/6529seize-frontend/blob/faf4aa616bc3a25ccab5a0db8162980d9cdaedd1/ops/skills/deploy-6529/SKILL.md),
 [`Web Deploy - STAGING`](https://github.com/6529-Collections/6529seize-frontend/blob/faf4aa616bc3a25ccab5a0db8162980d9cdaedd1/.github/workflows/deploy-staging.yml),

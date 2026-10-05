@@ -540,6 +540,17 @@ and dispatches once. The mirrored deployment workflows hold their product-shaped
 environment locks. The wait prevents a Coordinator operation from relying on
 queue cancellation behavior.
 
+Once a release workflow run is identified, both profiles follow that same run
+every ten seconds without the old roughly ten-minute completion cutoff. This
+includes deployments, monitoring, the automatic E2E dispatch wrapper and its
+matching E2E run. The product-shaped adapter also waits for the exact completed
+run's jobs to settle before accepting evidence. GitHub's own workflow/job
+timeouts remain unchanged. Failed, cancelled or timed-out runs cannot pass;
+changed identity, missing evidence and API errors still stop advancement.
+Ctrl-C leaves the saved run resumable and never starts a replacement. The
+existing bounded search for an as-yet-unidentified run, PR/check polling and
+the separate sample service-check wait above are unchanged.
+
 After the final required E2E and owned-branch cleanup, selected tickets receive
 `status:completed` and `reason:release-completed` and close. This records only the
 fake sandbox result. The

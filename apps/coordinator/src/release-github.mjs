@@ -166,6 +166,7 @@ export function createReleaseGitHub({
     ];
     if (body !== undefined) args.push("--input", "-");
     const output = await execute(args, body);
+    signal?.throwIfAborted();
     const match = output.match(
       /^HTTP\/\S+ (\d{3})[^\n]*\r?\n[\s\S]*?\r?\n\r?\n([\s\S]*)$/u
     );
@@ -510,6 +511,9 @@ export function createReleaseGitHub({
     const repo = profile.repositories[role];
     serviceAssert(
       positive(run?.id) &&
+        (!record.workflow_run_id || record.workflow_run_id === run.id) &&
+        (run.status === "completed" ||
+          activeWorkflowRunStatuses.includes(run.status)) &&
         run.repository?.id === repo.id &&
         run.head_repository?.id === repo.id &&
         run.head_sha === expectedCommit &&
@@ -1473,7 +1477,10 @@ export function createReleaseGitHub({
         record.state = "running";
         await save();
       }
-      for (let poll = 0; poll < polls; poll++) {
+      // Discovery keeps its existing bound; a confirmed run has no local
+      // duration cutoff and is never replaced just because it is still queued.
+      for (let missing = 0; ;) {
+        signal?.throwIfAborted();
         run ??= await findRun(role, record, workflowId);
         if (run) {
           verifyRun(run, record, workflowId);
@@ -1487,9 +1494,12 @@ export function createReleaseGitHub({
             record.state = "running";
           }
           if (identityChanged || stateChanged) await save();
+          signal?.throwIfAborted();
           if (run.status === "completed") break;
+        } else if (++missing >= polls) {
+          break;
         }
-        if (poll + 1 < polls) await wait(pollMs, { signal });
+        await wait(pollMs, { signal });
         if (record.workflow_run_id)
           run = (
             await call(role, "GET", `/actions/runs/${record.workflow_run_id}`)

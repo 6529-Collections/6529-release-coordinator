@@ -489,15 +489,20 @@ const activeRun = (id, status, login = "alice") => ({
 
 // A dispatching client: pinned runtime files, the active-run listing, the
 // environment ref, the dispatch itself and the completed run's evidence.
-function dispatchingClient(f, { active, wait, signal, pollMs } = {}) {
+function dispatchingClient(
+  f,
+  { active, wait, signal, pollMs, polls, runStatuses = [] } = {}
+) {
   const calls = [];
   let dispatched = false;
+  let reads = 0;
   const client = createReleaseGitHub({
     profile: sandboxProfile,
     runtime,
     signal,
+    ...(polls === undefined ? {} : { polls }),
     ...(wait ? { wait } : {}),
-    ...(pollMs ? { pollMs } : {}),
+    ...(pollMs === undefined ? {} : { pollMs }),
     execute: async (args, body) => {
       const method = args[args.indexOf("--method") + 1];
       const endpoint = args[args.indexOf("--method") + 2];
@@ -535,7 +540,11 @@ function dispatchingClient(f, { active, wait, signal, pollMs } = {}) {
         return apiResponse("204 No Content");
       }
       if (endpoint.endsWith(`/actions/runs/${f.run.id}`))
-        return apiResponse("200 OK", f.run);
+        return apiResponse("200 OK", {
+          ...f.run,
+          status: runStatuses[reads++] ?? f.run.status,
+          conclusion: reads <= runStatuses.length ? null : f.run.conclusion
+        });
       if (endpoint.includes("/attempts/2/jobs"))
         return apiResponse("200 OK", { total_count: 1, jobs: [f.job] });
       assert.fail(`${method} ${endpoint}`);
@@ -545,6 +554,55 @@ function dispatchingClient(f, { active, wait, signal, pollMs } = {}) {
   });
   return { client, calls };
 }
+
+test("the generic sandbox follows the same known run beyond sixty polls", async () => {
+  const f = fixture();
+  f.record.workflow_run_id = f.run.id;
+  let waits = 0;
+  const { client, calls } = dispatchingClient(f, {
+    polls: 2,
+    runStatuses: ["queued", "waiting", ...Array(65).fill("in_progress")],
+    wait: async () => waits++
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.ok(waits > 60);
+  assert.equal(
+    calls.some(({ method }) => method === "POST"),
+    false
+  );
+  assert.equal(result.workflow.id, f.run.id);
+});
+
+test("the generic sandbox's running wait is cancellable without another request", async () => {
+  const f = fixture();
+  f.record.workflow_run_id = f.run.id;
+  const controller = new AbortController();
+  let callsAtAbort;
+  const { client, calls } = dispatchingClient(f, {
+    runStatuses: Array(65).fill("in_progress"),
+    signal: controller.signal,
+    wait: async () => {
+      callsAtAbort = calls.length;
+      controller.abort();
+    }
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => {}
+    }),
+    { name: "AbortError" }
+  );
+  assert.equal(calls.length, callsAtAbort);
+  assert.equal(f.record.workflow_run_id, f.run.id);
+  assert.equal(f.record.state, "running");
+});
 
 test("release workflow result binds exact operation, commits, actor and rerun attempt", async () => {
   const f = fixture();

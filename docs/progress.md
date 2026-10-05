@@ -1,10 +1,40 @@
 # Progress and next steps
 
-Last reviewed: **2026-10-02** for the reviewed frontend release-runtime refresh,
+Last reviewed: **2026-10-05** for local confirmed-workflow completion waiting,
+and **2026-10-02** for the reviewed frontend release-runtime refresh,
 candidate blob publication, behind-main source admission, original-PR
 history publication, completed sandbox acceptance, the local frontend PR-CI
 pin refresh, and staging-aware preparation's local review and sandbox acceptance. The real #275 evidence
 below retains its recorded September 30 date.
+
+## October 5 — wait for confirmed release workflows (local only)
+
+On branch `codex/wait-for-workflow-completion`, the product-shaped adapter used
+by both real and sandbox profiles now follows the same verified deployment,
+monitoring, automatic E2E dispatcher and E2E run without the old sixty-poll
+completion cutoff. Exact job evidence may also settle after that window. The
+explicit generic sandbox fallback applies the same known-run waiting rule.
+GitHub's workflow/job timeouts, existing run-discovery bounds, PR/check and
+sample-service polling, runtime pins, release gates and recovery policy remain
+unchanged. Failed/cancelled/timed-out runs, mismatched identity and uncertain
+evidence still stop; cancellation preserves the saved run for explicit resume
+without redispatching it.
+
+Five new regressions reproduced the old cutoff before the fix. Offline tests
+simulate more than sixty pending observations, eventual success and failure,
+exact run/actor/source checks, job-index lag, cancellation during waits and
+final reads, unchanged missing-run discovery, and resume without a duplicate
+dispatch. Automatic E2E duration cases cover staging and production in both
+profiles. These are controlled-response local tests, not live GitHub sandbox
+acceptance. No release, deployment, ticket/journal mutation, workflow pin
+refresh or npm publication is part of this change. At this local checkpoint,
+no remote PR or merge had occurred; publication and final-head review are separate
+steps and do not establish live acceptance.
+
+The full non-fixing `npm run check` passed on Node 22.16.0: **812 tests passed**,
+three optional Docker cases skipped (815 total), plus lint, formatting,
+documentation/workflow policy and packed-CLI checks. This is local verification
+only; no remote CI or bot review has been completed for this branch.
 
 ## October 2 — staging-aware merge preparation (local and sandbox acceptance)
 
