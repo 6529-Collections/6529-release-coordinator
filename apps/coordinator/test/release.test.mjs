@@ -29,6 +29,10 @@ import { ServiceError, serviceHash } from "../src/service-contract.mjs";
 import { stopStaleE2e } from "../src/manual-stale-stop.mjs";
 import { elapsedBatchPolicy, legacyBatchPolicy } from "../src/batch-plan.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
+import {
+  productWorkflowReleaseAdapter,
+  verifyProductWorkflowReport
+} from "../src/product-workflow-contract.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
 import { buildApplication } from "../sandbox/application-build.mjs";
 
@@ -1020,6 +1024,71 @@ test("a saved wait for another workflow run validates; malformed notes are rejec
     );
   }
 });
+
+for (const database of [false, true]) {
+  test(`confirmed E2E wrapper failure reaches terminal release handling (database=${database})`, async () => {
+    const batch = await productionBatch({ database });
+    const calls = [];
+    const releaseClient = client(calls);
+    const originalRun = releaseClient.run;
+    /** Supply the adapter's explicit failed-launcher contract at the engine boundary. */
+    releaseClient.run = async (args) => {
+      if (args.record.step.id !== "staging:e2e") return originalRun(args);
+      calls.push(args.record.step.id);
+      args.record.dispatch_workflow_run_id = 603;
+      args.record.state = "running";
+      await args.save();
+      const failed = {
+        ...report(args.record, "failed", 603),
+        adapter: productWorkflowReleaseAdapter,
+        failure_stage: "e2e-dispatch",
+        checks: [{ name: "automatic-e2e-dispatch", status: "failed" }],
+        deployments: {},
+        runner: {
+          repository: sandboxProfile.repositories.frontend.full_name,
+          run_id: 603,
+          attempt: 1,
+          commit: "c".repeat(40),
+          workflow: ".github/workflows/staging-e2e-dispatch.yml"
+        }
+      };
+      verifyProductWorkflowReport(failed, args.record.operation);
+      return {
+        status: "failed",
+        report: failed,
+        report_hash: serviceHash(failed),
+        workflow: { id: 603, url: "https://example.invalid/runs/603" }
+      };
+    };
+    const options = {
+      batch,
+      client: releaseClient,
+      /** Isolate engine failure routing from external admission checks. */
+      guard: async () => {},
+      /** Preserve execution state in the batch object without journal writes. */
+      save: async () => {}
+    };
+    const execution = await executeRelease(options);
+    const record = execution.operations["staging:e2e"];
+    assert.equal(execution.status, "needs-human");
+    assert.equal(record.state, "completed");
+    assert.equal(record.result.report.failure_stage, "e2e-dispatch");
+    assert.equal(record.workflow_run_id, undefined);
+    assert.equal(record.dispatch_workflow_run_id, 603);
+    assert.equal(
+      execution.recovery?.status,
+      database ? undefined : "completed"
+    );
+    assert.equal(
+      calls.some((step) => step.startsWith("prod:")),
+      false
+    );
+    assert.doesNotThrow(() => validateReleaseExecution(execution, batch));
+    const callsBeforeResume = calls.length;
+    assert.deepEqual(await executeRelease(options), execution);
+    assert.equal(calls.length, callsBeforeResume);
+  });
+}
 
 test("a failed database-changing release stops for a person without staging restoration", async () => {
   const batch = await selectedBatch({ database: true });

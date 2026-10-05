@@ -1,5 +1,23 @@
 # Progress and next steps
 
+## October 5 — workflow-wait PR integration with current main
+
+PR #304 now integrates remote main `489125e11b7b0b091d2ed2e7240444ff45409fd6`,
+which includes the ordinary merged cleanup/release-board PR #307 and the earlier
+staging-preparation PR #293. The sole merge conflict was overlapping progress
+notes; both delivery histories are retained. The product adapter's automatic
+merge also retains #307's exported job-set helper for cleanup evidence alongside
+#304's exact-run waiting and cancellation guards. Cleanup, journal ownership and staging preparation
+code are otherwise unchanged from reviewed main. The combined non-fixing Node
+22.16.0 gate passed **942 tests**, with three optional Docker skips (945 total),
+plus lint, formatting, documentation/workflow policy and packed-CLI checks;
+the check wrapper verified unchanged source. The regressions still cover both
+profiles and automatic E2E in staging and production, late job evidence,
+interruption/resume without redispatch, and verified failed-wrapper routing.
+Fresh exact-head remote gates remain required before merging #304. This is
+offline proof, not a fresh sandbox or real release. No cleanup, release, product
+operation, publication or runtime restart occurred for this integration step.
+
 ## October 5 — cleanup and release-board publication checkpoint
 
 The existing local cleanup, cooperative ticket reservations, follow-up evidence,
@@ -97,11 +115,100 @@ resume or product dispatch was performed. Opening the board never starts cleanup
 See the [maintenance contract](./inbox-processing.md#cleanup-without-release-execution)
 and [release board guide](./release-board.md).
 
-Last reviewed: **2026-10-02** for the reviewed frontend release-runtime refresh,
+Last reviewed: **2026-10-05** for local confirmed-workflow completion waiting,
+and **2026-10-02** for the reviewed frontend release-runtime refresh,
 candidate blob publication, behind-main source admission, original-PR
 history publication, completed sandbox acceptance, the local frontend PR-CI
 pin refresh, and staging-aware preparation's local review and sandbox acceptance. The real #275 evidence
 below retains its recorded September 30 date.
+
+## October 5 — wait for confirmed release workflows (local only)
+
+On branch `codex/wait-for-workflow-completion`, the product-shaped adapter used
+by both real and sandbox profiles now follows the same verified deployment,
+monitoring, automatic E2E dispatcher and E2E run without the old sixty-poll
+completion cutoff. Exact job evidence may also settle after that window. The
+explicit generic sandbox fallback applies the same known-run waiting rule.
+GitHub's workflow/job timeouts, existing run-discovery bounds, PR/check and
+sample-service polling, runtime pins, release gates and recovery policy remain
+unchanged. Failed/cancelled/timed-out runs, mismatched identity and uncertain
+evidence still stop; cancellation preserves the saved run for explicit resume
+without redispatching it.
+
+Five new regressions reproduced the old cutoff before the fix. Offline tests
+simulate more than sixty pending observations, eventual success and failure,
+exact run/actor/source checks, job-index lag, cancellation during waits and
+final reads, unchanged missing-run discovery, and resume without a duplicate
+dispatch. Automatic E2E duration cases cover staging and production in both
+profiles. These are controlled-response local tests, not live GitHub sandbox
+acceptance. No release, deployment, ticket/journal mutation, workflow pin
+refresh or npm publication is part of this change. At this local checkpoint,
+no remote PR or merge had occurred; publication and final-head review are separate
+steps and do not establish live acceptance.
+
+The full non-fixing `npm run check` passed on Node 22.16.0: **812 tests passed**,
+three optional Docker cases skipped (815 total), plus lint, formatting,
+documentation/workflow policy and packed-CLI checks. This is local verification
+only, recorded before publication and the PR review below.
+
+### PR #304 review follow-up
+
+[Coordinator PR #304](https://github.com/6529-Collections/6529-release-coordinator/pull/304)
+publishes this waiting change separately from the product release. Its initial
+required GitHub CI passed. The general review identified an interrupted
+wrapper-only window: the confirmed automatic E2E dispatch ID was not saved until
+the test run appeared. Two offline regressions reproduced the missing snapshot
+and the late cancellation boundary before the fix. The adapter now saves that
+wrapper and its causal deployment immediately, checks cancellation after saving,
+and resumes the exact wrapper without rediscovery. A missing wrapper or test run
+has a specific discovery error rather than an identity-mismatch message.
+
+Further tests verify HTTP 404 stops each confirmed-run path without replacement,
+and exercise workflow, actor, branch, event and unknown-status changes while
+waiting. The initial GLM advisory had three empty reviewer slices and covered only
+design text; it is not code-review coverage. Final-head checks and reviews remain
+required. No release or deployment was restarted for this PR.
+
+The review follow-up's full non-fixing local gate passed: **832 tests passed**,
+three optional Docker cases skipped (835 total), with lint, formatting,
+documentation/workflow policy and packed-CLI checks passing and source unchanged.
+The touched helpers now have purpose/boundary docstrings; no review threshold or
+configuration was changed. A new local completion bound was deliberately not
+added: the agreed behavior waits for GitHub while retaining explicit cancellation.
+
+The completed incremental CodeRabbit review then identified a second valid gap:
+a confirmed failed automatic E2E wrapper escaped as an error and left its saved
+operation running. Two profile regressions reproduced that behavior before the
+fix. A verified wrapper failure now returns failed-only `e2e-dispatch` evidence,
+with its actual wrapper identity and no claim that E2E ran or passed. Offline
+cases cover both profiles and environments, rejected success/build/deployment
+claims, contradictory jobs and cancellation. Engine tests verify existing
+no-database-change recovery versus database-changing human stop, and terminal
+same-run resume without repeated work. Cancellation, timeout and uncertain
+evidence remain reconciliation stops; no recovery policy or workflow pin changed.
+Final-head CI and review of this second follow-up remain required before merge.
+
+The second follow-up's full non-fixing local gate passed: **839 tests passed**,
+three optional Docker cases skipped (842 total), plus lint, formatting,
+documentation/workflow policy and packed-CLI checks. The check wrapper confirmed
+unchanged source. Touched test callbacks now document their simulated delay,
+cancellation and persistence boundaries; review configuration is unchanged.
+
+CodeRabbit's completed review of `10dbaa6` found no actionable code issue but
+retained an aggregate docstring warning. Its subsequent source inspection
+confirmed valid JSDoc on the named helpers and callbacks and could not provide
+the checker’s nine-function diagnostics. The already-documented test helpers
+now use ordinary named function declarations to avoid ambiguous comment attachment;
+their response behavior is unchanged. The new failed-wrapper pin check also
+explains why its `prod` argument selects the trusted `main` runner's files,
+including for staging. GLM's remaining hardcoded-environment lead was independently
+rejected against that execution-ref contract; two advisory slices were empty.
+These are scoped documentation/readability follow-ups, not a pin or policy change.
+
+The completed `b0da9b2` CodeRabbit review also found no actionable code issue,
+but its aggregate documentation count still warned. A further documentation-only
+pass describes the existing workflow pin verification, discovery, quiet-wait and
+fixture boundaries. No function behavior, review threshold or configuration changed.
 
 ## October 2 — staging-aware merge preparation (local and sandbox acceptance)
 

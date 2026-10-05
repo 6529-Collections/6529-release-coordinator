@@ -84,6 +84,10 @@ export function integrationPullWaitsForReview(observed, checked) {
   );
 }
 
+/**
+ * Create profile-bound GitHub integration and release operations.
+ * The generic workflow runner is restricted to its pinned sandbox contract.
+ */
 export function createReleaseGitHub({
   profile,
   runtime = sandboxReleaseRuntime,
@@ -143,6 +147,7 @@ export function createReleaseGitHub({
     "release-runtime",
     "The pinned release runtime is unavailable; a different profile is never a fallback."
   );
+  /** Make a repository-scoped request and reject cancellation or unexpected status. */
   async function call(role, method, suffix, body, allowed = [200]) {
     signal?.throwIfAborted();
     serviceAssert(
@@ -166,6 +171,7 @@ export function createReleaseGitHub({
     ];
     if (body !== undefined) args.push("--input", "-");
     const output = await execute(args, body);
+    signal?.throwIfAborted();
     const match = output.match(
       /^HTTP\/\S+ (\d{3})[^\n]*\r?\n[\s\S]*?\r?\n\r?\n([\s\S]*)$/u
     );
@@ -295,6 +301,7 @@ export function createReleaseGitHub({
       "Published staging tree differs from its exact prepared merge."
     );
   }
+  /** Verify profile-specific workflow files at exact source and environment pins. */
   async function verifyRuntime(role, commit, environment) {
     serviceAssert(
       sha(commit),
@@ -503,6 +510,7 @@ export function createReleaseGitHub({
     };
   }
   const runTitle = (id) => `Sandbox release ${id}`;
+  /** Require the exact saved run to match the approved sandbox operation. */
   function verifyRun(run, record, workflowId) {
     const operation = validateReleaseOperation(record.operation);
     const role = operation.operation === "e2e" ? "backend" : operation.role;
@@ -510,6 +518,9 @@ export function createReleaseGitHub({
     const repo = profile.repositories[role];
     serviceAssert(
       positive(run?.id) &&
+        (!record.workflow_run_id || record.workflow_run_id === run.id) &&
+        (run.status === "completed" ||
+          activeWorkflowRunStatuses.includes(run.status)) &&
         run.repository?.id === repo.id &&
         run.head_repository?.id === repo.id &&
         run.head_sha === expectedCommit &&
@@ -525,6 +536,7 @@ export function createReleaseGitHub({
     );
     return { role, run };
   }
+  /** Discover and validate the unique sandbox run matching a saved operation. */
   async function findRun(role, record, workflowId) {
     const perPage = 100;
     const maxPages = 10;
@@ -601,6 +613,7 @@ export function createReleaseGitHub({
   // can only make the wait longer. The returned `unlisted` is a lag indicator,
   // the excess of the status counts over the distinct runs actually listed,
   // not an exact number of hidden runs.
+  /** Read recent and status-filtered workflow activity without treating API lag as quiet. */
   async function activeWorkflowRuns(role) {
     const active = new Map();
     const recent = (
@@ -655,6 +668,7 @@ export function createReleaseGitHub({
   // Coordinator never waits for itself: this runs only while the step has no
   // run of its own, and the release advances past a step only after that
   // step's run completed, so no earlier Coordinator run can still be active.
+  /** Preserve workflow blockers while waiting cancellably, before any dispatch. */
   async function waitForQuietWorkflow(role, record, save, purpose) {
     for (let checks = 1; ; checks++) {
       signal?.throwIfAborted();
@@ -1412,6 +1426,7 @@ export function createReleaseGitHub({
       }
       return observed;
     },
+    /** Follow one generic sandbox workflow and verify its exact operation result. */
     async run({ record, actor, save }) {
       serviceAssert(
         runtime.workflow === "sandbox-release.yml",
@@ -1473,7 +1488,10 @@ export function createReleaseGitHub({
         record.state = "running";
         await save();
       }
-      for (let poll = 0; poll < polls; poll++) {
+      // Discovery keeps its existing bound; a confirmed run has no local
+      // duration cutoff and is never replaced just because it is still queued.
+      for (let missing = 0; ;) {
+        signal?.throwIfAborted();
         run ??= await findRun(role, record, workflowId);
         if (run) {
           verifyRun(run, record, workflowId);
@@ -1487,9 +1505,12 @@ export function createReleaseGitHub({
             record.state = "running";
           }
           if (identityChanged || stateChanged) await save();
+          signal?.throwIfAborted();
           if (run.status === "completed") break;
+        } else if (++missing >= polls) {
+          break;
         }
-        if (poll + 1 < polls) await wait(pollMs, { signal });
+        await wait(pollMs, { signal });
         if (record.workflow_run_id)
           run = (
             await call(role, "GET", `/actions/runs/${record.workflow_run_id}`)

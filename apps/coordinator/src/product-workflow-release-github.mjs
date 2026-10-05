@@ -333,6 +333,10 @@ function deploymentDependencies(record, operations, steps) {
   return { backend, frontend };
 }
 
+/**
+ * Bind existing product-shaped workflows to one explicit real or sandbox profile.
+ * Confirmed runs keep their identity through completion; discovery stays bounded.
+ */
 export function createProductWorkflowReleaseGitHub({
   profile,
   runtime,
@@ -399,7 +403,9 @@ export function createProductWorkflowReleaseGitHub({
     pollMs
   });
 
+  /** Issue a scoped GitHub request, rejecting unexpected status or cancellation. */
   async function call(role, method, suffix, body, allowed = [200]) {
+    signal?.throwIfAborted();
     serviceAssert(
       ["backend", "frontend"].includes(role),
       "release-github",
@@ -421,6 +427,7 @@ export function createProductWorkflowReleaseGitHub({
     ];
     if (body !== undefined) args.push("--input", "-");
     const output = await execute(args, body);
+    signal?.throwIfAborted();
     const match = output.match(
       /^HTTP\/\S+ (\d{3})[^\n]*\r?\n[\s\S]*?\r?\n\r?\n([\s\S]*)$/u
     );
@@ -450,6 +457,7 @@ export function createProductWorkflowReleaseGitHub({
   const ref = async (role, name) =>
     (await call(role, "GET", `/git/ref/heads/${name}`)).data.object.sha;
 
+  /** Verify workflow/evidence blobs at an exact commit using its execution-ref pins. */
   async function verifyFiles(role, commit, environment) {
     serviceAssert(sha(commit), "release-runtime", "Invalid runtime commit.");
     for (const [file, expected] of Object.entries(
@@ -487,6 +495,7 @@ export function createProductWorkflowReleaseGitHub({
     actor: run.actor?.login ?? null
   });
 
+  /** Read pinned workflow activity and expose count/list lag without assuming quiet. */
   async function activeRuns(role, files) {
     const active = new Map();
     let counted = 0;
@@ -529,6 +538,7 @@ export function createProductWorkflowReleaseGitHub({
     return { runs, unlisted: Math.max(0, counted - runs.length) };
   }
 
+  /** Save observed blockers until pinned workflows are quiet, honoring cancellation. */
   async function waitForQuiet(role, files, record, save, purpose) {
     for (let checks = 1; ; checks++) {
       signal?.throwIfAborted();
@@ -582,6 +592,7 @@ export function createProductWorkflowReleaseGitHub({
     }
   }
 
+  /** Read and validate repository-scoped run listings for subsequent exact adoption. */
   async function listRuns(role, file, query = {}) {
     const filters = new URLSearchParams({ ...query, per_page: "100" });
     const runs = [];
@@ -616,6 +627,7 @@ export function createProductWorkflowReleaseGitHub({
     return runs;
   }
 
+  /** Refuse evidence acceptance if either saved application source moved. */
   async function verifyEnvironment(operation, stage) {
     for (const role of ["backend", "frontend"])
       serviceAssert(
@@ -626,6 +638,7 @@ export function createProductWorkflowReleaseGitHub({
       );
   }
 
+  /** Reject a direct run outside the saved source, actor and dispatch boundary. */
   function verifyDirectRun(run, descriptor, workflowIdentity, actor, record) {
     const repository = profile.repositories[descriptor.role];
     const returnedRunId =
@@ -640,6 +653,9 @@ export function createProductWorkflowReleaseGitHub({
       );
     serviceAssert(
       positive(run?.id) &&
+        (!record.workflow_run_id || record.workflow_run_id === run.id) &&
+        (run.status === "completed" ||
+          activeWorkflowRunStatuses.includes(run.status)) &&
         run.repository?.id === repository.id &&
         run.head_repository?.id === repository.id &&
         run.head_sha === descriptor.sourceCommit &&
@@ -661,6 +677,7 @@ export function createProductWorkflowReleaseGitHub({
     return run;
   }
 
+  /** Discover one saved-boundary direct run; ambiguous matches never authorize adoption. */
   async function findDirectRun(descriptor, workflowIdentity, actor, record) {
     const runs = await listRuns(descriptor.role, descriptor.workflow, {
       event: descriptor.event,
@@ -691,10 +708,12 @@ export function createProductWorkflowReleaseGitHub({
       : null;
   }
 
+  /** Wait for complete job evidence from this exact run and attempt, or stop. */
   async function jobsFor(role, run, descriptor) {
     const expected = expectedJobs(descriptor, runtime);
     const required = new Set(expected.required);
-    for (let poll = 0; poll < polls; poll++) {
+    for (;;) {
+      signal?.throwIfAborted();
       const list = (
         await call(
           role,
@@ -725,13 +744,8 @@ export function createProductWorkflowReleaseGitHub({
       // GitHub can report the run completed while its jobs endpoint still
       // reports an in-progress job. Re-read only this exact run; never infer
       // success from the run-level conclusion or dispatch another workflow.
-      if (poll + 1 < polls) await wait(pollMs, { signal });
+      await wait(pollMs, { signal });
     }
-    serviceAssert(
-      false,
-      "release-workflow",
-      "The product-shaped workflow jobs did not settle after the run completed."
-    );
   }
 
   async function readDeploymentArtifact(run, descriptor) {
@@ -804,12 +818,14 @@ export function createProductWorkflowReleaseGitHub({
     };
   }
 
+  /** Build operation-bound evidence without claiming outputs from a failed stage. */
   function reportFor({
     operation,
     run,
     status,
     builds = {},
-    deployments = {}
+    deployments = {},
+    failureStage
   }) {
     return {
       protocol: operation.protocol,
@@ -823,9 +839,13 @@ export function createProductWorkflowReleaseGitHub({
       role: operation.role,
       unit: operation.unit,
       status,
+      ...(failureStage ? { failure_stage: failureStage } : {}),
       checks: [
         {
-          name: "product-shaped-workflow",
+          name:
+            failureStage === "e2e-dispatch"
+              ? "automatic-e2e-dispatch"
+              : "product-shaped-workflow",
           status
         }
       ],
@@ -846,6 +866,7 @@ export function createProductWorkflowReleaseGitHub({
     };
   }
 
+  /** Adopt or dispatch one saved direct operation and verify its terminal evidence. */
   async function runDirect({
     record,
     operation,
@@ -991,7 +1012,10 @@ export function createProductWorkflowReleaseGitHub({
       record.state = "running";
       await save();
     }
-    for (let poll = 0; poll < polls; poll++) {
+    // The existing bound applies only to discovering a missing run. Once its
+    // identity is confirmed, GitHub's workflow timeout owns its duration.
+    for (let missing = 0; ;) {
+      signal?.throwIfAborted();
       run ??= record.workflow_run_id
         ? (
             await call(
@@ -1011,9 +1035,12 @@ export function createProductWorkflowReleaseGitHub({
         record.workflow_id = workflowIdentity.id;
         record.state = "running";
         if (changed) await save();
+        signal?.throwIfAborted();
         if (run.status === "completed") break;
+      } else if (++missing >= polls) {
+        break;
       }
-      if (poll + 1 < polls) await wait(pollMs, { signal });
+      await wait(pollMs, { signal });
       if (record.workflow_run_id)
         run = (
           await call(
@@ -1109,6 +1136,7 @@ export function createProductWorkflowReleaseGitHub({
     };
   }
 
+  /** Locate one deployment-caused automatic run without creating or replacing it. */
   async function findAutomaticRun(
     role,
     workflowIdentity,
@@ -1135,6 +1163,40 @@ export function createProductWorkflowReleaseGitHub({
     return matches[0] ?? null;
   }
 
+  /** Bind an automatic chain run to its workflow, actor and causal deployment. */
+  function verifyAutomaticRun(
+    run,
+    identity,
+    title,
+    event,
+    expectedActor,
+    createdAt,
+    expectedId
+  ) {
+    const repository = profile.repositories.frontend;
+    serviceAssert(
+      positive(run?.id) &&
+        (!expectedId || run.id === expectedId) &&
+        run.repository?.id === repository.id &&
+        run.head_repository?.id === repository.id &&
+        sha(run.head_sha) &&
+        run.head_branch === "main" &&
+        run.event === event &&
+        positive(run.run_attempt) &&
+        run.path === `.github/workflows/${identity.file}` &&
+        run.display_title === title &&
+        Date.parse(run.created_at) >= Date.parse(createdAt) &&
+        String(run.actor?.id) === expectedActor.id &&
+        run.actor?.login === expectedActor.login &&
+        run.workflow_id === identity.id &&
+        (run.status === "completed" ||
+          activeWorkflowRunStatuses.includes(run.status)),
+      "release-workflow",
+      "The automatic E2E workflow chain does not match the selected deployment."
+    );
+  }
+
+  /** Follow the deployment-triggered E2E chain without dispatching a replacement. */
   async function runE2e({
     record,
     operation,
@@ -1147,9 +1209,11 @@ export function createProductWorkflowReleaseGitHub({
     const dependencies = deploymentDependencies(record, operations, steps);
     const deployRunId = dependencies.frontend.result.workflow?.id;
     serviceAssert(
-      positive(deployRunId),
+      positive(deployRunId) &&
+        (!record.deployment_workflow_run_id ||
+          record.deployment_workflow_run_id === deployRunId),
       "release-state",
-      "The matching frontend deployment run is missing before E2E."
+      "The matching frontend deployment run is missing or changed before E2E."
     );
     const deploymentRun = (
       await call("frontend", "GET", `/actions/runs/${deployRunId}`)
@@ -1197,8 +1261,17 @@ export function createProductWorkflowReleaseGitHub({
           )
         ).data
       : null;
-    let dispatchRun;
-    for (let poll = 0; poll < polls; poll++) {
+    let dispatchRun = record.dispatch_workflow_run_id
+      ? (
+          await call(
+            "frontend",
+            "GET",
+            `/actions/runs/${record.dispatch_workflow_run_id}`
+          )
+        ).data
+      : null;
+    for (let missingDispatch = 0, missingE2e = 0; ;) {
+      signal?.throwIfAborted();
       dispatchRun ??= await findAutomaticRun(
         "frontend",
         dispatch,
@@ -1207,7 +1280,67 @@ export function createProductWorkflowReleaseGitHub({
         actor,
         chainCreatedAt
       );
+      if (dispatchRun) {
+        verifyAutomaticRun(
+          dispatchRun,
+          dispatch,
+          dispatchTitle,
+          "workflow_run",
+          actor,
+          chainCreatedAt,
+          record.dispatch_workflow_run_id
+        );
+        // Persist the confirmed wrapper before waiting for it to create E2E.
+        // An interrupted wrapper-only window must resume this exact run.
+        const changed =
+          record.dispatch_workflow_run_id !== dispatchRun.id ||
+          record.deployment_workflow_run_id !== deployRunId ||
+          record.state !== "running";
+        record.dispatch_workflow_run_id = dispatchRun.id;
+        record.deployment_workflow_run_id = deployRunId;
+        record.state = "running";
+        if (changed) await save();
+        signal?.throwIfAborted();
+      } else
+        serviceAssert(
+          ++missingDispatch < polls,
+          "release-workflow",
+          "The matching automatic E2E dispatch wrapper could not be found; no replacement was dispatched."
+        );
       if (dispatchRun?.status === "completed") {
+        if (dispatchRun.conclusion === "failure") {
+          // Automatic wrappers run from main, even for staging; "prod" selects
+          // trusted main-runner file pins, not the application's target.
+          await verifyFiles("frontend", dispatchRun.head_sha, "prod");
+          const jobs = await jobsFor("frontend", dispatchRun, {
+            kind: "dispatch",
+            environment: operation.environment
+          });
+          serviceAssert(
+            jobs.some((job) => job.conclusion === "failure"),
+            "release-workflow",
+            "The failed automatic E2E dispatch conclusion contradicts its jobs."
+          );
+          await verifyEnvironment(operation, "E2E dispatch failure acceptance");
+          const report = reportFor({
+            operation,
+            run: dispatchRun,
+            status: "failed",
+            failureStage: "e2e-dispatch"
+          });
+          verifyProductWorkflowReport(report, operation);
+          return {
+            status: "failed",
+            report_hash: releaseHash(report),
+            report,
+            workflow: { id: dispatchRun.id, url: dispatchRun.html_url },
+            dispatch_workflow: {
+              id: dispatchRun.id,
+              url: dispatchRun.html_url
+            },
+            deployment_workflow: dependencies.frontend.result.workflow
+          };
+        }
         serviceAssert(
           dispatchRun.conclusion === "success",
           "release-workflow",
@@ -1222,24 +1355,50 @@ export function createProductWorkflowReleaseGitHub({
           chainCreatedAt
         );
         if (e2eRun) {
+          verifyAutomaticRun(
+            e2eRun,
+            e2e,
+            e2eTitle,
+            "workflow_dispatch",
+            runtime.githubActionsActor,
+            chainCreatedAt,
+            record.workflow_run_id
+          );
           const changed =
             record.workflow_run_id !== e2eRun.id ||
             record.workflow_id !== e2e.id ||
             record.state !== "running";
           record.workflow_run_id = e2eRun.id;
           record.workflow_id = e2e.id;
-          record.dispatch_workflow_run_id = dispatchRun.id;
-          record.deployment_workflow_run_id = deployRunId;
           record.state = "running";
           if (changed) await save();
+          signal?.throwIfAborted();
           if (e2eRun.status === "completed") break;
-        }
+        } else
+          serviceAssert(
+            ++missingE2e < polls,
+            "release-workflow",
+            "The matching automatic E2E test run could not be found after its wrapper passed; no replacement was dispatched."
+          );
       }
-      if (poll + 1 < polls) await wait(pollMs, { signal });
-      if (dispatchRun?.id)
+      await wait(pollMs, { signal });
+      if (dispatchRun?.id) {
+        // Verify immediately after the awaited read as well as at loop entry;
+        // a changed response must not reach another read or an E2E result.
+        const expectedId = dispatchRun.id;
         dispatchRun = (
           await call("frontend", "GET", `/actions/runs/${dispatchRun.id}`)
         ).data;
+        verifyAutomaticRun(
+          dispatchRun,
+          dispatch,
+          dispatchTitle,
+          "workflow_run",
+          actor,
+          chainCreatedAt,
+          expectedId
+        );
+      }
       if (record.workflow_run_id)
         e2eRun = (
           await call(
@@ -1249,28 +1408,24 @@ export function createProductWorkflowReleaseGitHub({
           )
         ).data;
     }
-    const repository = profile.repositories.frontend;
     for (const [run, identity, title, event, expectedActor] of [
       [dispatchRun, dispatch, dispatchTitle, "workflow_run", actor],
       [e2eRun, e2e, e2eTitle, "workflow_dispatch", runtime.githubActionsActor]
-    ])
+    ]) {
+      verifyAutomaticRun(
+        run,
+        identity,
+        title,
+        event,
+        expectedActor,
+        chainCreatedAt
+      );
       serviceAssert(
-        positive(run?.id) &&
-          run.repository?.id === repository.id &&
-          run.head_repository?.id === repository.id &&
-          run.head_branch === "main" &&
-          run.event === event &&
-          positive(run.run_attempt) &&
-          run.path === `.github/workflows/${identity.file}` &&
-          run.display_title === title &&
-          Date.parse(run.created_at) >= Date.parse(chainCreatedAt) &&
-          String(run.actor?.id) === expectedActor.id &&
-          run.actor?.login === expectedActor.login &&
-          run.workflow_id === identity.id &&
-          run.status === "completed",
+        run.status === "completed",
         "release-workflow",
         "The automatic E2E workflow chain does not match the selected deployment."
       );
+    }
     serviceAssert(
       ["success", "failure"].includes(e2eRun.conclusion),
       "release-workflow",

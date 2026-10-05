@@ -373,6 +373,7 @@ function environmentRef(endpoint, operation) {
 const apiResponse = (status, data) =>
   `HTTP/2 ${status} Result\nContent-Type: application/json\n\n${data === undefined ? "" : JSON.stringify(data)}`;
 
+/** Build matching saved operation, workflow, jobs and result for offline runner tests. */
 function fixture(role = "backend", kind = "deploy") {
   const e2e = kind === "e2e";
   const unit = e2e ? null : role === "backend" ? "worker" : "frontend";
@@ -487,17 +488,33 @@ const activeRun = (id, status, login = "alice") => ({
   actor: { login }
 });
 
-// A dispatching client: pinned runtime files, the active-run listing, the
-// environment ref, the dispatch itself and the completed run's evidence.
-function dispatchingClient(f, { active, wait, signal, pollMs } = {}) {
+/**
+ * Model pinned runtime files, active runs, refs, dispatch and exact-run evidence.
+ * Delays, missing responses and cancellation remain local controlled inputs.
+ */
+function dispatchingClient(
+  f,
+  {
+    active,
+    wait,
+    signal,
+    pollMs,
+    polls,
+    runStatuses = [],
+    missingKnownRunAfter
+  } = {}
+) {
   const calls = [];
   let dispatched = false;
+  let reads = 0;
   const client = createReleaseGitHub({
     profile: sandboxProfile,
     runtime,
     signal,
+    ...(polls === undefined ? {} : { polls }),
     ...(wait ? { wait } : {}),
-    ...(pollMs ? { pollMs } : {}),
+    ...(pollMs === undefined ? {} : { pollMs }),
+    /** Serve deterministic runtime, discovery, dispatch and exact-run responses. */
     execute: async (args, body) => {
       const method = args[args.indexOf("--method") + 1];
       const endpoint = args[args.indexOf("--method") + 2];
@@ -534,8 +551,15 @@ function dispatchingClient(f, { active, wait, signal, pollMs } = {}) {
         dispatched = true;
         return apiResponse("204 No Content");
       }
-      if (endpoint.endsWith(`/actions/runs/${f.run.id}`))
-        return apiResponse("200 OK", f.run);
+      if (endpoint.endsWith(`/actions/runs/${f.run.id}`)) {
+        if (reads >= missingKnownRunAfter)
+          return apiResponse("404 Not Found", { message: "Not Found" });
+        return apiResponse("200 OK", {
+          ...f.run,
+          status: runStatuses[reads++] ?? f.run.status,
+          conclusion: reads <= runStatuses.length ? null : f.run.conclusion
+        });
+      }
       if (endpoint.includes("/attempts/2/jobs"))
         return apiResponse("200 OK", { total_count: 1, jobs: [f.job] });
       assert.fail(`${method} ${endpoint}`);
@@ -545,6 +569,84 @@ function dispatchingClient(f, { active, wait, signal, pollMs } = {}) {
   });
   return { client, calls };
 }
+
+test("the generic sandbox follows the same known run beyond sixty polls", async () => {
+  const f = fixture();
+  f.record.workflow_run_id = f.run.id;
+  let waits = 0;
+  const { client, calls } = dispatchingClient(f, {
+    polls: 2,
+    runStatuses: ["queued", "waiting", ...Array(65).fill("in_progress")],
+    /** Count known-run polls without a real delay. */
+    wait: async () => waits++
+  });
+  const result = await client.run({
+    record: f.record,
+    actor: f.record.actor,
+    /** The fixture's record is already the in-memory saved state. */
+    save: async () => {}
+  });
+  assert.equal(result.status, "passed");
+  assert.ok(waits > 60);
+  assert.equal(
+    calls.some(({ method }) => method === "POST"),
+    false
+  );
+  assert.equal(result.workflow.id, f.run.id);
+});
+
+test("the generic sandbox's running wait is cancellable without another request", async () => {
+  const f = fixture();
+  f.record.workflow_run_id = f.run.id;
+  const controller = new AbortController();
+  let callsAtAbort;
+  const { client, calls } = dispatchingClient(f, {
+    runStatuses: Array(65).fill("in_progress"),
+    signal: controller.signal,
+    /** Cancel the wait and record the last allowed API request boundary. */
+    wait: async () => {
+      callsAtAbort = calls.length;
+      controller.abort();
+    }
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      /** Preserve the fixture's mutated record for cancellation assertions. */
+      save: async () => {}
+    }),
+    { name: "AbortError" }
+  );
+  assert.equal(calls.length, callsAtAbort);
+  assert.equal(f.record.workflow_run_id, f.run.id);
+  assert.equal(f.record.state, "running");
+});
+
+test("a confirmed generic sandbox run disappearing stops without redispatch", async () => {
+  const f = fixture();
+  f.record.workflow_run_id = f.run.id;
+  const { client, calls } = dispatchingClient(f, {
+    runStatuses: Array(65).fill("in_progress"),
+    missingKnownRunAfter: 1,
+    /** Advance the missing-run scenario without sleeping. */
+    wait: async () => {}
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      /** Keep the existing exact run ID in the shared fixture record. */
+      save: async () => {}
+    }),
+    /404/u
+  );
+  assert.equal(
+    calls.some(({ method }) => method === "POST"),
+    false
+  );
+  assert.equal(f.record.workflow_run_id, f.run.id);
+});
 
 test("release workflow result binds exact operation, commits, actor and rerun attempt", async () => {
   const f = fixture();
