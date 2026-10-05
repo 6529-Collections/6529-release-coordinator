@@ -72,7 +72,11 @@ operations, no recovery/cancellation, and recorded temporary cleanup.
 
 The checker uses a separate fixed GET-only client. It verifies repository
 identities, current staging/production refs, and complete workflow-run/job
-pagination from the original attempt's start. Current staging must have a
+pagination from the earliest owned attempt's start. Separate activity reads
+have no date cutoff: the newest workflow page and every active-status count
+must be quiet both initially and on the final reread. Positive but unlisted
+counts, unreadable activity, or a run created before the original attempt block
+closure. Current staging must have a
 successful deployment and its unique automatic matching E2E chain; a production
 request also needs the corresponding current production chain. It checks approved
 workflow blobs, exact run/attempt identities, required successful jobs, triggers,
@@ -80,6 +84,13 @@ actors and causal order. Backend deployment must match its current branch and
 predate frontend validation. Every requested commit must be an ancestor of its
 merged PR head, and that merge must be included in the later delivered commit.
 Rebased or otherwise unprovable equivalence needs a person.
+
+Several saved attempts may name the same exact request. Every attempt must pass
+the stopped/no-database-change eligibility checks, and every attempt's temporary
+resources and original staging integrations must be accounted for independently.
+The current delivery chain can then prove that same request's inclusion once;
+it does not blend their outcomes, omit an old effect or change their history.
+One active, uncertain or unaccounted attempt keeps the whole ticket actionable.
 
 GitHub's [workflow-run search](https://docs.github.com/en/rest/actions/workflow-runs)
 returns at most 1,000 matches for a `created`-filtered query. Its
@@ -154,6 +165,10 @@ rechecks the same saved selection and safely reconciles pending presentation.
 It processes the saved claimed ticket first, before revisiting earlier open
 tickets. A fully verified ticket stays applied if releasing its reservation
 fails; resume verifies and clears that claim before moving on.
+Failure before a first decision never invents a partial application record.
+The original error and saved cleanup resume identity survive missing local
+transitions and failed diagnostic timestamps/saves; existing saved ownership
+remains intact for the same-run recovery.
 The updated journal client rejects resuming cleanup through `inbox:run`, or
 resuming a release through cleanup, before rotating the lock. Use the matching
 updated command for the saved action. Existing read-only commands stay read-only.

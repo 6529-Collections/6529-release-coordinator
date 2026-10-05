@@ -560,17 +560,14 @@ export async function cleanupInbox({
       requests
     };
   } catch (error) {
-    if (
-      pendingNumber &&
-      state.tickets[pendingNumber] &&
-      state.tickets[pendingNumber].applied !==
-        state.tickets[pendingNumber].transitions.at(-1).id
-    ) {
-      state.tickets[pendingNumber].application_error = {
-        at: now().toISOString(),
-        message: error.message
-      };
+    const ticket = state.tickets[pendingNumber],
+      last = ticket?.transitions.at(-1);
+    if (last && ticket.applied !== last.id) {
       try {
+        ticket.application_error = {
+          at: now().toISOString(),
+          message: error.message
+        };
         await journal.save(state, run, `partial cleanup #${pendingNumber}`);
       } catch {
         /* preserve uncertain ownership */

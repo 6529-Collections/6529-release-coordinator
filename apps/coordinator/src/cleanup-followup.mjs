@@ -204,6 +204,10 @@ export async function inspectCleanupFollowup(
     async () => {
       for (const role of ["backend", "frontend"])
         for (const key of Object.keys(runtime.repositories[role].workflows)) {
+          requireProof(
+            (await github.activity(role, key)) === true,
+            "A deployment or test workflow is still active or its unfiltered activity is unverified; its effects are not settled."
+          );
           const values = await runs(role, key);
           requireProof(
             Array.isArray(values) &&
@@ -528,6 +532,12 @@ export async function inspectCleanupFollowup(
     "environment_stability",
     "Recheck current environment versions before accepting this follow-up.",
     async () => {
+      for (const role of ["backend", "frontend"])
+        for (const key of Object.keys(runtime.repositories[role].workflows))
+          requireProof(
+            (await github.activity(role, key)) === true,
+            "Deployment or test workflow activity changed during the follow-up check."
+          );
       for (const [id, listed] of lists) {
         const [role, key] = id.split(":");
         const fresh = await github.runs(role, key, since);

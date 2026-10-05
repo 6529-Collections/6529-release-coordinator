@@ -4,6 +4,7 @@ import { inspectCleanupFollowup } from "../src/cleanup-followup.mjs";
 import { createCleanupFollowupGitHub } from "../src/cleanup-followup-github.mjs";
 import { productWorkflowRuntimeForProfile } from "../src/product-workflow-runtime-config.mjs";
 import { expectedJobs } from "../src/product-workflow-release-github.mjs";
+import { activeWorkflowRunStatuses } from "../src/release-state.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import { releaseRequestChecksum } from "../../../packages/release-request/src/inbox-issue.mjs";
 
@@ -187,6 +188,7 @@ function fixture(profile = realProfile) {
   const f = { entry, batch, runMap, lists, prs, refs: 0, calls: [] };
   const github = {
     identity: async (role) => clone(repository(role)),
+    activity: async () => true,
     ref: async (role, name) => {
       f.refs++;
       return name.startsWith("codex/")
@@ -261,6 +263,92 @@ for (const profile of [realProfile, sandboxProfile])
     assert.equal(result.evidence.delivery.e2e.id, 42);
     assert.deepEqual(f.batch, original);
   });
+
+test("multiple stopped attempts share later delivery only after every original effect is accounted for", async () => {
+  for (const scenario of [
+    "settled",
+    "active",
+    "branch remains",
+    "integration replaced"
+  ]) {
+    const f = fixture(),
+      second = clone(f.batch);
+    second.fingerprint = "2".repeat(64);
+    second.execution.started_at = "2026-09-27T01:00:00Z";
+    second.execution.operations.integrate.result.url = `https://github.com/${realProfile.repositories.frontend.full_name}/pull/12`;
+    second.execution.operations.integrate.result.commit = hash("7");
+    f.prs.set(12, {
+      ...clone(f.prs.get(11)),
+      number: 12,
+      merge_commit_sha: hash("7")
+    });
+    const trial = second.attempts[0].progress.prs[0];
+    Object.assign(trial, {
+      number: 13,
+      branch: "codex/batch-trial-22222222-2222-4222-8222-222222222222",
+      commit: hash("6")
+    });
+    const trialPr = clone(f.prs.get(9));
+    Object.assign(trialPr, { number: 13 });
+    Object.assign(trialPr.head, { ref: trial.branch, sha: trial.commit });
+    f.prs.set(13, trialPr);
+    const dates = [],
+      comparisons = [],
+      runs = f.github.runs,
+      compare = f.github.compare,
+      ref = f.github.ref;
+    f.github.runs = async (role, key, since) => {
+      dates.push(since);
+      return runs(role, key, since);
+    };
+    f.github.compare = async (role, base, head) => {
+      comparisons.push([base, head]);
+      return scenario === "integration replaced" && base === hash("7")
+        ? { status: "diverged", base_commit: { sha: base } }
+        : compare(role, base, head);
+    };
+    if (scenario === "active") second.execution.status = "running";
+    if (scenario === "branch remains")
+      f.github.ref = (role, name) =>
+        name === trial.branch
+          ? Promise.resolve({ object: { sha: trial.commit } })
+          : ref(role, name);
+    const result = await inspectCleanupFollowup(f.entry, {
+      records: [f.batch, second],
+      github: f.github,
+      profile: realProfile
+    });
+    assert.equal(
+      result.status,
+      scenario === "settled" ? "passed" : "unknown",
+      scenario
+    );
+    assert.deepEqual(result.evidence.attempts, [
+      f.batch.fingerprint,
+      second.fingerprint
+    ]);
+    if (scenario === "settled") {
+      assert.ok(
+        dates.length &&
+          dates.every((date) => date === "2026-09-27T01:00:00.000Z")
+      );
+      for (const commit of [hash("e"), hash("7")])
+        assert.ok(
+          comparisons.some(
+            ([base, head]) => base === commit && head === hash("a")
+          )
+        );
+    } else
+      assert.equal(
+        result.checks.find(
+          (check) =>
+            check.id ===
+            (scenario === "active" ? "stopped_attempts" : "owned_resources")
+        ).status,
+        "unknown"
+      );
+  }
+});
 
 for (const [name, change, check] of [
   [
@@ -471,6 +559,92 @@ test("rerun and trigger identity changes after listing invalidate the candidate 
       result.checks.find((check) => check.id === "production_delivery").status,
       "unknown"
     );
+  }
+});
+
+test("active runs created before the attempt prevent follow-up both initially and on the final reread", async () => {
+  for (const timing of ["initial", "final"])
+    for (const status of activeWorkflowRunStatuses) {
+      const f = fixture(),
+        read = f.github.runs;
+      let observations = 0;
+      const old = { id: 100, status, created_at: "2026-09-27T00:00:00Z" };
+      f.github.runs = async (role, key, since) =>
+        (await read(role, key)).filter(
+          (run) => Date.parse(run.created_at) >= Date.parse(since)
+        );
+      f.github.activity = async (role, key) => {
+        if (role !== "backend" || key !== "deploy") return true;
+        observations++;
+        return timing === "final" && observations === 1;
+      };
+      f.lists.get("backend:deploy").push(old);
+      const result = await f.inspect();
+      assert.equal(result.status, "unknown", `${timing}: ${status}`);
+      assert.equal(
+        result.checks.find(
+          (check) =>
+            check.id ===
+            (timing === "initial"
+              ? "workflow_activity"
+              : "environment_stability")
+        ).status,
+        "unknown"
+      );
+    }
+});
+
+test("activity reads omit date cutoffs, detect lagging positive counts, and require complete quiet status evidence", async () => {
+  for (const mode of [
+    "quiet",
+    "recent",
+    ...activeWorkflowRunStatuses,
+    "unreadable"
+  ]) {
+    const calls = [];
+    const client = createCleanupFollowupGitHub({
+      execute: async (args) => {
+        const endpoint = new URL(`https://github.com/${args[5]}`);
+        calls.push(endpoint);
+        const status = endpoint.searchParams.get("status");
+        const body = status
+          ? { total_count: status === mode ? 1 : 0, workflow_runs: [] }
+          : {
+              total_count: 3500,
+              workflow_runs: Array.from(
+                { length: mode === "unreadable" ? 0 : 100 },
+                (_, index) => ({
+                  id: index + 1,
+                  status:
+                    mode === "recent" && index === 99 ? "pending" : "completed"
+                })
+              )
+            };
+        return `HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(body)}`;
+      }
+    });
+    if (mode === "unreadable")
+      await assert.rejects(
+        client.activity("frontend", "prodDeploy"),
+        /Unsupported/u
+      );
+    else
+      assert.equal(
+        await client.activity("frontend", "prodDeploy"),
+        mode === "quiet",
+        mode
+      );
+    assert.ok(
+      calls.every(
+        (url) =>
+          !url.searchParams.has("created") && !url.searchParams.has("page")
+      )
+    );
+    if (mode === "quiet")
+      assert.deepEqual(
+        calls.slice(1).map((url) => url.searchParams.get("status")),
+        activeWorkflowRunStatuses
+      );
   }
 });
 

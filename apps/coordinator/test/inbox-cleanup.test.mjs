@@ -566,6 +566,89 @@ test("filtered cleanup updates only its verified selection; a wrong actor does n
   assert.equal(f.state().lock, null);
 });
 
+test("a failure before the first decision preserves the original error and resumable cleanup claim", async () => {
+  const f = fixture();
+  await initialize(f);
+  const journal = createJournal(f.api, f.profile, {
+    workflow: inboxWorkflow,
+    archiveOnRelease: false,
+    ticketConcurrency: true
+  });
+  const acquire = journal.acquire.bind(journal);
+  let working, resume;
+  journal.acquire = async (...args) => {
+    const result = await acquire(...args);
+    working = result.state;
+    return result;
+  };
+  await assert.rejects(
+    cleanupInbox({
+      ...f,
+      selectionMode: "inbox",
+      journal,
+      now: () => {
+        if (working?.tickets[1]?.transitions.length === 0)
+          throw new Error("Clock unavailable before first decision");
+        return f.now();
+      }
+    }),
+    (error) => {
+      resume = error.cleanupRunId;
+      assert.match(error.message, /Clock unavailable before first decision/u);
+      assert.equal(
+        error.cause.message,
+        "Clock unavailable before first decision"
+      );
+      return Boolean(resume);
+    }
+  );
+  assert.equal(issueWrites(f).length, 0);
+  assert.equal(f.state().tickets[1], undefined);
+  assert.equal(cleanupHeld(f).run_id, resume);
+  assert.equal(cleanupHeld(f).current_ticket, 1);
+  await cleanupInbox({ ...f, selectionMode: "inbox", resume });
+  assert.equal(cleanupHeld(f), null);
+  assert.equal(f.state().tickets[1].transitions.length, 1);
+  assert.equal(f.comments.length, 1);
+});
+
+test("a failed error timestamp never masks a partial ticket update or loses its resume identity", async () => {
+  const f = fixture();
+  await initialize(f);
+  let interrupted = false,
+    resume;
+  f.after = async ({ method, path }) => {
+    if (!interrupted && method === "POST" && path === "/issues/1/comments") {
+      interrupted = true;
+      throw new Error("Lost ticket comment response");
+    }
+  };
+  await assert.rejects(
+    cleanupInbox({
+      ...f,
+      selectionMode: "inbox",
+      now: () => {
+        if (interrupted) throw new Error("Error timestamp unavailable");
+        return f.now();
+      }
+    }),
+    (error) => {
+      resume = error.cleanupRunId;
+      assert.match(error.message, /Lost ticket comment response/u);
+      assert.equal(error.cause.message, "Lost ticket comment response");
+      return Boolean(resume);
+    }
+  );
+  assert.equal(cleanupHeld(f).run_id, resume);
+  assert.equal(cleanupHeld(f).current_ticket, 1);
+  assert.equal(f.state().tickets[1].transitions.length, 1);
+  f.after = async () => {};
+  await cleanupInbox({ ...f, selectionMode: "inbox", resume });
+  assert.equal(cleanupHeld(f), null);
+  assert.equal(f.state().tickets[1].transitions.length, 1);
+  assert.equal(f.comments.length, 1);
+});
+
 test("a lost closure response retains ownership; resume verifies the same decision without duplication", async () => {
   const f = fixture();
   await initialize(f);

@@ -40,6 +40,25 @@ empty output, so no GLM coverage is claimed. Fresh exact-head remote reviews and
 CI remain required before the separately authorized merge; these changes have
 not been exercised against the live inbox.
 
+The next review pass reproduced a first-decision failure masking its original
+error with `.at(-1).id`. Cleanup now preserves the original cause and saved
+resume identity when no transition exists or when diagnostic timestamp/save
+work fails. Both cases retain their saved claim and resume without duplicate
+Issue comments. Additional tests account for two distinct stopped attempts:
+every original integration/resource must be settled, and one active or
+unaccounted attempt prevents closure; no single-attempt policy limit was added.
+
+CodeRabbit's outside-diff active-workflow finding was also reproduced: a run
+created before the history cutoff could be missed. The fixed GET-only client
+checks the newest unfiltered page and all existing active-status counts without
+a date cutoff, initially and again before accepting follow-up proof. Counted
+but unlisted runs and unreadable activity remain unknown. Full local checks
+passed **875 tests**, with three optional Docker skips (878 total); 76 focused
+cleanup/follow-up/concurrency tests passed. The first fresh GLM advisory returned
+only its correctness slice, with three empty slices; its activation concern
+does not apply because the claim is saved before any ticket update. Fresh
+remote gates for these latest fixes remain separate from local proof.
+
 ## Concurrent cleanup — local installation (October 2)
 
 The approved dashboard cleanup changes were installed locally from the managed

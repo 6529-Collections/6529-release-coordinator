@@ -1,6 +1,7 @@
 import { executeGitHub } from "./coordinator-github.mjs";
 import { realProfile } from "./profiles.mjs";
 import { productWorkflowRuntimeForProfile } from "./product-workflow-runtime-config.mjs";
+import { activeWorkflowRunStatuses } from "./release-state.mjs";
 
 const positive = (value) => Number.isSafeInteger(value) && value > 0;
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
@@ -99,6 +100,37 @@ export function createCleanupFollowupGitHub({
     },
     workflow: (role, key) =>
       read(role, `/actions/workflows/${workflow(role, key).file}`),
+    // Active runs can predate the delivery-history cutoff. The newest page
+    // covers status transitions; all active-status counts cover older runs.
+    // Any positive/unlisted count blocks closure without needing its full list.
+    activity: async (role, key) => {
+      const path = `/actions/workflows/${workflow(role, key).file}/runs`;
+      const recent = await read(role, `${path}?per_page=100`);
+      requireValue(
+        Number.isSafeInteger(recent.total_count) &&
+          recent.total_count >= 0 &&
+          Array.isArray(recent.workflow_runs) &&
+          recent.workflow_runs.length === Math.min(100, recent.total_count) &&
+          recent.workflow_runs.every(
+            (run) => positive(run?.id) && typeof run.status === "string"
+          )
+      );
+      if (recent.workflow_runs.some((run) => run.status !== "completed"))
+        return false;
+      for (const status of activeWorkflowRunStatuses) {
+        const listed = await read(
+          role,
+          `${path}?status=${status}&per_page=100`
+        );
+        requireValue(
+          Number.isSafeInteger(listed.total_count) &&
+            listed.total_count >= 0 &&
+            Array.isArray(listed.workflow_runs)
+        );
+        if (listed.total_count || listed.workflow_runs.length) return false;
+      }
+      return true;
+    },
     runs: (role, key, since) => {
       requireValue(
         typeof since === "string" && Number.isFinite(Date.parse(since))
