@@ -333,6 +333,10 @@ function deploymentDependencies(record, operations, steps) {
   return { backend, frontend };
 }
 
+/**
+ * Bind existing product-shaped workflows to one explicit real or sandbox profile.
+ * Confirmed runs keep their identity through completion; discovery stays bounded.
+ */
 export function createProductWorkflowReleaseGitHub({
   profile,
   runtime,
@@ -399,6 +403,7 @@ export function createProductWorkflowReleaseGitHub({
     pollMs
   });
 
+  /** Issue a scoped GitHub request, rejecting unexpected status or cancellation. */
   async function call(role, method, suffix, body, allowed = [200]) {
     signal?.throwIfAborted();
     serviceAssert(
@@ -628,6 +633,7 @@ export function createProductWorkflowReleaseGitHub({
       );
   }
 
+  /** Reject a direct run outside the saved source, actor and dispatch boundary. */
   function verifyDirectRun(run, descriptor, workflowIdentity, actor, record) {
     const repository = profile.repositories[descriptor.role];
     const returnedRunId =
@@ -696,6 +702,7 @@ export function createProductWorkflowReleaseGitHub({
       : null;
   }
 
+  /** Wait for complete job evidence from this exact run and attempt, or stop. */
   async function jobsFor(role, run, descriptor) {
     const expected = expectedJobs(descriptor, runtime);
     const required = new Set(expected.required);
@@ -847,6 +854,7 @@ export function createProductWorkflowReleaseGitHub({
     };
   }
 
+  /** Adopt or dispatch one saved direct operation and verify its terminal evidence. */
   async function runDirect({
     record,
     operation,
@@ -1142,6 +1150,7 @@ export function createProductWorkflowReleaseGitHub({
     return matches[0] ?? null;
   }
 
+  /** Bind an automatic chain run to its workflow, actor and causal deployment. */
   function verifyAutomaticRun(
     run,
     identity,
@@ -1174,6 +1183,7 @@ export function createProductWorkflowReleaseGitHub({
     );
   }
 
+  /** Follow the deployment-triggered E2E chain without dispatching a replacement. */
   async function runE2e({
     record,
     operation,
@@ -1186,9 +1196,11 @@ export function createProductWorkflowReleaseGitHub({
     const dependencies = deploymentDependencies(record, operations, steps);
     const deployRunId = dependencies.frontend.result.workflow?.id;
     serviceAssert(
-      positive(deployRunId),
+      positive(deployRunId) &&
+        (!record.deployment_workflow_run_id ||
+          record.deployment_workflow_run_id === deployRunId),
       "release-state",
-      "The matching frontend deployment run is missing before E2E."
+      "The matching frontend deployment run is missing or changed before E2E."
     );
     const deploymentRun = (
       await call("frontend", "GET", `/actions/runs/${deployRunId}`)
@@ -1255,7 +1267,7 @@ export function createProductWorkflowReleaseGitHub({
         actor,
         chainCreatedAt
       );
-      if (dispatchRun)
+      if (dispatchRun) {
         verifyAutomaticRun(
           dispatchRun,
           dispatch,
@@ -1265,7 +1277,23 @@ export function createProductWorkflowReleaseGitHub({
           chainCreatedAt,
           record.dispatch_workflow_run_id
         );
-      else if (++missingDispatch >= polls) break;
+        // Persist the confirmed wrapper before waiting for it to create E2E.
+        // An interrupted wrapper-only window must resume this exact run.
+        const changed =
+          record.dispatch_workflow_run_id !== dispatchRun.id ||
+          record.deployment_workflow_run_id !== deployRunId ||
+          record.state !== "running";
+        record.dispatch_workflow_run_id = dispatchRun.id;
+        record.deployment_workflow_run_id = deployRunId;
+        record.state = "running";
+        if (changed) await save();
+        signal?.throwIfAborted();
+      } else
+        serviceAssert(
+          ++missingDispatch < polls,
+          "release-workflow",
+          "The matching automatic E2E dispatch wrapper could not be found; no replacement was dispatched."
+        );
       if (dispatchRun?.status === "completed") {
         serviceAssert(
           dispatchRun.conclusion === "success",
@@ -1296,16 +1324,21 @@ export function createProductWorkflowReleaseGitHub({
             record.state !== "running";
           record.workflow_run_id = e2eRun.id;
           record.workflow_id = e2e.id;
-          record.dispatch_workflow_run_id = dispatchRun.id;
-          record.deployment_workflow_run_id = deployRunId;
           record.state = "running";
           if (changed) await save();
           signal?.throwIfAborted();
           if (e2eRun.status === "completed") break;
-        } else if (++missingE2e >= polls) break;
+        } else
+          serviceAssert(
+            ++missingE2e < polls,
+            "release-workflow",
+            "The matching automatic E2E test run could not be found after its wrapper passed; no replacement was dispatched."
+          );
       }
       await wait(pollMs, { signal });
       if (dispatchRun?.id) {
+        // Verify immediately after the awaited read as well as at loop entry;
+        // a changed response must not reach another read or an E2E result.
         const expectedId = dispatchRun.id;
         dispatchRun = (
           await call("frontend", "GET", `/actions/runs/${dispatchRun.id}`)

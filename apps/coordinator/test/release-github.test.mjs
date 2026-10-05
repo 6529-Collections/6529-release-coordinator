@@ -487,11 +487,21 @@ const activeRun = (id, status, login = "alice") => ({
   actor: { login }
 });
 
-// A dispatching client: pinned runtime files, the active-run listing, the
-// environment ref, the dispatch itself and the completed run's evidence.
+/**
+ * Model pinned runtime files, active runs, refs, dispatch and exact-run evidence.
+ * Delays, missing responses and cancellation remain local controlled inputs.
+ */
 function dispatchingClient(
   f,
-  { active, wait, signal, pollMs, polls, runStatuses = [] } = {}
+  {
+    active,
+    wait,
+    signal,
+    pollMs,
+    polls,
+    runStatuses = [],
+    missingKnownRunAfter
+  } = {}
 ) {
   const calls = [];
   let dispatched = false;
@@ -539,12 +549,15 @@ function dispatchingClient(
         dispatched = true;
         return apiResponse("204 No Content");
       }
-      if (endpoint.endsWith(`/actions/runs/${f.run.id}`))
+      if (endpoint.endsWith(`/actions/runs/${f.run.id}`)) {
+        if (reads >= missingKnownRunAfter)
+          return apiResponse("404 Not Found", { message: "Not Found" });
         return apiResponse("200 OK", {
           ...f.run,
           status: runStatuses[reads++] ?? f.run.status,
           conclusion: reads <= runStatuses.length ? null : f.run.conclusion
         });
+      }
       if (endpoint.includes("/attempts/2/jobs"))
         return apiResponse("200 OK", { total_count: 1, jobs: [f.job] });
       assert.fail(`${method} ${endpoint}`);
@@ -602,6 +615,29 @@ test("the generic sandbox's running wait is cancellable without another request"
   assert.equal(calls.length, callsAtAbort);
   assert.equal(f.record.workflow_run_id, f.run.id);
   assert.equal(f.record.state, "running");
+});
+
+test("a confirmed generic sandbox run disappearing stops without redispatch", async () => {
+  const f = fixture();
+  f.record.workflow_run_id = f.run.id;
+  const { client, calls } = dispatchingClient(f, {
+    runStatuses: Array(65).fill("in_progress"),
+    missingKnownRunAfter: 1,
+    wait: async () => {}
+  });
+  await assert.rejects(
+    client.run({
+      record: f.record,
+      actor: f.record.actor,
+      save: async () => {}
+    }),
+    /404/u
+  );
+  assert.equal(
+    calls.some(({ method }) => method === "POST"),
+    false
+  );
+  assert.equal(f.record.workflow_run_id, f.run.id);
 });
 
 test("release workflow result binds exact operation, commits, actor and rerun attempt", async () => {

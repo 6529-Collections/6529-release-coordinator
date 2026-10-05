@@ -97,6 +97,7 @@ function runFixture(
   };
 }
 
+/** Build controlled direct-workflow responses without GitHub or deployments. */
 function directHarness(
   descriptor,
   operation,
@@ -110,6 +111,7 @@ function directHarness(
     jobStatuses = [],
     runStatuses = [],
     missingRun = false,
+    missingKnownRunAfter,
     observeRun,
     signal,
     polls = 2,
@@ -125,12 +127,14 @@ function directHarness(
   let dispatched = false;
   let jobReads = 0;
   let runReads = 0;
+  let knownRunReads = 0;
   const runtime =
     profile.name === "real"
       ? realProductWorkflowRuntime
       : productWorkflowRuntime;
   const run = runFixture(descriptor, { conclusion, profile });
   mutateRun?.(run);
+  /** Advance one simulated run observation, with optional drift or cancellation. */
   const readRun = () => {
     const status = runStatuses[runReads++] ?? run.status;
     const observed = {
@@ -155,6 +159,7 @@ function directHarness(
     expired: false,
     workflow_run: { id: run.id }
   };
+  /** Serve only the expected direct-workflow requests and retain dispatch evidence. */
   const execute = async (args, body) => {
     const method = args[args.indexOf("--method") + 1];
     const endpoint = args[args.indexOf("--method") + 2];
@@ -173,8 +178,11 @@ function directHarness(
         sha: endpoint.split("/").at(-1),
         tree: { sha: baseTree }
       });
-    if (method === "GET" && endpoint.endsWith(`/actions/runs/${run.id}`))
+    if (method === "GET" && endpoint.endsWith(`/actions/runs/${run.id}`)) {
+      if (++knownRunReads > missingKnownRunAfter)
+        return apiResponse("404 Not Found", { message: "Not Found" });
       return apiResponse("200 OK", readRun());
+    }
     if (
       endpoint.includes("/actions/runs/") &&
       endpoint.endsWith("/jobs?per_page=100")
@@ -280,6 +288,7 @@ function directHarness(
   return { calls, client, record, run };
 }
 
+/** Create the same backend waiting fixture using each profile's actual unit name. */
 function backendWaitHarness(options = {}) {
   const profile = options.profile ?? sandboxProfile;
   const unit =
@@ -315,6 +324,7 @@ function backendWaitHarness(options = {}) {
   );
 }
 
+/** Execute the fixture's saved direct operation with no external side effects. */
 const runDirectHarness = (harness) =>
   harness.client.run({
     record: harness.record,
@@ -455,13 +465,27 @@ for (const conclusion of [
   });
 }
 
-for (const field of ["id", "head_sha", "status"]) {
+for (const field of [
+  "id",
+  "head_sha",
+  "status",
+  "workflow_id",
+  "actor",
+  "head_branch",
+  "event"
+]) {
   test(`waiting stops when a confirmed deployment's ${field} changes`, async () => {
     const harness = backendWaitHarness({
       returnRunDetails: true,
       runStatuses: Array(65).fill("in_progress"),
       observeRun: (run, read) => {
-        if (read === 4) run[field] = field === "id" ? 999 : "unexpected";
+        if (read === 4)
+          run[field] =
+            field === "id"
+              ? 999
+              : field === "actor"
+                ? { ...run.actor, id: "999" }
+                : "unexpected";
       }
     });
     await assert.rejects(
@@ -470,6 +494,19 @@ for (const field of ["id", "head_sha", "status"]) {
     );
   });
 }
+
+test("a confirmed deployment disappearing stops without redispatching", async () => {
+  const harness = backendWaitHarness({
+    runStatuses: Array(65).fill("in_progress"),
+    missingKnownRunAfter: 1
+  });
+  await assert.rejects(runDirectHarness(harness), /404/u);
+  assert.equal(harness.record.workflow_run_id, harness.run.id);
+  assert.equal(
+    harness.calls.filter(({ method }) => method === "POST").length,
+    1
+  );
+});
 
 test("product workflow contract dispatches staging services and monitoring from 1a-staging", async () => {
   const backendOperation = makeReleaseOperation({
@@ -1602,6 +1639,7 @@ test("a monitoring build without its target template fails with a specific evide
   );
 });
 
+/** Construct verified deployment evidence for the chosen profile's E2E inputs. */
 function dependencyReport(
   operation,
   role,
@@ -1663,6 +1701,7 @@ function dependencyReport(
   return report;
 }
 
+/** Model the causal deployment, wrapper and E2E chain using read-only fake responses. */
 function automaticHarness({
   profile = sandboxProfile,
   environment = "staging",
@@ -1670,9 +1709,11 @@ function automaticHarness({
   e2eStatuses = [],
   missingWrapper = false,
   missingE2e = false,
+  missingKnownRun,
   observeRun,
   signal,
-  wait = async () => {}
+  wait = async () => {},
+  save = async () => {}
 } = {}) {
   const staging = environment === "staging";
   const label = staging ? "Staging" : "Production";
@@ -1782,6 +1823,7 @@ function automaticHarness({
   const automaticQueries = [];
   const calls = [];
   const reads = { wrapper: 0, e2e: 0 };
+  /** Advance the selected automatic phase without mutating its base identity. */
   const readRun = (run, key, statuses) => {
     const status = statuses[reads[key]++] ?? run.status;
     const observed = {
@@ -1792,6 +1834,7 @@ function automaticHarness({
     observeRun?.(observed, key, reads[key]);
     return observed;
   };
+  /** Serve the automatic chain and fail if the adapter tries any write request. */
   const execute = async (args) => {
     const method = args[args.indexOf("--method") + 1];
     const endpoint = args[args.indexOf("--method") + 2];
@@ -1805,6 +1848,16 @@ function automaticHarness({
     }
     if (endpoint.endsWith(`/actions/runs/${deploymentRun.id}`))
       return apiResponse("200 OK", deploymentRun);
+    if (
+      endpoint.endsWith(`/actions/runs/${wrapper.id}`) &&
+      missingKnownRun === "wrapper"
+    )
+      return apiResponse("404 Not Found", { message: "Not Found" });
+    if (
+      endpoint.endsWith(`/actions/runs/${e2eRun.id}`) &&
+      missingKnownRun === "e2e"
+    )
+      return apiResponse("404 Not Found", { message: "Not Found" });
     if (endpoint.endsWith(`/actions/runs/${wrapper.id}`))
       return apiResponse(
         "200 OK",
@@ -1915,6 +1968,7 @@ function automaticHarness({
       }
     }
   };
+  /** Start an E2E record whose deployment-triggered chain may already exist. */
   const makeRecord = () => ({
     id: e2eOperation.operation_id,
     release_id: releaseId,
@@ -1927,6 +1981,7 @@ function automaticHarness({
     operation: e2eOperation
   });
   const record = makeRecord();
+  /** Follow the mutable saved fixture record, including interrupted-run snapshots. */
   const run = () =>
     client.run({
       record,
@@ -1934,7 +1989,7 @@ function automaticHarness({
       runtime: savedRuntime,
       operations,
       steps,
-      save: async () => {}
+      save
     });
   return {
     client,
@@ -1997,7 +2052,7 @@ for (const phase of ["Wrapper", "E2e"]) {
       [`missing${phase}`]: true,
       wait: async () => waits++
     });
-    await assert.rejects(harness.run(), /chain does not match/u);
+    await assert.rejects(harness.run(), /could not be found/u);
     assert.ok(waits <= 2);
     assert.equal(harness.record.workflow_run_id, undefined);
   });
@@ -2024,16 +2079,87 @@ test("cancellation leaves the exact E2E chain resumable without another dispatch
   );
 });
 
+test("cancellation during the wrapper-only wait saves that exact run for resume", async () => {
+  const controller = new AbortController();
+  const snapshots = [];
+  const harness = automaticHarness({
+    wrapperStatuses: Array(65).fill("in_progress"),
+    signal: controller.signal,
+    wait: async () => controller.abort(),
+    save: async () => snapshots.push(structuredClone(harness.record))
+  });
+  await assert.rejects(harness.run(), { name: "AbortError" });
+  assert.equal(snapshots.length, 1);
+  const saved = JSON.parse(JSON.stringify(snapshots.at(-1)));
+  assert.equal(saved.dispatch_workflow_run_id, 603);
+  assert.equal(saved.deployment_workflow_run_id, 602);
+  assert.equal(saved.workflow_run_id, undefined);
+  assert.equal(saved.state, "running");
+  const resumed = automaticHarness({ wrapperStatuses: ["in_progress"] });
+  Object.assign(resumed.record, saved);
+  assert.equal((await resumed.run()).status, "passed");
+  assert.equal(
+    resumed.calls.some(({ endpoint }) =>
+      endpoint.includes("staging-e2e-dispatch.yml/runs?")
+    ),
+    false
+  );
+});
+
+test("cancellation during the wrapper-only save makes no further API request", async () => {
+  const controller = new AbortController();
+  let callsAtAbort;
+  const harness = automaticHarness({
+    wrapperStatuses: ["in_progress"],
+    signal: controller.signal,
+    save: async () => {
+      callsAtAbort = harness.calls.length;
+      controller.abort();
+    }
+  });
+  await assert.rejects(harness.run(), { name: "AbortError" });
+  assert.equal(harness.calls.length, callsAtAbort);
+  assert.equal(harness.record.dispatch_workflow_run_id, 603);
+  assert.equal(harness.record.workflow_run_id, undefined);
+});
+
 for (const phase of ["wrapper", "e2e"]) {
-  test(`automatic ${phase} rejects changed identity while waiting`, async () => {
-    const harness = automaticHarness({
-      [phase === "wrapper" ? "wrapperStatuses" : "e2eStatuses"]:
-        Array(65).fill("in_progress"),
-      observeRun: (run, key, read) => {
-        if (key === phase && read === 4) run.id = 999;
-      }
+  for (const field of [
+    "id",
+    "status",
+    "actor",
+    "workflow_id",
+    "head_branch",
+    "event"
+  ]) {
+    test(`automatic ${phase} rejects changed ${field} while waiting`, async () => {
+      const harness = automaticHarness({
+        [phase === "wrapper" ? "wrapperStatuses" : "e2eStatuses"]:
+          Array(65).fill("in_progress"),
+        observeRun: (run, key, read) => {
+          if (key === phase && read === 4)
+            run[field] =
+              field === "id"
+                ? 999
+                : field === "actor"
+                  ? { ...run.actor, id: "999" }
+                  : "unexpected";
+        }
+      });
+      await assert.rejects(harness.run(), /chain does not match/u);
     });
-    await assert.rejects(harness.run(), /chain does not match/u);
+  }
+  test(`a confirmed automatic ${phase} disappearing stops without a replacement`, async () => {
+    const harness = automaticHarness({
+      missingKnownRun: phase,
+      [phase === "wrapper" ? "wrapperStatuses" : "e2eStatuses"]:
+        Array(65).fill("in_progress")
+    });
+    await assert.rejects(harness.run(), /404/u);
+    assert.equal(
+      harness.calls.every(({ method }) => method === "GET"),
+      true
+    );
   });
 }
 

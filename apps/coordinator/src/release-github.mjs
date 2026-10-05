@@ -84,6 +84,10 @@ export function integrationPullWaitsForReview(observed, checked) {
   );
 }
 
+/**
+ * Create profile-bound GitHub integration and release operations.
+ * The generic workflow runner is restricted to its pinned sandbox contract.
+ */
 export function createReleaseGitHub({
   profile,
   runtime = sandboxReleaseRuntime,
@@ -143,6 +147,7 @@ export function createReleaseGitHub({
     "release-runtime",
     "The pinned release runtime is unavailable; a different profile is never a fallback."
   );
+  /** Make a repository-scoped request and reject cancellation or unexpected status. */
   async function call(role, method, suffix, body, allowed = [200]) {
     signal?.throwIfAborted();
     serviceAssert(
@@ -504,6 +509,7 @@ export function createReleaseGitHub({
     };
   }
   const runTitle = (id) => `Sandbox release ${id}`;
+  /** Require the exact saved run to match the approved sandbox operation. */
   function verifyRun(run, record, workflowId) {
     const operation = validateReleaseOperation(record.operation);
     const role = operation.operation === "e2e" ? "backend" : operation.role;
@@ -1416,6 +1422,7 @@ export function createReleaseGitHub({
       }
       return observed;
     },
+    /** Follow one generic sandbox workflow and verify its exact operation result. */
     async run({ record, actor, save }) {
       serviceAssert(
         runtime.workflow === "sandbox-release.yml",

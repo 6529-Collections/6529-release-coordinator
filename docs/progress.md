@@ -34,7 +34,32 @@ steps and do not establish live acceptance.
 The full non-fixing `npm run check` passed on Node 22.16.0: **812 tests passed**,
 three optional Docker cases skipped (815 total), plus lint, formatting,
 documentation/workflow policy and packed-CLI checks. This is local verification
-only; no remote CI or bot review has been completed for this branch.
+only, recorded before publication and the PR review below.
+
+### PR #304 review follow-up
+
+[Coordinator PR #304](https://github.com/6529-Collections/6529-release-coordinator/pull/304)
+publishes this waiting change separately from the product release. Its initial
+required GitHub CI passed. The general review identified an interrupted
+wrapper-only window: the confirmed automatic E2E dispatch ID was not saved until
+the test run appeared. Two offline regressions reproduced the missing snapshot
+and the late cancellation boundary before the fix. The adapter now saves that
+wrapper and its causal deployment immediately, checks cancellation after saving,
+and resumes the exact wrapper without rediscovery. A missing wrapper or test run
+has a specific discovery error rather than an identity-mismatch message.
+
+Further tests verify HTTP 404 stops each confirmed-run path without replacement,
+and exercise workflow, actor, branch, event and unknown-status changes while
+waiting. The initial GLM advisory had three empty reviewer slices and covered only
+design text; it is not code-review coverage. Final-head checks and reviews remain
+required. No release or deployment was restarted for this PR.
+
+The review follow-up's full non-fixing local gate passed: **832 tests passed**,
+three optional Docker cases skipped (835 total), with lint, formatting,
+documentation/workflow policy and packed-CLI checks passing and source unchanged.
+The touched helpers now have purpose/boundary docstrings; no review threshold or
+configuration was changed. A new local completion bound was deliberately not
+added: the agreed behavior waits for GitHub while retaining explicit cancellation.
 
 ## October 2 — staging-aware merge preparation (local and sandbox acceptance)
 
