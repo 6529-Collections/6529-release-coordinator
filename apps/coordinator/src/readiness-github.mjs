@@ -47,6 +47,19 @@ const pullQuery = `query ReadinessPull($repository: String!, $number: Int!, $cur
   }
 }`;
 
+// Cleanup retirement depends on PR identity and state, not check pagination or
+// approval-bypass discovery. This fixed query makes no release-ready claim.
+const identityQuery = `query CleanupPull($repository: String!, $number: Int!) {
+  repository(owner: "6529-Collections", name: $repository) {
+    pullRequest(number: $number) {
+      number state isDraft headRefOid headRefName baseRefOid baseRefName
+      mergeable mergeStateStatus reviewDecision
+      repository { nameWithOwner }
+      headRepository { nameWithOwner }
+    }
+  }
+}`;
+
 export function createReadinessGitHub({
   execute = executeFile,
   profile = realProfile,
@@ -133,6 +146,27 @@ export function createReadinessGitHub({
   }
 
   return {
+    async pullRequestIdentity(repository, number) {
+      if (
+        !repositories.has(repository) ||
+        !Number.isSafeInteger(number) ||
+        number < 1
+      )
+        throw new Error("Unsupported readiness repository or PR number.");
+      const response = await api("POST", "graphql", [
+        "-f",
+        `query=${identityQuery}`,
+        "-f",
+        `repository=${repository}`,
+        "-F",
+        `number=${number}`
+      ]);
+      const pr = response.data?.repository?.pullRequest;
+      if (!pr)
+        throw new Error("GitHub did not return the requested PR identity.");
+      return { ...pr, checks: [] };
+    },
+
     async pullRequest(repository, number) {
       if (
         !repositories.has(repository) ||

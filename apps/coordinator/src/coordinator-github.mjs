@@ -127,9 +127,9 @@ function allowed(method, path, body) {
   );
 }
 
-export function executeGitHub(args, body) {
+export function executeGitHub(args, body, executeFile = execFile) {
   return new Promise((resolve, reject) => {
-    const child = execFile(
+    const child = executeFile(
       "gh",
       args,
       {
@@ -147,13 +147,22 @@ export function executeGitHub(args, body) {
       (error, stdout) => {
         // --include preserves HTTP errors as structured status without exposing
         // raw stderr, credentials, runner logs, or API error bodies.
-        if (stdout?.startsWith("HTTP/")) resolve(stdout);
-        else if (error)
+        // A timeout or broken transport can leave headers and a partial body.
+        // Only an ordinary gh exit for an HTTP error is a completed response.
+        const status = Number(stdout?.match(/^HTTP\/\S+ (\d{3})\b/u)?.[1]);
+        const httpError =
+          error?.code === 1 &&
+          !error.killed &&
+          !error.signal &&
+          status >= 400 &&
+          status <= 599;
+        if (error && !httpError)
           reject(
             new Error(
-              "GitHub request failed before a readable HTTP response; outcome may be unknown."
+              "GitHub request did not complete; its outcome may be unknown."
             )
           );
+        else if (stdout?.startsWith("HTTP/")) resolve(stdout);
         else reject(new Error("GitHub returned no HTTP status."));
       }
     );
@@ -182,16 +191,30 @@ export function createCoordinatorGitHub({
       "X-GitHub-Api-Version: 2022-11-28"
     ];
     if (body !== undefined) args.push("--input", "-");
-    const output = await execute(args, body);
+    const operation = `${method} ${path.startsWith(prefix) ? path.slice(prefix.length) || "/" : "/user"}`;
+    let output;
+    try {
+      output = await execute(args, body);
+    } catch (error) {
+      throw new Error(
+        `GitHub request did not complete for ${operation}; its outcome may be unknown.`,
+        { cause: error }
+      );
+    }
     const match = output.match(
       /^HTTP\/\S+ (\d{3})[^\n]*\r?\n[\s\S]*?\r?\n\r?\n([\s\S]*)$/u
     );
-    if (!match) throw new Error("GitHub returned an unreadable HTTP response.");
+    if (!match)
+      throw new Error(
+        `GitHub returned an unreadable HTTP response for ${operation}; its outcome may be unknown.`
+      );
     let data = null;
     try {
       if (match[2].trim()) data = JSON.parse(match[2]);
     } catch {
-      throw new Error("GitHub returned unreadable JSON.");
+      throw new Error(
+        `GitHub returned a non-JSON HTTP ${match[1]} response for ${operation}; its outcome may be unknown.`
+      );
     }
     return { status: Number(match[1]), data };
   };

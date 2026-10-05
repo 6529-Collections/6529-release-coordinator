@@ -339,14 +339,15 @@ export async function readInbox({
   get,
   now = () => new Date(),
   profile = realProfile,
-  includeClosed = false
+  includeClosed = false,
+  inspect = inspectIssue
 }) {
   // Complete listing before verification, so page/auth failures cannot produce
   // a misleading empty or partially successful inbox report.
   const issues = await openIssues(get, profile, includeClosed);
   const requests = [];
   for (const issue of issues)
-    requests.push(await inspectIssue(issue, { get, profile }));
+    requests.push(await inspect(issue, { get, profile }));
   const byRequestId = new Map();
   for (const entry of requests) {
     if (!entry.request) continue;

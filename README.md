@@ -33,6 +33,13 @@ work are tracked in [Progress and next steps](./docs/progress.md).
 
 ## Run the ticket workflow
 
+To check and retire old requests without running a release, use the separate
+[ticket cleanup command](./apps/coordinator/README.md#check-and-clean-up-tickets)
+or the local board's **Check & clean up** button. Cleanup updates the same GitHub
+tickets and journal with Action needed or Closed decisions. It preserves closed
+records, active release ownership and stopped attempts; see the
+[cleanup rules](./docs/inbox-processing.md#cleanup-without-release-execution).
+
 Use one command with an explicit repository profile and inbox scope:
 
 Sandbox service checks require GitHub CLI 2.97.0 or later; see the
@@ -252,6 +259,7 @@ and an exact repeat passed from merged source; see
 | Need                                                                       | Document                                                                                                                                                                              |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | What has shipped, what is local, and what comes next                       | [Progress](./docs/progress.md)                                                                                                                                                        |
+| Open a simple release board with ticket cleanup                                    | [Release board](./release-board.html), [usage](./docs/release-board.md)                                                                                                                   |
 | Read live and saved run logs, including interruptions and cleanup          | [Run logging](./docs/design.md#next-step-v01-run-logging)                                                                                                                             |
 | Check changes to this repository before merging                            | [Repository code checks](./docs/code-checks.md)                                                                                                                                       |
 | Create or submit a request with the installed CLI                          | [CLI guide](./packages/release-request/README.md)                                                                                                                                     |

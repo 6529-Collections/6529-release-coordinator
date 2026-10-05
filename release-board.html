@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="A simple view of 6529 release requests from GitHub." />
+    <title>6529 Release board</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --page: #fff;
+        --column: #f4f5f6;
+        --text: #282c32;
+        --muted: #656b74;
+        --line: #e2e5e8;
+        --error: #a3423e;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--page); color: var(--text); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      main { max-width: 1050px; margin: 0 auto; padding: 36px 24px; }
+      header { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 28px; }
+      h1 { margin: 0; font-size: 21px; font-weight: 500; }
+      button { font: inherit; color: inherit; cursor: pointer; }
+      .actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+      #refresh, #cleanup { background: var(--page); border: 1px solid var(--line); border-radius: 6px; padding: 8px 13px; }
+      #cleanup { background: var(--text); color: white; border-color: var(--text); }
+      #cleanup-status { color: var(--muted); font-size: 12px; margin: -12px 0 24px; }
+      button:disabled { cursor: wait; color: var(--muted); }
+      #updated { margin: 5px 0 0; color: var(--muted); font-size: 12px; }
+      #message { margin: 0 0 20px; color: var(--error); font-size: 13px; }
+      [hidden] { display: none !important; }
+      .board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; align-items: start; }
+      .column { min-width: 0; min-height: 280px; padding: 16px; border-radius: 8px; background: var(--column); }
+      h2 { display: flex; align-items: baseline; gap: 8px; margin: 0 0 20px; font-size: 14px; font-weight: 500; }
+      .count { font-size: 12px; color: var(--muted); }
+      .cards { display: grid; gap: 12px; }
+      .card { display: block; padding: 15px; border: 1px solid var(--line); border-radius: 6px; background: var(--page); text-decoration: none; color: inherit; overflow-wrap: anywhere; }
+      .card:hover { border-color: #a4aab2; }
+      .card h3 { margin: 0 0 7px; font-size: 14px; line-height: 1.4; font-weight: 500; }
+      .card p { margin: 0; color: var(--muted); font-size: 12px; }
+      .card .failed { color: var(--error); }
+      .card .people { display: grid; gap: 3px; margin-top: 12px; }
+      .card .person { font-size: 11px; color: var(--text); }
+      .card .person-label { color: var(--muted); }
+      .card .identity { margin-top: 12px; font-size: 11px; }
+      .card .next-action { margin-top: 10px; color: var(--text); }
+      .empty { color: var(--muted); font-size: 12px; margin: 0; padding: 8px 0; }
+      .more { display: block; border: 0; background: transparent; padding: 13px 0 0; color: var(--muted); font-size: 12px; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+      footer { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding-top: 20px; font-size: 11px; color: var(--muted); }
+      footer a { color: inherit; text-underline-offset: 3px; }
+      a:focus-visible, button:focus-visible { outline: 2px solid #595d68; outline-offset: 3px; }
+      @media (max-width: 640px) { main { padding: 24px 16px; } .board { grid-template-columns: 1fr; gap: 16px; } .column { min-height: 0; } }
+      @media (pointer: coarse) { button { min-height: 44px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <div><h1>Release board</h1><p id="updated" role="status" aria-live="polite">Loading from GitHub…</p></div>
+        <div class="actions"><button id="refresh" type="button">Refresh</button><button id="cleanup" type="button" disabled>Check &amp; clean up</button></div>
+      </header>
+      <p id="cleanup-status" role="status" aria-live="polite">Updates GitHub tickets · does not release code</p>
+      <p id="message" role="alert" hidden></p>
+      <div class="board" id="board" aria-busy="true">
+        <section class="column" aria-labelledby="waiting-title"><h2 id="waiting-title">Open <span class="count" id="waiting-count"></span></h2><div class="cards" id="waiting-cards"><p class="empty">Loading requests…</p></div></section>
+        <section class="column" aria-labelledby="working-title"><h2 id="working-title">In progress <span class="count" id="working-count"></span></h2><div class="cards" id="working-cards"></div></section>
+        <section class="column" aria-labelledby="done-title"><h2 id="done-title">Done <span class="count" id="done-count"></span></h2><div class="cards" id="done-cards"></div></section>
+      </div>
+      <footer><span>Last recorded GitHub status</span><a id="closed-link" href="https://github.com/6529-Collections/6529-release-coordinator/issues?q=is%3Aissue+is%3Aclosed+label%3Arelease-request" target="_blank" rel="noopener noreferrer">Other closed requests ↗</a></footer>
+    </main>
+    <script>
+      (() => {
+        const repository = '6529-Collections/6529-release-coordinator';
+        const api = 'https://api.github.com/repos/' + repository;
+        const activeStatuses = new Set(['prepared', 'running', 'awaiting-review', 'awaiting-staging-choice', 'reconciling-staging', 'recovering', 'cancelling']);
+        const groups = ['waiting', 'working', 'done'];
+        const initialCards = 3;
+        const expanded = new Set();
+        const sourceTitles = new Map();
+        const refresh = document.getElementById('refresh');
+        const cleanup = document.getElementById('cleanup');
+        const cleanupStatus = document.getElementById('cleanup-status');
+        const cleanupToken = '__CLEANUP_TOKEN__';
+        const updated = document.getElementById('updated');
+        const message = document.getElementById('message');
+        const board = document.getElementById('board');
+        let rows = null;
+        let loading = false;
+        let cleanupRunning = false;
+        let cleanupAvailable = false;
+        let refreshAfterCleanup = false;
+        let completedCleanupRun = null;
+
+        function safeGitHubLink(value) {
+          try { const url = new URL(value); return url.origin === 'https://github.com' ? url.href : null; }
+          catch { return null; }
+        }
+
+        async function get(url, accept = 'application/vnd.github+json') {
+          const parsed = new URL(url);
+          const knownRepositoryPath = /^\/repos\/6529-Collections\/(6529-release-coordinator|6529seize-frontend|6529seize-backend)\//.test(parsed.pathname);
+          const inboxPaginationPath = parsed.pathname === '/repositories/1346244762/issues';
+          if (parsed.origin !== 'https://api.github.com' || (!knownRepositoryPath && !inboxPaginationPath)) throw new Error('Unexpected GitHub data address.');
+          const response = await fetch(url, { method: 'GET', headers: { Accept: accept }, credentials: 'omit', cache: 'no-store' });
+          if (!response.ok) {
+            if (response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0') {
+              const reset = Number(response.headers.get('x-ratelimit-reset'));
+              const when = reset ? new Date(reset * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'later';
+              throw new Error('GitHub’s public request allowance is used up. Try Refresh after ' + when + '.');
+            }
+            throw new Error('GitHub could not return the data (HTTP ' + response.status + ').');
+          }
+          return response;
+        }
+
+        async function readIssues() {
+          let url = api + '/issues?state=all&labels=release-request&sort=created&direction=desc&per_page=100';
+          const issues = [];
+          const visited = new Set();
+          while (url) {
+            if (visited.has(url)) throw new Error('GitHub returned a repeated results page.');
+            visited.add(url);
+            const response = await get(url);
+            const page = await response.json();
+            if (!Array.isArray(page)) throw new Error('GitHub returned an unexpected request list.');
+            issues.push(...page.filter(issue => !issue.pull_request));
+            const next = (response.headers.get('link') || '').split(',').find(link => /rel="next"/.test(link));
+            url = next ? next.match(/<([^>]+)>/)?.[1] : null;
+          }
+          return issues;
+        }
+
+        async function readJournal() {
+          const ref = await (await get(api + '/git/ref/heads/codex/inbox-state')).json();
+          const sha = ref.object?.sha;
+          if (!/^[0-9a-f]{40}$/.test(sha || '')) throw new Error('The saved progress revision could not be read.');
+          const journal = await (await get(api + '/contents/inbox-state.json?ref=' + sha, 'application/vnd.github.raw+json')).json();
+          if (journal.schema !== 1 || journal.repository !== repository || journal.profile !== 'real' || journal.workflow !== 'inbox-run-v7' || !journal.tickets || typeof journal.tickets !== 'object') throw new Error('The saved progress format is unfamiliar.');
+          if (journal.ticket_updates !== undefined && journal.ticket_updates !== 'cooperative-v1') throw new Error('The ticket reservation format is unfamiliar.');
+          return journal;
+        }
+
+        function appliedDecision(issue, journal) {
+          const ticket = journal.tickets[issue.number];
+          if (!ticket || ticket.issue_id !== issue.id || ticket.application_error) return null;
+          const transition = ticket.transitions?.at(-1);
+          return transition && ticket.applied === transition.id ? transition.decision : null;
+        }
+
+        function latestExecution(issue, journal) {
+          return Object.values(journal.batches || {})
+            .filter(batch => batch.selected?.includes(issue.number) && batch.execution)
+            .sort((a, b) => Date.parse(b.execution.started_at) - Date.parse(a.execution.started_at))[0]?.execution || null;
+        }
+
+        function controllerOwns(number, journal) {
+          const lock = journal.lock;
+          if (!lock || lock.scope?.cleanup) return false;
+          const selection = lock.scope?.selection;
+          const tickets = lock.reserved_tickets ?? (selection?.mode === 'filtered' ? selection.issue_numbers : lock.ticket_numbers);
+          return tickets === undefined || tickets.includes(number);
+        }
+
+        function releaseOwns(number, journal) {
+          return controllerOwns(number, journal) || Object.values(journal.batches || {}).some(batch =>
+            batch.selected?.includes(number) && (!batch.execution || activeStatuses.has(batch.execution.status)));
+        }
+
+        function submitterFor(issue, journal) {
+          const ticket = journal.tickets[issue.number];
+          if (ticket?.issue_id === issue.id && typeof ticket.submitter?.login === 'string') return ticket.submitter.login;
+          const receipt = (issue.body || '').split('\n## Release JSON')[0];
+          const actors = [...receipt.matchAll(/^\|\s*Trusted GitHub actor\s*\|\s*@([A-Za-z0-9-]+)\s*\|\s*$/gm)];
+          return actors.length === 1 ? actors[0][1] : null;
+        }
+
+        function responsibleFor(issue, decision, submitter) {
+          const owner = decision?.action_owner;
+          if (owner === 'None') return 'No action needed';
+          if (typeof owner === 'string' && owner.trim()) return owner
+            .replace(/\bSubmitter\b/g, submitter ? '@' + submitter : 'Submitter')
+            .replaceAll('; ', ' / ');
+          const received = issue.labels.some(label => (label.name || label) === 'status:received');
+          return received ? 'Coordinator' : 'Not recorded';
+        }
+
+        function shortStatus(issue, decision, execution, group) {
+          const labels = issue.labels.map(label => typeof label === 'string' ? label : label.name);
+          const codes = new Set(decision?.reasons?.map(reason => reason.code) || labels.filter(label => label.startsWith('reason:')).map(label => label.slice(7)));
+          if (group === 'done') return 'Released to ' + (decision.batch?.release?.target || (labels.includes('target:production') ? 'production' : 'staging'));
+          if (group === 'working' && (!execution || !activeStatuses.has(execution.status))) return 'Controller is checking this ticket';
+          if (execution && group === 'working') {
+            const states = { 'awaiting-review': 'Paused · waiting for review', 'awaiting-staging-choice': 'Paused · staging changed', 'reconciling-staging': 'Reconciling staging', recovering: 'Restoring the environment', cancelling: 'Cancelling this attempt', prepared: 'Release prepared' };
+            if (states[execution.status]) return states[execution.status];
+            const step = execution.plan?.steps?.[execution.step_index];
+            const environment = step?.environment === 'prod' ? 'production' : step?.environment;
+            if (step?.kind === 'e2e') return 'Testing on ' + (environment || 'the target');
+            if (step?.kind === 'deploy') return 'Deploying to ' + (environment || 'the target');
+            if (step?.kind === 'integrate') return 'Preparing ' + (environment || 'the release');
+            return 'Release in progress';
+          }
+          if (decision?.status === 'action-needed') return 'Action needed';
+          const explanations = [
+            ['release-failed', 'Failed · needs inspection'], ['release-stopped', 'Stopped · needs inspection'],
+            ['rehearsal-blocked', 'Blocked · needs inspection'], ['checks-failed', 'Failed checks · needs fixing'],
+            ['service-checks-failed', 'Failed service checks'], ['merge-conflict', 'Merge conflict · needs fixing'],
+            ['outdated-commit', 'Code changed · new request needed'], ['release-review-pending', 'Waiting for review'],
+            ['review-required', 'Waiting for review'], ['checks-pending', 'Waiting for checks'],
+            ['release-staging-changed', 'Staging changed · needs a decision'], ['coordinator-incomplete', 'Waiting for fresh evidence'],
+            ['request-unverified', 'Waiting for request evidence'], ['batch-deferred', 'Waiting for a later run']
+          ];
+          const explanation = explanations.find(([code]) => codes.has(code));
+          if (explanation) return explanation[1];
+          if (labels.includes('status:action-needed')) return 'Action needed';
+          if (execution && activeStatuses.has(execution.status)) return 'Saved attempt · needs inspection';
+          if (decision?.status === 'waiting' || labels.includes('status:waiting')) return 'Waiting for the next step';
+          return 'Waiting for inspection';
+        }
+
+        function makeRows(issues, journal) {
+          const result = { waiting: [], working: [], done: [], otherClosed: 0 };
+          for (const issue of issues) {
+            const decision = appliedDecision(issue, journal);
+            const execution = latestExecution(issue, journal);
+            const recordedComplete = decision?.status === 'completed' && decision.batch?.release?.status === 'completed' && decision.reasons?.some(reason => reason.code === 'release-completed');
+            let group = 'waiting';
+            if (recordedComplete) group = 'done';
+            else if (issue.state === 'closed') { result.otherClosed++; continue; }
+            else if (releaseOwns(issue.number, journal)) group = 'working';
+            const labels = issue.labels.map(label => typeof label === 'string' ? label : label.name);
+            const attention = group === 'waiting' && (decision?.status === 'action-needed' || labels.includes('status:action-needed'));
+            const submitter = submitterFor(issue, journal);
+            const responsible = responsibleFor(issue, decision, submitter);
+            const status = group === 'working' && !controllerOwns(issue.number, journal) ? 'Saved release · needs inspection' : shortStatus(issue, decision, execution, group);
+            result[group].push({ issue, decision, execution, attention, submitter, responsible, status });
+          }
+          for (const group of groups) result[group].sort((a, b) => Number(b.attention) - Number(a.attention) || Date.parse(b.issue.updated_at) - Date.parse(a.issue.updated_at));
+          return result;
+        }
+
+        function sourcePRs(row) {
+          return [...row.issue.title.matchAll(/(frontend|backend) (PR #[0-9]+(?:,\s*PR #[0-9]+)*)/g)]
+            .flatMap(([, role, references]) => [...references.matchAll(/PR #([0-9]+)/g)]
+              .map(([, number]) => ({ repository: '6529-Collections/6529seize-' + role, number })));
+        }
+
+        function cardTitle(row) {
+          const prs = sourcePRs(row);
+          const titles = prs.map(pr => sourceTitles.get(pr.repository + '#' + pr.number)).filter(Boolean);
+          if (titles.length === prs.length && titles.length) return titles.join(' + ');
+          return row.issue.title.replace(/^(Staging|Production)\s*·\s*/, '').split(' · ')[0];
+        }
+
+        function visibleRows(group) { return expanded.has(group) ? rows[group] : rows[group].slice(0, initialCards); }
+
+        function render() {
+          if (!rows) return;
+          for (const group of groups) {
+            document.getElementById(group + '-count').textContent = rows[group].length;
+            const container = document.getElementById(group + '-cards');
+            container.replaceChildren();
+            const visible = visibleRows(group);
+            for (const row of visible) {
+              const link = document.createElement('a');
+              link.className = 'card';
+              const href = safeGitHubLink(row.issue.html_url);
+              if (href) link.href = href;
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              const title = document.createElement('h3');
+              title.textContent = cardTitle(row);
+              const status = document.createElement('p');
+              status.textContent = row.status;
+              if (row.attention) status.className = 'failed';
+              const people = document.createElement('div');
+              people.className = 'people';
+              for (const [label, value] of [['Submitted by', row.submitter ? '@' + row.submitter : 'Not recorded'], ['Responsible', row.responsible]]) {
+                const person = document.createElement('p');
+                person.className = 'person';
+                const caption = document.createElement('span');
+                caption.className = 'person-label';
+                caption.textContent = label + ': ';
+                person.append(caption, document.createTextNode(value));
+                people.append(person);
+              }
+              const identity = document.createElement('p');
+              identity.className = 'identity';
+              const target = row.issue.labels.some(label => (label.name || label) === 'target:production') ? 'Production' : 'Staging';
+              identity.textContent = '#' + row.issue.number + ' · ' + target;
+              link.append(title, status, people, identity);
+              if (group === 'waiting' && row.decision?.next_action) {
+                const next = document.createElement('p');
+                next.className = 'next-action';
+                next.textContent = row.decision.next_action;
+                link.append(next);
+              }
+              container.append(link);
+            }
+            if (!visible.length) {
+              const empty = document.createElement('p');
+              empty.className = 'empty';
+              empty.textContent = group === 'working' ? 'No active release recorded.' : group === 'done' ? 'No completed release recorded.' : 'No open requests.';
+              container.append(empty);
+            }
+            if (rows[group].length > initialCards) {
+              const more = document.createElement('button');
+              more.type = 'button'; more.className = 'more';
+              more.textContent = expanded.has(group) ? 'Show less' : 'Show ' + (rows[group].length - visible.length) + ' more';
+              more.addEventListener('click', () => { expanded.has(group) ? expanded.delete(group) : expanded.add(group); render(); });
+              container.append(more);
+            }
+          }
+          document.getElementById('closed-link').textContent = rows.otherClosed + ' other closed requests ↗';
+        }
+
+        async function loadSourceTitles() {
+          const wanted = new Map();
+          for (const group of groups) for (const row of rows[group].slice(0, initialCards)) for (const pr of sourcePRs(row)) {
+            const key = pr.repository + '#' + pr.number;
+            if (!sourceTitles.has(key)) wanted.set(key, pr);
+          }
+          await Promise.allSettled([...wanted].map(async ([key, pr]) => {
+            const source = await (await get('https://api.github.com/repos/' + pr.repository + '/pulls/' + pr.number)).json();
+            if (typeof source.title === 'string') sourceTitles.set(key, source.title);
+          }));
+          render();
+        }
+
+        async function load() {
+          if (loading) return;
+          loading = true; refresh.disabled = true; board.setAttribute('aria-busy', 'true');
+          updated.textContent = 'Reading GitHub…'; message.hidden = true;
+          try {
+            const [issues, journal] = await Promise.all([readIssues(), readJournal()]);
+            rows = makeRows(issues, journal);
+            const refreshedAt = new Date();
+            sourceTitles.clear();
+            render();
+            await loadSourceTitles();
+            updated.textContent = 'Updated ' + refreshedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+          } catch (error) {
+            updated.textContent = rows ? 'Refresh failed · showing the previous data' : 'Could not load GitHub data';
+            message.textContent = error instanceof TypeError ? 'Could not reach GitHub. Check the connection and try Refresh.' : error.message;
+            message.hidden = false;
+            if (!rows) for (const group of groups) {
+              const container = document.getElementById(group + '-cards');
+              const empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = 'Data unavailable.'; container.replaceChildren(empty);
+            }
+          } finally { loading = false; refresh.disabled = cleanupRunning; cleanup.disabled = cleanupRunning || !cleanupAvailable; board.setAttribute('aria-busy', 'false'); }
+        }
+        function showCleanup(state) {
+          cleanupRunning = state.running === true;
+          cleanupAvailable = state.available === true;
+          cleanup.disabled = cleanupRunning || !cleanupAvailable || loading;
+          refresh.disabled = loading || cleanupRunning;
+          cleanup.textContent = cleanupRunning ? 'Checking…' : state.resume ? 'Resume cleanup' : 'Check & clean up';
+          if (cleanupRunning) cleanupStatus.textContent = state.progress?.message || 'Checking tickets…';
+          else if (state.error) cleanupStatus.textContent = state.error;
+          else if (state.result) {
+            const counts = state.result.counts;
+            cleanupStatus.textContent = 'Cleanup finished: ' + counts.closed + ' closed · ' + counts.action_needed + ' need action · ' + counts.unchanged + ' unchanged';
+          } else cleanupStatus.textContent = 'Updates GitHub tickets · does not release code';
+        }
+        async function checkCleanup() {
+          try {
+            const response = await fetch('/api/cleanup', { credentials: 'omit', cache: 'no-store' });
+            if (!response.ok) throw new Error('The local cleanup service is unavailable.');
+            const state = await response.json();
+            showCleanup(state);
+            if (state.running) {
+              refreshAfterCleanup = true;
+              setTimeout(() => { void checkCleanup(); }, 1500);
+            } else if (refreshAfterCleanup || (state.result && completedCleanupRun !== state.result.run_id)) {
+              refreshAfterCleanup = false;
+              completedCleanupRun = state.result?.run_id ?? null;
+              await load();
+            }
+          } catch {
+            cleanupAvailable = false;
+            cleanup.disabled = true;
+            refresh.disabled = loading;
+            cleanupStatus.textContent = 'Cleanup service unavailable. Refresh the page to reconnect; a running cleanup may still be active.';
+          }
+        }
+        async function startCleanup() {
+          refreshAfterCleanup = true;
+          cleanup.disabled = true;
+          refresh.disabled = true;
+          cleanupStatus.textContent = 'Starting cleanup…';
+          try {
+            const response = await fetch('/api/cleanup', { method: 'POST', headers: { 'X-Release-Board-Token': cleanupToken }, credentials: 'omit', cache: 'no-store' });
+            const state = await response.json();
+            if (!response.ok && response.status !== 409) throw new Error(state.error || 'Could not start cleanup.');
+            showCleanup(state);
+            await checkCleanup();
+          } catch (error) {
+            cleanupStatus.textContent = error.message;
+            cleanup.disabled = true;
+            refresh.disabled = loading;
+          }
+        }
+        cleanup.addEventListener('click', () => { void startCleanup(); });
+        refresh.addEventListener('click', () => { void load(); });
+        void load();
+        void checkCleanup();
+      })();
+    </script>
+  </body>
+</html>

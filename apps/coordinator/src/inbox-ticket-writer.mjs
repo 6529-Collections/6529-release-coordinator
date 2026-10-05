@@ -47,11 +47,12 @@ async function applyTicket({
   actor,
   profile,
   verifyClosure,
+  verifiedLabels,
   signal
 }) {
   const writeApi = async (call) => {
     signal?.throwIfAborted();
-    if (call.method !== "GET") await journal.guard(run);
+    if (call.method !== "GET") await journal.guard(run, number);
     return api(call);
   };
   const issue = await response(api, "GET", `/issues/${number}`);
@@ -63,7 +64,7 @@ async function applyTicket({
     decision = record.decision;
   const request = ticket.request;
   const labels = desiredLabels(issue, decision, request);
-  await ensureLabels(writeApi, labels);
+  await ensureLabels(writeApi, labels, verifiedLabels);
   const additions = labels.filter(
     (label) => managedLabels.has(label) && !labelNames(issue).includes(label)
   );
@@ -164,8 +165,10 @@ async function applyTicket({
   }
   if (Object.keys(patch).length)
     await response(writeApi, "PATCH", `/issues/${number}`, patch);
-  const finalIssue = await response(api, "GET", `/issues/${number}`);
-  const finalComments = await comments(api, number);
+  const [finalIssue, finalComments] = await Promise.all([
+    response(api, "GET", `/issues/${number}`),
+    comments(api, number)
+  ]);
   const finalManaged = labelNames(finalIssue)
     .filter((label) => managedLabels.has(label))
     .sort();
@@ -221,7 +224,10 @@ export async function presentRunTicket(
     get,
     profile,
     observe,
-    github
+    github,
+    verifiedLabels,
+    closureDecision = decideTicket,
+    decisionPolicyVersion
   }
 ) {
   const {
@@ -280,7 +286,9 @@ export async function presentRunTicket(
         at: now().toISOString(),
         actor,
         run_id: run.run_id,
-        policy_version: rehearsal ? runPolicyVersion : policyVersion,
+        policy_version:
+          decisionPolicyVersion ??
+          (rehearsal ? runPolicyVersion : policyVersion),
         decision,
         observation,
         previous_status: latest(ticket)?.decision.status ?? null,
@@ -309,6 +317,7 @@ export async function presentRunTicket(
         number,
         actor,
         profile,
+        verifiedLabels,
         signal,
         verifyClosure: async () => {
           if (recordedTerminal || closeTest) return;
@@ -339,7 +348,7 @@ export async function presentRunTicket(
             github,
             profile
           });
-          const fresh = decideTicket(freshEntry, freshObservation);
+          const fresh = await closureDecision(freshEntry, freshObservation);
           if (
             fresh.status !== "closed" ||
             digest(fresh.reasons) !== digest(latest(ticket).decision.reasons)

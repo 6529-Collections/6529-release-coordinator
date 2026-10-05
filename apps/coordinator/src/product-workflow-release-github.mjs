@@ -88,7 +88,7 @@ async function downloadProductArtifact(
   }
 }
 
-function expectedJobs(descriptor, runtime) {
+export function expectedJobs(descriptor, runtime) {
   if (runtime.profile === "real") {
     if (descriptor.kind === "dispatch")
       return {
