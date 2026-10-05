@@ -385,6 +385,125 @@ test("an ambiguous rejected transport never retries mutations just because the o
   assert.equal(f.state().lock.progress, "unrelated progress");
 });
 
+for (const advances of [1, 3])
+  test(`an unconfirmed own commit searches only the revision gap after ${advances} foreign saves on long history`, async () => {
+    const f = pair(),
+      release = journalFor(f),
+      first = await release.acquire(await f.identity(), undefined, scope([1]));
+    for (let index = 0; index < 40; index++) {
+      first.state.lock.progress = `prior progress ${index}`;
+      await release.save(first.state, first.run, "fixture prior history");
+    }
+    const cleanup = journalFor(f),
+      second = await cleanup.acquire(
+        await f.identity(),
+        undefined,
+        scope(null, true)
+      );
+    let interrupted = false,
+      confirmationStart;
+    f.before = async ({ method, path }) => {
+      if (
+        !interrupted &&
+        method === "PATCH" &&
+        path === "/git/refs/heads/codex/inbox-state"
+      ) {
+        interrupted = true;
+        for (let index = 0; index < advances; index++) {
+          first.state.lock.progress = `foreign progress ${index}`;
+          await release.save(
+            first.state,
+            first.run,
+            "fixture disjoint progress"
+          );
+        }
+        confirmationStart = f.calls.length;
+        throw new Error("Unknown request outcome");
+      }
+    };
+    const before = f.calls.filter((call) => call.method === "PATCH").length;
+    await assert.rejects(
+      cleanup.claimTicket(second.state, second.run, 2),
+      /Unknown request outcome/u
+    );
+    assert.equal(
+      f.calls.filter((call) => call.method === "PATCH").length - before,
+      advances + 1
+    );
+    assert.equal(
+      f.calls
+        .slice(confirmationStart)
+        .filter((call) => call.path.startsWith("/git/commits/")).length,
+      5 * advances
+    );
+    assert.equal(f.state().cleanup_lock.current_ticket, undefined);
+    assert.equal(f.state().cleanup_lock.token, second.run.token);
+    assert.equal(f.state().lock.progress, `foreign progress ${advances - 1}`);
+  });
+
+test("a changed ref observation stays verifiable when the other lane advances again during reread", async () => {
+  const f = pair(),
+    release = journalFor(f),
+    first = await release.acquire(await f.identity(), undefined, scope([1]));
+  const cleanup = journalFor(f),
+    second = await cleanup.acquire(
+      await f.identity(),
+      undefined,
+      scope(null, true)
+    );
+  let advanced = false;
+  f.after = async ({ method, path }) => {
+    if (
+      !advanced &&
+      method === "GET" &&
+      path === "/git/ref/heads/codex/inbox-state"
+    ) {
+      advanced = true;
+      second.state.cleanup_lock.progress = "later disjoint cleanup progress";
+      await cleanup.save(
+        second.state,
+        second.run,
+        "fixture progress after ref read"
+      );
+    }
+  };
+  await release.guard(first.run, 1);
+  assert.equal(advanced, true);
+  assert.equal(
+    first.state.cleanup_lock.progress,
+    "later disjoint cleanup progress"
+  );
+  assert.equal(f.state().lock.token, first.run.token);
+});
+
+for (const regressed of [false, true])
+  test(`a ${regressed ? "regressed" : "rewritten same-revision"} head is rejected without searching old journal history`, async () => {
+    const f = pair(),
+      release = journalFor(f),
+      first = await release.acquire(await f.identity(), undefined, scope([1]));
+    for (let index = 0; index < 40; index++)
+      await release.save(first.state, first.run, "fixture prior history");
+    const prior = f.head;
+    await release.save(first.state, first.run, "fixture latest snapshot");
+    if (regressed) f.head = prior;
+    else {
+      const copy = "e".repeat(40);
+      f.objects.set(copy, structuredClone(f.objects.get(f.head)));
+      f.head = copy;
+    }
+    const before = f.calls.length;
+    await assert.rejects(
+      release.guard(first.run, 1),
+      /history no longer descends/u
+    );
+    const calls = f.calls.slice(before);
+    assert.equal(
+      calls.filter((call) => call.path.startsWith("/git/commits/")).length,
+      1
+    );
+    assert.ok(calls.every((call) => call.method === "GET"));
+  });
+
 test("a legacy release blocks activation and an interrupted legacy cleanup resumes in its original lane", async () => {
   const f = pair(),
     legacy = createJournal(f.api, f.profile, {

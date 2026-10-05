@@ -4,7 +4,7 @@
 
 The existing local cleanup, cooperative ticket reservations, follow-up evidence,
 transport diagnostics and release-board work is now saved on
-`codex/publish-cleanup-dashboard`. Signed snapshot `0a56398` preserved all of the
+`codex/publish-cleanup-dashboard`. Signed snapshot `0a56398` preserved all the
 previously uncommitted files before integrating current remote main
 `b00542b503f2af190fce8cbafe0674d0503b111b` (merged staging-preparation PR #293).
 The final diff preserves #293's reviewed conflict logging, review-stop cleanup,
@@ -19,6 +19,26 @@ remained unchanged. These are local offline checks: remote PR CI/reviews and a
 merge remain separate gates. No cleanup command, live journal/ticket mutation,
 release resume, browser cleanup click, product merge/deployment, npm publication
 or runtime restart was performed for this publication checkpoint.
+
+Review follow-up in PR #307 bounds journal ancestry reads by the verified
+revision gap, preserving the existing five readback attempts and disjoint-save
+rules. Offline regressions reproduced an unconfirmed write reading 220/230
+old commits instead of 5/15; rewritten and regressed heads now reject after
+their one required snapshot read. A second lane advancing during the reread
+still verifies successfully. A large saved-history regression also reproduced
+an argument-spread stack overflow; selecting the earliest verified start now
+uses a reduction without adding a history cap.
+
+The follow-up reader explicitly reports GitHub's documented 1,000-result
+workflow-search cap and imprecise counts as unavailable complete evidence.
+It still rejects short or moving pages, accepts exactly 1,000 verified workflow
+results, and paginates 1,001 jobs without inventing a job limit. The updated full
+local gate passed **870 tests**, with three optional Docker skips (873 total).
+Initial primary reviews were context-truncated; CodeRabbit inspected all 33
+files and raised the fixed ancestry finding. Initial GLM reviewers all returned
+empty output, so no GLM coverage is claimed. Fresh exact-head remote reviews and
+CI remain required before the separately authorized merge; these changes have
+not been exercised against the live inbox.
 
 ## Concurrent cleanup — local installation (October 2)
 

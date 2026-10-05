@@ -139,7 +139,10 @@ export async function inspectCleanupFollowup(
   if (!eligible) return { status: "unknown", checks, evidence };
   const runtime = productWorkflowRuntimeForProfile(profile);
   const since = new Date(
-    Math.min(...owned.map((batch) => time(batch.execution.started_at)))
+    owned.reduce(
+      (earliest, batch) => Math.min(earliest, time(batch.execution.started_at)),
+      Infinity
+    )
   ).toISOString();
   const lists = new Map();
   const runs = (role, key) => {

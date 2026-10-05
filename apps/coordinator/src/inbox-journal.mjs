@@ -361,10 +361,16 @@ export function createJournal(
   const readArchive = async (ref, head) => {
     return readSavedFile(ref.path, head, "History archive");
   };
-  const assertDescendant = async (head, ancestor) => {
-    if (!ancestor) return;
+  // Each journal write advances one revision and has one parent. Search no
+  // further than that verified revision gap, not through unrelated old history.
+  const assertDescendant = async (head, ancestor, steps) => {
+    if (!ancestor || head === ancestor) return;
     let sha = head;
-    while (sha !== ancestor) {
+    for (let walked = 0; sha !== ancestor; walked++) {
+      if (!Number.isSafeInteger(steps) || steps <= 0 || walked >= steps)
+        throw new Error(
+          "Journal history no longer descends from the verified snapshot."
+        );
       const commit = await response(api, "GET", `/git/commits/${sha}`);
       if (
         !Array.isArray(commit.parents) ||
@@ -379,12 +385,15 @@ export function createJournal(
   };
   const freshSnapshot = async (run, observedHead) => {
     const current = await read();
+    const steps = current.state.revision - snapshot.state.revision;
+    // The first ref observation may sit between the verified snapshot and the
+    // reread head; the full verified gap also bounds that intervening walk.
     if (observedHead && current.sha !== observedHead)
-      await assertDescendant(current.sha, observedHead);
+      await assertDescendant(current.sha, observedHead, steps);
     if (current.sha !== snapshot.sha) {
       if (!cooperative(snapshot.state) || !cooperative(current.state))
         throw new Error("Inbox lock changed; this process must stop.");
-      await assertDescendant(current.sha, snapshot.sha);
+      await assertDescendant(current.sha, snapshot.sha, steps);
       verifyForeignProgress(snapshot.state, current.state, run);
     }
     return current;
@@ -474,7 +483,11 @@ export function createJournal(
       if (conflict) {
         const latest = await read();
         if (latest.sha === prior) throw updateError;
-        await assertDescendant(latest.sha, prior);
+        await assertDescendant(
+          latest.sha,
+          prior,
+          latest.state.revision - current.state.revision
+        );
         verifyForeignProgress(base.state, latest.state, run);
         mergeJournalChanges(base.state, desired, latest.state, run);
         current = latest;
@@ -493,7 +506,11 @@ export function createJournal(
             break;
           }
           if (latest.sha !== prior && cooperative(state) && run) {
-            await assertDescendant(latest.sha, commit.sha);
+            await assertDescendant(
+              latest.sha,
+              commit.sha,
+              latest.state.revision - state.revision
+            );
             verifyForeignProgress(state, latest.state, run);
             verified = latest;
             break;

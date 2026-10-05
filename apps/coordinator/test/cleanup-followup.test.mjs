@@ -522,6 +522,84 @@ test("incomplete or moving API pagination and unreadable evidence never supply c
   }
 });
 
+test("capped or imprecise workflow-run searches report unavailable complete evidence", async () => {
+  for (const total of [1001, 2501, "2,500+"]) {
+    let calls = 0;
+    const client = createCleanupFollowupGitHub({
+      execute: async () => {
+        calls++;
+        return `HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(
+          {
+            total_count: total,
+            workflow_runs: Array.from({ length: 100 }, (_, i) => ({
+              id: i + 1
+            }))
+          }
+        )}`;
+      }
+    });
+    await assert.rejects(
+      client.runs("frontend", "prodDeploy", "2026-09-29T00:00:00Z"),
+      /GitHub workflow-run search.*complete follow-up evidence/u
+    );
+    assert.equal(calls, 1);
+  }
+});
+
+test("complete workflow evidence at GitHub's search boundary and longer job lists remain readable", async () => {
+  for (const [field, total] of [
+    ["workflow_runs", 1000],
+    ["jobs", 1001]
+  ]) {
+    const pages = [];
+    const client = createCleanupFollowupGitHub({
+      execute: async (args) => {
+        const page = Number(
+          new URL(`https://github.com/${args[5]}`).searchParams.get("page")
+        );
+        pages.push(page);
+        const offset = (page - 1) * 100;
+        return `HTTP/2.0 200 OK\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(
+          {
+            total_count: total,
+            [field]: Array.from(
+              { length: Math.min(100, total - offset) },
+              (_, i) => ({ id: offset + i + 1 })
+            )
+          }
+        )}`;
+      }
+    });
+    const values =
+      field === "workflow_runs"
+        ? await client.runs("frontend", "prodDeploy", "2026-09-29T00:00:00Z")
+        : await client.jobs("frontend", { id: 40, run_attempt: 1 });
+    assert.equal(values.length, total);
+    assert.deepEqual(
+      pages,
+      Array.from({ length: Math.ceil(total / 100) }, (_, i) => i + 1)
+    );
+    assert.equal(values.at(-1).id, total);
+  }
+});
+
+test("large saved release histories do not overflow before reporting unavailable repository evidence", async () => {
+  const f = fixture();
+  f.github.identity = async () => {
+    throw new Error("Repository evidence unavailable");
+  };
+  const result = await inspectCleanupFollowup(f.entry, {
+    records: Array(200_000).fill(f.batch),
+    github: f.github,
+    profile: realProfile
+  });
+  assert.equal(result.status, "unknown");
+  assert.equal(
+    result.checks.find((check) => check.id === "repository_identity").message,
+    "Repository evidence unavailable"
+  );
+});
+
 test("follow-up reader exposes only fixed GET operations and paginates complete evidence", async () => {
   const calls = [];
   const client = createCleanupFollowupGitHub({

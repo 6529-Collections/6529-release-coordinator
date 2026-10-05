@@ -81,6 +81,16 @@ predate frontend validation. Every requested commit must be an ancestor of its
 merged PR head, and that merge must be included in the later delivered commit.
 Rebased or otherwise unprovable equivalence needs a person.
 
+GitHub's [workflow-run search](https://docs.github.com/en/rest/actions/workflow-runs)
+returns at most 1,000 matches for a `created`-filtered query. Its
+[September 25 API change](https://github.blog/changelog/2026-09-25-changes-to-query-results-in-the-github-actions-api-and-ui/)
+also permits imprecise large counts. A capped, imprecise, moving or incomplete
+result remains unknown and names the missing complete evidence; a maintainer
+must reconcile narrower dated evidence rather than close from a partial list.
+Exactly 1,000 consistently counted results can be verified across ten pages.
+This external search cap is not a Coordinator history limit or a limit on
+[job pagination](https://docs.github.com/en/rest/actions/workflow-jobs).
+
 Old trial PRs must be closed unmerged and their exact owned branches absent;
 old merged staging integrations must remain accounted for in current staging.
 The checker rereads workflow history and environment refs at the end. Immediately
@@ -131,6 +141,12 @@ descendant with intact own effects; an unknown outcome never triggers another
 mutation merely because the other lane advanced. This adds no retry/time budget
 or automatic takeover. GitHub Issues and this journal remain the only state
 source; separate lane reservations are not a database or heartbeat.
+
+Ancestry verification walks no further than the verified journal revision gap:
+each saved journal commit has one parent and increments the revision by one.
+Rewritten, regressed or unconfirmed sibling heads stop without searching all
+older history. This follows the existing journal invariant, not a new attempt
+budget; exact successful saves beneath unrelated later progress still reconcile.
 
 Interrupted writes retain the cleanup reservation and partial-application
 evidence. After the previous process has stopped, `inbox:cleanup --resume RUN_ID`

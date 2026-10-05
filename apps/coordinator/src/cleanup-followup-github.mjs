@@ -55,6 +55,16 @@ export function createCleanupFollowupGitHub({
     let total;
     for (let page = 1; ; page++) {
       const value = await read(role, `${path}&page=${page}`);
+      // GitHub caps created-filtered workflow searches at 1000 results and can
+      // return imprecise large counts. Neither supplies complete closure proof.
+      // https://docs.github.com/en/rest/actions/workflow-runs
+      if (
+        field === "workflow_runs" &&
+        (!Number.isSafeInteger(value.total_count) || value.total_count > 1000)
+      )
+        throw new Error(
+          "GitHub workflow-run search exceeds its 1000-result cap or has an imprecise count; complete follow-up evidence is unavailable. A maintainer must reconcile narrower dated evidence."
+        );
       requireValue(
         Array.isArray(value[field]) &&
           Number.isSafeInteger(value.total_count) &&
