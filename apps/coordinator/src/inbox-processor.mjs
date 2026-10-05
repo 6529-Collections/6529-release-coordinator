@@ -14,6 +14,9 @@ import {
   verifyBatchInputs
 } from "./inbox-preparation.mjs";
 import { presentRunTicket } from "./inbox-ticket-writer.mjs";
+import { batchDecision } from "./inbox-batch.mjs";
+import { batchTicketResult } from "./batch-selection.mjs";
+import { terminal } from "./ticket-presentation.mjs";
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { assertCancellableRelease } from "./release-cancellation.mjs";
 import { refreshedPreparationPlans } from "./preparation-refresh.mjs";
@@ -46,7 +49,8 @@ export async function processInbox({
   profile = realProfile,
   releaseAdapter,
   journal = createJournal(api, profile, {
-    workflow: rehearsal ? inboxWorkflow : undefined
+    workflow: rehearsal ? inboxWorkflow : undefined,
+    ticketConcurrency: Boolean(rehearsal)
   }),
   loadInbox = readInbox,
   inspect = inspectIssue,
@@ -214,6 +218,7 @@ export async function processInbox({
       inspect
     });
     let preparedTickets;
+    const presented = new Set();
     for (;;) {
       signal?.throwIfAborted();
       preparedTickets = await prepareRunTickets({
@@ -259,14 +264,62 @@ export async function processInbox({
               plan
             }),
           release: release
-            ? (options) =>
-                release({
+            ? async (options) => {
+                // Settle the tickets outside this exact group before releasing
+                // their reservation. They must not be overwritten afterward.
+                if (journal.reserveRelease) {
+                  for (const item of preparedTickets.filter(
+                    (item) =>
+                      !options.batch.selected.includes(item.number) &&
+                      !presented.has(item.number)
+                  )) {
+                    if (
+                      options.batch.inputs.some(
+                        (input) => input.number === item.number
+                      ) &&
+                      item.decision &&
+                      !terminal(item.decision)
+                    )
+                      item.decision = batchDecision(
+                        item.decision,
+                        batchTicketResult(options.batch, item.number)
+                      );
+                    pendingNumber = item.number;
+                    results.push(
+                      await presentRunTicket(item, {
+                        api,
+                        journal,
+                        state,
+                        run,
+                        actor,
+                        signal,
+                        now,
+                        rehearsal,
+                        closeTest,
+                        inspect,
+                        get,
+                        profile,
+                        observe,
+                        github
+                      })
+                    );
+                    presented.add(item.number);
+                    pendingNumber = null;
+                  }
+                  await journal.reserveRelease(
+                    state,
+                    run,
+                    options.batch.selected
+                  );
+                }
+                return release({
                   ...options,
                   stagingChange,
                   reviewStop,
                   cancelKeepCurrent,
                   operator: actor
-                })
+                });
+              }
             : undefined
         });
       }
@@ -347,6 +400,7 @@ export async function processInbox({
       });
     }
     for (const item of preparedTickets) {
+      if (presented.has(item.number)) continue;
       pendingNumber = item.number;
       results.push(
         await presentRunTicket(item, {

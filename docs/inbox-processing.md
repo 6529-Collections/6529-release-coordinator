@@ -20,6 +20,161 @@ the locally implemented real-product path.
 
 ## Goal and boundary
 
+### Cleanup without release execution
+
+`inbox:cleanup` is a separate, manually invoked ticket maintenance action. The
+user-approved October 1 design uses only `action-needed` and `closed` for new
+decisions: it never emits `waiting` or `eligible`, and passing initial checks
+does not authorize or start a release. Existing terminal decisions and closed
+Issues remain unchanged. Cleanup skips tickets reserved by a running, paused or
+recovering release. It can check and update other tickets while that release
+continues; saved unfinished releases remain protected even without a live lock.
+
+The command requires an explicit profile and `inbox` or `filtered` scope, verifies
+the existing current-profile v7 journal and intake receipts, reads current PR,
+check, review and dependency evidence, and updates the same Coordinator status
+comment, managed labels and next-action owner. It journals each decision before
+applying it and verifies the resulting Issue. GitHub remains the state source;
+the dashboard reads those same Issues and applied decisions.
+
+The cleanup scan reuses successful intake proof only for the same Issue ID,
+number and exact receipt body within that invocation. Closed tickets with an
+already verified terminal presentation and matching journal receipt are left
+unchanged without downloading their old submission logs again. Pending closure,
+reopened Issues and changed receipts do not take that shortcut.
+Completed job logs and catalogs at pinned commits can be reused within the run;
+workflow metadata, PRs, assignee eligibility and Issue/comment readback stay fresh.
+Before a new closure the writer re-verifies the receipt and current intake
+workflow, then independently rechecks current PR and any release-follow-up evidence.
+
+Clearly obsolete or all-merged requests use a fixed, smaller PR-identity query
+and two independent observations, without check pagination, catalog reads or
+approval-bypass discovery. They still use the same closure rules, source binding
+and saved release-ownership protection. Requests that may still need release
+work use the full check/review/dependency reader. This maintenance observation
+does not establish release readiness. Managed label definitions are ensured
+once per run; every Issue's applied labels, comment and state are still verified.
+
+Verified stable outdated requests and requests whose exact PRs were all merged
+before release execution can close with their existing reasons. Missing proof,
+pending checks, failed checks, conflicts, review requirements and overlapping
+requests become concrete named actions. Current requests without a first-stage
+blocker receive `reason:release-action-required`: decide whether to run an explicit
+scoped release with fresh checks or record an authorized cancellation.
+No request is closed merely for its age or a guessed replacement.
+
+An earlier selected release or recorded release projection prevents automatic
+intake closure merely because its PR is now merged or changed. The October 2
+follow-up checker can reconcile a verified frontend-only, no-database-change
+attempt stopped with `release-stale` before production operations. It requires
+the full saved batch bound to the exact request, completed known staging
+operations, no recovery/cancellation, and recorded temporary cleanup.
+
+The checker uses a separate fixed GET-only client. It verifies repository
+identities, current staging/production refs, and complete workflow-run/job
+pagination from the earliest owned attempt's start. Separate activity reads
+have no date cutoff: the newest workflow page and every active-status count
+must be quiet both initially and on the final reread. Positive but unlisted
+counts, unreadable activity, or a still-active run created before the original
+attempt block closure. Completed older runs do not block closure. Current
+staging must have a successful deployment and its unique automatic matching E2E chain; a production
+request also needs the corresponding current production chain. It checks approved
+workflow blobs, exact run/attempt identities, required successful jobs, triggers,
+actors and causal order. Backend deployment must match its current branch and
+predate frontend validation. Every requested commit must be an ancestor of its
+merged PR head, and that merge must be included in the later delivered commit.
+Rebased or otherwise unprovable equivalence needs a person.
+
+Several saved attempts may name the same pinned request. Every attempt must pass
+the stopped/no-database-change eligibility checks, and every attempt's temporary
+resources and original staging integrations must be accounted for independently.
+The current delivery chain can then prove that same request's inclusion once;
+it does not blend their outcomes, omit an old effect or change their history.
+One active, uncertain or unaccounted attempt keeps the whole ticket actionable.
+
+GitHub's [workflow-run search](https://docs.github.com/en/rest/actions/workflow-runs)
+returns at most 1,000 matches for a `created`-filtered query. Its
+[September 25 API change](https://github.blog/changelog/2026-09-25-changes-to-query-results-in-the-github-actions-api-and-ui/)
+also permits imprecise large counts. A capped, imprecise, moving or incomplete
+result remains unknown and names the missing complete evidence; a maintainer
+must reconcile narrower dated evidence rather than close from a partial list.
+Exactly 1,000 consistently counted results can be verified across ten pages.
+This external search cap is not a Coordinator history limit or a limit on
+[job pagination](https://docs.github.com/en/rest/actions/workflow-jobs).
+
+Old trial PRs must be closed unmerged and their exact owned branches absent;
+old merged staging integrations must remain accounted for in current staging.
+The checker rereads workflow history and environment refs at the end. Immediately
+before closure the ticket writer runs the whole follow-up check independently.
+Missing, changed or ambiguous evidence produces `reason:release-followup-required`
+with the specific next action and links to any verified evidence. Backend/database
+requests, other stop/failure types, recovery and production effects still require
+maintainer reconciliation. No missing proof is treated as successful cleanup.
+
+Complete proof closes the ticket as `closed` / `not_planned` with
+`reason:release-reconciled`: later delivery settled its remaining ticket action.
+The original stopped release projection and hash-chained history stay unchanged;
+this is never a new `completed` outcome. Cleanup does not cancel releases, restore
+environments, create/delete product resources, rehearse Git, dispatch workflows,
+or archive existing history.
+
+Both updated entrypoints use the current reviewed release engine and recognize
+the maintenance reasons, `original-pr-v1` history and reviewed batch policies.
+They preserve all existing markers and history. First cooperative acquisition
+adds `ticket_updates: cooperative-v1` to the same journal. Older strict writers
+reject this field before mutations; install the updated release and cleanup
+code together before enabling the dashboard action. An existing legacy release
+blocks activation until it finishes or is explicitly resumed after its old
+process stops. A same-run legacy cleanup resume finishes in its original
+exclusive lane rather than moving unsettled ownership.
+
+The release owns `lock`; maintenance owns `cleanup_lock`. Only one run may own
+each lane. A full-inbox release protects all tickets until its scanned selection
+is saved, then protects those tickets during preparation. Before deployment it
+fully presents decisions for unselected tickets and saves `reserved_tickets`
+for only the selected group. Those unselected tickets are not presented again
+after deployment, so a subsequent cleanup result cannot be overwritten.
+
+Cleanup observes a ticket without reserving it, then refreshes the journal and
+claims `current_ticket` only if its saved ticket/batch evidence is unchanged and
+no release reserves it. The claim is saved before any Issue mutation and checked
+before every mutation. If release selection wins that race, cleanup skips the
+ticket. The claim is removed only after verified presentation. Partial or
+uncertain updates retain it, preventing an overlapping release selection while
+other reserved release tickets can continue.
+
+Both lanes save by ordinary, non-forced Git fast-forwards. A confirmed rejected
+fast-forward can retry only after validating ancestry, unchanged own ownership
+and disjoint foreign progress. Unrelated saved progress is imported without
+overwriting the other lane. Same-ticket, ownership or protocol changes stop
+writes. A lost response must prove the exact own commit, or its verified
+descendant with intact own effects; an unknown outcome never triggers another
+mutation merely because the other lane advanced. This adds no retry/time budget
+or automatic takeover. GitHub Issues and this journal remain the only state
+source; separate lane reservations are not a database or heartbeat.
+
+Ancestry verification walks no further than the verified journal revision gap:
+each saved journal commit has one parent and increments the revision by one.
+Rewritten, regressed or unconfirmed sibling heads stop without searching all
+older history. This follows the existing journal invariant, not a new attempt
+budget; exact successful saves beneath unrelated later progress still reconcile.
+
+Interrupted writes retain the cleanup reservation and partial-application
+evidence. After the previous process has stopped, `inbox:cleanup --resume RUN_ID`
+rechecks the same saved selection and safely reconciles pending presentation.
+It processes the saved claimed ticket first, before revisiting earlier open
+tickets. A fully verified ticket stays applied if releasing its reservation
+fails; resume verifies and clears that claim before moving on.
+Failure before a first decision never invents a partial application record.
+The original error and saved cleanup resume identity survive missing local
+transitions and failed diagnostic timestamps/saves; existing saved ownership
+remains intact for the same-run recovery.
+The updated journal client rejects resuming cleanup through `inbox:run`, or
+resuming a release through cleanup, before rotating the lock. Use the matching
+updated command for the saved action. Existing read-only commands stay read-only.
+CLI syntax and the dashboard button are documented in the
+[Coordinator README](../apps/coordinator/README.md) and [release board guide](./release-board.md).
+
 After a processing run, a submitter can scan their open tickets and answer:
 
 - Where is my request?
@@ -179,6 +334,9 @@ explanation. Reasons are not permissions.
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `reason:outdated-commit`         | Retire a verified request whose requested commit no longer matches its PR. Include requested and observed commits.                                                                                                                                                                                                |
 | `reason:already-merged`          | Retire a verified request when all its exact PRs were already merged before Coordinator execution. A verified merged PR plus an open or unverified companion keeps the request action-needed for a scope decision. Unverified evidence alone does not trigger this reason. Deployment is not verified or claimed. |
+| `reason:release-action-required` | Cleanup found current unmerged code with no initial blocker. A maintainer decides whether to run the explicit scoped release with fresh checks or record an authorized cancellation. No readiness or deployment is claimed. |
+| `reason:release-followup-required` | A stopped attempt lacks specific delivery, staging, history or owned-resource evidence. The comment names what a maintainer must verify; cleanup performs no release or resource removal. |
+| `reason:release-reconciled` | Separate matching delivery, current staging validation and owned-resource checks settled a supported stopped attempt. Close as not planned while preserving its original stopped outcome; no new Coordinator completion is claimed. |
 | `reason:checks-pending`          | Wait for required checks; recheck on the next processing run.                                                                                                                                                                                                                                                     |
 | `reason:checks-failed`           | Identify the failed required checks and the person who can fix them.                                                                                                                                                                                                                                              |
 | `reason:merge-conflict`          | Identify the PR/base evidence and the correction needed.                                                                                                                                                                                                                                                          |
@@ -629,7 +787,8 @@ records, not a malicious maintainer who can rewrite the entire branch. Preserve
 this branch and its history; deletion cannot be distinguished from first setup
 by a new machine. External state edits or force pushes are outside this protocol.
 
-Acquire the repository-wide journal lock before inspection/Issue changes. Save
+Acquire the release or cleanup lane before inspection/Issue changes, and protect
+the specific ticket before its mutation as described above. Save
 intended decisions and the status-comment identity before applying updates. Save
 and verify the applied result afterward. A failed or uncertain API call keeps
 the lock. Resume is an explicit operator action after stopping the old process
@@ -639,6 +798,14 @@ old process checks the current token before every Issue mutation and journal
 advance. GitHub Issue calls are not transactional; do not run a resumed copy
 while the original process may still be alive. The command guide owns the
 recovery procedure and timeout guidance.
+
+The guard reads `codex/inbox-state`'s current commit SHA and compares it with
+the last fully validated snapshot and its saved lock token. Git commits are
+immutable, so an unchanged SHA names that same state without another file
+download. A changed ref allows only verified disjoint cooperative progress;
+an unreadable ref or different own token stops the writer. Initial
+acquire, resume and every save still read and validate the complete state,
+history and ancestry; save still verifies the exact persisted result.
 
 If an exact integration PR has green required checks but GitHub still marks
 its merge gate `BLOCKED`, the release records `awaiting-review` and the ticket

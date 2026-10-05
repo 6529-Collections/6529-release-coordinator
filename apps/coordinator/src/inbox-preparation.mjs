@@ -5,6 +5,7 @@ import { coordinateTicket, canRehearse } from "./inbox-rehearsal.mjs";
 import { digest, receiptHash } from "./inbox-journal.mjs";
 import { response, labelNames, terminal } from "./ticket-presentation.mjs";
 import { filterInboxRequests } from "./inbox-selection.mjs";
+import { savedRun } from "./inbox-concurrency.mjs";
 const latest = (ticket) => ticket?.transitions.at(-1);
 const isNumber = (value) => Number.isSafeInteger(value) && value > 0;
 
@@ -77,7 +78,7 @@ export async function scanRunTickets({
         ].sort((a, b) => a - b));
   if ((batching || selection.mode === "filtered") && !run.ticket_numbers) {
     run.ticket_numbers = numbers;
-    state.lock.ticket_numbers = numbers;
+    savedRun(state, run).ticket_numbers = numbers;
     await journal.save(
       state,
       run,

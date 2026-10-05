@@ -1,5 +1,102 @@
 # Progress and next steps
 
+## October 5 — cleanup and release-board publication checkpoint
+
+The existing local cleanup, cooperative ticket reservations, follow-up evidence,
+transport diagnostics and release-board work is now saved on
+`codex/publish-cleanup-dashboard`. Signed snapshot `0a56398` preserved all the
+previously uncommitted files before integrating current remote main
+`b00542b503f2af190fce8cbafe0674d0503b111b` (merged staging-preparation PR #293).
+The final diff preserves #293's reviewed conflict logging, review-stop cleanup,
+tests and acceptance record rather than publishing older copies of those files.
+The other cleanup worktree and the separate workflow-wait PR #304 are unchanged;
+this branch does not include #304's unmerged fix.
+
+Fresh non-fixing `npm run check` on Node 22.16.0 passed **862 tests**, with three
+optional Docker tests skipped (865 total), plus lint, formatting,
+documentation/workflow policy and packed-CLI smoke checks. The source snapshot
+remained unchanged. These are local offline checks: remote PR CI/reviews and a
+merge remain separate gates. No cleanup command, live journal/ticket mutation,
+release resume, browser cleanup click, product merge/deployment, npm publication
+or runtime restart was performed for this publication checkpoint.
+
+Review follow-up in PR #307 bounds journal ancestry reads by the verified
+revision gap, preserving the existing five readback attempts and disjoint-save
+rules. Offline regressions reproduced an unconfirmed write reading 220/230
+old commits instead of 5/15; rewritten and regressed heads now reject after
+their one required snapshot read. A second lane advancing during the reread
+still verifies successfully. A large saved-history regression also reproduced
+an argument-spread stack overflow; selecting the earliest verified start now
+uses a reduction without adding a history cap.
+
+The follow-up reader explicitly reports GitHub's documented 1,000-result
+workflow-search cap and imprecise counts as unavailable complete evidence.
+It still rejects short or moving pages, accepts exactly 1,000 verified workflow
+results, and paginates 1,001 jobs without inventing a job limit. The updated full
+local gate passed **870 tests**, with three optional Docker skips (873 total).
+Initial primary reviews were context-truncated; CodeRabbit inspected all 33
+files and raised the fixed ancestry finding. Initial GLM reviewers all returned
+empty output, so no GLM coverage is claimed. Fresh exact-head remote reviews and
+CI remain required before the separately authorized merge; these changes have
+not been exercised against the live inbox.
+
+The next review pass reproduced a first-decision failure masking its original
+error with `.at(-1).id`. Cleanup now preserves the original cause and saved
+resume identity when no transition exists or when diagnostic timestamp/save
+work fails. Both cases retain their saved claim and resume without duplicate
+Issue comments. Additional tests account for two distinct stopped attempts:
+every original integration/resource must be settled, and one active or
+unaccounted attempt prevents closure; no single-attempt policy limit was added.
+
+CodeRabbit's outside-diff active-workflow finding was also reproduced: a run
+created before the history cutoff could be missed. The fixed GET-only client
+checks the newest unfiltered page and all existing active-status counts without
+a date cutoff, initially and again before accepting follow-up proof. Counted
+but unlisted runs and unreadable activity remain unknown. Full local checks
+passed **875 tests**, with three optional Docker skips (878 total); 76 focused
+cleanup/follow-up/concurrency tests passed. The first fresh GLM advisory returned
+only its correctness slice, with three empty slices; its activation concern
+does not apply because the claim is saved before any ticket update. Fresh
+remote gates for these latest fixes remain separate from local proof.
+
+The final documentation clarification distinguishes still-active older runs
+from completed ones. Additional characterization tests verify repeated distinct
+CLI issue flags in both profiles, synchronous board-task failure/retry, and
+large rejected HTTP bodies followed by a request on the same socket. Those
+advisory leads required no runtime changes. The full local gate passed **878
+tests**, with three optional Docker skips (881 total). Required GitHub CI at
+`8bcfbce` passed; its primary reviews were context-truncated and the GLM advisory
+had only its runtime slice available, with three empty slices. Superseded
+general-review claims and the advisory leads are answered with current code
+and test evidence on PR #307. Final-head remote review and merge remain separate
+from these local results; no live inbox or product operation was performed.
+
+## Concurrent cleanup — local installation (October 2)
+
+The approved dashboard cleanup changes were installed locally from the managed
+`codex/concurrent-inbox-cleanup` worktree, integrated with reviewed main `73d8747`.
+Release and cleanup use separate owners and ticket reservations in the same
+GitHub journal. Cleanup skips running, paused, recovering and unfinished release
+tickets; the full-inbox release settles unselected tickets before deployment and
+does not overwrite subsequent cleanup. New cleanup outcomes remain **Action
+needed** or **Closed**. The `cooperative-v1` marker fences older writers on first
+authorized acquisition. The installed guides describe activation and recovery.
+
+That worktree's full Node 22 gate passed **840 tests**, with three optional Docker
+skips; its fifteen overlap/recovery cases cover both profiles. After installation,
+this checkout passed 55 focused cleanup/concurrency/server tests. Runtime patch
+paths did not overlap the separately edited staging preparation files; this does
+not claim completion of that separate fix or its full combined-checkout gate.
+No remote merge or package publication is included in this installation.
+
+The board at `http://127.0.0.1:51901/` was restarted and browser-verified with
+**Check & clean up** enabled and idle. Installed-reader GET-only readback retained
+real journal revision 598 at `69c8f7ec480ec4ad384b21741282b7e31d5ceccd`, no active
+lane and no cooperative marker yet. No cleanup run, ticket/journal write, #285
+resume or product dispatch was performed. Opening the board never starts cleanup.
+See the [maintenance contract](./inbox-processing.md#cleanup-without-release-execution)
+and [release board guide](./release-board.md).
+
 Last reviewed: **2026-10-02** for the reviewed frontend release-runtime refresh,
 candidate blob publication, behind-main source admission, original-PR
 history publication, completed sandbox acceptance, the local frontend PR-CI

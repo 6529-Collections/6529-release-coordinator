@@ -26,6 +26,81 @@ and history. See [progress](../../docs/progress.md) for local versus merged evid
 
 ## Run
 
+### Check and clean up tickets
+
+Run the separate cleanup action from the repository root:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=real RELEASE_COORDINATOR_SCOPE=inbox npm run inbox:cleanup
+```
+
+For a selected submitter's verified requests:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:cleanup -- --issue 253 --actor simo6529
+```
+
+This command **updates GitHub tickets and the existing journal**. New decisions
+are only **Action needed** or **Closed**. Each has a reason, a next action,
+an owner and supporting evidence. It never starts a release or emits Waiting,
+Eligible or a new Completed outcome. Current open code gets a concrete action
+to decide whether to release or cancel; clear stale requests can close after a
+fresh evidence check. A stopped release keeps its original history, even if its
+PR subsequently changed or merged.
+
+For frontend-only requests with no database change, the command can check
+follow-up after a verified staging-drift stop before production started. It
+checks later matching deployment/test chains, inclusion of the submitted code,
+current staging validation and old owned temporary PRs/branches. Complete proof
+closes with `reason:release-reconciled`; incomplete proof stays **Action needed**
+with `reason:release-followup-required` and the specific missing check. Other
+failure types, backend/database effects or recovery need a maintainer. It never
+removes product resources, runs tests remotely or changes the original release
+outcome. See the [full follow-up contract](../../docs/inbox-processing.md#cleanup-without-release-execution).
+
+Cleanup can run beside an updated release controller. It skips tickets reserved
+by running, paused or recovering releases and rechecks ownership immediately
+before each update. A legacy release lock blocks activation; let that run finish
+or explicitly resume it only after the old process stops. Existing
+closed Issues, terminal decisions and saved active releases are preserved.
+Intake still setting up a ticket is left alone. No ticket is retired just for
+its age, and overlapping requests are not guessed to replace each other.
+The account must have Issue and contents write access. The command requires an
+existing current-profile v7 journal and preserves its archives and any reviewed
+`original-pr-v1` source-history marker. Install the updated release and cleanup
+entrypoints together: the new `cooperative-v1` journal marker fences old writers.
+They share one GitHub journal with separate lane reservations and verified
+fast-forwards, so neither overwrites the other's progress. Uncertain ticket
+updates keep their reservation for explicit same-run recovery.
+
+Cleanup avoids repeating submission proof within one invocation and avoids old
+workflow reads for matching, already verified closures. Clear stale/merged
+requests use current PR identity/state instead of full readiness pagination;
+current requests retain their check/review/dependency inspection. Closures still
+recheck intake, PR and any release-follow-up evidence immediately before writing. Progress names the
+ticket currently being verified or updated. These are API observations, not
+builds or release execution.
+
+After an interrupted cleanup, verify that its old process has stopped and inspect
+its journal before resuming the same run:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=real RELEASE_COORDINATOR_SCOPE=inbox npm run inbox:cleanup -- --resume RUN_ID
+```
+
+Use the original `filtered` scope instead if that was the saved selection;
+do not supply new Issue or actor filters during resume. Cleanup and release
+resumes are separate. `--json` prints a machine-readable result; it is an
+execution summary, while Issues and their journal remain authoritative.
+Exit 0 means the ticket updates and closeout were verified, even if some tickets
+still need action. Exit 2 means input/access failure or an incomplete operation.
+`--help` makes no GitHub calls. The same code supports the explicit `sandbox`
+profile; sandbox evidence never proves a real release.
+The [release board](../../docs/release-board.md) has a button for this real-inbox
+action when served by its local server.
+
+### Read the inbox
+
 Use Node.js 20+ and a current GitHub CLI (`gh`) authenticated to `github.com`.
 The account needs read access to the repository's Issues and Actions logs.
 The reader uses your existing `gh` authentication; do not put tokens in source.
