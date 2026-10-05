@@ -301,6 +301,7 @@ export function createReleaseGitHub({
       "Published staging tree differs from its exact prepared merge."
     );
   }
+  /** Verify profile-specific workflow files at exact source and environment pins. */
   async function verifyRuntime(role, commit, environment) {
     serviceAssert(
       sha(commit),
@@ -535,6 +536,7 @@ export function createReleaseGitHub({
     );
     return { role, run };
   }
+  /** Discover and validate the unique sandbox run matching a saved operation. */
   async function findRun(role, record, workflowId) {
     const perPage = 100;
     const maxPages = 10;
@@ -611,6 +613,7 @@ export function createReleaseGitHub({
   // can only make the wait longer. The returned `unlisted` is a lag indicator,
   // the excess of the status counts over the distinct runs actually listed,
   // not an exact number of hidden runs.
+  /** Read recent and status-filtered workflow activity without treating API lag as quiet. */
   async function activeWorkflowRuns(role) {
     const active = new Map();
     const recent = (
@@ -665,6 +668,7 @@ export function createReleaseGitHub({
   // Coordinator never waits for itself: this runs only while the step has no
   // run of its own, and the release advances past a step only after that
   // step's run completed, so no earlier Coordinator run can still be active.
+  /** Preserve workflow blockers while waiting cancellably, before any dispatch. */
   async function waitForQuietWorkflow(role, record, save, purpose) {
     for (let checks = 1; ; checks++) {
       signal?.throwIfAborted();

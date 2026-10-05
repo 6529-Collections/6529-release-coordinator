@@ -90,6 +90,11 @@ including for staging. GLM's remaining hardcoded-environment lead was independen
 rejected against that execution-ref contract; two advisory slices were empty.
 These are scoped documentation/readability follow-ups, not a pin or policy change.
 
+The completed `b0da9b2` CodeRabbit review also found no actionable code issue,
+but its aggregate documentation count still warned. A further documentation-only
+pass describes the existing workflow pin verification, discovery, quiet-wait and
+fixture boundaries. No function behavior, review threshold or configuration changed.
+
 ## October 2 — staging-aware merge preparation (local and sandbox acceptance)
 
 Local, uncommitted Coordinator-only code now prepares new forward staging

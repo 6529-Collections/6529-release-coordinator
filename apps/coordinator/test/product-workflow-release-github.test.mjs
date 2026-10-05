@@ -39,6 +39,7 @@ const savedRuntime = {
   }
 };
 
+/** Produce a minimal valid build manifest for controlled artifact responses. */
 function build(role, sourceCommit) {
   return makeReleaseBuild({
     role,
@@ -55,6 +56,7 @@ function repositoryRole(endpoint) {
   return endpoint.includes("frontend") ? "frontend" : "backend";
 }
 
+/** Return the selected profile's pinned file blob without reading GitHub. */
 function runtimeFile(endpoint, runtime, environment) {
   const role = repositoryRole(endpoint);
   const file = endpoint.match(/\/contents\/(.+)\?ref=/u)?.[1];
@@ -67,6 +69,7 @@ function runtimeFile(endpoint, runtime, environment) {
   };
 }
 
+/** Model a direct workflow's exact source, actor and terminal outcome. */
 function runFixture(
   descriptor,
   {

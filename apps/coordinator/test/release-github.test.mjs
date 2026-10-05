@@ -373,6 +373,7 @@ function environmentRef(endpoint, operation) {
 const apiResponse = (status, data) =>
   `HTTP/2 ${status} Result\nContent-Type: application/json\n\n${data === undefined ? "" : JSON.stringify(data)}`;
 
+/** Build matching saved operation, workflow, jobs and result for offline runner tests. */
 function fixture(role = "backend", kind = "deploy") {
   const e2e = kind === "e2e";
   const unit = e2e ? null : role === "backend" ? "worker" : "frontend";

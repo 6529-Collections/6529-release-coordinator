@@ -457,6 +457,7 @@ export function createProductWorkflowReleaseGitHub({
   const ref = async (role, name) =>
     (await call(role, "GET", `/git/ref/heads/${name}`)).data.object.sha;
 
+  /** Verify workflow/evidence blobs at an exact commit using its execution-ref pins. */
   async function verifyFiles(role, commit, environment) {
     serviceAssert(sha(commit), "release-runtime", "Invalid runtime commit.");
     for (const [file, expected] of Object.entries(
@@ -494,6 +495,7 @@ export function createProductWorkflowReleaseGitHub({
     actor: run.actor?.login ?? null
   });
 
+  /** Read pinned workflow activity and expose count/list lag without assuming quiet. */
   async function activeRuns(role, files) {
     const active = new Map();
     let counted = 0;
@@ -536,6 +538,7 @@ export function createProductWorkflowReleaseGitHub({
     return { runs, unlisted: Math.max(0, counted - runs.length) };
   }
 
+  /** Save observed blockers until pinned workflows are quiet, honoring cancellation. */
   async function waitForQuiet(role, files, record, save, purpose) {
     for (let checks = 1; ; checks++) {
       signal?.throwIfAborted();
@@ -589,6 +592,7 @@ export function createProductWorkflowReleaseGitHub({
     }
   }
 
+  /** Read and validate repository-scoped run listings for subsequent exact adoption. */
   async function listRuns(role, file, query = {}) {
     const filters = new URLSearchParams({ ...query, per_page: "100" });
     const runs = [];
@@ -623,6 +627,7 @@ export function createProductWorkflowReleaseGitHub({
     return runs;
   }
 
+  /** Refuse evidence acceptance if either saved application source moved. */
   async function verifyEnvironment(operation, stage) {
     for (const role of ["backend", "frontend"])
       serviceAssert(
@@ -672,6 +677,7 @@ export function createProductWorkflowReleaseGitHub({
     return run;
   }
 
+  /** Discover one saved-boundary direct run; ambiguous matches never authorize adoption. */
   async function findDirectRun(descriptor, workflowIdentity, actor, record) {
     const runs = await listRuns(descriptor.role, descriptor.workflow, {
       event: descriptor.event,
@@ -1130,6 +1136,7 @@ export function createProductWorkflowReleaseGitHub({
     };
   }
 
+  /** Locate one deployment-caused automatic run without creating or replacing it. */
   async function findAutomaticRun(
     role,
     workflowIdentity,
