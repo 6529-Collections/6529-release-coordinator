@@ -1,5 +1,31 @@
 # Progress and next steps
 
+## October 6 — interrupted first-staging cancellation (local)
+
+The long-post release stopped on a pre-merge source gate after saving its first
+owned staging PR. No staging merge, deployment or production operation was
+recorded; the saved release remains at `running`/step zero although the original
+process exited. Existing cancellation accepted review pauses and interrupted
+review stops, not this checkpoint. The local change adds only that first-stage,
+single-operation, `checking`/null-result case to explicit keep-current cancellation.
+The adapter still verifies current unmerged PR ownership, exact head and uniquely
+owned branch before its existing conditional cleanup. It cannot merge, deploy,
+restore shared refs or refresh old candidate proof. Uncertain merges, later
+operations, database effects and recovery remain refused.
+
+All 91 focused engine/adapter tests passed, including interrupted cleanup,
+durable intent, moved shared refs, multi-ticket closeout and verified archival.
+See the [scope and offline evidence](./testing/interrupted-first-staging-cancellation-2026-10-06.md).
+All full repository gates passed on Node 22.16.0, with all 48 test files run
+serially to avoid parallel local memory load: **960 tests passed**, three optional
+Docker skips (963 total), plus lint, formatting, docs, workflow policy and packed
+CLI checks; the source snapshot remained unchanged. A GET-only read of journal
+revision 710 reproduced eligibility for the same #311 checkpoint, not cleanup.
+PR reviews/CI and merge are pending. The real attempt
+has not been cancelled, and no fresh feature head or release request has been
+created. The watcher remains paused; unrelated work and old release history
+are unchanged. This implementation is not live cleanup or deployment proof.
+
 ## October 6 — reviewed Wave-creation PR-CI approval (local)
 
 Coordinator PR #315 and #316 are merged; clean main before this work was

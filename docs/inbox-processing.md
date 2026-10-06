@@ -828,9 +828,16 @@ merge merely because the GitHub review changes meanwhile.
 `--resume RUN_ID --cancel-keep-current` is a separate explicit choice: abandon
 this attempt without undoing any code. It supports a confirmed no-database-change
 release paused at its exact owned, unmerged integration PR, including an
-interrupted `--review-stop` whose intent is already saved. No other production
-operation, database uncertainty or recovery may be present. It is not a general
-override for arbitrary failures or deployments already in progress.
+interrupted `--review-stop` whose intent is already saved. It also supports an
+interrupted first staging checkpoint: saved `running`, step index zero, exactly
+one integration operation, PR state `checking`, null result and no cleanup
+choice. This checkpoint can remain after a thrown pre-merge check; it does not
+prove the original process is alive. Independently confirm the process and its
+requests have stopped and settled for at least 60 seconds before cancellation.
+This narrow case refuses any other release operation, uncertain merge state,
+staging reconciliation, manual stop, database uncertainty or recovery. The
+existing review-pause path still refuses other production operations. This is
+not a general override for arbitrary failures or deployments in progress.
 
 The journal saves the operator, decision, step and observed staging/main refs
 before cleanup. The same adapter in both profiles verifies the unique PR, saved

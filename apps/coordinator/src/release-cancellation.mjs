@@ -22,6 +22,18 @@ export function assertCancellableRelease(
     code,
     "Cancellation requires its saved integration PR record."
   );
+  // A thrown pre-merge check retains the last running checkpoint rather than
+  // a review pause. Allow explicit abandonment only at the first staging PR,
+  // before any other release operation exists. The adapter still verifies the
+  // live PR is unmerged and its uniquely owned branch has not changed.
+  const firstStagingCheckpoint =
+    execution.status === "running" &&
+    execution.step_index === 0 &&
+    step?.environment === "staging" &&
+    record.state === "checking" &&
+    record.result === null &&
+    record.cleanup_reason === undefined &&
+    Object.keys(execution.operations).length === 1;
   serviceAssert(
     selectedPreparation(batch).prepared.service_plan.database.observed ===
       "no" &&
@@ -29,6 +41,7 @@ export function assertCancellableRelease(
       !execution.staging_drift &&
       !execution.manual_stop &&
       (execution.status === "awaiting-review" ||
+        firstStagingCheckpoint ||
         (["running", "cancelling", "cancelled"].includes(execution.status) &&
           record?.cleanup_reason === "review-stop")) &&
       step?.kind === "integrate" &&
@@ -46,7 +59,7 @@ export function assertCancellableRelease(
           operation.step.environment === "prod" && operation !== record
       ),
     code,
-    "Keeping current code requires a no-database-change release paused at an owned, unmerged integration PR (or its interrupted stop), with no other production operation or recovery."
+    "Keeping current code requires a no-database-change release at an owned, unmerged integration PR: awaiting review, its interrupted stop, or an interrupted first staging checkpoint with no other release operation. Uncertain merges, production work and recovery refuse cancellation."
   );
   return record;
 }

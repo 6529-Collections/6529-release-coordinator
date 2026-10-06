@@ -508,7 +508,13 @@ missing review.
 An operator may instead explicitly cancel a confirmed no-database-change
 attempt at its owned, unmerged integration PR and keep current code. This
 separate `--cancel-keep-current` choice can also finish an interrupted review
-stop, but refuses other production operations, recovery or database uncertainty.
+stop, or abandon a stopped first staging checkpoint before any other release
+operation exists. That checkpoint must be step zero, saved `running`, with its
+single integration PR in `checking`, no result and no cleanup choice. Its saved
+status is not process-liveness evidence; the operator must independently confirm
+the original process and requests have stopped and settled before cancellation.
+Uncertain merges, recovery, reconciliation and database uncertainty still refuse;
+the existing review-pause path still refuses other production operations.
 It records durable cancellation intent before closing the exact owned PR and
 removing its uniquely owned branch. It does not merge, deploy, restore or alter
 shared staging/main refs. External branch movement therefore does not authorize
