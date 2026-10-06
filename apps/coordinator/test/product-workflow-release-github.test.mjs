@@ -1717,6 +1717,8 @@ function automaticHarness({
   environment = "staging",
   wrapperStatuses = ["in_progress"],
   wrapperJobConclusion,
+  e2eJobConclusion,
+  e2eAncillaryJobs = [],
   e2eStatuses = [],
   missingWrapper = false,
   missingE2e = false,
@@ -1915,7 +1917,7 @@ function automaticHarness({
       )
     )
       return apiResponse("200 OK", {
-        total_count: 1,
+        total_count: 1 + e2eAncillaryJobs.length,
         jobs: [
           {
             name: staging
@@ -1924,8 +1926,14 @@ function automaticHarness({
             run_id: e2eRun.id,
             head_sha: e2eRun.head_sha,
             status: "completed",
-            conclusion: e2eRun.conclusion
-          }
+            conclusion: e2eJobConclusion ?? e2eRun.conclusion
+          },
+          ...e2eAncillaryJobs.map((job) => ({
+            ...job,
+            run_id: e2eRun.id,
+            head_sha: e2eRun.head_sha,
+            status: "completed"
+          }))
         ]
       });
     throw new Error(`Unexpected endpoint ${endpoint}`);
@@ -2059,6 +2067,71 @@ test("slow automatic E2E keeps a genuine failure and its matching deployment", a
   assert.equal(result.deployment_workflow.id, 602);
   assert.deepEqual(result.report.deployments, {});
 });
+
+for (const conclusion of ["success", "failure", "skipped"]) {
+  test(`real production E2E requires the browser job despite a green notification (${conclusion})`, async () => {
+    const harness = automaticHarness({
+      profile: realProfile,
+      environment: "prod",
+      e2eJobConclusion: conclusion,
+      e2eAncillaryJobs: [
+        {
+          name: "Notify CI wave about production WEB validation",
+          conclusion: "success"
+        },
+        {
+          name: "Notify CI wave about a production canary failure",
+          conclusion: "skipped"
+        }
+      ]
+    });
+    if (conclusion === "success") {
+      const result = await harness.run();
+      assert.equal(result.status, "passed");
+      assert.equal(result.workflow.id, harness.e2eRun.id);
+      assert.equal(result.deployment_workflow.id, 602);
+    } else {
+      // A green wrapper/run/notification never substitutes for browser evidence.
+      await assert.rejects(harness.run(), {
+        code: "release-workflow",
+        message: "The matching E2E conclusion contradicts its jobs."
+      });
+    }
+    assert.ok(harness.calls.every(({ method }) => method === "GET"));
+  });
+}
+
+for (const runConclusion of ["success", "failure"]) {
+  test(`real production ancillary failure never overrides the ${runConclusion} E2E run`, async () => {
+    const harness = automaticHarness({
+      profile: realProfile,
+      environment: "prod",
+      e2eJobConclusion: "success",
+      e2eAncillaryJobs: [
+        {
+          name: "Notify CI wave about production WEB validation",
+          conclusion: "failure"
+        },
+        {
+          name: "Notify CI wave about a production canary failure",
+          conclusion: "skipped"
+        }
+      ]
+    });
+    harness.e2eRun.conclusion = runConclusion;
+    if (runConclusion === "success") {
+      assert.equal((await harness.run()).status, "passed");
+    } else {
+      // Ancillary jobs are not browser evidence, but an unsuccessful run is
+      // still never promoted to success or a confirmed browser failure.
+      await assert.rejects(harness.run(), {
+        code: "release-workflow",
+        message: "The matching E2E conclusion contradicts its jobs."
+      });
+    }
+    assert.ok(harness.calls.every(({ method }) => method === "GET"));
+  });
+}
 
 for (const phase of ["Wrapper", "E2e"]) {
   test(`automatic missing ${phase} discovery stays bounded`, async () => {

@@ -12,7 +12,7 @@ const reviewedFrontendFiles = {
   ".github/workflows/production-build-artifact.yml":
     "5df8df3da1a50336a7b9f4816b79fbe639d0a3e1",
   ".github/workflows/production-e2e.yml":
-    "29346bd8d8c9816f40388801943b006e21f3f6ef"
+    "56b8c0e73121bcb1ac937775fbe3e80dd2f3bce5"
 };
 const supersededFrontendFiles = {
   ".github/workflows/deploy-staging.yml":
@@ -20,7 +20,7 @@ const supersededFrontendFiles = {
   ".github/workflows/production-build-artifact.yml":
     "22bafb14740b35388d7f6e07f67af01c42486c11",
   ".github/workflows/production-e2e.yml":
-    "93c6e39132308f9733eab70ba1191e8a4bd9cd15"
+    "29346bd8d8c9816f40388801943b006e21f3f6ef"
 };
 const versions = {
   staging: { backend: "a".repeat(40), frontend: "b".repeat(40) },

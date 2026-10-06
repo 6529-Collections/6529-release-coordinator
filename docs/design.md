@@ -211,6 +211,19 @@ ticket/actor scope and journal evidence. Resume rechecks current runtime files
 and release inputs; approving one environment does not approve future changes
 or a different file on the other branch.
 
+The reviewed October 6 production E2E refresh changes only its workflow blob
+pin. The product workflow now loads its trusted verifier at `github.workflow_sha`,
+adds read-only deployment-history access for canary discovery, and preserves
+setup-versus-browser failure evidence. Its new discovery helper is used only
+for scheduled or explicitly requested canary runs, not the Coordinator's
+deployment-caused `post-deploy` chain. This is not a recursive helper-content
+pin or authorization to run canaries. That chain retains its exact deploy-run,
+canonical deploy-job, live-version and source checks and unchanged browser-pack
+commands. The Coordinator still requires the named browser job to succeed;
+notification success or the new failure-stage output cannot replace matching
+E2E evidence. Backend/sandbox pins, dispatch inputs and release/recovery gates
+are unchanged.
+
 The real candidate PR-check policy separately pins the product's PR workflows.
 The reviewed October 1 frontend native-competition lane changes only the
 `app-pr-ci.yml` pin; required checks and all other pins remain unchanged. Its
