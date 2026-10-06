@@ -216,7 +216,8 @@ pin. The product workflow now loads its trusted verifier at `github.workflow_sha
 adds read-only deployment-history access for canary discovery, and preserves
 setup-versus-browser failure evidence. Its new discovery helper is used only
 for scheduled or explicitly requested canary runs, not the Coordinator's
-deployment-caused `post-deploy` chain. That chain retains its exact deploy-run,
+deployment-caused `post-deploy` chain. This is not a recursive helper-content
+pin or authorization to run canaries. That chain retains its exact deploy-run,
 canonical deploy-job, live-version and source checks and unchanged browser-pack
 commands. The Coordinator still requires the named browser job to succeed;
 notification success or the new failure-stage output cannot replace matching

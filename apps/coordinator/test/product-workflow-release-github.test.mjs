@@ -2101,6 +2101,38 @@ for (const conclusion of ["success", "failure", "skipped"]) {
   });
 }
 
+for (const runConclusion of ["success", "failure"]) {
+  test(`real production ancillary failure never overrides the ${runConclusion} E2E run`, async () => {
+    const harness = automaticHarness({
+      profile: realProfile,
+      environment: "prod",
+      e2eJobConclusion: "success",
+      e2eAncillaryJobs: [
+        {
+          name: "Notify CI wave about production WEB validation",
+          conclusion: "failure"
+        },
+        {
+          name: "Notify CI wave about a production canary failure",
+          conclusion: "skipped"
+        }
+      ]
+    });
+    harness.e2eRun.conclusion = runConclusion;
+    if (runConclusion === "success") {
+      assert.equal((await harness.run()).status, "passed");
+    } else {
+      // Ancillary jobs are not browser evidence, but an unsuccessful run is
+      // still never promoted to success or a confirmed browser failure.
+      await assert.rejects(harness.run(), {
+        code: "release-workflow",
+        message: "The matching E2E conclusion contradicts its jobs."
+      });
+    }
+    assert.ok(harness.calls.every(({ method }) => method === "GET"));
+  });
+}
+
 for (const phase of ["Wrapper", "E2e"]) {
   test(`automatic missing ${phase} discovery stays bounded`, async () => {
     let waits = 0;

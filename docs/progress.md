@@ -40,6 +40,18 @@ was incomplete: three slices returned empty output, and the remaining slice
 examined only progress text. That is not GLM coverage of the changed code/tests;
 full deterministic checks and the other configured reviews remain separate.
 
+CodeRabbit reviewed the initial five-file head and suggested covering failed
+ancillary notification jobs. The added fixtures use the real notification-job
+names: a successful run with successful browser evidence is not rejected solely
+for an ancillary conclusion, but an unsuccessful run is still refused even when
+its browser job passed. No runtime gate was relaxed. Final-head included review
+was rate-limited; that green status is not completed review coverage, and no
+paid/on-demand review or billing change was requested.
+Full non-fixing checks after both review improvements passed **947 tests**, with
+three optional Docker skips (950 total), plus all other repository gates and
+unchanged-source verification. Canary helper content is not recursively pinned
+by a workflow-file hash; it remains outside Coordinator execution scope.
+
 ## October 6 — reviewed frontend session-recovery PR-CI pin (local)
 
 The real frontend candidate-check policy now pins `app-pr-ci.yml` blob
