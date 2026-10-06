@@ -160,7 +160,7 @@ export const nativeCompetitionRealBatchPolicy = Object.freeze({
 
 // Reviewed session-recovery browser pack. Saved candidates keep their exact
 // policy hash; approving this pin never promotes their earlier CI evidence.
-export const realBatchPolicy = Object.freeze({
+export const sessionRecoveryRealBatchPolicy = Object.freeze({
   ...nativeCompetitionRealBatchPolicy,
   workflow_blobs: Object.freeze({
     ...nativeCompetitionRealBatchPolicy.workflow_blobs,
@@ -172,7 +172,21 @@ export const realBatchPolicy = Object.freeze({
   })
 });
 
-// Only this explicitly reviewed transition can replace an unpublished
+// Reviewed Wave-creation browser lane; all other policy fields stay unchanged.
+// Keep the previous snapshot readable without reusing its candidate CI proof.
+export const realBatchPolicy = Object.freeze({
+  ...sessionRecoveryRealBatchPolicy,
+  workflow_blobs: Object.freeze({
+    ...sessionRecoveryRealBatchPolicy.workflow_blobs,
+    frontend: Object.freeze({
+      ...sessionRecoveryRealBatchPolicy.workflow_blobs.frontend,
+      ".github/workflows/app-pr-ci.yml":
+        "134e53f46bfe207742adcc4fec392128bec75ab8"
+    })
+  })
+});
+
+// Only these explicitly reviewed transitions can replace an unpublished
 // preparation. Never migrate copied-history work, owned resources or releases.
 export function canRefreshBatchPreparationPolicy(batch, currentPolicy) {
   return Boolean(
@@ -180,7 +194,9 @@ export function canRefreshBatchPreparationPolicy(batch, currentPolicy) {
     !batch.execution &&
     (batch.status === "searching" || batch.stop?.status === "stale") &&
     batch.selected?.length === 0 &&
-    serviceHash(batch.policy) === serviceHash(priorRealBatchPolicy) &&
+    [priorRealBatchPolicy, sessionRecoveryRealBatchPolicy].some(
+      (policy) => serviceHash(batch.policy) === serviceHash(policy)
+    ) &&
     serviceHash(currentPolicy) === serviceHash(realBatchPolicy) &&
     Array.isArray(batch.attempts) &&
     batch.attempts.every(
@@ -246,6 +262,7 @@ export function trustedBatchPolicy(policy) {
     batchPolicy,
     priorRealBatchPolicy,
     nativeCompetitionRealBatchPolicy,
+    sessionRecoveryRealBatchPolicy,
     realBatchPolicy
   ].find(
     (candidate) =>

@@ -13,6 +13,7 @@ import {
   batchMergePlan,
   priorRealBatchPolicy,
   realBatchPolicy,
+  sessionRecoveryRealBatchPolicy,
   realServicePlan
 } from "../src/batch-plan.mjs";
 import { ServiceError, serviceHash } from "../src/service-contract.mjs";
@@ -21,7 +22,7 @@ import {
   releaseRequestChecksum
 } from "../../../packages/release-request/src/inbox-issue.mjs";
 
-async function interruptedPreparation() {
+async function interruptedPreparation(policy = priorRealBatchPolicy) {
   const f = fixture(realProfile);
   f.request.target = "production";
   f.request.release_parts = [
@@ -110,8 +111,8 @@ async function interruptedPreparation() {
   await assert.rejects(
     selectBatch({
       items: [item],
-      policy: priorRealBatchPolicy,
-      prepare: async (items) => prepare(items, priorRealBatchPolicy),
+      policy,
+      prepare: async (items) => prepare(items, policy),
       check: (prepared, options) =>
         checkBatch(prepared, {
           ...options,
@@ -246,143 +247,154 @@ async function interruptedPreparation() {
   };
 }
 
-for (const mainMoves of [false, true]) {
-  test(`resume an unpublished old-policy attempt rechecks the same filtered ticket with fresh CI (${mainMoves ? "moved" : "unchanged"} main)`, async () => {
-    const h = await interruptedPreparation();
-    if (mainMoves) h.setBase("9".repeat(40));
+for (const policy of [priorRealBatchPolicy, sessionRecoveryRealBatchPolicy]) {
+  for (const mainMoves of [false, true]) {
+    test(`resume an unpublished ${policy.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"]} attempt rechecks the same filtered ticket with fresh CI (${mainMoves ? "moved" : "unchanged"} main)`, async () => {
+      const h = await interruptedPreparation(policy);
+      if (mainMoves) h.setBase("9".repeat(40));
+      await assert.rejects(
+        processInbox(h.options),
+        /fixture stop before deployment/
+      );
+      const state = h.f.state();
+      assert.deepEqual(state.lock.scope.selection, {
+        mode: "filtered",
+        issue_numbers: [1],
+        actor_login: "trusted-user"
+      });
+      assert.deepEqual(state.lock.reprepared_batches, [h.old.fingerprint]);
+      const retired = state.batches[h.old.fingerprint];
+      assert.equal(retired.stop.status, "stale");
+      assert.deepEqual(retired.policy, h.old.policy);
+      assert.deepEqual(retired.attempts[0], h.old.attempts[0]);
+      assert.equal(retired.attempts[1].id, h.old.attempts[1].id);
+      assert.equal(retired.attempts[1].progress.cleanup, "removed");
+      assert.equal(retired.attempts[1].result.status, "stale");
+      const fresh = state.batches[state.lock.batch_fingerprint];
+      assert.deepEqual(fresh.policy, realBatchPolicy);
+      assert.notEqual(fresh.fingerprint, retired.fingerprint);
+      assert.notEqual(
+        serviceHash(fresh.attempts[0].result),
+        serviceHash(retired.attempts[0].result)
+      );
+      assert.deepEqual(
+        fresh.inputs[0].input.repositories[0].pull_requests,
+        h.old.inputs[0].input.repositories[0].pull_requests
+      );
+      assert.equal(
+        fresh.inputs[0].input.repositories[0].destination.commit,
+        (mainMoves ? "9" : "b").repeat(40)
+      );
+      assert.deepEqual(h.budgets.at(-1).spent, { git: 1, checks: 1 });
+      assert.deepEqual(h.events, ["prepare", "identity", "open", "cleanup"]);
+      assert.equal(h.releases(), 1);
+      const attempts = structuredClone(fresh.attempts);
+      await assert.rejects(
+        processInbox(h.options),
+        /fixture stop before deployment/
+      );
+      assert.deepEqual(
+        h.f.state().batches[fresh.fingerprint].attempts,
+        attempts
+      );
+      assert.deepEqual(h.events, ["prepare", "identity", "open", "cleanup"]);
+    });
+  }
+
+  test(`changed source code or failing gates prevent ${policy.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"]} refresh from starting checks or release`, async () => {
+    for (const changed of ["head", "checks"]) {
+      const h = await interruptedPreparation(policy);
+      if (changed === "head") {
+        const plan = h.options.plan;
+        h.options.plan = async (entry) => {
+          const input = await plan(entry);
+          input.repositories[0].pull_requests[0].commit = "8".repeat(40);
+          return input;
+        };
+      } else {
+        const observe = h.options.observe;
+        h.options.observe = async (...args) => {
+          const result = await observe(...args);
+          result.pull_requests[0].checks.find(
+            (check) => check.id === "required_checks"
+          ).status = "fail";
+          return result;
+        };
+      }
+      const result = await processInbox(h.options);
+      assert.equal(result.batch.stop.status, "stale");
+      assert.deepEqual(h.events, []);
+      assert.equal(h.releases(), 0);
+      assert.equal(h.f.state().lock, null);
+      const archive = h.f.state().history.batches[h.old.fingerprint];
+      const saved =
+        h.f.state().batches[h.old.fingerprint] ?? h.f.file(archive.path).record;
+      assert.deepEqual(saved.attempts[0], h.old.attempts[0]);
+      assert.deepEqual(saved.policy, h.old.policy);
+    }
+  });
+
+  test(`resume with a recorded trial keeps ${policy.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"]} and its original attempt, without fresh publication`, async () => {
+    const h = await interruptedPreparation(policy);
+    await h.saveFixture((state) => {
+      const attempt = state.batches[h.old.fingerprint].attempts[1];
+      attempt.progress.prs.push({
+        role: "frontend",
+        branch: `codex/batch-trial-${attempt.id}`,
+        base: "b".repeat(40),
+        tree: "d".repeat(40),
+        cleanup: "pending"
+      });
+    });
+    h.options.batch = (options) =>
+      coordinateInboxBatch({
+        ...options,
+        prepare: async () =>
+          assert.fail("no fresh preparation of published work"),
+        check: async (_prepared, { id, previous, policy }) => {
+          assert.equal(id, h.old.attempts[1].id);
+          assert.equal(previous.prs.length, 1);
+          assert.deepEqual(policy, h.old.policy);
+          throw new ServiceError(
+            "batch-runtime",
+            "old workflow remains changed"
+          );
+        }
+      });
+    await assert.rejects(
+      processInbox(h.options),
+      /old workflow remains changed/
+    );
+    assert.equal(h.f.state().lock.batch_fingerprint, h.old.fingerprint);
+    assert.equal(h.f.state().lock.reprepared_batches, undefined);
+    assert.deepEqual(h.events, []);
+    assert.equal(h.releases(), 0);
+  });
+
+  test(`interruption after retiring ${policy.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"]} resumes the same ticket and preserves spent budgets`, async () => {
+    const h = await interruptedPreparation(policy);
+    const batch = h.options.batch;
+    let calls = 0;
+    await assert.rejects(
+      processInbox({
+        ...h.options,
+        batch: (options) => {
+          if (++calls === 2)
+            throw new Error("fixture interruption after policy retirement");
+          return batch(options);
+        }
+      }),
+      /fixture interruption after policy retirement/
+    );
+    assert.equal(h.f.state().lock.batch_fingerprint, undefined);
+    assert.deepEqual(h.f.state().lock.reprepared_batches, [h.old.fingerprint]);
+    assert.deepEqual(h.events, []);
     await assert.rejects(
       processInbox(h.options),
       /fixture stop before deployment/
-    );
-    const state = h.f.state();
-    assert.deepEqual(state.lock.scope.selection, {
-      mode: "filtered",
-      issue_numbers: [1],
-      actor_login: "trusted-user"
-    });
-    assert.deepEqual(state.lock.reprepared_batches, [h.old.fingerprint]);
-    const retired = state.batches[h.old.fingerprint];
-    assert.equal(retired.stop.status, "stale");
-    assert.deepEqual(retired.policy, h.old.policy);
-    assert.deepEqual(retired.attempts[0], h.old.attempts[0]);
-    assert.equal(retired.attempts[1].id, h.old.attempts[1].id);
-    assert.equal(retired.attempts[1].progress.cleanup, "removed");
-    assert.equal(retired.attempts[1].result.status, "stale");
-    const fresh = state.batches[state.lock.batch_fingerprint];
-    assert.deepEqual(fresh.policy, realBatchPolicy);
-    assert.notEqual(fresh.fingerprint, retired.fingerprint);
-    assert.notEqual(
-      serviceHash(fresh.attempts[0].result),
-      serviceHash(retired.attempts[0].result)
-    );
-    assert.deepEqual(
-      fresh.inputs[0].input.repositories[0].pull_requests,
-      h.old.inputs[0].input.repositories[0].pull_requests
-    );
-    assert.equal(
-      fresh.inputs[0].input.repositories[0].destination.commit,
-      (mainMoves ? "9" : "b").repeat(40)
     );
     assert.deepEqual(h.budgets.at(-1).spent, { git: 1, checks: 1 });
     assert.deepEqual(h.events, ["prepare", "identity", "open", "cleanup"]);
     assert.equal(h.releases(), 1);
-    const attempts = structuredClone(fresh.attempts);
-    await assert.rejects(
-      processInbox(h.options),
-      /fixture stop before deployment/
-    );
-    assert.deepEqual(h.f.state().batches[fresh.fingerprint].attempts, attempts);
-    assert.deepEqual(h.events, ["prepare", "identity", "open", "cleanup"]);
   });
 }
-
-test("changed source code or failing gates still prevent a policy refresh from starting checks or release", async () => {
-  for (const changed of ["head", "checks"]) {
-    const h = await interruptedPreparation();
-    if (changed === "head") {
-      const plan = h.options.plan;
-      h.options.plan = async (entry) => {
-        const input = await plan(entry);
-        input.repositories[0].pull_requests[0].commit = "8".repeat(40);
-        return input;
-      };
-    } else {
-      const observe = h.options.observe;
-      h.options.observe = async (...args) => {
-        const result = await observe(...args);
-        result.pull_requests[0].checks.find(
-          (check) => check.id === "required_checks"
-        ).status = "fail";
-        return result;
-      };
-    }
-    const result = await processInbox(h.options);
-    assert.equal(result.batch.stop.status, "stale");
-    assert.deepEqual(h.events, []);
-    assert.equal(h.releases(), 0);
-    assert.equal(h.f.state().lock, null);
-    const archive = h.f.state().history.batches[h.old.fingerprint];
-    const saved =
-      h.f.state().batches[h.old.fingerprint] ?? h.f.file(archive.path).record;
-    assert.deepEqual(saved.attempts[0], h.old.attempts[0]);
-    assert.deepEqual(saved.policy, h.old.policy);
-  }
-});
-
-test("resume with a recorded trial stays on its old policy and attempt, without fresh publication", async () => {
-  const h = await interruptedPreparation();
-  await h.saveFixture((state) => {
-    const attempt = state.batches[h.old.fingerprint].attempts[1];
-    attempt.progress.prs.push({
-      role: "frontend",
-      branch: `codex/batch-trial-${attempt.id}`,
-      base: "b".repeat(40),
-      tree: "d".repeat(40),
-      cleanup: "pending"
-    });
-  });
-  h.options.batch = (options) =>
-    coordinateInboxBatch({
-      ...options,
-      prepare: async () =>
-        assert.fail("no fresh preparation of published work"),
-      check: async (_prepared, { id, previous, policy }) => {
-        assert.equal(id, h.old.attempts[1].id);
-        assert.equal(previous.prs.length, 1);
-        assert.deepEqual(policy, priorRealBatchPolicy);
-        throw new ServiceError("batch-runtime", "old workflow remains changed");
-      }
-    });
-  await assert.rejects(processInbox(h.options), /old workflow remains changed/);
-  assert.equal(h.f.state().lock.batch_fingerprint, h.old.fingerprint);
-  assert.equal(h.f.state().lock.reprepared_batches, undefined);
-  assert.deepEqual(h.events, []);
-  assert.equal(h.releases(), 0);
-});
-
-test("interruption after policy retirement resumes the same ticket and preserves spent budgets", async () => {
-  const h = await interruptedPreparation();
-  const batch = h.options.batch;
-  let calls = 0;
-  await assert.rejects(
-    processInbox({
-      ...h.options,
-      batch: (options) => {
-        if (++calls === 2)
-          throw new Error("fixture interruption after policy retirement");
-        return batch(options);
-      }
-    }),
-    /fixture interruption after policy retirement/
-  );
-  assert.equal(h.f.state().lock.batch_fingerprint, undefined);
-  assert.deepEqual(h.f.state().lock.reprepared_batches, [h.old.fingerprint]);
-  assert.deepEqual(h.events, []);
-  await assert.rejects(
-    processInbox(h.options),
-    /fixture stop before deployment/
-  );
-  assert.deepEqual(h.budgets.at(-1).spent, { git: 1, checks: 1 });
-  assert.deepEqual(h.events, ["prepare", "identity", "open", "cleanup"]);
-  assert.equal(h.releases(), 1);
-});

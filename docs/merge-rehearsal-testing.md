@@ -987,6 +987,20 @@ operator must separately authorize release continuation and reverify the saved
 run, current product refs, ordinary gates and matching evidence. No product
 workflow, sandbox runtime or backend policy is changed by this refresh.
 
+The [October 6 Wave-creation CI review](./testing/frontend-wave-creation-ci-2026-10-06.md)
+approves only the added local browser lane in real frontend `app-pr-ci.yml`.
+The immediately superseded session-recovery policy remains an exact trusted
+historical snapshot. In addition to the existing original reviewed-policy
+transition, only that session-recovery snapshot can refresh to the current
+Wave-creation policy, before any trial or service resource was recorded,
+before selection and before release execution. Copy-based and native-competition
+policies, unknown edits and downgrades do not gain a refresh route.
+The engine retires the empty old attempt, preserves its IDs/results/policy and
+spent count budgets, revalidates the same requested source commits and rebuilds
+on current main with fresh candidate checks. Old CI proof is never promoted.
+An owned trial or execution retains its original policy; this approval neither
+migrates it nor changes any staging, production or recovery gate.
+
 ### Paused integration review mirror
 
 The [September 29 sandbox acceptance](./testing/review-pause-2026-09-29.md)
