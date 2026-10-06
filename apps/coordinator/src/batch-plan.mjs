@@ -232,6 +232,7 @@ export function isReleaseBatchPolicy(policy) {
   ].includes(policy?.version);
 }
 
+/** Return only an exact reviewed policy snapshot, including its historical hash. */
 export function trustedBatchPolicy(policy) {
   const expected = [
     legacyBatchPolicy,

@@ -28,8 +28,8 @@ workflow policy and packed-CLI checks; source contents remained unchanged.
 GET-only frontend candidate identity admission then passed against product main
 `a8a95d30bf20977ef40e6e8cb0c6b1b9a761310a`. Remote reviews/CI, merge and
 the authorized isolated #311 release are still pending; ticket creation and
-admission readbacks are not staging or production deployment proof. No old
-#285/#294 attempt, product code, shared branch or journal was changed here.
+admission readbacks are not staging or production deployment proof. Neither old
+ticket #285/#294 attempts nor product code, shared branches or journals changed here.
 
 ## October 5 — workflow-wait PR integration with current main
 
