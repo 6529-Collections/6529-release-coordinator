@@ -1,5 +1,37 @@
 # Progress and next steps
 
+## October 6 — reviewed production E2E canary workflow pin (local)
+
+The real frontend release adapter now pins `production-e2e.yml` blob
+`56b8c0e73121bcb1ac937775fbe3e80dd2f3bce5` on both environment branches,
+replacing `29346bd8d8c9816f40388801943b006e21f3f6ef`. Complete blob reads were
+independently rehashed at product main `a8a95d30bf20977ef40e6e8cb0c6b1b9a761310a`
+and staging `695b86fea2201414a9b158f5cf75f5b954f26da0`, and compared with the
+parent of product commit
+[`be8c0c8`](https://github.com/6529-Collections/6529seize-frontend/commit/be8c0c832b6ee7f4053df52c34bb32f8b0766fdf).
+The new workflow adds live-SHA-bound canary discovery, checks out trusted helpers
+at its workflow commit, distinguishes setup/browser failures and preserves
+provenance evidence. Its new helper was reviewed at blob
+`8d79eb5f1c8525e423b85525ee52e01bc2fbe684`; only schedule/canary scope executes
+it. The normal deployment-caused post-deploy chain retains the same inputs,
+run/job/live-version/source checks, browser-pack commands and required job name.
+No Coordinator dispatch, job matching, permission, limit or recovery change is
+needed. All other real pins and the entire sandbox runtime remain unchanged.
+
+Tests use independent reviewed blob literals for GET-only admission on both
+branches, refuse the immediately superseded and unknown blobs, and require the
+production browser job despite successful ancillary notifications. All 103
+focused tests passed. Full non-fixing Node 22.16.0 checks passed **945 tests**,
+with three optional Docker skips (948 total), plus lint, formatting, docs,
+workflow policy and packed-CLI checks; source contents remained unchanged.
+The actual real release identity client also passed with 65 GET-only requests
+against both product repositories and both environment refs above; all configured
+files/workflow identities matched. This is admission evidence, not deployment.
+Remote PR review/merge remain pending. PR #315 is already merged at
+`ed3975cdee430c8a712ef477b06adbd1e21f9399`; this separate approval does not
+change its candidate-check policy. No #311 run, #285/#294 resume, product edit,
+deployment, journal mutation, cleanup or package publication occurred here.
+
 ## October 6 — reviewed frontend session-recovery PR-CI pin (local)
 
 The real frontend candidate-check policy now pins `app-pr-ci.yml` blob
