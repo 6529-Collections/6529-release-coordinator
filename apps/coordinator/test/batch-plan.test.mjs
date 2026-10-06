@@ -27,6 +27,16 @@ test("reviewed frontend workflow refresh changes only its pin and keeps all hist
   expected.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"] =
     "0a506cbf14c340198c5273a560b0968d901cbebd";
   assert.deepEqual(realBatchPolicy, expected);
+  assert.equal(
+    new Set(
+      [
+        priorRealBatchPolicy,
+        nativeCompetitionRealBatchPolicy,
+        realBatchPolicy
+      ].map(serviceHash)
+    ).size,
+    3
+  );
   for (const historical of [
     copiedRealBatchPolicy,
     priorRealBatchPolicy,
@@ -99,6 +109,25 @@ test("policy refresh is limited to the reviewed unpublished preparation, not own
     ),
     false
   );
+  assert.equal(
+    canRefreshBatchPreparationPolicy(
+      { ...batch, policy: realBatchPolicy },
+      nativeCompetitionRealBatchPolicy
+    ),
+    false
+  );
+  for (const destination of [
+    copiedRealBatchPolicy,
+    priorRealBatchPolicy,
+    batchPolicy
+  ])
+    assert.equal(
+      canRefreshBatchPreparationPolicy(
+        { ...batch, policy: nativeCompetitionRealBatchPolicy },
+        destination
+      ),
+      false
+    );
 });
 
 test("history-preserving policies never reuse old copy-based publication proof", () => {
