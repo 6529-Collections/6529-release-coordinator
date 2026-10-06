@@ -8,6 +8,7 @@ import {
   copiedBatchPolicy,
   copiedRealBatchPolicy,
   earlierElapsedBatchPolicy,
+  nativeCompetitionRealBatchPolicy,
   previousBatchPolicy,
   priorRealBatchPolicy,
   realBatchPolicy,
@@ -17,13 +18,33 @@ import {
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import { serviceHash } from "../src/service-contract.mjs";
 
-test("reviewed frontend workflow refresh changes only its pin and keeps both historical policies trusted", () => {
-  const expected = structuredClone(priorRealBatchPolicy);
-  expected.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"] =
+test("reviewed frontend workflow refresh changes only its pin and keeps all historical policies trusted", () => {
+  const nativeCompetition = structuredClone(priorRealBatchPolicy);
+  nativeCompetition.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"] =
     "2cc4f7a5e36ba3d056b1f4b43d534f13f2ebde9a";
+  assert.deepEqual(nativeCompetitionRealBatchPolicy, nativeCompetition);
+  const expected = structuredClone(nativeCompetitionRealBatchPolicy);
+  expected.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"] =
+    "0a506cbf14c340198c5273a560b0968d901cbebd";
   assert.deepEqual(realBatchPolicy, expected);
-  for (const historical of [copiedRealBatchPolicy, priorRealBatchPolicy])
+  assert.equal(
+    new Set(
+      [
+        priorRealBatchPolicy,
+        nativeCompetitionRealBatchPolicy,
+        realBatchPolicy
+      ].map(serviceHash)
+    ).size,
+    3
+  );
+  for (const historical of [
+    copiedRealBatchPolicy,
+    priorRealBatchPolicy,
+    nativeCompetitionRealBatchPolicy
+  ]) {
     assert.equal(trustedBatchPolicy(structuredClone(historical)), historical);
+    assert.notEqual(serviceHash(historical), serviceHash(realBatchPolicy));
+  }
   assert.equal(
     priorRealBatchPolicy.workflow_blobs.frontend[
       ".github/workflows/app-pr-ci.yml"
@@ -81,6 +102,32 @@ test("policy refresh is limited to the reviewed unpublished preparation, not own
     false
   );
   assert.equal(canRefreshBatchPreparationPolicy(batch, batchPolicy), false);
+  assert.equal(
+    canRefreshBatchPreparationPolicy(
+      { ...batch, policy: nativeCompetitionRealBatchPolicy },
+      realBatchPolicy
+    ),
+    false
+  );
+  assert.equal(
+    canRefreshBatchPreparationPolicy(
+      { ...batch, policy: realBatchPolicy },
+      nativeCompetitionRealBatchPolicy
+    ),
+    false
+  );
+  for (const destination of [
+    copiedRealBatchPolicy,
+    priorRealBatchPolicy,
+    batchPolicy
+  ])
+    assert.equal(
+      canRefreshBatchPreparationPolicy(
+        { ...batch, policy: nativeCompetitionRealBatchPolicy },
+        destination
+      ),
+      false
+    );
 });
 
 test("history-preserving policies never reuse old copy-based publication proof", () => {

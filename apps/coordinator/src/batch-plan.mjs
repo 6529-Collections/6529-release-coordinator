@@ -146,7 +146,7 @@ export const priorRealBatchPolicy = Object.freeze({
 
 // Reviewed frontend native-competition CI lane. Keep the complete old policy
 // readable; a new hash requires fresh candidate preparation and check evidence.
-export const realBatchPolicy = Object.freeze({
+export const nativeCompetitionRealBatchPolicy = Object.freeze({
   ...priorRealBatchPolicy,
   workflow_blobs: Object.freeze({
     ...priorRealBatchPolicy.workflow_blobs,
@@ -154,6 +154,20 @@ export const realBatchPolicy = Object.freeze({
       ...priorRealBatchPolicy.workflow_blobs.frontend,
       ".github/workflows/app-pr-ci.yml":
         "2cc4f7a5e36ba3d056b1f4b43d534f13f2ebde9a"
+    })
+  })
+});
+
+// Reviewed session-recovery browser pack. Saved candidates keep their exact
+// policy hash; approving this pin never promotes their earlier CI evidence.
+export const realBatchPolicy = Object.freeze({
+  ...nativeCompetitionRealBatchPolicy,
+  workflow_blobs: Object.freeze({
+    ...nativeCompetitionRealBatchPolicy.workflow_blobs,
+    frontend: Object.freeze({
+      ...nativeCompetitionRealBatchPolicy.workflow_blobs.frontend,
+      ".github/workflows/app-pr-ci.yml":
+        "0a506cbf14c340198c5273a560b0968d901cbebd"
     })
   })
 });
@@ -218,6 +232,7 @@ export function isReleaseBatchPolicy(policy) {
   ].includes(policy?.version);
 }
 
+/** Return only an exact reviewed policy snapshot, including its historical hash. */
 export function trustedBatchPolicy(policy) {
   const expected = [
     legacyBatchPolicy,
@@ -230,6 +245,7 @@ export function trustedBatchPolicy(policy) {
     copiedRealBatchPolicy,
     batchPolicy,
     priorRealBatchPolicy,
+    nativeCompetitionRealBatchPolicy,
     realBatchPolicy
   ].find(
     (candidate) =>

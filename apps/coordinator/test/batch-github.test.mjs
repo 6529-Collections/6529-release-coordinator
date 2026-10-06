@@ -4,6 +4,7 @@ import { createBatchGitHub } from "../src/batch-github.mjs";
 import { realProfile } from "../src/profiles.mjs";
 import {
   previousBatchPolicy,
+  nativeCompetitionRealBatchPolicy,
   priorRealBatchPolicy,
   realBatchPolicy
 } from "../src/batch-plan.mjs";
@@ -37,6 +38,7 @@ test("real frontend accepts only the reviewed CI pin, never an old or unknown wo
   );
   for (const blob of [
     priorRealBatchPolicy.workflow_blobs.frontend[path],
+    nativeCompetitionRealBatchPolicy.workflow_blobs.frontend[path],
     "f".repeat(40)
   ]) {
     f.workflowBlobs[path] = blob;
@@ -44,20 +46,29 @@ test("real frontend accepts only the reviewed CI pin, never an old or unknown wo
       code: "batch-runtime"
     });
   }
-  const historical = fixture({
-    profile: realProfile,
-    role: "frontend",
-    policy: priorRealBatchPolicy
-  });
-  historical.workflowBlobs[path] =
-    realBatchPolicy.workflow_blobs.frontend[path];
-  await assert.rejects(
-    historical.client.identity("frontend", historical.record.base),
-    { code: "batch-runtime" }
-  );
-  assert.ok(
-    [...f.calls, ...historical.calls].every((call) => call.method === "GET")
-  );
+  for (const policy of [
+    priorRealBatchPolicy,
+    nativeCompetitionRealBatchPolicy
+  ]) {
+    const historical = fixture({
+      profile: realProfile,
+      role: "frontend",
+      policy
+    });
+    assert.equal(
+      (await historical.client.identity("frontend", historical.record.base))
+        .workflow_id,
+      null
+    );
+    historical.workflowBlobs[path] =
+      realBatchPolicy.workflow_blobs.frontend[path];
+    await assert.rejects(
+      historical.client.identity("frontend", historical.record.base),
+      { code: "batch-runtime" }
+    );
+    assert.ok(historical.calls.every((call) => call.method === "GET"));
+  }
+  assert.ok(f.calls.every((call) => call.method === "GET"));
 });
 
 test("published candidate preserves every selected original head and rejects lost history", async () => {

@@ -224,6 +224,15 @@ count against the same run's budgets. This does not migrate copy-based work,
 published trials, selected candidates or existing releases, and never accepts
 an arbitrary workflow change. Unreviewed pins still stop execution.
 
+The reviewed October 6 session-recovery browser pack updates that frontend
+PR-CI pin again, without changing required checks, permissions, other workflow
+pins, limits or release gates. The native-competition policy remains separately
+trusted for reading and reconciling its exact saved history. Fresh requests use
+the new policy hash and fresh candidate CI. The existing pre-publication refresh
+guard still accepts only the original prior history-preserving policy; this
+change does not add a native-competition-to-current migration, relabel older CI
+as current proof, or resume any stopped release automatically.
+
 <a id="proposed-batch-testing-and-selection"></a>
 
 ## Batch testing and selection

@@ -1,5 +1,50 @@
 # Progress and next steps
 
+## October 6 — reviewed frontend session-recovery PR-CI pin (local)
+
+The real frontend candidate-check policy now pins `app-pr-ci.yml` blob
+`0a506cbf14c340198c5273a560b0968d901cbebd`, replacing
+`2cc4f7a5e36ba3d056b1f4b43d534f13f2ebde9a` for fresh preparations. A complete
+blob comparison found only the added session-recovery browser regression step
+in the existing critical-shell lane. Its package command uses the local
+Playwright authentication/composer sandbox. Required checks, permissions,
+backend/debt-ratchet and deployment pins, sandbox policy, count budgets and
+staging/production/recovery gates are unchanged. The exact native-competition
+policy remains trusted for saved-history reads and its original pin checks;
+old proof is never promoted to the new policy hash. The existing narrowly gated
+pre-publication refresh is not widened to another historical policy.
+
+Fresh real [ticket #311](https://github.com/6529-Collections/6529-release-coordinator/issues/311)
+was accepted through intake run `37321444238`, request
+`231c312c-bc2c-4753-950c-1754d42ec376`, unchanged frontend PR #4120 head
+`39263ae2038767c08f1be1355b218896f82d613f`, verified submitter `simo6529`
+(`209783236`), production target, no database change and no dependencies.
+Before this change, read-only candidate identity admission reproduced
+`batch-runtime: A pinned product PR workflow changed.` Product deployment
+identity admission passed separately on October 5. The 30 focused policy/identity/refresh
+tests passed. Full non-fixing checks on Node 22.16.0 passed **942 tests**, with
+three optional Docker skips (945 total), plus lint, formatting, documentation,
+workflow policy and packed-CLI checks; source contents remained unchanged.
+GET-only frontend candidate identity admission then passed against product main
+`a8a95d30bf20977ef40e6e8cb0c6b1b9a761310a`. Remote reviews/CI, merge and
+the authorized isolated #311 release are still pending; ticket creation and
+admission readbacks are not staging or production deployment proof. Neither old
+ticket #285/#294 attempts nor product code, shared branches or journals changed here.
+
+The October 6 GET-only release recheck found a separate, unapproved frontend
+`production-e2e.yml` change on both environment branches: expected blob
+`29346bd8d8c9816f40388801943b006e21f3f6ef`, observed
+`56b8c0e73121bcb1ac937775fbe3e80dd2f3bce5`. Product commit
+[`be8c0c8`](https://github.com/6529-Collections/6529seize-frontend/commit/be8c0c832b6ee7f4053df52c34bb32f8b0766fdf)
+adds live-version-bound canary discovery, failure classification and preserved
+evidence. All other configured deployment-file pins matched. This PR does not
+approve that separate workflow/helper change: #311 remains unstarted pending
+its review and explicit approval. The saved journal remained at revision 665
+with no lock; its existing native-policy batches are finished, not active
+preparations requiring migration. Advisory follow-up tests explicitly reject
+current-to-native downgrade and native-to-historical refresh and assert pairwise
+distinct prior/native/current policy hashes without changing the guard.
+
 ## October 5 — workflow-wait PR integration with current main
 
 PR #304 now integrates remote main `489125e11b7b0b091d2ed2e7240444ff45409fd6`,
