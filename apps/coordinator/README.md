@@ -768,7 +768,12 @@ still running.
 To cancel the attempt while leaving current code alone, use
 `--resume RUN_ID --cancel-keep-current`. This separate option requires a
 confirmed no-database-change release at its owned unmerged integration PR,
-or an interrupted review stop, with no other production operation or recovery.
+either awaiting review, finishing an interrupted review stop, or stopped at
+the first staging checkpoint with no other release operation. The last case
+requires step zero, a saved PR in `checking`, no result and no earlier cleanup
+choice. A saved `running` checkpoint is not proof that its process is alive:
+independently verify the original process and requests have stopped before
+using this option. Other production operations or recovery refuse cancellation.
 It closes only that verified PR and removes its exact temporary branch. It
 does not restore, merge, deploy or change staging/main. It records cancellation
 and closes the selected tickets as not planned, not as a completed release.

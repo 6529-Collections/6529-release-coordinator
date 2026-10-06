@@ -53,8 +53,9 @@ staging E2E passes. In real profile these are real product changes and deploymen
                  Requires --resume; never discards an uncertain PR or branch.
   --cancel-keep-current
                  Cancel a no-database-change attempt paused at its owned PR,
-                 or its interrupted stop. Close that unmerged PR and remove
-                 its exact branch. Do not restore, merge or deploy code.
+                 its interrupted review stop, or an interrupted first staging
+                 checkpoint with no other release operation. Close only its
+                 unmerged PR/branch. Do not restore, merge or deploy code.
                  Requires --resume; closes selected tickets as not planned,
                  not as a completed release. Other production work refuses cancellation.
   --json         Print structured results; live progress goes to stderr.

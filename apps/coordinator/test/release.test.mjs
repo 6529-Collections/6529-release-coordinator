@@ -26,6 +26,7 @@ import {
   makeReleasePlan
 } from "../src/release-plan.mjs";
 import { ServiceError, serviceHash } from "../src/service-contract.mjs";
+import { assertCancellableRelease } from "../src/release-cancellation.mjs";
 import { stopStaleE2e } from "../src/manual-stale-stop.mjs";
 import { elapsedBatchPolicy, legacyBatchPolicy } from "../src/batch-plan.mjs";
 import { sandboxProfile } from "../src/profiles.mjs";
@@ -1306,6 +1307,201 @@ async function cancellableProductionFixture() {
   return { batch, calls, options, observed };
 }
 
+async function interruptedFirstStagingFixture() {
+  const batch = await frontendOnlyProductionBatch();
+  const calls = [];
+  const releaseClient = client(calls);
+  releaseClient.integrate = async ({
+    record,
+    candidate,
+    expectedBase,
+    save
+  }) => {
+    assert.equal(record.step.id, "staging:integrate:frontend");
+    record.base = expectedBase;
+    record.target_branch = "1a-staging";
+    record.branch = `codex/release-${record.release_id}-staging-frontend`;
+    record.integration_version = 1;
+    record.integration_input = integrationCommitInput(record, candidate);
+    record.integration_commit = serviceHash(record.integration_input).slice(
+      0,
+      40
+    );
+    record.number = 42;
+    record.url =
+      "https://github.com/6529-Collections/release-coordinator-test-frontend/pull/42";
+    record.state = "checking";
+    await save();
+    throw new ServiceError("release-source", "Source gate is not established.");
+  };
+  const options = {
+    batch,
+    client: releaseClient,
+    operator: { id: "456", login: "tester" },
+    guard: async () => {},
+    save: async () => validateReleaseExecution(batch.execution, batch)
+  };
+  await assert.rejects(
+    executeRelease(options),
+    (error) => error instanceof ServiceError && error.code === "release-source"
+  );
+  assert.equal(batch.execution.status, "running");
+  assert.equal(batch.execution.step_index, 0);
+  assert.deepEqual(Object.keys(batch.execution.operations), [
+    "staging:integrate:frontend"
+  ]);
+  const observed = {
+    staging: { backend: "1".repeat(40), frontend: "2".repeat(40) },
+    prod: { backend: "3".repeat(40), frontend: "4".repeat(40) }
+  };
+  releaseClient.environmentVersions = async (environment) => ({
+    ...observed[environment]
+  });
+  releaseClient.cancelIntegration = async ({ record }) => {
+    calls.push("cancel:owned-pr");
+    record.cleanup = "removed";
+    return { status: "failed", kind: "review-stop", url: record.url };
+  };
+  releaseClient.integrate = async () =>
+    assert.fail("cancellation must not retry integration");
+  releaseClient.run = async () =>
+    assert.fail("cancellation must not deploy or test");
+  releaseClient.restore = async () =>
+    assert.fail("cancellation must not restore shared code");
+  calls.length = 0;
+  return { batch, calls, options, observed };
+}
+
+test("an interrupted first staging checkpoint cancels without promoting old proof or touching moved refs", async () => {
+  const { batch, calls, options, observed } =
+    await interruptedFirstStagingFixture();
+  const attempts = structuredClone(batch.attempts);
+  const plan = structuredClone(batch.execution.plan);
+  const versions = structuredClone(batch.execution.versions);
+  const operationId = batch.execution.operations[plan.steps[0].id].id;
+  const cancelled = await executeRelease({
+    ...options,
+    cancelKeepCurrent: true
+  });
+  assert.equal(cancelled.status, "cancelled");
+  assert.deepEqual(calls, ["cancel:owned-pr"]);
+  assert.deepEqual(batch.attempts, attempts);
+  assert.deepEqual(cancelled.plan, plan);
+  assert.deepEqual(cancelled.versions, versions);
+  assert.deepEqual(cancelled.cancellation.observed_before, observed);
+  assert.deepEqual(cancelled.cancellation.observed_after, observed);
+  assert.equal(cancelled.operations[plan.steps[0].id].id, operationId);
+  assert.equal(cancelled.operations[plan.steps[0].id].cleanup, "removed");
+  assert.equal(releaseTicketResult(batch, 1).code, "release-cancelled");
+  assert.equal(releaseTicketResult(batch, 1).status, "closed");
+  assert.doesNotThrow(() => validateReleaseExecution(cancelled, batch));
+  await executeRelease(options);
+  assert.deepEqual(calls, ["cancel:owned-pr"]);
+});
+
+test("interrupted first-checkpoint cancellation saves intent before cleanup and resumes only cancellation", async () => {
+  const { batch, calls, options } = await interruptedFirstStagingFixture();
+  await assert.rejects(
+    executeRelease({
+      ...options,
+      cancelKeepCurrent: true,
+      save: async (message) => {
+        validateReleaseExecution(batch.execution, batch);
+        if (message === "cancel release while keeping current code")
+          throw new Error("lost first-checkpoint cancellation save");
+      }
+    }),
+    /lost first-checkpoint cancellation save/u
+  );
+  assert.equal(batch.execution.status, "cancelling");
+  assert.deepEqual(calls, []);
+  const resumed = await executeRelease(options);
+  assert.equal(resumed.status, "cancelled");
+  assert.deepEqual(calls, ["cancel:owned-pr"]);
+});
+
+test("first-checkpoint cancellation retains its intent after uncertain cleanup", async () => {
+  const { batch, calls, options } = await interruptedFirstStagingFixture();
+  const cancel = options.client.cancelIntegration;
+  options.client.cancelIntegration = async () => {
+    throw new Error("lost first-checkpoint cleanup response");
+  };
+  await assert.rejects(
+    executeRelease({ ...options, cancelKeepCurrent: true }),
+    /lost first-checkpoint cleanup response/u
+  );
+  assert.equal(batch.execution.status, "cancelling");
+  assert.equal(batch.execution.completed_at, null);
+  assert.deepEqual(calls, []);
+  assert.doesNotThrow(() => validateReleaseExecution(batch.execution, batch));
+  options.client.cancelIntegration = cancel;
+  const resumed = await executeRelease(options);
+  assert.equal(resumed.status, "cancelled");
+  assert.deepEqual(calls, ["cancel:owned-pr"]);
+});
+
+test("first-checkpoint cancellation refuses later operations, uncertain stages and database effects", async () => {
+  const { batch, calls } = await interruptedFirstStagingFixture();
+  for (const change of [
+    (value) => {
+      value.execution.step_index = 1;
+    },
+    (value) => {
+      value.execution.operations.other = { step: { environment: "staging" } };
+    },
+    (value) => {
+      value.execution.operations.other = { step: { environment: "prod" } };
+    },
+    (value) => {
+      value.execution.operations["staging:integrate:frontend"].state =
+        "merging";
+    },
+    (value) => {
+      value.execution.operations["staging:integrate:frontend"].state = "merged";
+    },
+    (value) => {
+      value.execution.operations["staging:integrate:frontend"].state =
+        "creating-pr";
+    },
+    (value) => {
+      value.execution.operations["staging:integrate:frontend"].result = {
+        status: "passed"
+      };
+    },
+    (value) => {
+      value.execution.recovery = {};
+    },
+    (value) => {
+      value.execution.staging_drift = {};
+    },
+    (value) => {
+      value.execution.manual_stop = {};
+    },
+    (value) => {
+      value.execution.status = "prepared";
+    },
+    (value) => {
+      value.execution.status = "needs-human";
+    },
+    (value) => {
+      value.execution.status = "cancelling";
+    },
+    (value) => {
+      value.attempts.find(
+        (attempt) => attempt.phase === "git"
+      ).result.service_plan.database.observed = "yes";
+    }
+  ]) {
+    const unsafe = structuredClone(batch);
+    change(unsafe);
+    assert.throws(
+      () => assertCancellableRelease(unsafe.execution, unsafe),
+      (error) => error instanceof ServiceError
+    );
+  }
+  assert.deepEqual(calls, []);
+});
+
 test("explicit cancellation preserves moved staging/main and closes, not completes, the ticket", async () => {
   const { batch, calls, options, observed } =
     await cancellableProductionFixture();
@@ -1629,119 +1825,148 @@ test("cancellation refuses DB changes, uncertain merges, other production steps,
   );
 });
 
-test("a cancelled multi-ticket attempt closes every selected ticket and releases the normal inbox lock", async () => {
-  const h = harness(2);
-  let closed = false;
-  const releaseClient = client([]);
-  releaseClient.integrate = async ({ record, candidate, expectedBase }) => {
-    record.base = expectedBase;
-    record.target_branch = "1a-staging";
-    record.branch = `codex/release-${record.release_id}-staging-${record.step.role}`;
-    record.integration_version = 1;
-    record.integration_input = integrationCommitInput(record, candidate);
-    record.integration_commit = serviceHash(record.integration_input).slice(
-      0,
-      40
-    );
-    record.number = 42;
-    record.url =
-      "https://github.com/6529-Collections/release-coordinator-test-backend/pull/42";
-    record.state = "checking";
-    return { status: "waiting-review", url: record.url };
-  };
-  releaseClient.cancelIntegration = async ({ record }) => {
-    closed = true;
-    record.cleanup = "removed";
-    return { status: "failed", kind: "review-stop", url: record.url };
-  };
-  h.options.release = (options) =>
-    executeRelease({ ...options, client: releaseClient });
-  const paused = await processInbox(h.options);
-  assert.equal(paused.batch.status, "awaiting-review");
-  assert.equal(h.f.state().lock.run_id, paused.run_id);
-  const cancelled = await processInbox({
-    ...h.options,
-    resume: paused.run_id,
-    cancelKeepCurrent: true
-  });
-  assert.equal(cancelled.batch.status, "cancelled");
-  assert.equal(cancelled.release_executed, false);
-  assert.equal(closed, true);
-  assert.equal(h.f.state().lock, null);
-  assert.equal(cancelled.requests.length, 2);
-  assert.equal(inboxRunExitCode(cancelled), 0);
-  const history = h.f.state().history.batches[cancelled.batch.fingerprint];
-  assert.equal(history.status, "cancelled");
-  assert.equal(h.f.state().batches[cancelled.batch.fingerprint], undefined);
-  const savedArchive = h.f.file(history.path);
-  const savedBatch = verifyArchive(
-    savedArchive,
-    "batches",
-    cancelled.batch.fingerprint,
-    history,
-    sandboxProfile
-  );
-  assert.equal(savedBatch.execution.status, "cancelled");
-  const laterStale = structuredClone(savedBatch);
-  laterStale.stop = {
-    status: "stale",
-    kind: "inputs",
-    message: "Old source inputs changed after cancellation."
-  };
-  assert.doesNotThrow(() =>
-    validateBatchHistory(
-      { [laterStale.fingerprint]: laterStale },
+for (const interrupted of [false, true]) {
+  test(`${interrupted ? "interrupted first checkpoint" : "review-paused"}: cancelled multi-ticket attempt closes every selected ticket and releases the normal inbox lock`, async () => {
+    const h = harness(2);
+    let closed = false;
+    const releaseClient = client([]);
+    releaseClient.integrate = async ({
+      record,
+      candidate,
+      expectedBase,
+      save
+    }) => {
+      record.base = expectedBase;
+      record.target_branch = "1a-staging";
+      record.branch = `codex/release-${record.release_id}-staging-${record.step.role}`;
+      record.integration_version = 1;
+      record.integration_input = integrationCommitInput(record, candidate);
+      record.integration_commit = serviceHash(record.integration_input).slice(
+        0,
+        40
+      );
+      record.number = 42;
+      record.url =
+        "https://github.com/6529-Collections/release-coordinator-test-backend/pull/42";
+      record.state = "checking";
+      if (interrupted) {
+        await save();
+        throw new ServiceError(
+          "release-source",
+          "Source gate is not established."
+        );
+      }
+      return { status: "waiting-review", url: record.url };
+    };
+    releaseClient.cancelIntegration = async ({ record }) => {
+      closed = true;
+      record.cleanup = "removed";
+      return { status: "failed", kind: "review-stop", url: record.url };
+    };
+    h.options.release = (options) =>
+      executeRelease({ ...options, client: releaseClient });
+    let runId;
+    if (interrupted) {
+      await assert.rejects(
+        processInbox(h.options),
+        /Source gate is not established/u
+      );
+      runId = h.f.state().lock.run_id;
+      assert.equal(
+        h.f.state().batches[h.f.state().lock.batch_fingerprint].execution
+          .status,
+        "running"
+      );
+    } else {
+      const paused = await processInbox(h.options);
+      assert.equal(paused.batch.status, "awaiting-review");
+      runId = paused.run_id;
+    }
+    assert.equal(h.f.state().lock.run_id, runId);
+    const cancelled = await processInbox({
+      ...h.options,
+      resume: runId,
+      cancelKeepCurrent: true
+    });
+    assert.equal(cancelled.batch.status, "cancelled");
+    assert.equal(cancelled.release_executed, false);
+    assert.equal(closed, true);
+    assert.equal(h.f.state().lock, null);
+    assert.equal(cancelled.requests.length, 2);
+    assert.equal(inboxRunExitCode(cancelled), 0);
+    const history = h.f.state().history.batches[cancelled.batch.fingerprint];
+    assert.equal(history.status, "cancelled");
+    assert.equal(h.f.state().batches[cancelled.batch.fingerprint], undefined);
+    const savedArchive = h.f.file(history.path);
+    const savedBatch = verifyArchive(
+      savedArchive,
+      "batches",
+      cancelled.batch.fingerprint,
+      history,
       sandboxProfile
-    )
-  );
-  const unfinishedStale = structuredClone(laterStale);
-  unfinishedStale.execution.status = "cancelling";
-  unfinishedStale.execution.completed_at = null;
-  assert.throws(
-    () =>
+    );
+    assert.equal(savedBatch.execution.status, "cancelled");
+    const laterStale = structuredClone(savedBatch);
+    laterStale.stop = {
+      status: "stale",
+      kind: "inputs",
+      message: "Old source inputs changed after cancellation."
+    };
+    assert.doesNotThrow(() =>
       validateBatchHistory(
-        { [unfinishedStale.fingerprint]: unfinishedStale },
+        { [laterStale.fingerprint]: laterStale },
         sandboxProfile
-      ),
-    /stale batches can retain only terminal evidence/u
-  );
-  const cancelling = structuredClone(savedBatch);
-  cancelling.execution.status = "cancelling";
-  cancelling.execution.completed_at = null;
-  const pendingState = {
-    tickets: {},
-    batches: { [cancelling.fingerprint]: cancelling }
-  };
-  assert.deepEqual(archiveFinished(pendingState, sandboxProfile), []);
-  assert.ok(pendingState.batches[cancelling.fingerprint]);
-  assert.equal(
-    pendingState.history?.batches?.[cancelling.fingerprint],
-    undefined
-  );
-  assert.equal(
-    savedBatch.execution.operations["staging:integrate:backend"].cleanup,
-    "removed"
-  );
-  const unfinished = structuredClone(savedBatch);
-  unfinished.execution.operations["staging:integrate:backend"].cleanup =
-    "pending";
-  const unsafeState = {
-    tickets: h.f.state().tickets,
-    batches: { [unfinished.fingerprint]: unfinished }
-  };
-  assert.throws(() => archiveFinished(unsafeState, sandboxProfile));
-  assert.ok(unsafeState.batches[unfinished.fingerprint]);
-  for (const item of cancelled.requests) {
-    assert.equal(item.status, "closed");
-    assert.equal(item.applied, true);
-    assert.equal(h.f.issues[item.issue_number - 1].state, "closed");
-    assert.ok(
-      h.f.issues[item.issue_number - 1].labels.some(
-        (label) => (label.name ?? label) === "reason:release-cancelled"
       )
     );
-  }
-});
+    const unfinishedStale = structuredClone(laterStale);
+    unfinishedStale.execution.status = "cancelling";
+    unfinishedStale.execution.completed_at = null;
+    assert.throws(
+      () =>
+        validateBatchHistory(
+          { [unfinishedStale.fingerprint]: unfinishedStale },
+          sandboxProfile
+        ),
+      /stale batches can retain only terminal evidence/u
+    );
+    const cancelling = structuredClone(savedBatch);
+    cancelling.execution.status = "cancelling";
+    cancelling.execution.completed_at = null;
+    const pendingState = {
+      tickets: {},
+      batches: { [cancelling.fingerprint]: cancelling }
+    };
+    assert.deepEqual(archiveFinished(pendingState, sandboxProfile), []);
+    assert.ok(pendingState.batches[cancelling.fingerprint]);
+    assert.equal(
+      pendingState.history?.batches?.[cancelling.fingerprint],
+      undefined
+    );
+    assert.equal(
+      savedBatch.execution.operations["staging:integrate:backend"].cleanup,
+      "removed"
+    );
+    const unfinished = structuredClone(savedBatch);
+    unfinished.execution.operations["staging:integrate:backend"].cleanup =
+      "pending";
+    const unsafeState = {
+      tickets: h.f.state().tickets,
+      batches: { [unfinished.fingerprint]: unfinished }
+    };
+    assert.throws(() => archiveFinished(unsafeState, sandboxProfile));
+    assert.ok(unsafeState.batches[unfinished.fingerprint]);
+    for (const item of cancelled.requests) {
+      assert.equal(item.status, "closed");
+      assert.equal(item.applied, true);
+      assert.equal(h.f.issues[item.issue_number - 1].state, "closed");
+      assert.ok(
+        h.f.issues[item.issue_number - 1].labels.some(
+          (label) => (label.name ?? label) === "reason:release-cancelled"
+        )
+      );
+    }
+  });
+}
 
 test("failed staging E2E restores staging and stops before prod", async () => {
   const batch = await selectedBatch();

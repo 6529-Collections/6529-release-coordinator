@@ -11,7 +11,10 @@ import {
   realProductWorkflowRuntime
 } from "../src/product-workflow-runtime-config.mjs";
 
-function fixture(profile, { conditionalDelete = true } = {}) {
+function fixture(
+  profile,
+  { conditionalDelete = true, environment = "prod" } = {}
+) {
   const candidate = {
     role: "frontend",
     base: "a".repeat(40),
@@ -24,10 +27,10 @@ function fixture(profile, { conditionalDelete = true } = {}) {
     release_id: "11111111-1111-4111-8111-111111111111",
     profile: profile.name,
     step: {
-      id: "prod:integrate:frontend",
+      id: `${environment}:integrate:frontend`,
       kind: "integrate",
       role: "frontend",
-      environment: "prod"
+      environment
     },
     state: "checking",
     result: null,
@@ -37,8 +40,8 @@ function fixture(profile, { conditionalDelete = true } = {}) {
         ? { id: "209783236", login: "simo6529" }
         : { id: "456", login: "tester" },
     base: candidate.base,
-    target_branch: "main",
-    branch: "codex/release-11111111-1111-4111-8111-111111111111-prod-frontend",
+    target_branch: environment === "staging" ? "1a-staging" : "main",
+    branch: `codex/release-11111111-1111-4111-8111-111111111111-${environment}-frontend`,
     body: "Owned release attempt",
     integration_version: 1,
     integration_commit: "d".repeat(40),
@@ -72,7 +75,7 @@ function fixture(profile, { conditionalDelete = true } = {}) {
     },
     base: {
       repo: { id: profile.repositories.frontend.id },
-      ref: "main",
+      ref: record.target_branch,
       sha: "f".repeat(40)
     }
   });
@@ -161,6 +164,21 @@ test("cancellation rejects a missing saved operation with a structured error", (
 });
 
 for (const profile of [sandboxProfile, realProfile]) {
+  test(`${profile.name}: first staging cancellation closes only the unmerged owned PR despite destination drift`, async () => {
+    const { client, input, live, writes } = fixture(profile, {
+      environment: "staging"
+    });
+    assert.equal(input.record.target_branch, "1a-staging");
+    const result = await client.cancelIntegration(input);
+    assert.equal(result.kind, "review-stop");
+    assert.equal(live.state, "closed");
+    assert.equal(live.exists, false);
+    assert.equal(input.record.cleanup, "removed");
+    assert.deepEqual(writes, [
+      `PATCH repos/${profile.repositories.frontend.full_name}/pulls/42`,
+      `GIT ${input.record.branch}`
+    ]);
+  });
   test(`${profile.name}: cancellation closes only its exact owned PR/branch despite main moving`, async () => {
     const { client, input, live, writes } = fixture(profile);
     const result = await client.cancelIntegration(input);
