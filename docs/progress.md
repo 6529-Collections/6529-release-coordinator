@@ -1,5 +1,36 @@
 # Progress and next steps
 
+## October 6 — reviewed Wave-creation PR-CI approval (local)
+
+Coordinator PR #315 and #316 are merged; clean main before this work was
+`4446c4445a3995d97879dae597832894c305a9c6`. The authorized isolated real
+#311 run `b9f77d5a-9fe8-41d6-bad4-cbc8d7422644` stopped before candidate
+publication at `2026-10-06T06:50:36.290Z`: frontend `app-pr-ci.yml` had changed
+from approved `0a506cbf14c340198c5273a560b0968d901cbebd` to
+`134e53f46bfe207742adcc4fec392128bec75ab8`. Its Git rehearsal passed, but
+there is no candidate CI or staging/production deployment proof. Journal
+revision 674 preserves the same filtered #311 scope/actor, source/request,
+original attempts, empty check resources and owned lock; the runner exited 2
+and its actual Node/npm processes were independently absent.
+
+The [complete blob review](./testing/frontend-wave-creation-ci-2026-10-06.md)
+found only 14 added lines for a local Wave-creation browser test lane. This
+branch approves those bytes only, preserves the superseded policy snapshot and
+adds its narrow unpublished-preparation transition to the current policy.
+Existing original-policy refresh remains supported; native/copy-based policies
+and owned trials/releases do not gain a migration route. The same source must
+be rebuilt and freshly checked, preserving history and spent budgets. Required
+checks, backend/debt-ratchet/deployment pins, permissions, sandbox policy and
+release/recovery gates stay unchanged. All 36 focused policy/admission/resume
+tests passed; full non-fixing Node 22.16.0 checks passed **953 tests**, with
+three optional Docker skips (956 total), plus lint, formatting, docs, workflow
+policy and packed-CLI gates, with source unchanged. Seven guarded GET-only
+requests reproduced old-policy refusal and current-policy admission against
+exact product main above; saved revision 674 is eligible for the narrow
+refresh. This is admission proof, not candidate CI or deployment. PR review/CI
+and merge remain pending; #311 has not been resumed. Old #285/#294 history is
+untouched.
+
 ## October 6 — reviewed production E2E canary workflow pin (local)
 
 The real frontend release adapter now pins `production-e2e.yml` blob
