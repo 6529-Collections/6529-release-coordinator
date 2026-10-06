@@ -32,6 +32,14 @@ Remote PR review/merge remain pending. PR #315 is already merged at
 change its candidate-check policy. No #311 run, #285/#294 resume, product edit,
 deployment, journal mutation, cleanup or package publication occurred here.
 
+The initial general review suggested replacing the loose rejection regex with
+the exact `release-workflow` error code/message; the regression now checks that
+specific browser-job contradiction, not an unrelated refusal. Initial primary
+general/security/deployment reviews were clear. Initial GLM advisory coverage
+was incomplete: three slices returned empty output, and the remaining slice
+examined only progress text. That is not GLM coverage of the changed code/tests;
+full deterministic checks and the other configured reviews remain separate.
+
 ## October 6 — reviewed frontend session-recovery PR-CI pin (local)
 
 The real frontend candidate-check policy now pins `app-pr-ci.yml` blob

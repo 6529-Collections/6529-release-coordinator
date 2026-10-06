@@ -2092,7 +2092,10 @@ for (const conclusion of ["success", "failure", "skipped"]) {
       assert.equal(result.deployment_workflow.id, 602);
     } else {
       // A green wrapper/run/notification never substitutes for browser evidence.
-      await assert.rejects(harness.run(), /E2E.*jobs|job evidence/iu);
+      await assert.rejects(harness.run(), {
+        code: "release-workflow",
+        message: "The matching E2E conclusion contradicts its jobs."
+      });
     }
     assert.ok(harness.calls.every(({ method }) => method === "GET"));
   });
