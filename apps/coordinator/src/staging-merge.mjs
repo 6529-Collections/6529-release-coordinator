@@ -30,6 +30,7 @@ export function validateStagingMerge(record, candidate) {
         candidate.tree
       ].every(sha) &&
       Array.isArray(prepared.patch) &&
+      (prepared.patch.length > 0 || prepared.tree === prepared.base_tree) &&
       new Set(prepared.patch.map((file) => file?.path)).size ===
         prepared.patch.length &&
       prepared.patch.every(

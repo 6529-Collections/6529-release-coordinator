@@ -2836,7 +2836,14 @@ test("integration commit recovery state stays bound to the exact candidate", asy
     candidate_commit: candidate.commit,
     candidate_tree: candidate.tree,
     tree: "7".repeat(40),
-    patch: []
+    patch: [
+      {
+        path: "changed.txt",
+        mode: "100644",
+        type: "blob",
+        sha: "f".repeat(40)
+      }
+    ]
   };
   assert.notEqual(record.staging_preparation.tree, candidate.tree);
   record.integration_input = integrationCommitInput(record, candidate);

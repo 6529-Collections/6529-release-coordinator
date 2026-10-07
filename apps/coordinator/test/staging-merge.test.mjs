@@ -18,6 +18,7 @@ async function fixture(
   {
     profile = "sandbox",
     conflict = false,
+    alreadyPresent = false,
     conflictPaths = ["src/quote.test.txt"]
   } = {}
 ) {
@@ -61,7 +62,9 @@ async function fixture(
           "docs/staging.md": "keep staging-only work\n"
         }
       : {
-          "shared.txt": "staging first\nunchanged\nlast\n",
+          "shared.txt": alreadyPresent
+            ? "first\nunchanged\nsource last\n"
+            : "staging first\nunchanged\nlast\n",
           "docs/staging.md": "keep staging-only work\n"
         },
     foundation.commit
@@ -209,22 +212,27 @@ async function fixture(
         };
         status = 201;
       } else if (method === "POST" && suffix === "/git/trees") {
-        await git(["read-tree", body.base_tree]);
-        for (const file of body.tree) {
-          if (file.sha === null)
-            await git(["update-index", "--force-remove", "--", file.path]);
-          else
-            await git([
-              "update-index",
-              "--add",
-              "--cacheinfo",
-              file.mode,
-              file.sha,
-              file.path
-            ]);
+        if (!body.tree.length) {
+          status = 422;
+          data = { message: "Validation Failed: tree must not be empty" };
+        } else {
+          await git(["read-tree", body.base_tree]);
+          for (const file of body.tree) {
+            if (file.sha === null)
+              await git(["update-index", "--force-remove", "--", file.path]);
+            else
+              await git([
+                "update-index",
+                "--add",
+                "--cacheinfo",
+                file.mode,
+                file.sha,
+                file.path
+              ]);
+          }
+          data = { sha: await git(["write-tree"]) };
+          status = 201;
         }
-        data = { sha: await git(["write-tree"]) };
-        status = 201;
       } else if (method === "POST" && suffix === "/git/commits") {
         const oid = await git(
           [
@@ -350,6 +358,137 @@ async function fixture(
 }
 
 for (const profile of ["sandbox", "real"]) {
+  test(`${profile}: an empty staging patch reuses the verified tree but still requires a unique checked integration PR`, async (t) => {
+    const f = await fixture(t, { profile, alreadyPresent: true });
+    const candidateHash = serviceHash(f.candidate);
+    const result = await f.client.integrate(f.input);
+    assert.equal(result.status, "passed");
+    assert.deepEqual(f.record.staging_preparation.patch, []);
+    assert.equal(result.tree, f.record.staging_preparation.base_tree);
+    assert.notEqual(result.tree, f.candidate.tree);
+    assert.notEqual(f.record.integration_commit, f.candidate.commit);
+    assert.deepEqual(f.record.integration_input.parents, [
+      f.staging.commit,
+      f.candidate.commit
+    ]);
+    await f.git([
+      "merge-base",
+      "--is-ancestor",
+      f.candidate.commit,
+      result.commit
+    ]);
+    assert.equal(
+      await f.git(["show", `${result.commit}:docs/staging.md`]),
+      "keep staging-only work"
+    );
+    assert.ok(f.gates.length >= 2);
+    assert.ok(
+      f.gates.every((gate) => gate.headRefOid === f.record.integration_commit)
+    );
+    assert.equal(serviceHash(f.candidate), candidateHash);
+    assert.equal(f.record.cleanup, "removed");
+    for (const suffix of ["/git/blobs", "/git/trees"]) {
+      assert.equal(
+        f.calls.some(
+          (call) => call.method === "POST" && call.suffix === suffix
+        ),
+        false
+      );
+    }
+    for (const [method, suffix] of [
+      ["POST", "/git/commits"],
+      ["POST", "/pulls"],
+      ["PUT", "/pulls/99/merge"]
+    ]) {
+      assert.equal(
+        f.calls.filter(
+          (call) => call.method === method && call.suffix === suffix
+        ).length,
+        1
+      );
+    }
+  });
+  test(`${profile}: an interrupted empty-patch checkpoint resumes its exact saved preparation and integration input`, async (t) => {
+    const f = await fixture(t, { profile, alreadyPresent: true });
+    await assert.rejects(
+      f.client.integrate({
+        ...f.input,
+        save: async () => {
+          await f.input.save();
+          if (f.record.state === "commit-prepared")
+            throw Error("Stopped after durable preparation");
+        }
+      }),
+      /Stopped after durable preparation/u
+    );
+    assert.equal(f.record.state, "commit-prepared");
+    assert.equal(
+      f.calls.every((call) => call.method === "GET"),
+      true
+    );
+    const preparation = serviceHash(f.record.staging_preparation);
+    const integration = serviceHash(f.record.integration_input);
+    const result = await f.client.integrate(f.input);
+    assert.equal(result.status, "passed");
+    assert.equal(serviceHash(f.record.staging_preparation), preparation);
+    assert.equal(serviceHash(f.record.integration_input), integration);
+    assert.equal(f.preparations.length, 1);
+    assert.equal(
+      f.calls.some((call) => call.suffix === "/git/trees"),
+      false
+    );
+    assert.equal(
+      f.calls.filter(
+        (call) => call.method === "POST" && call.suffix === "/git/commits"
+      ).length,
+      1
+    );
+  });
+  for (const changed of ["staging ref", "base tree"]) {
+    test(`${profile}: an empty patch cannot bypass a changed ${changed}`, async (t) => {
+      const f = await fixture(t, { profile, alreadyPresent: true });
+      f.setHook(async ({ method, suffix, data }) => {
+        if (method === "GET" && suffix === `/git/commits/${f.staging.commit}`) {
+          if (changed === "staging ref") f.move();
+          else data.tree.sha = "0".repeat(40);
+        }
+      });
+      await assert.rejects(
+        f.client.integrate(f.input),
+        changed === "staging ref"
+          ? /Staging changed/u
+          : /Staging base tree differs/u
+      );
+      assert.equal(
+        f.calls.every((call) => call.method === "GET"),
+        true
+      );
+    });
+  }
+  test(`${profile}: an empty saved patch cannot claim a different staging tree on resume`, async (t) => {
+    const f = await fixture(t, { profile, alreadyPresent: true });
+    await assert.rejects(
+      f.client.integrate({
+        ...f.input,
+        save: async () => {
+          await f.input.save();
+          if (f.record.state === "commit-prepared")
+            throw Error("Stopped after durable preparation");
+        }
+      }),
+      /Stopped after durable preparation/u
+    );
+    f.record.staging_preparation.tree = f.candidate.tree;
+    assert.throws(
+      () => validateStagingMerge(f.record, f.candidate),
+      /Staging preparation/u
+    );
+    await assert.rejects(f.client.integrate(f.input), /Staging preparation/u);
+    assert.equal(
+      f.calls.every((call) => call.method === "GET"),
+      true
+    );
+  });
   test(`${profile}: staging merge preserves staging-only work, exact source ancestry and fresh check binding`, async (t) => {
     const f = await fixture(t, { profile });
     const pinned = serviceHash(f.candidate);
