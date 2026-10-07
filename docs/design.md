@@ -241,10 +241,10 @@ The reviewed October 6 session-recovery browser pack updates that frontend
 PR-CI pin again, without changing required checks, permissions, other workflow
 pins, limits or release gates. The native-competition policy remains separately
 trusted for reading and reconciling its exact saved history. Fresh requests use
-the new policy hash and fresh candidate CI. The existing pre-publication refresh
-guard still accepts only the original prior history-preserving policy; this
-change does not add a native-competition-to-current migration, relabel older CI
-as current proof, or resume any stopped release automatically.
+the new policy hash and fresh candidate CI. That change did not add a
+native-competition-to-current migration, relabel older CI as current proof,
+or resume a stopped release automatically. The October 7 paragraphs below
+describe the current approved preparation-refresh sources.
 
 The October 7 frontend PR-CI policy uses the reviewed Wave feature-usage workflow
 as a byte-exact baseline, with the narrow `additive-browser-packs-v1` extension
