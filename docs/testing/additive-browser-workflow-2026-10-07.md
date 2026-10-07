@@ -111,7 +111,8 @@ all 50 test files run serially: **1048 passed**, three optional Docker skips
 (1051 total), plus lint, formatting, docs, workflow policy and packed-CLI checks.
 The normal check stages were run inside the same source-snapshot wrapper, with
 the test stage given `--test-concurrency=1` to avoid parallel workstation load;
-all source bytes remained unchanged. No install, Docker or frontend build ran.
+all source bytes remained unchanged. No dependency setup, Docker or frontend
+build ran; the packed-CLI check used its normal temporary offline consumer install.
 
 At `2026-10-07T10:40:15.756Z`, eight guarded GET-only requests independently read
 frontend main `0727a6be43a6dad451d375538e0d9e2185132bc0`, reproduced rejection by
