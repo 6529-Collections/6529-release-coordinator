@@ -1,5 +1,30 @@
 # Progress and next steps
 
+## October 7 — unchanged staging tree publication (local)
+
+The fresh long-post release stopped before creating its first staging commit:
+its saved ordinary merge preparation has an empty patch and the exact existing
+staging tree, while the adapter always attempted Git tree creation. The original
+log records only HTTP 422, without the endpoint or response body; that alone
+does not establish the server's precise rejection. No staging or production
+merge, deployment or E2E completion is recorded for this attempt. The process
+and requests stopped; journal revision 743 and its exact saved inputs were
+independently reread unchanged on October 7.
+
+The narrow fix verifies that an empty patch retains the staging base tree,
+rereads the unchanged staging ref and exact base commit/tree, then reuses that
+tree without an empty creation request. A unique two-parent integration commit,
+fresh PR checks, protected merge, deployment and matching E2E are still required.
+No saved inputs, attempts, policies, workflow pins or count budgets are changed.
+See the [scope and regression evidence](./testing/unchanged-staging-tree-2026-10-07.md).
+All full repository gates passed on Node 22.16.0: all 48 test files ran serially,
+**970 tests passed**, three optional Docker skips (973 total), plus non-fixing
+lint, formatting, docs, workflow policy and packed CLI checks. The source snapshot
+remained unchanged. A GET-only validation accepted the actual saved preparation
+and reproduced its unchanged integration input. Review and merge are pending.
+The watcher remains paused and the same release has not been resumed; this is
+not deployment proof.
+
 ## October 6 — interrupted first-staging cancellation (local)
 
 The long-post release stopped on a pre-merge source gate after saving its first

@@ -531,6 +531,16 @@ actual merge composition, preserve others' work, and do not claim staging
 validated a different production composition. Changed bases or scope require
 fresh matching combined evidence; if that cannot be established, stop.
 
+If ordinary staging merge rehearsal produces no file changes, its saved patch
+must be empty and its prepared tree must equal the saved staging base tree.
+After rereading the unchanged staging ref and exact base commit/tree, reuse that
+existing tree instead of sending an empty Git tree creation request. This does
+not skip integration: create the same deterministic two-parent integration
+commit, obtain fresh exact-head PR checks, use an ordinary protected merge and
+retain the normal deployment and matching E2E gates. An explicit same-run resume
+can reuse this exact saved `commit-prepared` checkpoint; it cannot rewrite its
+inputs or accept a moved staging ref or different base tree.
+
 Conflicting runs are handled by waiting, not by racing. GitHub keeps one running
 and one waiting run per concurrency group and cancels the waiting run when a
 third arrives, so a Coordinator run must never queue behind someone else's

@@ -286,6 +286,9 @@ export function createReleaseGitHub({
       "Staging base tree differs from its preparation."
     );
     await unchangedStaging(record);
+    // An empty patch already names the verified base tree. Keep the unique
+    // integration commit and fresh PR checks, without an empty Git tree write.
+    if (!prepared.patch.length) return;
     const tree = (
       await call(
         role,

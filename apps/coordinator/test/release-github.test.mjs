@@ -1129,7 +1129,14 @@ test("staging integration uses a unique checked merge with both pinned histories
         candidate_commit: candidate.commit,
         candidate_tree: candidate.tree,
         tree: candidate.tree,
-        patch: []
+        patch: [
+          {
+            path: "changed.txt",
+            mode: "100644",
+            type: "blob",
+            sha: "f".repeat(40)
+          }
+        ]
       },
       blobs: []
     }),
@@ -1177,6 +1184,8 @@ test("staging integration uses a unique checked merge with both pinned histories
           sha: candidate.base,
           tree: { sha: "a".repeat(40) }
         });
+      if (method === "GET" && endpoint.endsWith(`/git/blobs/${"f".repeat(40)}`))
+        return apiResponse("200 OK", { sha: "f".repeat(40) });
       if (method === "POST" && endpoint.endsWith("/git/trees"))
         return apiResponse("201 Created", { sha: candidate.tree });
       if (method === "POST" && endpoint.endsWith("/git/commits")) {
