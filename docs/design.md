@@ -524,6 +524,22 @@ presentation release the lane normally; an interrupted cancellation resumes
 only cancellation. Earlier staging work remains, selected tickets close as
 cancelled (not successfully released), and changed code requires a fresh request.
 
+A second narrow abandonment checkpoint covers a frontend-only release interrupted
+at its first staging deployment after its completed staging merge. There must be
+exactly those two saved operations, a known deployment run, confirmed no database
+change and no E2E, backend/monitoring, production or recovery operation. The old
+process and requests must independently be stopped and settled. Product-shaped
+adapters verify the original merged PR/commits and absent owned branch with GETs,
+the pinned files at the historical deployed source, and the exact recorded
+successful deployment run and required jobs. They require quiet pinned workflows
+and re-read the run to reject a concurrent rerun. Unknown or active effects keep
+the lane. Separate cancellation evidence preserves the original unfinished
+deployment record; it is not a current deployment/E2E pass. The explicit operator
+choice closes the selected tickets as not planned through normal presentation
+and archival. No shared ref, workflow or product code is changed by abandonment,
+and moved staging/main refs never justify promotion. A new request still needs
+fresh candidate, staging and production evidence.
+
 One lane serializes this Coordinator; it cannot stop unrelated humans or Actions.
 Check current refs and conflicting runs before mutations and match deployed
 versions to E2E. Shared staging may contain other changes: inspect and record its

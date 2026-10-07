@@ -10,7 +10,10 @@ import {
   validateReleasePlan
 } from "./release-plan.mjs";
 import { serviceAssert } from "./service-contract.mjs";
-import { assertCancellableRelease } from "./release-cancellation.mjs";
+import {
+  assertCancellableRelease,
+  validateStagingCloseoutEvidence
+} from "./release-cancellation.mjs";
 
 const successful = (result) => result?.status === "passed";
 const requestsMonitoring = (batch) =>
@@ -177,8 +180,11 @@ export async function executeRelease({
   // cannot authorize a merge here: this path has no merge/deploy/restore call.
   if (cancelKeepCurrent || execution.status === "cancelling") {
     const record = assertCancellableRelease(execution, batch);
+    const stagingCloseout = record.step.kind === "deploy";
     serviceAssert(
-      typeof client.cancelIntegration === "function" &&
+      (stagingCloseout
+        ? typeof client.verifyFinishedStaging === "function"
+        : typeof client.cancelIntegration === "function") &&
         typeof client.environmentVersions === "function",
       "release-cancel",
       "The selected adapter cannot verify and clean up an owned integration PR."
@@ -213,14 +219,46 @@ export async function executeRelease({
         actor: { id: String(operator.id), login: operator.login },
         requested_at: now().toISOString(),
         step_id: record.step.id,
+        ...(stagingCloseout
+          ? { checkpoint: "finished-staging-deployment" }
+          : {}),
         observed_before: await observedVersions()
       };
-      record.cleanup_reason = "review-stop";
+      if (!stagingCloseout) record.cleanup_reason = "review-stop";
       execution.status = "cancelling";
       execution.message =
         "Cancelling this attempt without restoring, merging or deploying code.";
       delete execution.review_pause;
       await persist("cancel release while keeping current code");
+    }
+    if (stagingCloseout) {
+      const evidence = await loggedStep(
+        {
+          step: "release.cancel",
+          operation_id: record.id,
+          role: "frontend",
+          message:
+            "Read the exact finished staging deployment and owned merge cleanup without changing product resources."
+        },
+        () =>
+          client.verifyFinishedStaging({
+            record,
+            integration: execution.operations["staging:integrate:frontend"],
+            candidate: execution.plan.candidates.frontend,
+            runtime: execution.runtime
+          })
+      );
+      validateStagingCloseoutEvidence(evidence, execution, "release-cancel");
+      execution.cancellation.evidence = evidence;
+      execution.cancellation.observed_after = await observedVersions();
+      execution.status = "cancelled";
+      execution.completed_at = now().toISOString();
+      execution.message =
+        "The stopped release attempt was abandoned without changing current code. Its original frontend staging deployment finished successfully and its owned integration branch is gone. Original deployment and check records remain unchanged; they do not prove current staging or production passed. Nothing was merged, deployed, restored or cancelled on GitHub by closeout. Submit a fresh request with fresh validation to continue.";
+      await persist(
+        "abandon stopped staging deployment; current code preserved"
+      );
+      return execution;
     }
     const result = await loggedStep(
       {

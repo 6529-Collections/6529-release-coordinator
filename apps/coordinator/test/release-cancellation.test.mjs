@@ -4,6 +4,7 @@ import { createReleaseGitHub } from "../src/release-github.mjs";
 import { createProductWorkflowReleaseGitHub } from "../src/product-workflow-release-github.mjs";
 import { integrationCommitInput } from "../src/release-plan.mjs";
 import { assertCancellableRelease } from "../src/release-cancellation.mjs";
+import { makeProfileReleaseOperation } from "../src/profile-release-contract.mjs";
 import { ServiceError } from "../src/service-contract.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import {
@@ -104,6 +105,18 @@ function fixture(
           : { message: "Not Found" }
       );
     }
+    if (live.merged && endpoint.includes("/git/commits/")) {
+      const commit = endpoint.split("/").at(-1);
+      return respond(200, {
+        sha: commit,
+        tree: { sha: record.result.tree },
+        message: record.integration_input.message,
+        parents: (commit === record.integration_commit
+          ? record.integration_input.parents
+          : [record.base, record.integration_commit]
+        ).map((sha) => ({ sha }))
+      });
+    }
     assert.fail(`Cancellation must not access ${method} ${endpoint}`);
   };
   const base = createReleaseGitHub({
@@ -141,7 +154,235 @@ function fixture(
     execute: async () => assert.fail("No workflow API needed for cancellation")
   });
   const input = { record, candidate, save: async () => {} };
-  return { client, input, live, writes };
+  return { client, input, live, writes, base, execute };
+}
+
+/** Model a finished staging run without allowing a single product write. */
+function finishedStagingFixture(profile) {
+  const f = fixture(profile, { environment: "staging" });
+  const merged = f.input.record;
+  merged.state = "completed";
+  merged.cleanup = "removed";
+  delete merged.cleanup_reason;
+  merged.result = {
+    status: "passed",
+    kind: "merge",
+    commit: "e".repeat(40),
+    tree: f.input.candidate.tree,
+    url: merged.url
+  };
+  f.live.state = "closed";
+  f.live.merged = true;
+  f.live.exists = false;
+  const runtime =
+    profile.name === "real"
+      ? realProductWorkflowRuntime
+      : productWorkflowRuntime;
+  const record = {
+    id: "33333333-3333-4333-8333-333333333333",
+    release_id: merged.release_id,
+    step: {
+      id: "staging:deploy:frontend:frontend",
+      environment: "staging",
+      kind: "deploy",
+      role: "frontend",
+      unit: "frontend"
+    },
+    state: "running",
+    result: null,
+    created_at: "2026-09-30T11:00:01.000Z",
+    actor: merged.actor,
+    workflow_id: 21,
+    workflow_run_id: 501,
+    dispatch_response_run_id: 501
+  };
+  record.operation = makeProfileReleaseOperation({
+    profile: profile.name,
+    release_id: record.release_id,
+    operation_id: record.id,
+    operation: "deploy",
+    environment: "staging",
+    role: "frontend",
+    unit: "frontend",
+    backend_commit: "b".repeat(40),
+    frontend_commit: merged.result.commit
+  });
+  const run = {
+    id: 501,
+    repository: { id: profile.repositories.frontend.id },
+    head_repository: { id: profile.repositories.frontend.id },
+    head_sha: merged.result.commit,
+    head_branch: "1a-staging",
+    path: ".github/workflows/deploy-staging.yml",
+    event: "workflow_dispatch",
+    actor: { id: Number(merged.actor.id) },
+    workflow_id: 21,
+    run_attempt: 1,
+    status: "completed",
+    conclusion: "success",
+    html_url: `https://github.com/${profile.repositories.frontend.full_name}/actions/runs/501`,
+    created_at: "2026-09-30T11:01:00.000Z"
+  };
+  const control = {
+    active: false,
+    missing: false,
+    badJob: false,
+    changeAttempt: false,
+    recreateBranch: false,
+    foreignPull: false,
+    badMerge: false
+  };
+  const calls = [];
+  let reads = 0;
+  const execute = async (args, body) => {
+    const method = args[args.indexOf("--method") + 1];
+    const endpoint = args[args.indexOf("--method") + 2];
+    calls.push({ method, endpoint });
+    assert.equal(
+      method,
+      "GET",
+      "Finished staging closeout is product-read-only"
+    );
+    if (endpoint.includes("/actions/workflows/") && endpoint.includes("/runs?"))
+      return `HTTP/2 200 OK\nContent-Type: application/json\n\n${JSON.stringify({ total_count: control.active ? 1 : 0, workflow_runs: [] })}`;
+    if (endpoint.endsWith("/actions/runs/501")) {
+      reads++;
+      if (control.recreateBranch && reads > 1) f.live.exists = true;
+      return `HTTP/2 ${control.missing ? 404 : 200} OK\nContent-Type: application/json\n\n${JSON.stringify({ ...run, run_attempt: control.changeAttempt && reads > 1 ? 2 : run.run_attempt })}`;
+    }
+    if (endpoint.includes("/jobs?per_page=100"))
+      return `HTTP/2 200 OK\nContent-Type: application/json\n\n${JSON.stringify(
+        {
+          total_count: 2,
+          jobs: [
+            "Build exact staging artifact",
+            "Deploy exact staging artifact"
+          ].map((name, index) => ({
+            id: 801 + index,
+            run_id: 501,
+            head_sha: run.head_sha,
+            name,
+            status: "completed",
+            conclusion: control.badJob && index === 1 ? "failure" : "success"
+          }))
+        }
+      )}`;
+    if (endpoint.includes("/contents/")) {
+      const role = endpoint.includes("backend") ? "backend" : "frontend";
+      const file = endpoint.match(/\/contents\/(.+)\?ref=/u)[1];
+      const pinned = runtime.repositories[role].files[file];
+      return `HTTP/2 200 OK\nContent-Type: application/json\n\n${JSON.stringify({ type: "file", path: file, sha: typeof pinned === "string" ? pinned : pinned.staging })}`;
+    }
+    const response = await f.execute(args, body);
+    const split = response.indexOf("\n\n");
+    const data = JSON.parse(response.slice(split + 2));
+    if (endpoint.endsWith("/pulls/42")) {
+      data.merge_commit_sha = merged.result.commit;
+      data.merged_at = "2026-09-30T11:00:01.000Z";
+      if (control.foreignPull) data.user.id = 999;
+    }
+    if (
+      endpoint.endsWith(`/git/commits/${merged.result.commit}`) &&
+      control.badMerge
+    )
+      data.parents = [];
+    return `${response.slice(0, split + 2)}${JSON.stringify(data)}`;
+  };
+  const base = createReleaseGitHub({
+    profile,
+    runtime,
+    execute,
+    wait: async () => {}
+  });
+  const client = createProductWorkflowReleaseGitHub({
+    profile,
+    runtime,
+    base,
+    execute,
+    wait: async () => {}
+  });
+  const input = {
+    record,
+    integration: merged,
+    candidate: f.input.candidate,
+    runtime: { frontend: { workflows: { stagingDeploy: { workflow_id: 21 } } } }
+  };
+  return { ...f, client, input, run, control, calls };
+}
+
+for (const profile of [sandboxProfile, realProfile]) {
+  test(`${profile.name}: finished staging inspection uses only GET and preserves all original records`, async () => {
+    const f = finishedStagingFixture(profile);
+    const original = structuredClone(f.input);
+    const evidence = await f.client.verifyFinishedStaging(f.input);
+    assert.equal(evidence.deployment.conclusion, "success");
+    assert.equal(evidence.integration.cleanup, "removed");
+    assert.equal(
+      evidence.integration.commit,
+      f.input.integration.result.commit
+    );
+    assert.deepEqual(f.input, original);
+    assert.deepEqual(f.writes, []);
+    assert.ok(f.calls.every((call) => call.method === "GET"));
+  });
+  test(`${profile.name}: finished staging inspection refuses pending, failed, foreign, rerun and incomplete evidence`, async () => {
+    for (const mutate of [
+      (f) => {
+        f.run.status = "in_progress";
+        f.run.conclusion = null;
+      },
+      (f) => {
+        f.run.conclusion = "failure";
+      },
+      (f) => {
+        f.run.conclusion = "cancelled";
+      },
+      (f) => {
+        f.run.head_sha = "a".repeat(40);
+      },
+      (f) => {
+        f.run.actor.id = 999;
+      },
+      (f) => {
+        f.run.repository.id = 999;
+      },
+      (f) => {
+        f.run.workflow_id = 999;
+      },
+      (f) => {
+        f.run.event = "push";
+      },
+      (f) => {
+        f.control.active = true;
+      },
+      (f) => {
+        f.control.missing = true;
+      },
+      (f) => {
+        f.control.badJob = true;
+      },
+      (f) => {
+        f.control.changeAttempt = true;
+      },
+      (f) => {
+        f.control.recreateBranch = true;
+      },
+      (f) => {
+        f.control.foreignPull = true;
+      },
+      (f) => {
+        f.control.badMerge = true;
+      },
+      (f) => {
+        f.live.exists = true;
+      }
+    ]) {
+      const f = finishedStagingFixture(profile);
+      mutate(f);
+      await assert.rejects(f.client.verifyFinishedStaging(f.input));
+      assert.deepEqual(f.writes, []);
+    }
+  });
 }
 
 test("cancellation rejects a missing saved operation with a structured error", () => {

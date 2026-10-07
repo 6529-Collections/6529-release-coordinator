@@ -36,6 +36,7 @@ import {
 } from "../src/product-workflow-contract.mjs";
 import { sampleFiles } from "../sandbox/fixtures.mjs";
 import { buildApplication } from "../sandbox/application-build.mjs";
+import { sandboxFrontendServiceProtocol } from "../src/service-plan.mjs";
 
 test("product integration and recovery commits use Simo's authorized DCO identity", () => {
   const record = {
@@ -98,7 +99,11 @@ import { validateBatchHistory } from "../src/batch-state.mjs";
 import { validateReleaseExecution } from "../src/release-state.mjs";
 import { batchStatuses } from "../src/ticket-presentation.mjs";
 import { inboxRunExitCode } from "../src/inbox-run-cli.mjs";
-import { archiveFinished, verifyArchive } from "../src/inbox-history.mjs";
+import {
+  archiveFinished,
+  makeArchive,
+  verifyArchive
+} from "../src/inbox-history.mjs";
 import { createRunLog } from "../src/run-log.mjs";
 
 const runFile = promisify(execFile);
@@ -1371,6 +1376,346 @@ async function interruptedFirstStagingFixture() {
   calls.length = 0;
   return { batch, calls, options, observed };
 }
+
+/** Keep the deployment checkpoint unfinished even though its external run finished. */
+async function interruptedStagingDeploymentFixture() {
+  const batch = await frontendOnlyProductionBatch();
+  // This fixture also exercises full archive validation: build a valid native
+  // frontend-only preparation rather than the older pruned engine-only mock.
+  const prepared = batch.attempts.find(
+    (attempt) => attempt.phase === "git"
+  ).result;
+  const { fingerprint: _fingerprint, ...contents } = prepared.service_plan;
+  contents.protocol = sandboxFrontendServiceProtocol;
+  contents.sources = { frontend: contents.sources.frontend };
+  prepared.service_plan = { ...contents, fingerprint: serviceHash(contents) };
+  const progress = batch.attempts.find(
+    (attempt) => attempt.phase === "checks"
+  ).progress;
+  progress.prepared_hash = serviceHash(prepared);
+  progress.prs = progress.prs.filter((pr) => pr.role === "frontend");
+  progress.service_attempts = {};
+  validateBatchHistory({ [batch.fingerprint]: batch }, sandboxProfile);
+  const calls = [];
+  const releaseClient = client(calls);
+  const integrate = releaseClient.integrate;
+  releaseClient.integrate = async (args) => {
+    const result = await integrate(args);
+    const record = args.record;
+    record.target_branch = "1a-staging";
+    record.branch = `codex/release-${record.release_id}-staging-frontend`;
+    record.number = 42;
+    record.url = `https://github.com/${sandboxProfile.repositories.frontend.full_name}/pull/42`;
+    result.url = record.url;
+    return result;
+  };
+  releaseClient.run = async ({ record, save }) => {
+    record.state = "running";
+    record.workflow_id = 21;
+    record.workflow_run_id = 501;
+    await save();
+    throw new Error("lost staging deployment response");
+  };
+  const options = {
+    batch,
+    client: releaseClient,
+    operator: { id: "456", login: "tester" },
+    guard: async () => {},
+    save: async () => validateReleaseExecution(batch.execution, batch)
+  };
+  await assert.rejects(
+    executeRelease(options),
+    /lost staging deployment response/u
+  );
+  const observed = {
+    staging: { backend: "1".repeat(40), frontend: "2".repeat(40) },
+    prod: { backend: "3".repeat(40), frontend: "4".repeat(40) }
+  };
+  releaseClient.environmentVersions = async (environment) => ({
+    ...observed[environment]
+  });
+  releaseClient.verifyFinishedStaging = async ({ record, integration }) => {
+    calls.push("verify:finished-staging");
+    return {
+      version: 1,
+      operation_id: record.id,
+      integration: {
+        number: integration.number,
+        url: integration.url,
+        commit: integration.result.commit,
+        tree: integration.result.tree,
+        head: integration.integration_commit,
+        branch: integration.branch,
+        cleanup: "removed"
+      },
+      deployment: {
+        id: record.workflow_run_id,
+        workflow_id: record.workflow_id,
+        source_commit: record.operation.frontend_commit,
+        attempt: 1,
+        conclusion: "success",
+        url: `https://github.com/${sandboxProfile.repositories.frontend.full_name}/actions/runs/${record.workflow_run_id}`
+      },
+      checked_at: new Date().toISOString()
+    };
+  };
+  for (const method of ["integrate", "run", "restore", "cancelIntegration"])
+    releaseClient[method] = async () =>
+      assert.fail(`Staging closeout must not ${method}`);
+  calls.length = 0;
+  return { batch, calls, options, observed };
+}
+
+test("finished staging closeout preserves original records, moved refs and history without claiming a release pass", async () => {
+  const { batch, calls, options, observed } =
+    await interruptedStagingDeploymentFixture();
+  const original = structuredClone(batch);
+  const cancelled = await executeRelease({
+    ...options,
+    cancelKeepCurrent: true
+  });
+  assert.equal(cancelled.status, "cancelled");
+  assert.deepEqual(calls, ["verify:finished-staging"]);
+  for (const key of ["attempts", "inputs", "policy", "selected"])
+    assert.deepEqual(batch[key], original[key]);
+  for (const key of ["operations", "plan", "versions"])
+    assert.deepEqual(cancelled[key], original.execution[key]);
+  assert.deepEqual(cancelled.cancellation.observed_before, observed);
+  assert.deepEqual(cancelled.cancellation.observed_after, observed);
+  assert.equal(
+    cancelled.cancellation.checkpoint,
+    "finished-staging-deployment"
+  );
+  assert.equal(
+    cancelled.operations["staging:deploy:frontend:frontend"].result,
+    null
+  );
+  assert.equal(releaseTicketResult(batch, 1).status, "closed");
+  assert.equal(releaseTicketResult(batch, 1).code, "release-cancelled");
+  validateReleaseExecution(cancelled, batch);
+  const { archive, ref } = makeArchive(
+    "batches",
+    batch.fingerprint,
+    batch,
+    sandboxProfile
+  );
+  assert.equal(ref.status, "cancelled");
+  const archived = verifyArchive(
+    archive,
+    "batches",
+    batch.fingerprint,
+    ref,
+    sandboxProfile
+  );
+  assert.deepEqual(
+    archived.execution.operations,
+    original.execution.operations
+  );
+  assert.deepEqual(
+    archived.execution.cancellation.evidence,
+    cancelled.cancellation.evidence
+  );
+  await executeRelease(options);
+  assert.deepEqual(calls, ["verify:finished-staging"]);
+});
+
+test("finished staging closeout saves intent first and ordinary resume cannot promote or dispatch", async () => {
+  const { batch, calls, options } = await interruptedStagingDeploymentFixture();
+  await assert.rejects(
+    executeRelease({
+      ...options,
+      cancelKeepCurrent: true,
+      save: async (message) => {
+        validateReleaseExecution(batch.execution, batch);
+        if (message === "cancel release while keeping current code")
+          throw new Error("lost closeout intent");
+      }
+    }),
+    /lost closeout intent/u
+  );
+  assert.equal(batch.execution.status, "cancelling");
+  assert.deepEqual(calls, []);
+  assert.equal((await executeRelease(options)).status, "cancelled");
+  assert.deepEqual(calls, ["verify:finished-staging"]);
+});
+
+test("uncertain external staging closeout verification retains intent and unfinished deployment", async () => {
+  const { batch, options } = await interruptedStagingDeploymentFixture();
+  const verify = options.client.verifyFinishedStaging;
+  options.client.verifyFinishedStaging = async () => {
+    throw new Error("unknown deployment outcome");
+  };
+  await assert.rejects(
+    executeRelease({ ...options, cancelKeepCurrent: true }),
+    /unknown deployment outcome/u
+  );
+  assert.equal(batch.execution.status, "cancelling");
+  assert.equal(batch.execution.completed_at, null);
+  assert.equal(
+    batch.execution.operations["staging:deploy:frontend:frontend"].result,
+    null
+  );
+  validateReleaseExecution(batch.execution, batch);
+  options.client.verifyFinishedStaging = verify;
+  assert.equal((await executeRelease(options)).status, "cancelled");
+});
+
+test("finished staging closeout survives lost final observations and terminal-save responses without deployment", async () => {
+  for (const loss of ["observation", "terminal-save"]) {
+    const { batch, calls, options } =
+      await interruptedStagingDeploymentFixture();
+    const original = structuredClone(batch.execution.operations);
+    const observe = options.client.environmentVersions;
+    let reads = 0;
+    options.client.environmentVersions = async (environment) => {
+      reads++;
+      if (loss === "observation" && reads === 3)
+        throw new Error("lost final observation");
+      return observe(environment);
+    };
+    await assert.rejects(
+      executeRelease({
+        ...options,
+        cancelKeepCurrent: true,
+        save: async (message) => {
+          validateReleaseExecution(batch.execution, batch);
+          if (loss === "terminal-save" && message.startsWith("abandon stopped"))
+            throw new Error("lost terminal save response");
+        }
+      }),
+      /lost (final observation|terminal save response)/u
+    );
+    validateReleaseExecution(batch.execution, batch);
+    assert.equal(
+      batch.execution.status,
+      loss === "observation" ? "cancelling" : "cancelled"
+    );
+    assert.deepEqual(batch.execution.operations, original);
+    assert.equal((await executeRelease(options)).status, "cancelled");
+    assert.deepEqual(batch.execution.operations, original);
+    assert.deepEqual(
+      calls,
+      Array(loss === "observation" ? 2 : 1).fill("verify:finished-staging")
+    );
+  }
+});
+
+test("staging closeout refuses database effects, additional operations and uncertain checkpoints", async () => {
+  const { batch } = await interruptedStagingDeploymentFixture();
+  for (const mutate of [
+    (b) => {
+      selectedPreparationForTest(b).service_plan.database.observed = "yes";
+    },
+    (b) => {
+      selectedPreparationForTest(b).service_plan.database.observed = "unknown";
+    },
+    (b) => {
+      b.execution.operations["prod:integrate:frontend"] = {
+        step: { environment: "prod" }
+      };
+    },
+    (b) => {
+      b.execution.operations["staging:e2e"] = {
+        step: { environment: "staging" }
+      };
+    },
+    (b) => {
+      b.execution.plan.candidates.backend = {};
+    },
+    (b) => {
+      b.execution.plan.steps.push({ role: "backend", kind: "monitoring" });
+    },
+    (b) => {
+      b.execution.operations["staging:integrate:frontend"].cleanup = "pending";
+    },
+    (b) => {
+      b.execution.operations["staging:integrate:frontend"].result.kind =
+        "unchanged";
+    },
+    (b) => {
+      b.execution.operations[
+        "staging:deploy:frontend:frontend"
+      ].workflow_run_id = undefined;
+    },
+    (b) => {
+      b.execution.operations["staging:deploy:frontend:frontend"].state =
+        "dispatching";
+    },
+    (b) => {
+      b.execution.operations["staging:deploy:frontend:frontend"].result = {
+        status: "passed"
+      };
+    },
+    (b) => {
+      b.execution.recovery = {};
+    },
+    (b) => {
+      b.execution.staging_drift = {};
+    },
+    (b) => {
+      b.execution.manual_stop = {};
+    },
+    (b) => {
+      b.execution.step_index = 2;
+    }
+  ]) {
+    const unsafe = structuredClone(batch);
+    mutate(unsafe);
+    assert.throws(() => assertCancellableRelease(unsafe.execution, unsafe));
+  }
+});
+
+/** Locate the selected Git preparation without changing the production contract. */
+function selectedPreparationForTest(batch) {
+  return batch.attempts.find(
+    (attempt) => attempt.phase === "git" && attempt.result?.status === "passed"
+  ).result;
+}
+
+test("staging cancellation validator refuses forged, missing and cross-run abandonment evidence", async () => {
+  const { batch, options } = await interruptedStagingDeploymentFixture();
+  await executeRelease({ ...options, cancelKeepCurrent: true });
+  for (const mutate of [
+    (e) => {
+      delete e.cancellation.evidence;
+    },
+    (e) => {
+      delete e.cancellation.checkpoint;
+    },
+    (e) => {
+      e.cancellation.evidence.operation_id = "foreign";
+    },
+    (e) => {
+      e.cancellation.evidence.integration.commit = "a".repeat(40);
+    },
+    (e) => {
+      e.cancellation.evidence.integration.cleanup = "pending";
+    },
+    (e) => {
+      e.cancellation.evidence.deployment.id++;
+    },
+    (e) => {
+      e.cancellation.evidence.deployment.workflow_id++;
+    },
+    (e) => {
+      e.cancellation.evidence.deployment.source_commit = "a".repeat(40);
+    },
+    (e) => {
+      e.cancellation.evidence.deployment.conclusion = "failure";
+    },
+    (e) => {
+      e.cancellation.evidence.deployment.url =
+        "https://example.invalid/foreign";
+    },
+    (e) => {
+      e.cancellation.evidence.checked_at = "later";
+    }
+  ]) {
+    const unsafe = structuredClone(batch.execution);
+    mutate(unsafe);
+    assert.throws(() => validateReleaseExecution(unsafe, batch));
+  }
+});
 
 test("an interrupted first staging checkpoint cancels without promoting old proof or touching moved refs", async () => {
   const { batch, calls, options, observed } =

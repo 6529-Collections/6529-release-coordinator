@@ -1502,6 +1502,110 @@ export function createProductWorkflowReleaseGitHub({
       (value) => value.file
     );
   const client = {
+    /** Inspect a known finished run for abandonment; never accept it as release proof. */
+    async verifyFinishedStaging({
+      record,
+      integration,
+      candidate,
+      runtime: savedRuntime
+    }) {
+      const operation = validateProfileReleaseOperation(record.operation);
+      serviceAssert(
+        operation.operation === "deploy" &&
+          operation.environment === "staging" &&
+          operation.role === "frontend" &&
+          operation.unit === "frontend" &&
+          operation.operation_id === record.id &&
+          operation.release_id === record.release_id &&
+          integration.release_id === record.release_id &&
+          operation.frontend_commit === integration.result?.commit &&
+          record.state === "running" &&
+          record.result === null &&
+          positive(record.workflow_run_id) &&
+          record.actor?.id === integration.actor?.id &&
+          typeof base.verifyMergedIntegration === "function",
+        "release-cancel",
+        "Staging closeout requires its known unfinished deployment and completed integration."
+      );
+      const checkQuiet = async () => {
+        for (const role of ["backend", "frontend"]) {
+          const { runs, unlisted } = await activeRuns(role, allFiles(role));
+          serviceAssert(
+            !runs.length && !unlisted,
+            "release-cancel",
+            "Product workflows are still active or uncertain; staging closeout stays blocked."
+          );
+        }
+      };
+      await checkQuiet();
+      const owned = await base.verifyMergedIntegration({
+        record: integration,
+        candidate
+      });
+      const changed = await integrationChanged(
+        record,
+        { [integration.step.id]: integration },
+        async (commit) =>
+          (await call("frontend", "GET", `/git/commits/${commit}`)).data
+      );
+      const descriptor = directDescriptor(operation, changed, runtime);
+      const identity = workflow(
+        "frontend",
+        descriptor.workflowKey,
+        savedRuntime
+      );
+      serviceAssert(
+        identity.id === record.workflow_id,
+        "release-cancel",
+        "The saved deployment workflow identity changed."
+      );
+      await verifyFiles("frontend", operation.frontend_commit, "staging");
+      const read = async () => {
+        const run = (
+          await call(
+            "frontend",
+            "GET",
+            `/actions/runs/${record.workflow_run_id}`
+          )
+        ).data;
+        verifyDirectRun(run, descriptor, identity, record.actor, record);
+        serviceAssert(
+          run.status === "completed" && run.conclusion === "success",
+          "release-cancel",
+          "The original staging deployment is pending, failed or uncertain; closeout is refused."
+        );
+        return run;
+      };
+      const run = await read();
+      const jobs = await jobsFor("frontend", run, descriptor);
+      serviceAssert(
+        jobs.every((job) => job.conclusion === "success"),
+        "release-cancel",
+        "Staging deployment jobs did not all pass."
+      );
+      await checkQuiet();
+      const final = await read();
+      serviceAssert(
+        final.run_attempt === run.run_attempt,
+        "release-cancel",
+        "The original deployment was rerun during closeout verification."
+      );
+      await base.verifyMergedIntegration({ record: integration, candidate });
+      return {
+        version: 1,
+        operation_id: record.id,
+        integration: owned,
+        deployment: {
+          id: run.id,
+          workflow_id: run.workflow_id,
+          source_commit: run.head_sha,
+          url: run.html_url,
+          attempt: run.run_attempt,
+          conclusion: run.conclusion
+        },
+        checked_at: now().toISOString()
+      };
+    },
     async environmentVersions(environment) {
       serviceAssert(
         ["staging", "prod"].includes(environment),

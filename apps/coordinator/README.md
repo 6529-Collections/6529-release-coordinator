@@ -777,6 +777,17 @@ using this option. Other production operations or recovery refuse cancellation.
 It closes only that verified PR and removes its exact temporary branch. It
 does not restore, merge, deploy or change staging/main. It records cancellation
 and closes the selected tickets as not planned, not as a completed release.
+The product-shaped adapters additionally allow a stopped first frontend staging
+deployment to be abandoned after its exact external run finished successfully.
+This requires step one, only the completed frontend merge and its unfinished
+deployment record, confirmed no database change, no E2E/backend/monitoring or
+production operation, quiet pinned workflows, and independently verified stopped
+processes/settled requests. Read-only inspection verifies the original merged PR,
+immutable commits, absent owned branch, pinned source files and exact successful
+deployment run/jobs/attempt. It saves separate abandonment evidence without
+marking the old deployment or release as passed. Current staging/main changes
+remain untouched; no workflow is cancelled or dispatched. This is not rollback
+or current environment health proof.
 An uncertain result keeps the lock. After an interruption, ordinary resume
 continues the saved cancellation and cannot promote code. Stop the original
 process and settle its requests first; new code needs a fresh ticket afterward.
