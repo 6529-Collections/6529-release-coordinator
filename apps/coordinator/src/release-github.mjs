@@ -837,6 +837,82 @@ export function createReleaseGitHub({
         versions
       };
     },
+    /** Read-only verification for abandonment after an already completed merge. */
+    async verifyMergedIntegration({ record, candidate }) {
+      serviceAssert(
+        record.profile === profile.name &&
+          record.step.kind === "integrate" &&
+          record.step.environment === "staging" &&
+          record.step.role === "frontend" &&
+          !record.step.recovery &&
+          record.state === "completed" &&
+          record.cleanup === "removed" &&
+          record.result?.status === "passed" &&
+          record.result.kind === "merge" &&
+          candidate?.role === "frontend" &&
+          candidate.changed === true &&
+          sha(candidate.commit) &&
+          sha(candidate.tree) &&
+          uuid(record.release_id) &&
+          record.branch === branch(record) &&
+          record.target_branch === target(runtime, "staging") &&
+          positive(record.number) &&
+          sha(record.base) &&
+          sha(record.integration_commit) &&
+          sha(record.result.commit) &&
+          sha(record.result.tree) &&
+          [1, 2].includes(record.integration_version) &&
+          JSON.stringify(record.integration_input) ===
+            JSON.stringify(integrationCommitInput(record, candidate)),
+        "release-cancel",
+        "Staging closeout lacks the exact completed, uniquely owned integration."
+      );
+      const pr = (await call("frontend", "GET", `/pulls/${record.number}`))
+        .data;
+      verifyPull(pr, record, candidate, { allowMerged: true });
+      serviceAssert(
+        pr.state === "closed" &&
+          pr.merge_commit_sha === record.result.commit &&
+          record.url === pr.html_url &&
+          Number.isFinite(Date.parse(pr.merged_at)),
+        "release-ownership",
+        "The saved staging merge is not confirmed by its exact PR."
+      );
+      const head = (
+        await call(
+          "frontend",
+          "GET",
+          `/git/commits/${record.integration_commit}`
+        )
+      ).data;
+      const merged = (
+        await call("frontend", "GET", `/git/commits/${record.result.commit}`)
+      ).data;
+      serviceAssert(
+        head.sha === record.integration_commit &&
+          head.tree?.sha === record.integration_input.tree &&
+          head.message === record.integration_input.message &&
+          JSON.stringify(head.parents?.map((parent) => parent.sha)) ===
+            JSON.stringify(record.integration_input.parents) &&
+          merged.sha === record.result.commit &&
+          merged.tree?.sha === record.result.tree &&
+          record.result.tree === record.integration_input.tree &&
+          JSON.stringify(merged.parents?.map((parent) => parent.sha)) ===
+            JSON.stringify([record.base, record.integration_commit]) &&
+          (await ref("frontend", record.branch, [200, 404])).status === 404,
+        "release-ownership",
+        "The original staging commits or owned branch cleanup could not be verified."
+      );
+      return {
+        number: record.number,
+        url: record.url,
+        commit: record.result.commit,
+        tree: record.result.tree,
+        head: record.integration_commit,
+        branch: record.branch,
+        cleanup: "removed"
+      };
+    },
     async cancelIntegration({ record, candidate, save }) {
       serviceAssert(
         record.step.kind === "integrate" &&

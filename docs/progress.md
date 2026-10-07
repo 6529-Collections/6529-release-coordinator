@@ -1,5 +1,32 @@
 # Progress and next steps
 
+## October 7 — stopped staging deployment closeout (local)
+
+The frontend staging merge and deployment completed externally, followed by
+successful matching browser checks, but the local connection stopped before the
+Coordinator saved deployment completion. The saved attempt remains at step one
+with a null deployment result; backend staging and frontend main subsequently
+moved. Continuing old proof or changing saved inputs is not authorized. Existing
+keep-current cancellation covered owned unmerged PRs, not this merged checkpoint.
+
+The local extension allows explicit abandonment only for a confirmed
+no-database-change frontend-only first deployment with exactly two operations
+and no production work. GET-only inspection verifies the historical owned merge,
+commits, absent branch, pinned deployed-source files and exact successful run/jobs,
+with quiet workflows and final attempt/owned-branch readbacks. It preserves original
+operations, attempts, inputs and policy, saves separate abandonment evidence,
+and uses normal cancelled-ticket closeout/archival. It does not merge, dispatch,
+restore, cancel an external workflow, accept old proof for current environments,
+or refresh workflow pins. See the [scope and verification record](./testing/stopped-staging-closeout-2026-10-07.md).
+All full repository gates passed on Node 22.16.0 with 48 test files run serially:
+**980 tests passed**, three optional Docker skips (983 total), plus non-fixing
+lint, formatting, docs, workflow policy and packed CLI checks; the source snapshot
+remained unchanged. All 193 focused tests passed. A GET-only actual checkpoint
+inspection accepted saved eligibility but correctly refused active product
+workflows; a separate GET-only read verified the original merged PR/commits and
+absent branch. Neither changed the journal. PR review and merge are pending.
+No live cancellation, journal change or new product release has been performed.
+
 ## October 7 — unchanged staging tree publication (local)
 
 The fresh long-post release stopped before creating its first staging commit:

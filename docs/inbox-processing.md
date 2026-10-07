@@ -834,13 +834,31 @@ one integration operation, PR state `checking`, null result and no cleanup
 choice. This checkpoint can remain after a thrown pre-merge check; it does not
 prove the original process is alive. Independently confirm the process and its
 requests have stopped and settled for at least 60 seconds before cancellation.
-This narrow case refuses any other release operation, uncertain merge state,
+This first-PR case refuses any other release operation, uncertain merge state,
 staging reconciliation, manual stop, database uncertainty or recovery. The
 existing review-pause path still refuses other production operations. This is
 not a general override for arbitrary failures or deployments in progress.
 
+For product-shaped adapters, keep-current cancellation also supports an
+interrupted first frontend staging deployment: step one, exactly the completed
+frontend staging merge and its saved `running`/null-result deployment, a known
+workflow run, and no database change, E2E, backend/monitoring work, production
+operation or recovery. The operator must first independently confirm the old
+process and its requests stopped and settled for at least 60 seconds. The adapter
+reads only GitHub: it verifies the exact merged PR, both immutable commits and
+removed owned branch, the pinned workflow files at the deployed source, the
+recorded run's source/actor/workflow/attempt and passing required deployment jobs.
+Pinned product workflows must be quiet; active, missing, failed or uncertain
+evidence retains the lane. It neither cancels a workflow nor adopts the old
+deployment as a release pass. Original operations/results remain unchanged;
+separate cancellation evidence records the historical verification. Current
+shared refs are observed, not rewritten or restored, even if they moved.
+Selected tickets close as not planned and normal archival/lane release follows.
+Fresh code and current environment validation require a fresh request.
+
 The journal saves the operator, decision, step and observed staging/main refs
-before cleanup. The same adapter in both profiles verifies the unique PR, saved
+before cleanup or finished-deployment inspection. For unmerged PRs, the same
+adapter in both profiles verifies the unique PR, saved
 head, author, body, destination and exact owned branch, closes it unmerged, and
 verifies branch removal. It never recreates a missing branch, merges code,
 dispatches a workflow, restores snapshots or changes either shared branch.

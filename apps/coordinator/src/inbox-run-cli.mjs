@@ -54,8 +54,11 @@ staging E2E passes. In real profile these are real product changes and deploymen
   --cancel-keep-current
                  Cancel a no-database-change attempt paused at its owned PR,
                  its interrupted review stop, or an interrupted first staging
-                 checkpoint with no other release operation. Close only its
-                 unmerged PR/branch. Do not restore, merge or deploy code.
+                 checkpoint with no other release operation. Also supports a
+                 frontend-only first deployment after its staging merge, only
+                 when that exact run finished successfully and owned cleanup
+                 is verified. Preserve original deployment records; do not
+                 restore, merge, deploy or cancel a GitHub workflow.
                  Requires --resume; closes selected tickets as not planned,
                  not as a completed release. Other production work refuses cancellation.
   --json         Print structured results; live progress goes to stderr.
