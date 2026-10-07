@@ -14,6 +14,7 @@ import {
   priorRealBatchPolicy,
   realBatchPolicy,
   sessionRecoveryRealBatchPolicy,
+  waveCreationRealBatchPolicy,
   realServicePlan
 } from "../src/batch-plan.mjs";
 import { ServiceError, serviceHash } from "../src/service-contract.mjs";
@@ -247,7 +248,11 @@ async function interruptedPreparation(policy = priorRealBatchPolicy) {
   };
 }
 
-for (const policy of [priorRealBatchPolicy, sessionRecoveryRealBatchPolicy]) {
+for (const policy of [
+  priorRealBatchPolicy,
+  sessionRecoveryRealBatchPolicy,
+  waveCreationRealBatchPolicy
+]) {
   for (const mainMoves of [false, true]) {
     test(`resume an unpublished ${policy.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"]} attempt rechecks the same filtered ticket with fresh CI (${mainMoves ? "moved" : "unchanged"} main)`, async () => {
       const h = await interruptedPreparation(policy);

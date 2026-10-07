@@ -7,6 +7,7 @@ import {
   nativeCompetitionRealBatchPolicy,
   priorRealBatchPolicy,
   sessionRecoveryRealBatchPolicy,
+  waveCreationRealBatchPolicy,
   realBatchPolicy
 } from "../src/batch-plan.mjs";
 
@@ -30,15 +31,15 @@ test("frontend pin refresh never accepts unreviewed backend PR workflow drift", 
   );
 });
 
-test("real frontend accepts only the reviewed CI pin, never an old or unknown workflow", async () => {
+test("real frontend exact-pin admission rejects old or unverifiable workflow bytes", async () => {
   const path = ".github/workflows/app-pr-ci.yml";
   const f = fixture({ profile: realProfile, role: "frontend" });
   // Independent literals prevent the fixture and implementation sharing a typo.
   assert.equal(
     realBatchPolicy.workflow_blobs.frontend[path],
-    "134e53f46bfe207742adcc4fec392128bec75ab8"
+    "9209601a51023b4a17609fb7cdacb360a2e34977"
   );
-  f.workflowBlobs[path] = "134e53f46bfe207742adcc4fec392128bec75ab8";
+  f.workflowBlobs[path] = "9209601a51023b4a17609fb7cdacb360a2e34977";
   assert.equal(
     (await f.client.identity("frontend", f.record.base)).workflow_id,
     null
@@ -47,6 +48,7 @@ test("real frontend accepts only the reviewed CI pin, never an old or unknown wo
     priorRealBatchPolicy.workflow_blobs.frontend[path],
     nativeCompetitionRealBatchPolicy.workflow_blobs.frontend[path],
     "0a506cbf14c340198c5273a560b0968d901cbebd",
+    "134e53f46bfe207742adcc4fec392128bec75ab8",
     "f".repeat(40)
   ]) {
     f.workflowBlobs[path] = blob;
@@ -57,7 +59,8 @@ test("real frontend accepts only the reviewed CI pin, never an old or unknown wo
   for (const policy of [
     priorRealBatchPolicy,
     nativeCompetitionRealBatchPolicy,
-    sessionRecoveryRealBatchPolicy
+    sessionRecoveryRealBatchPolicy,
+    waveCreationRealBatchPolicy
   ]) {
     const historical = fixture({
       profile: realProfile,

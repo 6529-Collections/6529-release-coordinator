@@ -213,6 +213,10 @@ and merged sample setup. Sandbox runs also add
 elimination before expensive combined checks and durable temporary PR ownership.
 The real policy uses the same bounded selection with the product repositories'
 pinned required checks; it does not run the sandbox sample-service workflow.
+The real frontend PR-CI workflow alone supports the reviewed
+[additive sandbox-browser-pack contract](./testing/additive-browser-workflow-2026-10-07.md).
+All existing baseline bytes, other workflow pins and deployment/E2E gates stay
+protected; a profile switch or added test pack is not release permission.
 The same repositories, test inbox,
 exact-input bindings and automatically generated plans are retained.
 

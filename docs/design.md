@@ -241,10 +241,36 @@ The reviewed October 6 session-recovery browser pack updates that frontend
 PR-CI pin again, without changing required checks, permissions, other workflow
 pins, limits or release gates. The native-competition policy remains separately
 trusted for reading and reconciling its exact saved history. Fresh requests use
-the new policy hash and fresh candidate CI. The existing pre-publication refresh
-guard still accepts only the original prior history-preserving policy; this
-change does not add a native-competition-to-current migration, relabel older CI
-as current proof, or resume any stopped release automatically.
+the new policy hash and fresh candidate CI. That change did not add a
+native-competition-to-current migration, relabel older CI as current proof,
+or resume a stopped release automatically. The October 7 paragraphs below
+describe the current approved preparation-refresh sources.
+
+The October 7 frontend PR-CI policy uses the reviewed Wave feature-usage workflow
+as a byte-exact baseline, with the narrow `additive-browser-packs-v1` extension
+contract. At two fixed insertion points it accepts only paired literal browser
+lane registrations and `./bin/6529 run test:e2e:<pack>-sandbox` steps. Their
+check/lane names, output directories and commands must agree; duplicates and
+baseline lane collisions are refused. Complete current and baseline Git bytes
+are rehashed before validation. No workflow code is evaluated by the validator.
+Every baseline byte remains required, including existing coverage, triggers,
+permissions, jobs, actions, runner selection, failure aggregation and build
+commands. Other workflow files and all deployment/E2E pins remain exact.
+See the [contract and offline verification record](./testing/additive-browser-workflow-2026-10-07.md).
+
+Future supplemental packs following that literal template do not need another
+Coordinator hash approval. This is not a claim that a pack's test implementation
+is correct or isolated: ordinary product review, source gates and fresh exact
+candidate CI still apply. Nor does the baseline freeze every future supplemental
+pack forever; changing baseline behavior or using a different extension shape
+still needs separate Coordinator review. Candidates still cannot change their
+own pinned verification workflows. All historical policies retain their exact
+pins and do not inherit this extension approval. The previous Wave-creation
+snapshot joins the existing original/session-recovery unpublished-preparation
+refresh sources only under the same no-resource/no-selection/no-execution guard,
+with fresh same-source checks and preserved attempts and spent budgets. Native,
+copy-based, unknown, published and selected/release histories are not migrated.
+This implementation does not resume a release or authorize deployment.
 
 <a id="proposed-batch-testing-and-selection"></a>
 

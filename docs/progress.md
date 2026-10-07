@@ -1,5 +1,32 @@
 # Progress and next steps
 
+## October 7 — additive frontend browser-test contract (local)
+
+Ordinary registration of a new frontend browser-test pack changed the whole
+PR-CI blob and stopped admission, even when existing checks were untouched.
+The local change accepts only matching literal registrations and sandbox test
+steps at two reviewed insertion points. Every existing workflow byte stays
+protected; permissions, actions, runners, builds, failure aggregation, other
+workflow pins, source/reviewer gates and matching staging/production E2E are
+unchanged. The current Wave feature-usage pack becomes part of the reviewed
+baseline, not an optional removable extension. New supplemental packs still
+need normal product review and fresh candidate CI.
+
+The former Wave-creation policy remains trusted only as exact historical state.
+Its empty unpublished preparations may use the existing fresh-rebuild transition;
+owned trials, selected candidates and release executions cannot migrate.
+No journal, ticket, source head, count budget or old evidence is rewritten.
+See the [contract and verification record](./testing/additive-browser-workflow-2026-10-07.md).
+All 104 focused tests passed. Full non-fixing Node 22.16.0 gates passed with all
+50 test files run serially: **1048 tests passed**, three optional Docker skips
+(1051 total), plus lint, formatting, docs, workflow policy and packed-CLI checks.
+The source snapshot remained unchanged. Eight guarded GET-only GitHub requests
+confirmed the former policy refuses current frontend main while the new policy
+admits it; future added-pack hashes are covered offline, not yet live-tested.
+PR review, GitHub CI and merge are pending; admission is not deployment proof.
+The long-post attempt was already closed separately. This work starts no new
+release and changes neither staging nor production.
+
 ## October 7 — stopped staging deployment closeout (local)
 
 The frontend staging merge and deployment completed externally, followed by

@@ -13,13 +13,14 @@ import {
   priorRealBatchPolicy,
   realBatchPolicy,
   sessionRecoveryRealBatchPolicy,
+  waveCreationRealBatchPolicy,
   realServicePlan,
   trustedBatchPolicy
 } from "../src/batch-plan.mjs";
 import { realProfile, sandboxProfile } from "../src/profiles.mjs";
 import { serviceHash } from "../src/service-contract.mjs";
 
-test("reviewed frontend workflow refresh changes only its pin and keeps all historical policies trusted", () => {
+test("reviewed frontend extension policy preserves every historical pin, required check and budget", () => {
   const nativeCompetition = structuredClone(priorRealBatchPolicy);
   nativeCompetition.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"] =
     "2cc4f7a5e36ba3d056b1f4b43d534f13f2ebde9a";
@@ -31,6 +32,14 @@ test("reviewed frontend workflow refresh changes only its pin and keeps all hist
   const expected = structuredClone(sessionRecoveryRealBatchPolicy);
   expected.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"] =
     "134e53f46bfe207742adcc4fec392128bec75ab8";
+  assert.deepEqual(waveCreationRealBatchPolicy, expected);
+  expected.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"] =
+    "9209601a51023b4a17609fb7cdacb360a2e34977";
+  expected.workflow_extensions = {
+    frontend: {
+      ".github/workflows/app-pr-ci.yml": "additive-browser-packs-v1"
+    }
+  };
   assert.deepEqual(realBatchPolicy, expected);
   assert.equal(
     new Set(
@@ -38,16 +47,18 @@ test("reviewed frontend workflow refresh changes only its pin and keeps all hist
         priorRealBatchPolicy,
         nativeCompetitionRealBatchPolicy,
         sessionRecoveryRealBatchPolicy,
+        waveCreationRealBatchPolicy,
         realBatchPolicy
       ].map(serviceHash)
     ).size,
-    4
+    5
   );
   for (const historical of [
     copiedRealBatchPolicy,
     priorRealBatchPolicy,
     nativeCompetitionRealBatchPolicy,
-    sessionRecoveryRealBatchPolicy
+    sessionRecoveryRealBatchPolicy,
+    waveCreationRealBatchPolicy
   ]) {
     assert.equal(trustedBatchPolicy(structuredClone(historical)), historical);
     assert.notEqual(serviceHash(historical), serviceHash(realBatchPolicy));
@@ -68,7 +79,11 @@ test("reviewed frontend workflow refresh changes only its pin and keeps all hist
   assert.throws(() => trustedBatchPolicy(unknown), { code: "batch-policy" });
 });
 
-for (const policy of [priorRealBatchPolicy, sessionRecoveryRealBatchPolicy]) {
+for (const policy of [
+  priorRealBatchPolicy,
+  sessionRecoveryRealBatchPolicy,
+  waveCreationRealBatchPolicy
+]) {
   test(`policy refresh from ${policy.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"]} is limited to unpublished preparation, not owned work or release history`, () => {
     const batch = {
       policy: structuredClone(policy),
@@ -136,6 +151,7 @@ for (const policy of [priorRealBatchPolicy, sessionRecoveryRealBatchPolicy]) {
       copiedRealBatchPolicy,
       priorRealBatchPolicy,
       sessionRecoveryRealBatchPolicy,
+      waveCreationRealBatchPolicy,
       batchPolicy
     ]) {
       assert.equal(
