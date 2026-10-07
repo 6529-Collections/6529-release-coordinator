@@ -24,6 +24,11 @@ import {
   assertProductCommitActor,
   productCommitSignoff
 } from "./product-commit-signoff.mjs";
+import {
+  additiveBrowserContract,
+  validateAdditiveBrowserWorkflow,
+  verifiedWorkflowBytes
+} from "./additive-browser-workflow.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const branchName = (value) =>
@@ -298,10 +303,27 @@ export function createBatchGitHub({
             await call(role, "GET", `/contents/${path}?ref=${base}`)
           ).data;
           serviceAssert(
-            file?.type === "file" && file.path === path && file.sha === blob,
+            file?.type === "file" && file.path === path && sha(file.sha),
             "batch-runtime",
             "A pinned product PR workflow changed."
           );
+          if (file.sha !== blob) {
+            serviceAssert(
+              role === "frontend" &&
+                path === ".github/workflows/app-pr-ci.yml" &&
+                policy.workflow_extensions?.[role]?.[path] ===
+                  additiveBrowserContract,
+              "batch-runtime",
+              "A pinned product PR workflow changed."
+            );
+            const current = verifiedWorkflowBytes(file, file.sha);
+            const baseline = (await call(role, "GET", `/git/blobs/${blob}`))
+              .data;
+            validateAdditiveBrowserWorkflow(
+              verifiedWorkflowBytes(baseline, blob),
+              current
+            );
+          }
         }
         return {
           actor: { id: String(actor.id), login: actor.login },

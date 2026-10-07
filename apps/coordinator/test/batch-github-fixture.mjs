@@ -13,6 +13,8 @@ export function fixture({
   candidateBlobs,
   missingBlobs = new Set(),
   existingBlobs,
+  workflowFiles = {},
+  workflowObjects = {},
   baseTree = "e".repeat(40),
   profile = sandboxProfile,
   policy = profile.name === "real" ? realBatchPolicy : batchPolicy
@@ -121,7 +123,8 @@ export function fixture({
             ? workflowBlobs[filePath]
             : typeof policy.workflow_blob === "string"
               ? policy.workflow_blob
-              : policy.workflow_blob[record.role]
+              : policy.workflow_blob[record.role],
+        ...workflowFiles[filePath]
       };
     } else if (path === "/actions/workflows/sandbox-check.yml")
       data = {
@@ -141,7 +144,7 @@ export function fixture({
       status = (existingBlobs ? existingBlobs.has(sha) : !missingBlobs.has(sha))
         ? 200
         : 404;
-      data = status === 200 ? { sha } : {};
+      data = status === 200 ? (workflowObjects[sha] ?? { sha }) : {};
     } else if (path === "/git/blobs" && method === "POST") {
       status = 201;
       const sha = blobHash(Buffer.from(body.content, body.encoding));
@@ -237,6 +240,8 @@ export function fixture({
   return {
     authenticatedActor,
     workflowBlobs,
+    workflowFiles,
+    workflowObjects,
     record,
     calls,
     saved,
