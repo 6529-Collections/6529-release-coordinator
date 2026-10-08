@@ -200,6 +200,8 @@ export function fixture({
     } else if (path === `/git/commits/${merge.sha}`) data = merge;
     else if (path.startsWith("/actions/workflows/101/runs?"))
       data = { total_count: 1, workflow_runs: [run] };
+    else if (path.startsWith("/actions/runs?head_sha="))
+      data = { total_count: 1, workflow_runs: [run] };
     else if (path === "/actions/runs/55/attempts/1/jobs?per_page=100")
       data = { total_count: 1, jobs: [job] };
     else if (

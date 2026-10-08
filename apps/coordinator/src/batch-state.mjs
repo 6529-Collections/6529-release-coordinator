@@ -6,6 +6,7 @@ import {
 import { validateReleaseExecution } from "./release-state.mjs";
 import { sandboxFrontendServiceProtocol } from "./service-plan.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
+import { batchFingerprint, validateRetryLink } from "./batch-retry-history.mjs";
 import {
   databaseBatchPolicies,
   batchPolicyProfile,
@@ -33,6 +34,7 @@ export function validateBatchHistory(batches, profile) {
     "Invalid batch history."
   );
   for (const [key, batch] of Object.entries(batches)) {
+    validateRetryLink(batch);
     const policy = trustedBatchPolicy(batch?.policy);
     const created = Date.parse(batch?.created_at);
     const validLegacyDeadline = Number.isFinite(policy.max_elapsed_ms)
@@ -41,7 +43,7 @@ export function validateBatchHistory(batches, profile) {
     serviceAssert(
       hash(key) &&
         key === batch?.fingerprint &&
-        batch.version === 1 &&
+        [1, 2].includes(batch.version) &&
         Array.isArray(batch.inputs) &&
         batch.inputs.length > 0 &&
         batch.inputs.length <= 10 &&
@@ -55,7 +57,7 @@ export function validateBatchHistory(batches, profile) {
           "real-batch-v1"
         ].includes(batch.policy?.version) &&
         batchPolicyProfile(batch.policy) === profile.name &&
-        key === serviceHash({ inputs: batch.inputs, policy: batch.policy }) &&
+        key === batchFingerprint(batch) &&
         Number.isFinite(created) &&
         validLegacyDeadline &&
         ["searching", "finished"].includes(batch.status) &&

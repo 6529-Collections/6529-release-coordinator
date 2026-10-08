@@ -387,3 +387,82 @@ test("appended review summaries preserve identity but editing the original trial
   await f.client.cleanup(f.record);
   assert.equal(f.pr().state, "closed");
 });
+
+test("retry admission verifies closed/unmerged ownership, removed refs and settled workflows read-only without trusting a rerun conclusion", async () => {
+  const f = fixture();
+  await f.client.open(f.record, f.patch, f.save);
+  await f.client.cleanup(f.record);
+  f.record.cleanup = "removed";
+  const start = f.calls.length;
+  for (const conclusion of ["success", "failure"]) {
+    f.run.conclusion = conclusion;
+    assert.deepEqual(await f.client.verifyRemoved(f.record), {
+      status: "removed"
+    });
+  }
+  assert.ok(f.calls.slice(start).every((call) => call.method === "GET"));
+  f.run.status = "in_progress";
+  await assert.rejects(f.client.verifyRemoved(f.record), /active/);
+  f.run.status = "completed";
+  f.pr().state = "open";
+  await assert.rejects(f.client.verifyRemoved(f.record), /still open/);
+  f.pr().state = "closed";
+  f.pr().merged = true;
+  await assert.rejects(f.client.verifyRemoved(f.record), /ownership/);
+});
+
+test("retry admission cannot remove an existing owned ref or accept edited PR ownership", async () => {
+  const f = fixture();
+  await f.client.open(f.record, f.patch, f.save);
+  f.pr().state = "closed";
+  f.record.cleanup = "removed";
+  const start = f.calls.length;
+  await assert.rejects(f.client.verifyRemoved(f.record), /branch still exists/);
+  f.pr().body = "changed identity";
+  await assert.rejects(f.client.verifyRemoved(f.record), /ownership/);
+  assert.ok(f.calls.slice(start).every((call) => call.method === "GET"));
+});
+
+test("retry admission reads every old workflow page and refuses duplicate or moving pagination", async () => {
+  for (const broken of [null, "duplicate", "changed"]) {
+    const f = fixture({
+      after: async ({ path, response }) => {
+        if (!path.startsWith("/actions/runs?head_sha=")) return;
+        const page = Number(
+          new URLSearchParams(path.split("?")[1]).get("page")
+        );
+        response.total_count = broken === "changed" && page === 2 ? 102 : 101;
+        response.workflow_runs = Array.from(
+          { length: page === 1 ? 100 : 1 },
+          (_, i) => ({
+            ...response.workflow_runs[0],
+            id:
+              broken === "duplicate" && page === 2
+                ? 1
+                : (page - 1) * 100 + i + 1
+          })
+        );
+      }
+    });
+    await f.client.open(f.record, f.patch, f.save);
+    await f.client.cleanup(f.record);
+    f.record.cleanup = "removed";
+    const start = f.calls.length;
+    if (broken)
+      await assert.rejects(
+        f.client.verifyRemoved(f.record),
+        /identity changed|changed during pagination/
+      );
+    else
+      assert.deepEqual(await f.client.verifyRemoved(f.record), {
+        status: "removed"
+      });
+    assert.ok(f.calls.slice(start).every((call) => call.method === "GET"));
+    assert.equal(
+      f.calls
+        .slice(start)
+        .filter((call) => call.path.startsWith("/actions/runs?")).length,
+      2
+    );
+  }
+});

@@ -429,6 +429,30 @@ Missing evidence stops the search or preserves an interrupted attempt for
 explicit reconciliation. Unchanged completed unknown results are retained; a new
 input/configuration or a resolved interrupted attempt is needed for new evidence.
 
+An explicit exception is `--resume RUN_ID --retry-checks ATTEMPT_ID` for the
+owner's one-ticket filtered real frontend-only, no-database-change request.
+It names a completed pre-release `unknown/evidence` attempt whose Installed app
+checks failed. No selected candidate or release execution may exist. The engine
+verifies the original history, closed unmerged owned trials, absent owned refs
+and completed workflows using read-only calls before saving a linked version-2
+batch. This is a new combined Git/CI round, never a rewrite or promotion of an
+out-of-band diagnostic rerun. Attributed code failures, backend/database work,
+uncertain cleanup, missing archives and exhausted existing budgets refuse it.
+Normal processing/resume still does not retry completed checks automatically.
+
+The link binds the parent attempt, complete record hash, all prior round/refresh
+records and explicit operator authorization. Original inputs, failures, archives
+and attempt IDs remain unchanged. All linked rounds and same-run preparation
+refreshes spend the existing 40 Git/12 check budgets together; deduplicated
+history cannot reset them. A repeated flag continues its saved round, including
+after interruption or safe current-main refresh. Another failed fresh round
+keeps the run locked for human direction. `explicit-check-retry-v1` fences older
+writers even after version-2 batches archive, while preserving `inbox-run-v7`.
+Fresh source, rules, reviews, workflow and candidate gates remain mandatory.
+Staging deployment and matching E2E still precede production, which needs its
+own matching deployment and E2E. This explicit path is not process takeover:
+the operator must independently settle the prior process/requests first.
+
 ### Journal, temporary PRs and recovery
 
 `inbox-run-v7` preserves earlier ticket, service and v4/v5/v6 batch history, including

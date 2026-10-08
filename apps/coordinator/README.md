@@ -824,6 +824,15 @@ must match the saved run, and the saved Issue/actor filter is reused rather than
 supplied again. It does not process tickets outside that saved filter. There is
 no automatic timeout, lock stealing,
 or background retry. Never resume while another copy may still be running.
+
+For a separately approved fresh round after a diagnostic rerun changed a failed
+frontend candidate's checks, use `--resume RUN_ID --retry-checks ATTEMPT_ID` only
+with real/filtered scope and the owner's unchanged single frontend-only,
+no-database-change request before release execution. It verifies old owned
+cleanup and settled workflows, preserves the failed history, then runs fresh
+combined Git/CI with the existing aggregate budgets. It does not accept the
+diagnostic pass or retry automatically; another fresh failure keeps the run
+held for a person. See [eligibility and evidence boundaries](../../docs/inbox-processing.md#explicit-fresh-checks-after-a-diagnostic-rerun).
 GitHub Issues do not offer a multi-operation transaction; the journal makes
 partial application explicit and recoverable, not atomic. A maintainer must
 investigate edited receipts, deleted/ambiguous status comments, manual closure

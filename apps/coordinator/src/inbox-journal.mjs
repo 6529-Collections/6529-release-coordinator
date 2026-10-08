@@ -8,6 +8,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { realProfile } from "./profiles.mjs";
 import { stateBranch, stateFile } from "./coordinator-github.mjs";
 import { validateBatchHistory } from "./batch-state.mjs";
+import { checkRetryHistoryMarker } from "./batch-retry-history.mjs";
 import { serviceStatuses } from "./service-contract.mjs";
 import {
   response,
@@ -83,6 +84,7 @@ export function validateJournal(
           "tickets",
           "workflow",
           "source_history",
+          "check_retry_history",
           "ticket_updates",
           "cleanup_lock",
           "service_attempts",
@@ -92,7 +94,10 @@ export function validateJournal(
     ) ||
     (state.workflow !== undefined && !workflows.includes(state.workflow)) ||
     (state.source_history !== undefined &&
-      (!allowSourceHistory || state.source_history !== sourceHistoryMarker))
+      (!allowSourceHistory || state.source_history !== sourceHistoryMarker)) ||
+    (state.check_retry_history !== undefined &&
+      (state.check_retry_history !== checkRetryHistoryMarker ||
+        state.workflow !== inboxWorkflow))
   )
     throw new Error("Unsupported or corrupt inbox journal.");
   validateConcurrency(state);
@@ -111,6 +116,17 @@ export function validateJournal(
     } catch {
       throw new Error("Invalid inbox lock scope.");
     }
+    if (
+      state.lock.check_retry !== undefined &&
+      (state.check_retry_history !== checkRetryHistoryMarker ||
+        !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(
+          state.lock.check_retry?.attempt_id ?? ""
+        ) ||
+        !/^[0-9a-f]{64}$/u.test(
+          state.lock.check_retry?.batch_fingerprint ?? ""
+        ))
+    )
+      throw new Error("Invalid saved check retry intent.");
     if (
       state.lock.reprepared_batches !== undefined &&
       (!Array.isArray(state.lock.reprepared_batches) ||
@@ -145,6 +161,13 @@ export function validateJournal(
     )
       throw new Error("Batch history requires the current inbox writer.");
     validateBatchHistory(state.batches, profile);
+    if (
+      Object.values(state.batches).some((batch) => batch.version === 2) &&
+      state.check_retry_history !== checkRetryHistoryMarker
+    )
+      throw new Error(
+        "Explicit retries require the check-retry writer marker."
+      );
   }
   if (state.history !== undefined) {
     if (
@@ -411,6 +434,11 @@ export function createJournal(
         state.source_history !== base.state.source_history
       )
         throw new Error("Journal source-history marker must be preserved.");
+      if (
+        base.state.check_retry_history &&
+        state.check_retry_history !== base.state.check_retry_history
+      )
+        throw new Error("Journal check-retry marker must be preserved.");
       const prior = current.sha;
       state.parent = prior;
       state.revision = current.state.revision + 1;
@@ -625,6 +653,9 @@ export function createJournal(
         ...(workflow === inboxWorkflow
           ? {
               plans: resume ? structuredClone(held.plans ?? {}) : {},
+              ...(resume && held.check_retry
+                ? { check_retry: structuredClone(held.check_retry) }
+                : {}),
               ...(resume && held.reprepared_batches
                 ? {
                     reprepared_batches: structuredClone(held.reprepared_batches)
@@ -713,7 +744,7 @@ export function createJournal(
       adoptJournal(state, snapshot.state);
       workingState = state;
     },
-    async loadHistory(state, run, kind, identity) {
+    async loadHistory(state, run, kind, identity, { immutable = false } = {}) {
       if (
         !["batches", "services"].includes(kind) ||
         !/^[0-9a-f]{64}$/u.test(identity)
@@ -731,6 +762,16 @@ export function createJournal(
           profile
         );
         state[field] ??= {};
+        // Normal reconciliation can update a resident record while retaining
+        // its old archive. Retry ancestry must instead remain immutable.
+        if (
+          immutable &&
+          state[field][identity] &&
+          digest(state[field][identity]) !== digest(record)
+        )
+          throw new Error(
+            "Resident history differs from its verified archive."
+          );
         state[field][identity] ??= structuredClone(record);
       }
       return state[field]?.[identity];

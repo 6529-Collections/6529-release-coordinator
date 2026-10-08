@@ -12,6 +12,7 @@ import {
   requestedOperationalDeployments
 } from "./batch-plan.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
+import { batchFingerprint } from "./batch-retry-history.mjs";
 
 const members = (items) => items.map((item) => item.entry.issue_number);
 const key = (items) => members(items).join(",");
@@ -21,6 +22,8 @@ const key = (items) => members(items).join(",");
 export async function selectBatch({
   items,
   previous,
+  retryOf = previous?.retry_of,
+  retryAuthorization = previous?.retry_authorization,
   prepare,
   check,
   revalidate = async () => {},
@@ -74,12 +77,18 @@ export async function selectBatch({
     "batch-unsupported",
     "Every batch ticket needs a supported target, and a database change must be alone."
   );
-  const fingerprint = serviceHash({ inputs, policy });
+  const fingerprint = batchFingerprint({ inputs, policy, retry_of: retryOf });
   const created = now();
   const state = previous
     ? structuredClone(previous)
     : {
-        version: 1,
+        version: retryOf ? 2 : 1,
+        ...(retryOf
+          ? {
+              retry_of: structuredClone(retryOf),
+              retry_authorization: structuredClone(retryAuthorization)
+            }
+          : {}),
         fingerprint,
         inputs,
         policy,
