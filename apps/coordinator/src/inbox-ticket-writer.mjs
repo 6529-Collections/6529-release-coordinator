@@ -346,7 +346,8 @@ export async function presentRunTicket(
           const freshEntry = await inspect(freshIssue, { get, profile });
           const freshObservation = await observe(freshEntry, {
             github,
-            profile
+            profile,
+            signal
           });
           const fresh = await closureDecision(freshEntry, freshObservation);
           if (

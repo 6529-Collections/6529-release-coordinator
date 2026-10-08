@@ -231,9 +231,19 @@ it checks:
    backend parts. Conflicting orders or ambiguous unit ownership block the request.
    Different catalog service definitions across requested commits require the
    catalog from an exact combined merge result; none is silently chosen.
-4. **Stable observations.** Read each PR again after the initial PR/catalog
-   reads. Changes to its head, base, state, checks, or reviews make the observation
-   unknown. API errors and incomplete pagination also leave evidence unknown.
+4. **Stable observations.** For an unchanged, same-repository, open, non-draft
+   source, wait while GitHub reports `UNKNOWN` mergeability or merge state. Poll
+   every ten seconds without a new deadline or attempt-count ceiling; cancellation
+   interrupts the wait. This is read-only polling, not another inbox execution.
+   Head, base, PR identity/state, check or review changes during that wait stop
+   the scan. Only GitHub's calculated merge fields and their derived admission
+   proofs may settle; those pending answers never supply passing evidence.
+   Compare two completed, full PR observations, with the final read after the
+   initial PR/catalog reads. A pending final recheck also waits but never replaces
+   the first completed snapshot. Any difference between completed observations,
+   including the admission proofs, remains unknown. Conflicts, failed checks and
+   review blocks still stop admission. API errors, malformed responses and
+   incomplete pagination leave evidence unknown without an automatic read retry.
 5. **Overlaps and missing history.** Identify other open requests for the
    same PR and target, without choosing one. Report completed, cancelled, and
    replaced as unknown because this reader has no verified release-outcome source. Issue closure, labels, PR merge state, and newer requests cannot
@@ -388,7 +398,9 @@ closed tests, duplicate requests, output safety, read failures, and the GET-only
 adapter. Unit tests use fake GitHub responses and do not contact GitHub.
 Readiness tests additionally cover current-head changes, merge/check/review
 blocks, catalog and graph errors, missing history, conflicting requests,
-pagination races, adapter input boundaries, and the verified-intake-to-readiness
+pending merge calculation followed by two complete audited observations,
+changes during the wait, cancellation, pagination races, adapter input boundaries,
+and the verified-intake-to-readiness
 CLI path. Live evidence is dated separately in the progress record.
 
 ## Run the ticket workflow

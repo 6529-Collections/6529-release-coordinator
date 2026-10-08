@@ -631,6 +631,13 @@ without turning each poll into a new ticket conversation.
 3. Reuse current PR, required-check, review, catalog, and dependency observations.
    Recheck facts supporting a change before applying it. A failed read or
    moving observation cannot become a confident automatic closure.
+   An unchanged, same-repository, open, non-draft source may wait for GitHub's
+   pending merge calculation. Polling has no added deadline/count limit and
+   honors cancellation. Changes to code, base, PR identity/state, checks or
+   reviews while waiting stop the scan. Two completed full observations must
+   still match; pending answers and newly available admission proofs do not
+   bypass that comparison. Read failures are not automatically retried, and a
+   completed calculation does not override conflicts, failed checks or reviews.
 4. Retire clearly outdated requests with requested/observed commit evidence.
    Do not call them replaced unless an explicit replacement relationship is
    established. Respect any recorded terminal or active execution ownership;

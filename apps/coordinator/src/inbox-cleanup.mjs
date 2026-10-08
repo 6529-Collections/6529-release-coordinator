@@ -346,7 +346,7 @@ export async function cleanupInbox({
     }
     const requests = [];
     const observeTicket = async (entry, options) => ({
-      ...(await observe(entry, options)),
+      ...(await observe(entry, { ...options, signal })),
       cleanup_followup: await followup(entry, {
         ticket: state.tickets[entry.issue_number],
         records,
