@@ -1,5 +1,36 @@
 # Progress and next steps
 
+## October 8 — explicit fresh checks after a diagnostic rerun (local)
+
+The original frontend candidate failed CI. A separately approved diagnostic
+rerun passed unchanged code, but a later processing invocation loaded the old
+failure and stopped when the required Installed app checks conclusion had
+changed. The immutable failure remains valid history, not passing release proof.
+
+The new explicit `--resume RUN_ID --retry-checks ATTEMPT_ID` path creates a
+linked fresh Git/CI round for the owner's unchanged one-ticket filtered real
+frontend-only no-database-change request. It refuses uncertain owned cleanup,
+active old workflows, missing/changed archives, release execution, selected
+candidates, attributed code failures and exhausted existing budgets. It does
+not reuse a diagnostic pass. Original history, attempts and budgets remain;
+safe current-main refresh carries the retry linkage. Repeating the flag resumes
+the same round; another failed fresh round holds for human direction.
+Source/review/rule/workflow checks and matching staging/production deployment
+plus E2E gates are unchanged. No new policy limits or pin changes are introduced.
+
+All 34 focused tests passed. Full non-fixing Node 22.16.0 repository gates
+passed with all 52 test files run serially: **1138 tests passed**, three optional
+Docker skips (1141 total), plus lint, formatting, docs, workflow policy and
+isolated offline packed-CLI checks. Source contents remained unchanged during
+the gates. A guarded GET-only inspection of the actual saved request and its
+owned trial accepted retry eligibility without saving intent or starting tests.
+See the [scope and verification record](./testing/explicit-check-retry-2026-10-08.md)
+and [explicit retry contract](./inbox-processing.md#explicit-fresh-checks-after-a-diagnostic-rerun).
+PR review, hosted CI and merge remain pending. No request, product source, real
+journal, lock, deployment or automation has been changed, and ticket 334 has not
+been rerun. This is offline regression and read-only admission proof, not live
+retry or release acceptance.
+
 ## October 8 — wait for GitHub merge calculation (local)
 
 A read-only diagnostic reproduced an initial `UNKNOWN` merge answer followed

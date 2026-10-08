@@ -826,6 +826,83 @@ export function createBatchGitHub({
               : "The required checks did not provide attributable code-failure evidence."
       };
     },
+    // Read-only admission for an explicit retry. Current CI conclusions are
+    // deliberately not returned as release proof, but old work must be settled.
+    async verifyRemoved(record) {
+      validate(record);
+      serviceAssert(
+        record.number && record.commit && record.cleanup === "removed",
+        "batch-retry",
+        "Retry requires a confirmed removed trial identity."
+      );
+      const pr = (await call(record.role, "GET", `/pulls/${record.number}`))
+        .data;
+      validatePull(pr, { ...record, base: pr.base?.sha }, { closed: true });
+      serviceAssert(
+        pr.state === "closed",
+        "batch-retry",
+        "The previous trial is still open."
+      );
+      const ref = await call(
+        record.role,
+        "GET",
+        `/git/ref/heads/${record.branch}`,
+        undefined,
+        [200, 404]
+      );
+      serviceAssert(
+        ref.status === 404,
+        "batch-retry",
+        "The previous trial branch still exists."
+      );
+      let count = 0,
+        total;
+      const identities = new Set();
+      for (let page = 1; ; page++) {
+        const list = (
+          await call(
+            record.role,
+            "GET",
+            `/actions/runs?head_sha=${record.commit}&per_page=100&page=${page}`
+          )
+        ).data;
+        serviceAssert(
+          Number.isSafeInteger(list.total_count) &&
+            list.total_count >= 0 &&
+            Array.isArray(list.workflow_runs),
+          "batch-retry",
+          "Previous trial workflow history is incomplete."
+        );
+        total ??= list.total_count;
+        serviceAssert(
+          total === list.total_count,
+          "batch-retry",
+          "Previous trial workflow history changed during pagination."
+        );
+        for (const run of list.workflow_runs) {
+          serviceAssert(
+            positive(run.id) &&
+              !identities.has(run.id) &&
+              run.head_sha === record.commit &&
+              run.status === "completed" &&
+              run.repository?.id === profile.repositories[record.role].id &&
+              run.repository.full_name ===
+                profile.repositories[record.role].full_name,
+            "batch-retry",
+            "Previous trial workflows are active or their identity changed."
+          );
+          identities.add(run.id);
+        }
+        count += list.workflow_runs.length;
+        if (count === list.total_count) break;
+        serviceAssert(
+          list.workflow_runs.length > 0 && count < list.total_count,
+          "batch-retry",
+          "Previous trial workflow history is incomplete."
+        );
+      }
+      return { status: "removed" };
+    },
     async cleanup(record) {
       validate(record);
       if (!record.number && record.pr_state === "creating") {

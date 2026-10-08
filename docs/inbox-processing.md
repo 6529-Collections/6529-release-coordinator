@@ -506,6 +506,46 @@ cheap scope and ticket/PR-limit filtering. A ticket held outside that pool canno
 invalidate its test result by changing unrelated PR evidence. Tickets inside the
 pool still require fresh exact evidence throughout selection and splitting.
 
+### Explicit fresh checks after a diagnostic rerun
+
+A diagnostic rerun is not a release attempt. Keep its result separate from the
+saved failed trial. A green rerun must not replace the original journal result
+or authorize deployment. If the operator explicitly approves fresh release
+checks, the supported narrow command is:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --resume RUN_ID --retry-checks FAILED_CHECK_ATTEMPT_ID --json
+```
+
+Use only the original currently held run after independently confirming its
+process, descendants and in-flight requests stopped, then waiting at least
+60 seconds and rereading authoritative state. The engine does not prove process
+absence or acquire somebody else's lane. This command cannot submit a request,
+change the saved issue/actor selection, clear a lock or answer another recovery
+choice. It is not available for an already released run: reconcile that state
+separately; never invent a lock or silently launch a replacement.
+
+Eligibility is limited to the verified submitter/operator's one-ticket filtered
+real frontend-only no-database-change request, unchanged reviewed policy, and
+a completed `unknown/evidence` candidate with failed Installed app checks.
+Every old trial must be closed unmerged, its owned ref absent and its workflow
+runs completed. No release execution, selected candidate, unfinished services,
+attributed code failure or exhausted existing count budget is eligible. The
+original archived record must still verify. Read-only cleanup admission does
+not accept a new CI conclusion as old or fresh release proof.
+
+The engine saves a distinct version-2 batch and authorization linked to the
+immutable failed record, then runs fresh combined Git/CI under all current
+source/check/review/rule gates. It preserves original requests, attempts,
+failures, archives and spent budgets. Safe main refresh retains this linkage and
+the same aggregate 40 Git/12 candidate-check budgets. Repeating the same flag
+continues the saved round rather than creating another. If fresh CI fails again,
+the run stays held for a person; another round requires a new explicit choice
+naming that new failed attempt. It never loops automatically. Matching saved
+deployment plus browser E2E for staging, then independently for production,
+remain mandatory. Install this reviewed writer before using the flag; the
+durable `explicit-check-retry-v1` marker refuses older writers after use.
+
 The general future outcomes below also cover capabilities beyond this first
 stage, including cross-ticket dependency groups and reassessment after a real
 release. Those capabilities are not implied by the new sandbox labels.

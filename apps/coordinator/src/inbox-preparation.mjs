@@ -338,7 +338,9 @@ export async function prepareRunTickets({
       rehearsalResult = {
         status: "passed",
         message:
-          "Continuing the exact saved batch; its earlier Git and check evidence remains in the journal."
+          activeBatch.retry_of && !activeBatch.attempts.length
+            ? "An explicit retry is prepared; fresh combined Git and CI are still required. The original failure is historical only."
+            : "Continuing the exact saved batch; its earlier Git and check evidence remains in the journal."
       };
       decision.rehearsal = rehearsalResult;
     } else if (!recordedTerminal) {

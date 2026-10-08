@@ -21,6 +21,7 @@ RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox npm run
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --issue NUMBER [--issue NUMBER...] --actor LOGIN [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --issue NUMBER --actor LOGIN --close-test [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID [--json]
+RELEASE_COORDINATOR_PROFILE=real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --resume RUN_ID --retry-checks ATTEMPT_ID [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --staging-change retest|restore [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --review-stop [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --cancel-keep-current [--json]
@@ -48,6 +49,11 @@ staging E2E passes. In real profile these are real product changes and deploymen
                   new backend/frontend pair, or restore only this release's
                   frontend staging change. Requires --resume and an exact,
                   unchanged no-database-change frontend-only reconciliation.
+  --retry-checks ID
+                 Explicitly start fresh checks after a settled frontend CI failure,
+                 not reuse a diagnostic rerun. Requires --resume of the owner's
+                 one-ticket filtered real run, verified owned cleanup and no release.
+                 Keeps the original failure and existing spent attempt budgets.
   --review-stop  For a run awaiting integration PR review only: explicitly
                  close its owned PR, then apply ordinary release recovery.
                  Requires --resume; never discards an uncertain PR or branch.
@@ -115,6 +121,7 @@ export async function runInboxRunCli(
         "--actor",
         "--close-test",
         "--resume",
+        "--retry-checks",
         "--staging-change",
         "--review-stop",
         "--cancel-keep-current",
@@ -150,11 +157,12 @@ export async function runInboxRunCli(
         stderr(help);
         return 2;
       }
-    } else if (key === "--resume") {
-      options.resume = args[++index];
+    } else if (key === "--resume" || key === "--retry-checks") {
+      const name = key === "--resume" ? "resume" : "retryChecks";
+      options[name] = args[++index];
       if (
         !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(
-          options.resume ?? ""
+          options[name] ?? ""
         )
       ) {
         stderr(help);
@@ -172,6 +180,11 @@ export async function runInboxRunCli(
   }
   if (
     (options.closeTest && options.issueNumbers.length !== 1) ||
+    (options.retryChecks &&
+      (!options.resume ||
+        options.stagingChange ||
+        options.reviewStop ||
+        options.cancelKeepCurrent)) ||
     (options.stagingChange && !options.resume) ||
     (options.reviewStop && (!options.resume || options.stagingChange)) ||
     (options.cancelKeepCurrent &&
@@ -186,6 +199,13 @@ export async function runInboxRunCli(
   try {
     profile = selectProfile(env.RELEASE_COORDINATOR_PROFILE);
     selectionMode = selectInboxScope(env.RELEASE_COORDINATOR_SCOPE);
+    if (
+      options.retryChecks &&
+      (profile.name !== "real" || selectionMode !== "filtered")
+    )
+      throw new Error(
+        "Check retry requires the real profile and filtered scope."
+      );
     if (!options.resume) {
       if (
         (selectionMode === "filtered" &&

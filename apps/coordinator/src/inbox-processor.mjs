@@ -20,6 +20,8 @@ import { terminal } from "./ticket-presentation.mjs";
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { assertCancellableRelease } from "./release-cancellation.mjs";
 import { refreshedPreparationPlans } from "./preparation-refresh.mjs";
+import { startCheckRetry } from "./batch-retry.mjs";
+import { retryHistory } from "./batch-retry-history.mjs";
 import {
   createInboxSelection,
   filterInboxRequests,
@@ -36,6 +38,8 @@ export async function processInbox({
   actorLogin,
   closeTest = false,
   resume,
+  retryChecks,
+  retryTrials,
   stagingChange,
   reviewStop = false,
   cancelKeepCurrent = false,
@@ -56,6 +60,16 @@ export async function processInbox({
   inspect = inspectIssue,
   observe = inspectReadiness
 }) {
+  serviceAssert(
+    !retryChecks ||
+      (resume &&
+        !closeTest &&
+        !stagingChange &&
+        !reviewStop &&
+        !cancelKeepCurrent),
+    "batch-retry",
+    "Check retry requires a saved run and cannot request another recovery action."
+  );
   serviceAssert(
     !cancelKeepCurrent || (resume && !reviewStop && !stagingChange),
     "release-cancel",
@@ -217,6 +231,27 @@ export async function processInbox({
       api,
       inspect
     });
+    if (retryChecks) {
+      serviceAssert(
+        batching,
+        "batch-retry",
+        "Check retry requires current batch processing."
+      );
+      await startCheckRetry({
+        attemptId: retryChecks,
+        state,
+        run,
+        selection,
+        entries: scanned.entries,
+        profile,
+        signal,
+        now,
+        verifyTrials: retryTrials,
+        loadBatch: (hash) => journal.loadHistory(state, run, "batches", hash),
+        guard: () => journal.guard(run),
+        save: (message) => journal.save(state, run, message)
+      });
+    }
     let preparedTickets;
     const presented = new Set();
     for (;;) {
@@ -340,8 +375,19 @@ export async function processInbox({
           journal.loadHistory(state, run, "batches", hash)
         )
       );
+      const retryParents = await retryHistory(stale, (hash) =>
+        journal.loadHistory(state, run, "batches", hash)
+      );
+      const spentHistory = [
+        ...new Map(
+          [...previous, ...retryParents, stale].map((saved) => [
+            saved.fingerprint,
+            saved
+          ])
+        ).values()
+      ];
       const used = (phase) =>
-        [...previous, stale].reduce(
+        spentHistory.reduce(
           (sum, saved) =>
             sum +
             (saved?.attempts.filter((attempt) => attempt.phase === phase)
@@ -428,7 +474,12 @@ export async function processInbox({
       batchResult?.status !== "awaiting-staging-choice" &&
       batchResult?.status !== "awaiting-review" &&
       batchResult?.status !== "cancelling" &&
-      batchResult?.release?.staging_drift?.status !== "failed"
+      batchResult?.release?.staging_drift?.status !== "failed" &&
+      !(
+        run.check_retry &&
+        batchResult?.stop?.status === "unknown" &&
+        batchResult.stop.kind === "evidence"
+      )
     )
       await loggedStep(
         {

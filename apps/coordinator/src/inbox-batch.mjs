@@ -22,6 +22,7 @@ import {
 import { terminal } from "./ticket-presentation.mjs";
 import { releaseTicketResult } from "./release-execution.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
+import { batchFingerprint, retryHistory } from "./batch-retry-history.mjs";
 
 export function batchDecision(decision, result) {
   const next = structuredClone(decision);
@@ -151,6 +152,19 @@ export async function coordinateInboxBatch({
   const active = run.batch_fingerprint
     ? await loadBatch(run.batch_fingerprint)
     : null;
+  const retryRound =
+    active ??
+    (run.check_retry
+      ? await loadBatch(run.check_retry.batch_fingerprint)
+      : null);
+  serviceAssert(
+    !run.check_retry || retryRound,
+    "batch-retry",
+    "Saved retry round is unavailable."
+  );
+  const retryParents = retryRound
+    ? await retryHistory(retryRound, loadBatch)
+    : [];
   const candidatePolicy = active?.policy ?? batchPolicyForProfile(profile);
   const policyRefresh = canRefreshBatchPreparationPolicy(
     active,
@@ -207,6 +221,7 @@ export async function coordinateInboxBatch({
         active.execution?.status ??
         (active.selected.length ? "release-unverified" : "no-candidate"),
       selected: active.selected,
+      stop: active.stop ?? null,
       release: active.execution ?? null,
       // A cancelled attempt is closed, not a successfully executed release.
       release_executed: active.execution?.status === "completed",
@@ -459,7 +474,11 @@ export async function coordinateInboxBatch({
       : {}),
     input: item.input
   }));
-  const freshFingerprint = serviceHash({ inputs, policy });
+  const freshFingerprint = batchFingerprint({
+    inputs,
+    policy,
+    retry_of: retryRound?.retry_of
+  });
   const fingerprint = run.batch_fingerprint ?? freshFingerprint;
   const changed = fingerprint !== freshFingerprint;
   const original = await loadBatch(fingerprint);
@@ -488,7 +507,17 @@ export async function coordinateInboxBatch({
     "batch-state",
     "Missing or unsafe prior preparation history."
   );
+  const priorHistory = [
+    ...new Map(
+      [...retryParents, ...refreshedHistory].map((saved) => [
+        saved.fingerprint,
+        saved
+      ])
+    ).values()
+  ];
   const batch = await select({
+    retryOf: retryRound?.retry_of,
+    retryAuthorization: retryRound?.retry_authorization,
     items: inputsChanged
       ? original.inputs.map((value) => ({
           entry: {
@@ -506,7 +535,7 @@ export async function coordinateInboxBatch({
     spent: Object.fromEntries(
       ["git", "checks"].map((phase) => [
         phase,
-        refreshedHistory.reduce(
+        priorHistory.reduce(
           (sum, saved) =>
             sum +
             (saved.attempts.filter((attempt) => attempt.phase === phase)
