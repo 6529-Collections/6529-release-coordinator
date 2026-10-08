@@ -744,7 +744,7 @@ export function createJournal(
       adoptJournal(state, snapshot.state);
       workingState = state;
     },
-    async loadHistory(state, run, kind, identity) {
+    async loadHistory(state, run, kind, identity, { immutable = false } = {}) {
       if (
         !["batches", "services"].includes(kind) ||
         !/^[0-9a-f]{64}$/u.test(identity)
@@ -762,7 +762,10 @@ export function createJournal(
           profile
         );
         state[field] ??= {};
+        // Normal reconciliation can update a resident record while retaining
+        // its old archive. Retry ancestry must instead remain immutable.
         if (
+          immutable &&
           state[field][identity] &&
           digest(state[field][identity]) !== digest(record)
         )

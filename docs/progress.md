@@ -4,7 +4,7 @@
 
 The original frontend candidate failed CI. A separately approved diagnostic
 rerun passed unchanged code, but a later processing invocation loaded the old
-failure and stopped when the required Installed app checks conclusion had
+failure and stopped when the required `Installed app checks` conclusion had
 changed. The immutable failure remains valid history, not passing release proof.
 
 The new explicit `--resume RUN_ID --retry-checks ATTEMPT_ID` path creates a
@@ -18,15 +18,20 @@ the same round; another failed fresh round holds for human direction.
 Source/review/rule/workflow checks and matching staging/production deployment
 plus E2E gates are unchanged. No new policy limits or pin changes are introduced.
 
-All 34 focused tests passed. Full non-fixing Node 22.16.0 repository gates
-passed with all 52 test files run serially: **1138 tests passed**, three optional
-Docker skips (1141 total), plus lint, formatting, docs, workflow policy and
+All 35 focused tests passed. Full non-fixing Node 22.16.0 repository gates
+passed with all 52 test files run serially: **1139 tests passed**, three optional
+Docker skips (1142 total), plus lint, formatting, docs, workflow policy and
 isolated offline packed-CLI checks. Source contents remained unchanged during
 the gates. A guarded GET-only inspection of the actual saved request and its
 owned trial accepted retry eligibility without saving intent or starting tests.
 See the [scope and verification record](./testing/explicit-check-retry-2026-10-08.md)
 and [explicit retry contract](./inbox-processing.md#explicit-fresh-checks-after-a-diagnostic-rerun).
-PR review, hosted CI and merge remain pending. No request, product source, real
+The implementation is in [PR #349](https://github.com/6529-Collections/6529-release-coordinator/pull/349).
+The initial head passed hosted Node 20/22/24 checks, locked audits, required
+statuses and both CodeQL scans (zero results). Review caught an overbroad
+resident/archive equality check; it is now limited to immutable retry ancestry,
+with normal stale reconciliation and strict retry refusal covered together.
+Final-head review, hosted CI and merge remain pending. No request, product source, real
 journal, lock, deployment or automation has been changed, and ticket 334 has not
 been rerun. This is offline regression and read-only admission proof, not live
 retry or release acceptance.

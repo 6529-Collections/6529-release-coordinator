@@ -163,7 +163,9 @@ export async function coordinateInboxBatch({
     "Saved retry round is unavailable."
   );
   const retryParents = retryRound
-    ? await retryHistory(retryRound, loadBatch)
+    ? await retryHistory(retryRound, (hash) =>
+        loadBatch(hash, { immutable: true })
+      )
     : [];
   const candidatePolicy = active?.policy ?? batchPolicyForProfile(profile);
   const policyRefresh = canRefreshBatchPreparationPolicy(

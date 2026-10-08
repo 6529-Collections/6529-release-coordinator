@@ -17,6 +17,7 @@ import {
 } from "../src/batch-retry.mjs";
 import { serviceHash } from "../src/service-contract.mjs";
 import { runInboxRunCli } from "../src/inbox-run-cli.mjs";
+import { selectBatch } from "../src/batch-selection.mjs";
 
 const retry = (h) => processInbox({ ...h.resume, retryChecks: h.attemptId });
 
@@ -234,6 +235,56 @@ test("cancellation after cleanup admission starts no new round", async () => {
   o.verifyTrials = async () => controller.abort(new Error("stop retry"));
   await assert.rejects(startCheckRetry(o), /stop retry/);
   assert.equal(o.run.check_retry, undefined);
+});
+
+test("normal archived-batch stale reconciliation keeps its archive; explicit retry refuses the changed resident record", async () => {
+  const h = await failedChecks(),
+    journal = createJournal(h.f.api, realProfile, {
+      workflow: inboxWorkflow,
+      ticketConcurrency: true
+    });
+  const { state, run } = await journal.acquire(
+    await h.f.identity(),
+    h.resume.resume
+  );
+  const identity = run.batch_fingerprint,
+    ref = state.history.batches[identity],
+    archive = structuredClone(h.f.file(ref.path)),
+    original = await journal.loadHistory(state, run, "batches", identity, {
+      immutable: true
+    });
+  const changed = await selectBatch({
+    items: original.inputs.map((input) => ({
+      entry: {
+        issue_number: input.number,
+        request: {
+          target: input.target,
+          database_change: input.database_change,
+          operational_deployments: input.operational_deployments
+        }
+      },
+      input: input.input
+    })),
+    previous: original,
+    policy: original.policy,
+    guard: () => journal.guard(run),
+    verify: async () => false,
+    prepare: async () => assert.fail("stale history cannot start Git work"),
+    check: async () => assert.fail("cleaned history cannot start checks"),
+    revalidate: async () => assert.fail("stale inputs cannot reuse proof"),
+    save: async (value) => {
+      state.batches[identity] = value;
+      await journal.save(state, run, "fixture normal stale reconciliation");
+    }
+  });
+  assert.equal(changed.stop.status, "stale");
+  assert.deepEqual(
+    await journal.loadHistory(state, run, "batches", identity),
+    changed
+  );
+  await assert.rejects(retry(h), /Resident history differs/);
+  assert.deepEqual(h.f.file(ref.path), archive);
+  assert.equal(h.events.filter((event) => event.startsWith("open:")).length, 1);
 });
 
 test("valid CLI retry forwards the named round to the engine without changing its saved selection", async () => {

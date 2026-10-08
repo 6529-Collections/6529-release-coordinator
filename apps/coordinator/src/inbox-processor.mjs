@@ -247,7 +247,10 @@ export async function processInbox({
         signal,
         now,
         verifyTrials: retryTrials,
-        loadBatch: (hash) => journal.loadHistory(state, run, "batches", hash),
+        loadBatch: (hash) =>
+          journal.loadHistory(state, run, "batches", hash, {
+            immutable: true
+          }),
         guard: () => journal.guard(run),
         save: (message) => journal.save(state, run, message)
       });
@@ -286,7 +289,8 @@ export async function processInbox({
           signal,
           guard: () => journal.guard(run),
           save: (message) => journal.save(state, run, message),
-          loadBatch: (hash) => journal.loadHistory(state, run, "batches", hash),
+          loadBatch: (hash, options) =>
+            journal.loadHistory(state, run, "batches", hash, options),
           verify: (inputs) =>
             verifyBatchInputs(inputs, {
               preparedTickets,
@@ -376,7 +380,7 @@ export async function processInbox({
         )
       );
       const retryParents = await retryHistory(stale, (hash) =>
-        journal.loadHistory(state, run, "batches", hash)
+        journal.loadHistory(state, run, "batches", hash, { immutable: true })
       );
       const spentHistory = [
         ...new Map(
