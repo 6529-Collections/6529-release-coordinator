@@ -261,7 +261,8 @@ export async function processInbox({
               profile,
               observe,
               github,
-              plan
+              plan,
+              signal
             }),
           release: release
             ? async (options) => {

@@ -96,13 +96,13 @@ function prChecks(pr, requested, fullName) {
   ];
 }
 
-export async function inspectCleanup(entry, { github, profile }) {
+export async function inspectCleanup(entry, { github, profile, signal }) {
   if (
     entry.status !== "valid" ||
     !validateProfileRequest(entry.request, profile).ok ||
     typeof github.pullRequestIdentity !== "function"
   )
-    return inspectReadiness(entry, { github, profile });
+    return inspectReadiness(entry, { github, profile, signal });
   const observed = [];
   for (const part of entry.request.release_parts)
     for (const requested of part.pull_requests) {
@@ -145,7 +145,8 @@ export async function inspectCleanup(entry, { github, profile }) {
         item.checks.find((c) => c.id === "requested_code")?.status === "pass" &&
         item.checks.find((c) => c.id === "source_repository")?.status === "pass"
     );
-  if (!outdated && !merged) return inspectReadiness(entry, { github, profile });
+  if (!outdated && !merged)
+    return inspectReadiness(entry, { github, profile, signal });
   for (const { part, requested, fullName, item, pr } of observed) {
     if (!pr) continue;
     try {

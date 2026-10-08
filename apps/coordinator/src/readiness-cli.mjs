@@ -22,6 +22,7 @@ export async function runReadinessCli(
   {
     get,
     github,
+    signal,
     env = process.env,
     stdout = (value) => process.stdout.write(value),
     stderr = (value) => process.stderr.write(value)
@@ -44,7 +45,7 @@ export async function runReadinessCli(
     get ??= createGitHubReader({ profile });
     github ??= createReadinessGitHub({ profile });
     await get.identity?.();
-    const report = await checkReadiness({ get, github, profile });
+    const report = await checkReadiness({ get, github, profile, signal });
     stdout(
       json ? `${JSON.stringify(report, null, 2)}\n` : formatReadiness(report)
     );

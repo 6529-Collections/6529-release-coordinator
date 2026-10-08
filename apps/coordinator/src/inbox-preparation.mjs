@@ -312,7 +312,7 @@ export async function prepareRunTickets({
           request_id: entry.request?.request_id,
           message: "Re-read ticket identity while continuing its saved release."
         },
-        () => observe(entry, { github, profile })
+        () => observe(entry, { github, profile, signal })
       );
       decision = decideTicket(entry, observation);
       // Source PRs can become indirectly merged by this saved release. Do not
@@ -349,7 +349,7 @@ export async function prepareRunTickets({
           request_id: entry.request?.request_id,
           message: "Read current PR checks, reviews and dependencies."
         },
-        () => observe(entry, { github, profile })
+        () => observe(entry, { github, profile, signal })
       );
       decision = decideTicket(entry, observation, {
         overlaps: overlapping(
@@ -440,7 +440,8 @@ export async function prepareRunTickets({
                 return false;
               const currentObservation = await observe(entry, {
                 github,
-                profile
+                profile,
+                signal
               });
               const currentPlan = await plan(entry);
               assertPinnedDestinations(
@@ -501,7 +502,7 @@ export async function prepareRunTickets({
 
 export async function verifyBatchInputs(
   inputs,
-  { preparedTickets, api, inspect, get, profile, observe, github, plan }
+  { preparedTickets, api, inspect, get, profile, observe, github, plan, signal }
 ) {
   for (const { number, input } of inputs) {
     const item = preparedTickets.find((value) => value.number === number);
@@ -519,7 +520,7 @@ export async function verifyBatchInputs(
       digest(entry.github_actor) !== digest(item.entry.github_actor)
     )
       return false;
-    const observation = await observe(entry, { github, profile });
+    const observation = await observe(entry, { github, profile, signal });
     const currentPlan = await plan(entry);
     assertPinnedDestinations(item.input, currentPlan, profile);
     if (

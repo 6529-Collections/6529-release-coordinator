@@ -13,6 +13,7 @@ import {
 import { catalogPath } from "./readiness-github.mjs";
 import { effectiveRequiredChecks } from "./github-checks.mjs";
 import { hasApprovalBypass, hasSourceIntegration } from "./approval-bypass.mjs";
+import { setTimeout as delay } from "node:timers/promises";
 
 const sha = /^[0-9a-f]{40}$/u;
 const mergeStates = [
@@ -261,6 +262,50 @@ export function fingerprint(pr) {
   });
 }
 
+// Only GitHub's calculation and its derived admission proofs may settle here.
+// Code, base, checks, reviews and PR identity must not move while we wait.
+function pendingFingerprint(pr) {
+  const {
+    mergeable: ignoredMergeable,
+    mergeStateStatus: ignoredMergeState,
+    approvalBypass: ignoredBypass,
+    sourceIntegration: ignoredIntegration,
+    ...observed
+  } = pr;
+  return fingerprint(observed);
+}
+
+async function readCompletedPull(part, requested, { github, wait, signal }) {
+  let pending;
+  for (;;) {
+    signal?.throwIfAborted();
+    const pr = await github.pullRequest(part.repository, requested.number);
+    signal?.throwIfAborted();
+    validatePull(pr, part.repository, requested.number);
+    const current = pendingFingerprint(pr);
+    if (pending !== undefined && pending !== current)
+      throw new Error(
+        "PR, base, checks, or review state changed while GitHub was calculating mergeability. Run the scan again."
+      );
+    // Do not wait on a terminal, draft, conflicting, or outdated source.
+    // Its existing checks still report the obstacle without granting admission.
+    if (
+      pr.state !== "OPEN" ||
+      pr.isDraft ||
+      pr.mergeable === "CONFLICTING" ||
+      pr.headRefOid !== requested.commit ||
+      pr.headRefName !== requested.branch ||
+      pr.headRepository?.nameWithOwner !==
+        `6529-Collections/${part.repository}` ||
+      (pr.mergeable !== "UNKNOWN" && pr.mergeStateStatus !== "UNKNOWN")
+    )
+      return pr;
+    pending ??= current;
+    // Polling cadence, not a deadline or an additional release attempt budget.
+    await wait(10_000, { signal });
+  }
+}
+
 async function inspectCatalogs(request, github, checks) {
   const commits = [
     ...new Set(
@@ -374,8 +419,14 @@ function inspectOperationalDeployments(request, checks, profile) {
 
 export async function inspectReadiness(
   entry,
-  { github, profile = realProfile }
+  {
+    github,
+    profile = realProfile,
+    signal,
+    wait = (ms, options) => delay(ms, undefined, options)
+  }
 ) {
+  signal?.throwIfAborted();
   const result = {
     issue_number: entry.issue_number,
     issue_url: entry.issue_url,
@@ -434,11 +485,15 @@ export async function inspectReadiness(
       };
       result.pull_requests.push(item);
       try {
-        const pr = await github.pullRequest(part.repository, requested.number);
-        validatePull(pr, part.repository, requested.number);
+        const pr = await readCompletedPull(part, requested, {
+          github,
+          wait,
+          signal
+        });
         item.checks = inspectPull(pr, requested, part.repository);
         observed.push({ part, requested, item, pr });
       } catch (error) {
+        signal?.throwIfAborted();
         item.checks.push(check("github_evidence", "unknown", error.message));
       }
     }
@@ -458,11 +513,11 @@ export async function inspectReadiness(
   // requested code or reuse earlier green checks when the observed state moves.
   for (const { part, requested, item, pr } of observed) {
     try {
-      const latest = await github.pullRequest(
-        part.repository,
-        requested.number
-      );
-      validatePull(latest, part.repository, requested.number);
+      const latest = await readCompletedPull(part, requested, {
+        github,
+        wait,
+        signal
+      });
       const changed = fingerprint(pr) !== fingerprint(latest);
       item.checks = inspectPull(latest, requested, part.repository);
       item.checks.push(
@@ -475,6 +530,7 @@ export async function inspectReadiness(
         )
       );
     } catch (error) {
+      signal?.throwIfAborted();
       item.checks.push(
         check(
           "observation_stability",
@@ -512,12 +568,16 @@ export async function checkReadiness({
   github,
   now = () => new Date(),
   profile = realProfile,
+  signal,
+  wait,
   loadInbox = readInbox
 }) {
   const inbox = await loadInbox({ get, now, profile });
   const requests = [];
   for (const entry of inbox.requests)
-    requests.push(await inspectReadiness(entry, { github, profile }));
+    requests.push(
+      await inspectReadiness(entry, { github, profile, signal, wait })
+    );
   for (let index = 0; index < inbox.requests.length; index += 1) {
     const entry = inbox.requests[index];
     if (entry.status !== "valid") continue;

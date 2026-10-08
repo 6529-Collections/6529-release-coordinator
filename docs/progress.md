@@ -1,5 +1,35 @@
 # Progress and next steps
 
+## October 8 — wait for GitHub merge calculation (local)
+
+A read-only diagnostic reproduced an initial `UNKNOWN` merge answer followed
+by `MERGEABLE`/`BEHIND` and its freshly audited source-admission proof, with the
+requested code unchanged. The next two diagnostic pairs matched. Earlier stopped
+attempts did not retain their raw pairs, so this reproduces the same stop rather
+than proving the exact changed field in every historical attempt.
+
+The local readiness change waits for pending GitHub merge calculation, then
+requires two completed full observations. A pending final read never replaces
+the original completed snapshot. Code, base, checks, review or PR identity/state
+changes during waiting still stop; completed admission proofs remain part of
+the unchanged full comparison. Conflicts and failed gates are never promoted.
+Polling uses the existing release-wait cadence of ten seconds, with cancellation
+and no added deadline/count ceiling. Network, pagination and malformed-data
+failures remain unknown, not automatic retries. The inbox processing and cleanup
+readiness callers forward their existing cancellation signal.
+
+Controlled regression tests cover both profiles, pending-to-completed answers,
+fresh behind-source audits, drift during waiting and final comparison, failed
+gates, read failures, terminal/outdated sources and cancellation. All **176
+focused tests passed**. Full non-fixing Node 22.16.0 repository gates passed
+with all 51 test files run serially: **1121 tests passed**, three optional Docker
+skips (1124 total), plus lint, formatting, docs, workflow policy and isolated
+offline packed-CLI checks. Source contents remained unchanged during the gates.
+The final evidence-only documentation update was rechecked separately. No release
+was retried, no ticket or journal was changed, and no GitHub PR, merge or
+deployment was performed. Review and merge remain pending; this is local
+regression proof, not live release acceptance.
+
 ## October 7 — additive frontend browser-test contract (local)
 
 Ordinary registration of a new frontend browser-test pack changed the whole

@@ -11,6 +11,7 @@ import { createCoordinatorGitHub } from "../src/coordinator-github.mjs";
 import { runInboxRunCli } from "../src/inbox-run-cli.mjs";
 import { readInbox } from "../src/inbox-reader.mjs";
 import { runCli } from "../src/cli.mjs";
+import { inspectReadiness } from "../src/readiness.mjs";
 import {
   buildReleaseRequestIssueBody,
   releaseRequestChecksum
@@ -43,6 +44,37 @@ const saveFixtureRequest = (f) => {
     checksum: releaseRequestChecksum(f.request)
   });
 };
+
+test("interrupting pending merge calculation retains the existing run lock without ticket writes", async () => {
+  const f = fixture();
+  const controller = new AbortController();
+  f.pr.mergeable = "UNKNOWN";
+  f.pr.mergeStateStatus = "UNKNOWN";
+  await assert.rejects(
+    processOne(f, {
+      signal: controller.signal,
+      observe: (entry, options) => {
+        assert.equal(options.signal, controller.signal);
+        return inspectReadiness(entry, {
+          ...options,
+          wait: async (_ms, { signal }) => {
+            controller.abort();
+            signal.throwIfAborted();
+          }
+        });
+      }
+    }),
+    (error) => {
+      assert.equal(error.cause?.name, "AbortError");
+      assert.match(error.message, /Stop this process and inspect the journal/);
+      return true;
+    }
+  );
+  assert.ok(f.state().lock?.run_id);
+  assert.deepEqual(f.state().tickets, {});
+  assert.deepEqual(issueWrites(f), []);
+  assert.deepEqual(f.productCalls, ["pr"]);
+});
 
 test("legacy sandbox release comments keep their sandbox label", () => {
   const body = statusComment({

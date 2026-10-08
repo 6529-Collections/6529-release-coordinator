@@ -458,14 +458,6 @@ for (const [label, mutate, id, status] of [
     "blocked"
   ],
   [
-    "merge still calculating",
-    (f) => {
-      f.pr.mergeable = "UNKNOWN";
-    },
-    "merge_conflicts",
-    "unknown"
-  ],
-  [
     "missing required result",
     (f) => {
       f.pr.checks = [];
@@ -541,14 +533,6 @@ for (const [label, mutate, id, status] of [
     "unknown"
   ],
   [
-    "unknown gate with green checks",
-    (f) => {
-      f.pr.mergeStateStatus = "UNKNOWN";
-    },
-    "required_checks",
-    "unknown"
-  ],
-  [
     "unavailable hooks",
     (f) => {
       f.pr.mergeStateStatus = "HAS_HOOKS";
@@ -583,6 +567,22 @@ for (const [label, mutate, id, status] of [
     if (status === "blocked") assert.equal(result.status, "blocked");
   });
 }
+
+test("raw pending merge evidence remains unknown, never passing", () => {
+  for (const [field, id] of [
+    ["mergeable", "merge_conflicts"],
+    ["mergeStateStatus", "required_checks"]
+  ]) {
+    const f = fixture();
+    f.pr[field] = "UNKNOWN";
+    const checks = inspectPull(
+      f.pr,
+      f.request.release_parts[0].pull_requests[0],
+      repo
+    );
+    assert.equal(checks.find((item) => item.id === id).status, "unknown");
+  }
+});
 
 test("optional failing checks are reported separately and do not become required", async () => {
   const f = fixture();
