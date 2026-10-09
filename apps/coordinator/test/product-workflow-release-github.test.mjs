@@ -1207,6 +1207,64 @@ test("a changed staging frontend adopts its automatic push deployment without di
 });
 
 for (const environment of ["staging", "prod"]) {
+  test(`real backend ${environment} deploy refuses stale, unknown and other-environment workflow pins before dispatch`, async () => {
+    const operation = makeProfileReleaseOperation({
+      profile: "real",
+      release_id: "11111111-1111-4111-8111-111111111111",
+      operation_id: "22222222-2222-4222-8222-222222222222",
+      operation: "deploy",
+      environment,
+      role: "backend",
+      unit: "transactionsProcessingLoop",
+      backend_commit: commits.backend,
+      frontend_commit: commits.frontend
+    });
+    const descriptor = {
+      kind: "backend",
+      role: "backend",
+      buildRole: "backend",
+      environment,
+      sourceCommit: commits.backend,
+      ref: environment === "staging" ? "1a-staging" : "main",
+      event: "workflow_dispatch",
+      workflow: "deploy.yml",
+      workflowId: savedRuntime.backend.workflows.deploy.workflow_id,
+      title: `Deploy transactionsProcessingLoop to ${environment}`,
+      unit: "transactionsProcessingLoop",
+      jobs: [`Build and deploy transactionsProcessingLoop to ${environment}`]
+    };
+    const path = ".github/workflows/deploy.yml";
+    const pins = realProductWorkflowRuntime.repositories.backend.files[path];
+    const previous = {
+      staging: "55f2db38999869b7b231c476f849ae330abef1da",
+      prod: "eff687cc84a14df7f15134af1068039c5b875bda"
+    };
+    for (const sha of [
+      previous[environment],
+      "e".repeat(40),
+      pins[environment === "staging" ? "prod" : "staging"]
+    ]) {
+      const rejected = directHarness(descriptor, operation, {
+        profile: realProfile,
+        mutateRuntimeFile: (file) => {
+          if (file.path === path) file.sha = sha;
+        }
+      });
+      await assert.rejects(
+        rejected.client.run({
+          record: rejected.record,
+          actor,
+          runtime: savedRuntime,
+          operations: {},
+          steps: [rejected.record.step],
+          save: async () => {}
+        }),
+        /pinned product workflow or evidence file changed/u
+      );
+      assert.ok(rejected.calls.every(({ method }) => method === "GET"));
+    }
+  });
+
   test(`real frontend ${environment} deploy verifies its own runtime pins before dispatch`, async () => {
     const staging = environment === "staging";
     const operation = makeProfileReleaseOperation({
@@ -1284,7 +1342,9 @@ for (const environment of ["staging", "prod"]) {
       ".github/workflows/production-build-artifact.yml":
         "22bafb14740b35388d7f6e07f67af01c42486c11",
       ".github/workflows/production-e2e.yml":
-        "93c6e39132308f9733eab70ba1191e8a4bd9cd15"
+        "56b8c0e73121bcb1ac937775fbe3e80dd2f3bce5",
+      ".github/workflows/staging-e2e.yml":
+        "63ace61b4d7b8f38605838435649ba47cec0ad25"
     })) {
       // Both branches legitimately have the same staging-workflow blob now.
       // Refuse stale and unknown blobs, not an otherwise approved other-branch pin.

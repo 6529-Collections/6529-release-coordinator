@@ -115,8 +115,8 @@ export const realProductWorkflowRuntime = Object.freeze({
         // Staging and production have different reviewed workflow blobs; keep
         // independent pins so a change to either branch fails its own check.
         ".github/workflows/deploy.yml": Object.freeze({
-          staging: "55f2db38999869b7b231c476f849ae330abef1da",
-          prod: "eff687cc84a14df7f15134af1068039c5b875bda"
+          staging: "39250777ed9eca0ade44ccfc5eb3776d7a047929",
+          prod: "938ccac897092972c64de444001c48133291abed"
         }),
         ".github/workflows/deploy-operational-monitoring.yml":
           "2621e6705ab9fa70b006e7d8345762c95685cf73"
@@ -151,7 +151,7 @@ export const realProductWorkflowRuntime = Object.freeze({
         ".github/workflows/staging-e2e-dispatch.yml":
           "07c0f501372f013300e2be44d6724238df760c5f",
         ".github/workflows/staging-e2e.yml":
-          "63ace61b4d7b8f38605838435649ba47cec0ad25",
+          "6afa8ced671b00394b87e6c47dac498b137c17af",
         ".github/workflows/build-upload-deploy-prod.yml":
           "8b2c3cc8dd2351a877c919d99c1def8ec0089c25",
         ".github/workflows/production-build-artifact.yml":
@@ -163,7 +163,7 @@ export const realProductWorkflowRuntime = Object.freeze({
         ".github/workflows/production-e2e-dispatch.yml":
           "d89f00759703c6de7bb2773540c9517a49f181a6",
         ".github/workflows/production-e2e.yml":
-          "56b8c0e73121bcb1ac937775fbe3e80dd2f3bce5",
+          "31f8ad4fb58cc3cab99419d96547fe52da6f7a10",
         "ops/scripts/verify-deployment-version.cjs":
           "683ad00ff450ed3bdce617997cd99bec14b2a0b8"
       }),
