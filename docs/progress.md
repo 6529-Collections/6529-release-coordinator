@@ -1,6 +1,29 @@
 # Progress and next steps
 
-## October 8 — explicit fresh checks after a diagnostic rerun (local)
+## October 9 — reviewed product release-workflow versions (local)
+
+A fresh read-only preflight stopped before starting ticket #334 because product
+release workflows had changed. Review found only longer frontend browser
+dependency-installation setup with the same fatal verification, and an added
+selectable backend migration service with no new automatic invocation. Four
+exact blob pins are updated, retaining independent backend environment pins;
+all other release/candidate pins, required checks, existing budgets and matching
+staging/production deployment-plus-E2E gates are unchanged.
+
+All 163 focused offline runtime/adapter/shared-release tests passed, including
+superseded/unknown and wrong-environment refusal before writes. An independent
+24-file audit matches the reviewed configuration at the current branch commits.
+Full non-fixing Node 22.16.0 gates passed with all 52 test files run serially:
+**1155 passed**, three optional Docker skips (1158 total), plus lint, formatting,
+docs, workflow policy and isolated offline packed-CLI checks. Source contents
+remained unchanged; the separate exact locked audit found zero vulnerabilities.
+The actual complete product identity passed 65 guarded GET-only requests.
+Hosted checks/reviews and merge remain pending. See the
+[review and verification record](./testing/product-runtime-refresh-2026-10-09.md).
+No product source, request, journal, lock, workflow run, deployment or automation
+was changed. The watcher remains paused and ticket #334 has not been restarted.
+
+## October 8 — explicit fresh checks after a diagnostic rerun (merged)
 
 The original frontend candidate failed CI. A separately approved diagnostic
 rerun passed unchanged code, but a later processing invocation loaded the old
@@ -31,10 +54,16 @@ The initial head passed hosted Node 20/22/24 checks, locked audits, required
 statuses and both CodeQL scans (zero results). Review caught an overbroad
 resident/archive equality check; it is now limited to immutable retry ancestry,
 with normal stale reconciliation and strict retry refusal covered together.
-Final-head review, hosted CI and merge remain pending. No request, product source, real
-journal, lock, deployment or automation has been changed, and ticket 334 has not
-been rerun. This is offline regression and read-only admission proof, not live
-retry or release acceptance.
+Final-head configured reviews and hosted Node 20/22/24 checks, locked audits,
+required statuses and both CodeQL scans passed. GLM advisory coverage was not
+complete. PR #349 merged ordinarily at 12:35:23 UTC on October 8, producing
+`fdaea0cbe71c9ab3a3c3e03ba3392da4a9f0719a`; post-merge package checks passed.
+Post-merge CodeQL retained one pre-existing main-branch file-system-race alert
+in unchanged source, not zero main alerts. See the
+[verified merge readback](https://github.com/6529-Collections/6529-release-coordinator/pull/349#issuecomment-6060057718).
+No request, product source, real journal, lock, deployment or automation was
+changed, and ticket 334 has not been rerun. This is offline regression and
+read-only admission proof, not live retry or release acceptance.
 
 ## October 8 — wait for GitHub merge calculation (local)
 
