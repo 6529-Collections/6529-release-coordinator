@@ -833,6 +833,22 @@ cleanup and settled workflows, preserves the failed history, then runs fresh
 combined Git/CI with the existing aggregate budgets. It does not accept the
 diagnostic pass or retry automatically; another fresh failure keeps the run
 held for a person. See [eligibility and evidence boundaries](../../docs/inbox-processing.md#explicit-fresh-checks-after-a-diagnostic-rerun).
+
+For a separately approved refresh after an interrupted release stopped before
+any first staging integration effect, use
+`--resume RUN_ID --refresh-untouched-release RELEASE_ID`. It is limited to the
+same owner-held real/filtered single frontend-only production request with no
+database change. Independently stop the old process and actual descendants,
+settle requests, wait at least 60 seconds and reread state first. The engine
+refuses any saved resource/write intent, existing expected branch or any-state
+PR, unclean old trial, changed request/source/policy, unstable branches or spent
+budget. It preserves the exact old checkpoint as terminal `superseded` stale
+history, with a durable writer marker, then requires fresh Git/CI on newly
+observed main and all ordinary deployment/E2E gates. Repeating the same old
+release ID follows its saved preparation, not a new round. This is not automatic
+retry, rollback or permission to deploy. See the
+[full contract](../../docs/inbox-processing.md#explicit-refresh-of-an-untouched-release).
+
 GitHub Issues do not offer a multi-operation transaction; the journal makes
 partial application explicit and recoverable, not atomic. A maintainer must
 investigate edited receipts, deleted/ambiguous status comments, manual closure

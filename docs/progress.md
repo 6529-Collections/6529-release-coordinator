@@ -1,5 +1,35 @@
 # Progress and next steps
 
+## October 9 — explicit refresh before any staging effect (source update)
+
+The approved release invocation stopped during workflow serialization before
+its first staging integration created a branch, PR or commit. Independent
+read-only inspection found stopped processes and settled requests, unchanged
+request/source inputs and a still-held step-zero journal, but current branches
+had moved. Ordinary resume must not reuse that candidate or rewrite the saved
+release to fit new branches.
+
+The new explicit `--resume RUN_ID --refresh-untouched-release RELEASE_ID` path
+supersedes only a verified untouched first staging checkpoint for the owner's
+same single frontend-only real production request with no database change.
+It requires absent owned resources, old cleanup, fresh source gates and stable
+current refs, and preserves the complete old checkpoint, history and spent
+budgets. It then runs fresh Git/CI before unchanged staging and production
+deployment-plus-browser-E2E gates. It is not automatic retry, rollback, process
+takeover or a new request. Unknown/possibly-effectful checkpoints still stop.
+
+All 15 focused recovery tests passed. Full non-fixing Node 22.16.0 gates passed
+with all 53 test files run serially: **1170 passed**, three optional Docker skips
+(1173 total), plus lint, formatting, docs, workflow policy and isolated offline
+packed-CLI checks. Source contents stayed unchanged during the gates. The final
+evidence-only documentation update was checked separately. See the
+[scope and verification record](./testing/untouched-release-refresh-2026-10-09.md).
+This record covers source and offline verification, not protected merge, npm
+publication or live recovery acceptance. Hosted checks and reviews remain
+separate gates. No live journal change, product workflow or deployment was
+performed. The scheduled watch remains paused; release execution requires
+separate human authorization.
+
 ## October 9 — reviewed product release-workflow versions (local)
 
 A fresh read-only preflight stopped before starting ticket #334 because product

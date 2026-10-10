@@ -23,6 +23,7 @@ import { terminal } from "./ticket-presentation.mjs";
 import { releaseTicketResult } from "./release-execution.mjs";
 import { isReleaseRequestTarget } from "./release-target.mjs";
 import { batchFingerprint, retryHistory } from "./batch-retry-history.mjs";
+import { preparationHistory } from "./untouched-release-state.mjs";
 
 export function batchDecision(decision, result) {
   const next = structuredClone(decision);
@@ -187,7 +188,7 @@ export async function coordinateInboxBatch({
       active.stop?.status !== "stale" &&
       release &&
       (!active.execution ||
-        !["completed", "needs-human", "cancelled"].includes(
+        !["completed", "needs-human", "cancelled", "superseded"].includes(
           active.execution.status
         ))
     )
@@ -503,9 +504,7 @@ export async function coordinateInboxBatch({
     (run.reprepared_batches ?? []).map((hash) => loadBatch(hash))
   );
   serviceAssert(
-    refreshedHistory.every(
-      (saved) => saved && !saved.execution && saved.stop?.status === "stale"
-    ),
+    refreshedHistory.every(preparationHistory),
     "batch-state",
     "Missing or unsafe prior preparation history."
   );

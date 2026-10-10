@@ -243,7 +243,7 @@ export function validateBatchHistory(batches, profile) {
         isReleaseBatchPolicy(batch.policy) &&
           batch.selected.length &&
           (batch.stop?.status !== "stale" ||
-            ["completed", "needs-human", "cancelled"].includes(
+            ["completed", "needs-human", "cancelled", "superseded"].includes(
               batch.execution.status
             )),
         "release-state",

@@ -19,6 +19,10 @@ import { deleteOwnedRemoteBranch } from "./owned-branch-delete.mjs";
 import { assertSelectedSourceHistory } from "./source-history.mjs";
 import { assertSourcePulls, mergedSourcePulls } from "./source-pulls.mjs";
 import { prepareStagingMerge, validateStagingMerge } from "./staging-merge.mjs";
+import {
+  assertUntouchedRelease,
+  untouchedBranch
+} from "./untouched-release-state.mjs";
 
 const sha = (value) => /^[0-9a-f]{40}$/u.test(value ?? "");
 const uuid = (value) =>
@@ -776,6 +780,52 @@ export function createReleaseGitHub({
     };
   }
   return {
+    async verifyUntouchedRelease({ batch }) {
+      assertUntouchedRelease(batch);
+      const execution = batch.execution;
+      const repository = execution.plan.candidates.frontend.repository;
+      const owned = untouchedBranch(execution);
+      const repo = (await call("frontend", "GET", "")).data;
+      const actor = (await call("frontend", "GET", "user")).data;
+      serviceAssert(
+        repo.id === repository.id &&
+          repo.full_name === repository.full_name &&
+          repo.permissions?.push === true &&
+          String(actor.id) === execution.actor.id &&
+          actor.login === execution.actor.login,
+        "release-refresh",
+        "Untouched refresh repository or operator identity changed."
+      );
+      const observed = await ref("frontend", owned, [200, 404]);
+      // Integration creates this full branch in this same repository, never a
+      // fork. Query its exact owner:ref across all states. One result is enough
+      // to refuse admission; an empty first page proves this query has no PRs.
+      const pulls = (
+        await call(
+          "frontend",
+          "GET",
+          `/pulls?state=all&head=${repository.full_name.split("/")[0]}:${owned}&per_page=1&page=1`
+        )
+      ).data;
+      serviceAssert(
+        observed.status === 404 && Array.isArray(pulls) && pulls.length === 0,
+        "release-refresh",
+        "The expected integration branch or PR exists; untouched refresh cannot discard or adopt it."
+      );
+      const versions = {};
+      for (const environment of ["staging", "prod"])
+        versions[environment] = await this.environmentVersions(environment);
+      return {
+        repository_id: repo.id,
+        repository: repo.full_name,
+        branch: owned,
+        branch_absent: true,
+        prs_absent: true,
+        actor: { id: String(actor.id), login: actor.login },
+        versions,
+        checked_at: now().toISOString()
+      };
+    },
     async environmentVersions(environment) {
       serviceAssert(
         ["staging", "prod"].includes(environment),

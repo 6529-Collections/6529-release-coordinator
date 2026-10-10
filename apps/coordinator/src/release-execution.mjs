@@ -166,7 +166,11 @@ export async function executeRelease({
     "Cancellation cannot be combined with recovery or staging reconciliation."
   );
   if (cancelKeepCurrent) assertCancellableRelease(execution, batch);
-  if (["completed", "needs-human", "cancelled"].includes(execution.status))
+  if (
+    ["completed", "needs-human", "cancelled", "superseded"].includes(
+      execution.status
+    )
+  )
     return execution;
   const persist = async (message) => {
     signal?.throwIfAborted();

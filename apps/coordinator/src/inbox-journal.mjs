@@ -9,6 +9,7 @@ import { realProfile } from "./profiles.mjs";
 import { stateBranch, stateFile } from "./coordinator-github.mjs";
 import { validateBatchHistory } from "./batch-state.mjs";
 import { checkRetryHistoryMarker } from "./batch-retry-history.mjs";
+import { untouchedRefreshMarker } from "./untouched-release-state.mjs";
 import { serviceStatuses } from "./service-contract.mjs";
 import {
   response,
@@ -85,6 +86,7 @@ export function validateJournal(
           "workflow",
           "source_history",
           "check_retry_history",
+          "untouched_release_refresh",
           "ticket_updates",
           "cleanup_lock",
           "service_attempts",
@@ -97,7 +99,11 @@ export function validateJournal(
       (!allowSourceHistory || state.source_history !== sourceHistoryMarker)) ||
     (state.check_retry_history !== undefined &&
       (state.check_retry_history !== checkRetryHistoryMarker ||
-        state.workflow !== inboxWorkflow))
+        state.workflow !== inboxWorkflow)) ||
+    (state.untouched_release_refresh !== undefined &&
+      (state.untouched_release_refresh !== untouchedRefreshMarker ||
+        state.workflow !== inboxWorkflow ||
+        profile.name !== "real"))
   )
     throw new Error("Unsupported or corrupt inbox journal.");
   validateConcurrency(state);
@@ -168,6 +174,13 @@ export function validateJournal(
       throw new Error(
         "Explicit retries require the check-retry writer marker."
       );
+    if (
+      Object.values(state.batches).some(
+        (batch) => batch.execution?.status === "superseded"
+      ) &&
+      state.untouched_release_refresh !== untouchedRefreshMarker
+    )
+      throw new Error("Untouched refresh requires its current writer marker.");
   }
   if (state.history !== undefined) {
     if (
@@ -439,6 +452,11 @@ export function createJournal(
         state.check_retry_history !== base.state.check_retry_history
       )
         throw new Error("Journal check-retry marker must be preserved.");
+      if (
+        base.state.untouched_release_refresh &&
+        state.untouched_release_refresh !== base.state.untouched_release_refresh
+      )
+        throw new Error("Journal untouched-refresh marker must be preserved.");
       const prior = current.sha;
       state.parent = prior;
       state.revision = current.state.revision + 1;
