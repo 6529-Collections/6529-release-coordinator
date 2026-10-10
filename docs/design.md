@@ -359,7 +359,20 @@ rebuilds/retests its frozen ticket pool. It preserves every previous candidate
 and charges its attempts to the existing per-run count budgets, including on
 resume. A change after release execution begins still uses the existing stop and
 reconciliation rules; this is not automatic recovery or branch rewriting.
-This automatic refresh covers stale combined-candidate preparation. A main
+One explicit exception is
+`--resume RUN_ID --refresh-untouched-release RELEASE_ID`: for the owner's same
+single frontend-only real production request with confirmed no database change,
+it may supersede only an untouched first staging integration checkpoint. The
+original process and requests must be independently stopped and settled first.
+The engine requires no saved resource/write intent, an absent expected owned
+branch and any-state PR, verified old trial cleanup, fresh unchanged-source
+gates, stable current environment refs and a newly observed main not previously
+attempted. It preserves the complete old checkpoint and all spent attempts,
+then rebuilds and retests before normal staging and production gates. This is
+not rollback, cancellation, successful release proof, process takeover or an
+automatic retry; any possible integration effect still requires reconciliation.
+See the [explicit untouched refresh contract](./inbox-processing.md#explicit-refresh-of-an-untouched-release).
+The automatic pre-execution refresh covers stale combined-candidate preparation. A main
 change during the earlier individual Git rehearsal still stops that invocation;
 start a fresh filtered run for the same unchanged ticket, not a new request.
 

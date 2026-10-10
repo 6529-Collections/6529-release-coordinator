@@ -152,7 +152,9 @@ function historyComplete(kind, record) {
     record.status === "finished" &&
     (!isReleaseBatchPolicy(record.policy) ||
       !record.selected.length ||
-      ["completed", "cancelled"].includes(record.execution?.status)) &&
+      ["completed", "cancelled", "superseded"].includes(
+        record.execution?.status
+      )) &&
     record.attempts.every(
       (attempt) =>
         attempt.result &&

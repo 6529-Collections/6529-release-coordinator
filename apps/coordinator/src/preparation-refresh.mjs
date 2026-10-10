@@ -11,7 +11,8 @@ const withoutBases = (plan) => ({
   }))
 });
 
-// Called only after candidate cleanup, before any release execution exists.
+// Called only after candidate cleanup, before release effects; explicit untouched
+// refresh separately verifies and supersedes its saved pre-effect checkpoint.
 // Reuse the receipt and source heads, never a newly pushed developer version.
 export async function refreshedPreparationPlans(
   items,
@@ -50,7 +51,7 @@ export async function refreshedPreparationPlans(
       digest(entry.github_actor) !== digest(item.entry.github_actor)
     )
       return null;
-    const observation = await observe(entry, { github, profile });
+    const observation = await observe(entry, { github, profile, signal });
     if (!canRehearse(entry, observation, decideTicket(entry, observation)))
       return null;
     const current = await plan(entry);

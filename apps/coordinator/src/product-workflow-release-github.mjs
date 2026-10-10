@@ -1669,6 +1669,7 @@ export function createProductWorkflowReleaseGitHub({
       };
     },
     cancelIntegration: (args) => base.cancelIntegration(args),
+    verifyUntouchedRelease: (args) => base.verifyUntouchedRelease(args),
     async integrate(args) {
       await waitForQuiet(
         args.record.step.role,

@@ -21,6 +21,7 @@ import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { assertCancellableRelease } from "./release-cancellation.mjs";
 import { refreshedPreparationPlans } from "./preparation-refresh.mjs";
 import { startCheckRetry } from "./batch-retry.mjs";
+import { refreshUntouchedRelease } from "./untouched-release-refresh.mjs";
 import { retryHistory } from "./batch-retry-history.mjs";
 import {
   createInboxSelection,
@@ -40,6 +41,8 @@ export async function processInbox({
   resume,
   retryChecks,
   retryTrials,
+  refreshUntouched,
+  verifyUntouched,
   stagingChange,
   reviewStop = false,
   cancelKeepCurrent = false,
@@ -66,9 +69,21 @@ export async function processInbox({
         !closeTest &&
         !stagingChange &&
         !reviewStop &&
-        !cancelKeepCurrent),
+        !cancelKeepCurrent &&
+        !refreshUntouched),
     "batch-retry",
     "Check retry requires a saved run and cannot request another recovery action."
+  );
+  serviceAssert(
+    !refreshUntouched ||
+      (resume &&
+        !closeTest &&
+        !retryChecks &&
+        !stagingChange &&
+        !reviewStop &&
+        !cancelKeepCurrent),
+    "release-refresh",
+    "Untouched refresh requires the saved run and cannot request another recovery action."
   );
   serviceAssert(
     !cancelKeepCurrent || (resume && !reviewStop && !stagingChange),
@@ -231,6 +246,36 @@ export async function processInbox({
       api,
       inspect
     });
+    if (refreshUntouched) {
+      serviceAssert(
+        batching,
+        "release-refresh",
+        "Untouched refresh requires current batch processing."
+      );
+      await refreshUntouchedRelease({
+        releaseId: refreshUntouched,
+        state,
+        run,
+        selection,
+        entries: scanned.entries,
+        issues: scanned.issues,
+        profile,
+        api,
+        inspect,
+        get,
+        observe,
+        github,
+        plan,
+        signal,
+        now,
+        verifyUntouched,
+        verifyTrials: retryTrials,
+        loadBatch: (hash, options) =>
+          journal.loadHistory(state, run, "batches", hash, options),
+        guard: () => journal.guard(run),
+        save: (message) => journal.save(state, run, message)
+      });
+    }
     if (retryChecks) {
       serviceAssert(
         batching,

@@ -152,6 +152,7 @@ export async function failedChecks() {
             publications: [
               {
                 role: "frontend",
+                repository: realProfile.repositories.frontend,
                 base: items[0].input.repositories[0].destination.commit,
                 tree: "d".repeat(40),
                 base_tree: "e".repeat(40),

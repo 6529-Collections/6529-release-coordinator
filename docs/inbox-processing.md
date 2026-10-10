@@ -546,6 +546,66 @@ deployment plus browser E2E for staging, then independently for production,
 remain mandatory. Install this reviewed writer before using the flag; the
 durable `explicit-check-retry-v1` marker refuses older writers after use.
 
+### Explicit refresh of an untouched release
+
+If an interrupted release stopped in its first staging integration's workflow
+serialization wait, current branches may have moved before any integration was
+prepared. Ordinary resume does not silently replace that release or reuse its
+old candidate checks. A separately approved recovery can name that exact saved
+release:
+
+```sh
+RELEASE_COORDINATOR_PROFILE=real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --resume RUN_ID --refresh-untouched-release RELEASE_ID --json
+```
+
+First independently confirm the original process, actual descendants and
+in-flight requests stopped, wait at least 60 seconds, and reread authoritative
+state. This command does not prove process absence, steal a lane or create a
+replacement run. Do not combine it with check retry, review stop, staging
+reconciliation, cancellation, new issue/actor filters or test closure.
+
+Eligibility is deliberately narrower than ordinary release recovery:
+
+- The same verified submitter/operator owns the held real/filtered run and its
+  unchanged single frontend-only production request, with confirmed no database
+  change, unchanged reviewed policy and no operational deployment selection.
+- The saved execution is still `running` at step zero with exactly one
+  `prepared`, null-result staging integration operation. Only the original
+  identity/actor/timestamp/wait fields are allowed. A saved branch, base, commit,
+  PR, workflow, integration input, cleanup/recovery choice, unknown field or
+  later step refuses refresh, even if its result is absent.
+- Guarded GET-only reads verify the operator/repository and prove the exact
+  deterministic integration branch absent and its all-state PR list empty.
+  Every old trial is independently closed unmerged with its ref absent and
+  workflows settled. Unavailable, ambiguous or changed evidence stops admission;
+  nothing is deleted, adopted, merged or dispatched to make it eligible.
+- Fresh receipt/source/review/rule gates and the original source heads must
+  still match. Only main base SHAs may change. All four environment refs and
+  owned-resource absence must remain stable across two admission reads; current
+  frontend main must be new to the saved preparation history.
+- All earlier preparation and immutable retry records remain verifiable and
+  spend the same aggregate 40 Git/12 candidate-check budgets. Exhaustion cannot
+  be cleared by refresh.
+
+One journal save records the old execution as `superseded`, keeping a complete
+original-execution snapshot, the hash of the entire original batch, unchanged
+inputs/attempts/policy, the explicit run/actor decision and read-only evidence.
+It also records the new plan and prior-preparation link before fresh Git/CI.
+`superseded` is terminal stale history, not a passed, cancelled or rolled-back
+release. The durable `untouched-release-refresh-v1` writer marker must remain
+after archiving and refuses older writers after use. No existing archive is
+rewritten. Unrelated tickets and the cleanup lane stay untouched.
+
+Repeating the flag with the same old release ID follows its saved fresh
+preparation, without superseding a newer execution or allocating another round.
+If the save succeeded but its response was lost, ordinary resume continues the
+saved preparation. There is no automatic refresh of an interrupted release.
+Fresh Git and candidate CI must pass; old checks cannot authorize the new
+candidate. Matching saved staging deployment and browser E2E must then pass
+before production, which needs its own matching deployment and E2E. A fresh
+failure holds for a person; this option is not a general failed-CI retry or
+staging-drift answer. Its implementation alone does not authorize execution.
+
 The general future outcomes below also cover capabilities beyond this first
 stage, including cross-ticket dependency groups and reassessment after a real
 release. Those capabilities are not implied by the new sandbox labels.

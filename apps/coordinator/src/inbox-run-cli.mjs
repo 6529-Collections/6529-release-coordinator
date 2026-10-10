@@ -22,6 +22,7 @@ RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=filtered npm 
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --issue NUMBER --actor LOGIN --close-test [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID [--json]
 RELEASE_COORDINATOR_PROFILE=real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --resume RUN_ID --retry-checks ATTEMPT_ID [--json]
+RELEASE_COORDINATOR_PROFILE=real RELEASE_COORDINATOR_SCOPE=filtered npm run inbox:run -- --resume RUN_ID --refresh-untouched-release RELEASE_ID [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --staging-change retest|restore [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --review-stop [--json]
 RELEASE_COORDINATOR_PROFILE=sandbox|real RELEASE_COORDINATOR_SCOPE=inbox|filtered npm run inbox:run -- --resume RUN_ID --cancel-keep-current [--json]
@@ -54,6 +55,14 @@ staging E2E passes. In real profile these are real product changes and deploymen
                  not reuse a diagnostic rerun. Requires --resume of the owner's
                  one-ticket filtered real run, verified owned cleanup and no release.
                  Keeps the original failure and existing spent attempt budgets.
+  --refresh-untouched-release ID
+                 Explicitly supersede the named untouched first staging step,
+                 after verifying absent owned resources, old cleanup and fresh
+                 source gates on changed main. Requires the owner's same real,
+                 filtered frontend-only no-database-change production run.
+                 Preserves old execution/checks and all spent budgets; rebuilds
+                 and retests the same request before ordinary release gates.
+                 Never use before stopping the original process and settling calls.
   --review-stop  For a run awaiting integration PR review only: explicitly
                  close its owned PR, then apply ordinary release recovery.
                  Requires --resume; never discards an uncertain PR or branch.
@@ -122,6 +131,7 @@ export async function runInboxRunCli(
         "--close-test",
         "--resume",
         "--retry-checks",
+        "--refresh-untouched-release",
         "--staging-change",
         "--review-stop",
         "--cancel-keep-current",
@@ -157,8 +167,17 @@ export async function runInboxRunCli(
         stderr(help);
         return 2;
       }
-    } else if (key === "--resume" || key === "--retry-checks") {
-      const name = key === "--resume" ? "resume" : "retryChecks";
+    } else if (
+      ["--resume", "--retry-checks", "--refresh-untouched-release"].includes(
+        key
+      )
+    ) {
+      const name =
+        key === "--resume"
+          ? "resume"
+          : key === "--retry-checks"
+            ? "retryChecks"
+            : "refreshUntouched";
       options[name] = args[++index];
       if (
         !/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(
@@ -182,6 +201,13 @@ export async function runInboxRunCli(
     (options.closeTest && options.issueNumbers.length !== 1) ||
     (options.retryChecks &&
       (!options.resume ||
+        options.refreshUntouched ||
+        options.stagingChange ||
+        options.reviewStop ||
+        options.cancelKeepCurrent)) ||
+    (options.refreshUntouched &&
+      (!options.resume ||
+        options.retryChecks ||
         options.stagingChange ||
         options.reviewStop ||
         options.cancelKeepCurrent)) ||
@@ -200,11 +226,11 @@ export async function runInboxRunCli(
     profile = selectProfile(env.RELEASE_COORDINATOR_PROFILE);
     selectionMode = selectInboxScope(env.RELEASE_COORDINATOR_SCOPE);
     if (
-      options.retryChecks &&
+      (options.retryChecks || options.refreshUntouched) &&
       (profile.name !== "real" || selectionMode !== "filtered")
     )
       throw new Error(
-        "Check retry requires the real profile and filtered scope."
+        "Check retry or untouched refresh requires the real profile and filtered scope."
       );
     if (!options.resume) {
       if (
@@ -257,6 +283,14 @@ export async function runInboxRunCli(
         github,
         services,
         batch,
+        verifyUntouched: (batch) => {
+          releaseClient ??= createReleaseClient({
+            profile,
+            signal,
+            adapter: releaseAdapter
+          });
+          return releaseClient.verifyUntouchedRelease({ batch });
+        },
         release: (options) => {
           releaseClient ??= createReleaseClient({
             profile,

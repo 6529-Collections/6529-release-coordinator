@@ -12,6 +12,7 @@ import {
 } from "./release-plan.mjs";
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { validateReleaseCancellation } from "./release-cancellation.mjs";
+import { validateUntouchedSupersession } from "./untouched-release-state.mjs";
 
 const uuid = (value) =>
   /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(value ?? "");
@@ -104,6 +105,7 @@ export function validateReleaseExecution(execution, batch) {
         "recovering",
         "cancelling",
         "cancelled",
+        "superseded",
         "completed",
         "needs-human"
       ].includes(execution.status) &&
@@ -125,6 +127,13 @@ export function validateReleaseExecution(execution, batch) {
   );
   validateReleasePlan(execution.plan, batch);
   validateReleaseCancellation(execution, batch);
+  validateUntouchedSupersession(execution, batch);
+  if (execution.status === "superseded")
+    validateReleaseExecution(execution.refresh.previous_execution, {
+      ...batch,
+      stop: undefined,
+      execution: execution.refresh.previous_execution
+    });
   if (execution.status !== "prepared")
     serviceAssert(
       execution.actor?.id &&
