@@ -76,6 +76,22 @@ or run a product workflow. The new action was not exercised against the live
 journal; the earlier read-only stopped-state observations are not live recovery
 acceptance or fresh admission for a future execution.
 
+## October 10 review follow-up
+
+The owned integration branch is created in the pinned frontend repository, not
+a fork. The absence query includes that repository's owner and the complete
+`codex/release-...-staging-frontend` ref, with `state=all`. This is an existence
+test: any first-page result refuses admission, so a page size of one does not
+omit a matching PR when proving an empty result. A code comment makes this
+ownership and pagination contract explicit.
+
+The focused regressions now assert the complete eight-endpoint GET-only read
+set, reject open/closed PRs and an ambiguous foreign-fork response, and reject
+repository or push-permission changes. They also cover drift in each of the
+four environment refs, reject missing refresh/stale records through both release
+and journal validation, and confirm malformed release-ID help names the release
+option. These additions stay within the existing 15 focused test scenarios.
+
 ## Delivery boundary
 
 This record covers implementation and offline verification. Publishing a feature

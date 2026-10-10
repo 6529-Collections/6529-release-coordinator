@@ -334,14 +334,16 @@ test("absence, branch stability, cleanup, source gates and a never-attempted cha
     (o) => {
       o.plan = async () => o.run.plans[1];
     },
-    (o) => {
-      let reads = 0;
-      o.verifyUntouched = async (b) => {
-        const proof = evidence(b);
-        if (++reads === 2) proof.versions.staging.frontend = "7".repeat(40);
-        return proof;
-      };
-    },
+    ...["staging", "prod"].flatMap((environment) =>
+      ["backend", "frontend"].map((role) => (o) => {
+        let reads = 0;
+        o.verifyUntouched = async (b) => {
+          const proof = evidence(b);
+          if (++reads === 2) proof.versions[environment][role] = "7".repeat(40);
+          return proof;
+        };
+      })
+    ),
     (o) => {
       o.verifyUntouched = async () => {
         throw new Error("GitHub read unavailable");
@@ -373,7 +375,14 @@ test("a supersession cannot forge successful release proof, alter old operations
     o = await admission(h);
   await refreshUntouchedRelease(o);
   const retired = o.state.batches[h.original.fingerprint];
+  validateJournal(o.state, realProfile);
   for (const mutate of [
+    (b) => {
+      delete b.execution.refresh;
+    },
+    (b) => {
+      delete b.stop;
+    },
     (b) => {
       b.execution.operations["staging:integrate:frontend"].result = {
         status: "passed"
@@ -401,6 +410,15 @@ test("a supersession cannot forge successful release proof, alter old operations
     const forged = structuredClone(retired);
     mutate(forged);
     assert.throws(() => validateReleaseExecution(forged.execution, forged));
+    assert.throws(() =>
+      validateJournal(
+        {
+          ...o.state,
+          batches: { ...o.state.batches, [forged.fingerprint]: forged }
+        },
+        realProfile
+      )
+    );
   }
   await assert.rejects(
     executeRelease({ batch: retired, client: {} }),
@@ -506,13 +524,31 @@ test("a previously attempted current main is not a reason to allocate another fr
 
 test("owned integration absence admission is GET-only and rejects existing/ambiguous resources and failed reads", async () => {
   const h = await stopped();
+  const frontend = `repos/${realProfile.repositories.frontend.full_name}`;
+  const backend = `repos/${realProfile.repositories.backend.full_name}`;
+  const owned = untouchedBranch(h.original.execution);
+  const pullQuery = `${frontend}/pulls?state=all&head=6529-Collections:${owned}&per_page=1&page=1`;
+  const expected = [
+    frontend,
+    "user",
+    `${frontend}/git/ref/heads/${owned}`,
+    pullQuery,
+    `${backend}/git/ref/heads/1a-staging`,
+    `${frontend}/git/ref/heads/1a-staging`,
+    `${backend}/git/ref/heads/main`,
+    `${frontend}/git/ref/heads/main`
+  ];
   for (const scenario of [
     "absent",
     "branch",
     "pr",
+    "closed-pr",
+    "fork-pr",
     "bad-list",
     "transport",
-    "actor"
+    "actor",
+    "repository",
+    "permissions"
   ]) {
     const calls = [];
     const client = createReleaseGitHub({
@@ -531,22 +567,42 @@ test("owned integration absence admission is GET-only and rejects existing/ambig
             id: scenario === "actor" ? 999 : 456,
             login: "trusted-user"
           };
-        else if (endpoint.endsWith("6529seize-frontend"))
+        else if (endpoint === frontend)
           data = {
             ...realProfile.repositories.frontend,
-            permissions: { push: true }
+            id:
+              scenario === "repository"
+                ? 999
+                : realProfile.repositories.frontend.id,
+            permissions: { push: scenario !== "permissions" }
           };
-        else if (endpoint.includes("/pulls?"))
-          data =
-            scenario === "pr"
-              ? [{ number: 123 }]
-              : scenario === "bad-list"
-                ? {}
-                : [];
-        else if (endpoint.includes("/git/ref/heads/codex/release-")) {
+        else if (endpoint === pullQuery)
+          data = ["pr", "closed-pr", "fork-pr"].includes(scenario)
+            ? [
+                {
+                  number: 123,
+                  state: scenario === "closed-pr" ? "closed" : "open",
+                  head: {
+                    ref: owned,
+                    repo: {
+                      full_name:
+                        scenario === "fork-pr"
+                          ? "another-owner/frontend-fork"
+                          : realProfile.repositories.frontend.full_name
+                    }
+                  }
+                }
+              ]
+            : scenario === "bad-list"
+              ? {}
+              : [];
+        else if (endpoint === `${frontend}/git/ref/heads/${owned}`) {
           status = scenario === "branch" ? 200 : 404;
           data = {};
-        } else data = { object: { sha: "9".repeat(40) } };
+        } else {
+          assert.ok(expected.includes(endpoint), `Unexpected GET: ${endpoint}`);
+          data = { object: { sha: "9".repeat(40) } };
+        }
         return (
           "HTTP/2 " +
           status +
@@ -559,7 +615,7 @@ test("owned integration absence admission is GET-only and rejects existing/ambig
       const proof = await client.verifyUntouchedRelease({ batch: h.original });
       assert.equal(proof.branch_absent, true);
       assert.equal(proof.prs_absent, true);
-      assert.equal(calls.length, 8);
+      assert.deepEqual(calls.toSorted(), expected.toSorted());
     } else
       await assert.rejects(
         client.verifyUntouchedRelease({ batch: h.original })
@@ -570,6 +626,19 @@ test("owned integration absence admission is GET-only and rejects existing/ambig
 test("CLI binds untouched refresh to an exact release UUID and forbids scope changes and competing actions before client creation", async () => {
   const runId = "11111111-1111-4111-8111-111111111111";
   const releaseId = "22222222-2222-4222-8222-222222222222";
+  const errors = [];
+  assert.equal(
+    await runInboxRunCli(
+      ["--resume", runId, "--refresh-untouched-release", "bad"],
+      {
+        stdout: () => {},
+        stderr: (message) => errors.push(message),
+        createLog: () => assert.fail("must not initialize")
+      }
+    ),
+    2
+  );
+  assert.match(errors.join("\n"), /--refresh-untouched-release RELEASE_ID/u);
   for (const args of [
     ["--refresh-untouched-release", releaseId],
     ["--resume", runId, "--refresh-untouched-release", "bad"],

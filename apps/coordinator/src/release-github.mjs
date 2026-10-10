@@ -797,6 +797,9 @@ export function createReleaseGitHub({
         "Untouched refresh repository or operator identity changed."
       );
       const observed = await ref("frontend", owned, [200, 404]);
+      // Integration creates this full branch in this same repository, never a
+      // fork. Query its exact owner:ref across all states. One result is enough
+      // to refuse admission; an empty first page proves this query has no PRs.
       const pulls = (
         await call(
           "frontend",
