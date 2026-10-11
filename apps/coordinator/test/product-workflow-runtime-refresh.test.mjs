@@ -11,10 +11,14 @@ const reviewedFrontendFiles = {
     "c573f80b55aa46b2bb96259dee07b98c231d30b7",
   ".github/workflows/production-build-artifact.yml":
     "5df8df3da1a50336a7b9f4816b79fbe639d0a3e1",
-  ".github/workflows/production-e2e.yml":
-    "31f8ad4fb58cc3cab99419d96547fe52da6f7a10",
-  ".github/workflows/staging-e2e.yml":
-    "6afa8ced671b00394b87e6c47dac498b137c17af"
+  ".github/workflows/production-e2e.yml": {
+    staging: "6c5f4e85d3d5cf19a6331cea40d22a76a234721a",
+    prod: "31f8ad4fb58cc3cab99419d96547fe52da6f7a10"
+  },
+  ".github/workflows/staging-e2e.yml": {
+    staging: "5c7131791245b522db0230eee51b9c5449aadd63",
+    prod: "6afa8ced671b00394b87e6c47dac498b137c17af"
+  }
 };
 const reviewedBackendFiles = {
   ".github/workflows/deploy.yml": {
@@ -188,11 +192,11 @@ for (const environment of ["staging", "prod"])
       for (const [kind, sha] of [
         ["superseded", superseded],
         ["unknown", "f".repeat(40)],
-        ...(role === "backend"
+        ...(typeof reviewedFiles[role][path] === "object"
           ? [
               [
                 "other-environment",
-                reviewedBackendFiles[path][
+                reviewedFiles[role][path][
                   environment === "staging" ? "prod" : "staging"
                 ]
               ]

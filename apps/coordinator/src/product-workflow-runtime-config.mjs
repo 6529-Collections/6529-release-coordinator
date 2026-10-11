@@ -150,8 +150,12 @@ export const realProductWorkflowRuntime = Object.freeze({
         }),
         ".github/workflows/staging-e2e-dispatch.yml":
           "07c0f501372f013300e2be44d6724238df760c5f",
-        ".github/workflows/staging-e2e.yml":
-          "6afa8ced671b00394b87e6c47dac498b137c17af",
+        // Museum network-pack selection is reviewed on staging only. Do not
+        // approve that workflow on production before it reaches main.
+        ".github/workflows/staging-e2e.yml": Object.freeze({
+          staging: "5c7131791245b522db0230eee51b9c5449aadd63",
+          prod: "6afa8ced671b00394b87e6c47dac498b137c17af"
+        }),
         ".github/workflows/build-upload-deploy-prod.yml":
           "8b2c3cc8dd2351a877c919d99c1def8ec0089c25",
         ".github/workflows/production-build-artifact.yml":
@@ -162,8 +166,10 @@ export const realProductWorkflowRuntime = Object.freeze({
           "ca2fc4af84b5dd9903a835be2ee52e200f4b4bdf",
         ".github/workflows/production-e2e-dispatch.yml":
           "d89f00759703c6de7bb2773540c9517a49f181a6",
-        ".github/workflows/production-e2e.yml":
-          "31f8ad4fb58cc3cab99419d96547fe52da6f7a10",
+        ".github/workflows/production-e2e.yml": Object.freeze({
+          staging: "6c5f4e85d3d5cf19a6331cea40d22a76a234721a",
+          prod: "31f8ad4fb58cc3cab99419d96547fe52da6f7a10"
+        }),
         "ops/scripts/verify-deployment-version.cjs":
           "683ad00ff450ed3bdce617997cd99bec14b2a0b8"
       }),
