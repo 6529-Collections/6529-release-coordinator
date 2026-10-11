@@ -568,7 +568,10 @@ Eligibility is deliberately narrower than ordinary release recovery:
 
 - The same verified submitter/operator owns the held real/filtered run and its
   unchanged single frontend-only production request, with confirmed no database
-  change, unchanged reviewed policy and no operational deployment selection.
+  change and no operational deployment selection. The reviewed policy must be
+  unchanged, except for the exact approved `additive-browser-packs-v1` to
+  `additive-browser-packs-v2` transition. Unknown policies, downgrades and any
+  other policy-field change refuse refresh.
 - The saved execution is still `running` at step zero with exactly one
   `prepared`, null-result staging integration operation. Only the original
   identity/actor/timestamp/wait fields are allowed. A saved branch, base, commit,
@@ -595,6 +598,20 @@ It also records the new plan and prior-preparation link before fresh Git/CI.
 release. The durable `untouched-release-refresh-v1` writer marker must remain
 after archiving and refuses older writers after use. No existing archive is
 rewritten. Unrelated tickets and the cleanup lane stay untouched.
+
+The browser-contract upgrade uses refresh version 2 and saves the complete
+target policy without editing the retired batch's original policy, inputs or
+attempts. Its durable `untouched-release-policy-refresh-v2` writer marker
+replaces v1 when necessary and cannot be removed or downgraded, including after
+archiving. Older writers therefore stop rather than misread the new semantics.
+A fresh check-retry child retains its original failure/authorization lineage
+and additionally references the exact retired checkpoint by fingerprint and
+record hash. Loading that child verifies the reviewed policy pair, checkpoint,
+actor, run and unchanged request before accepting the transition; the checkpoint
+also remains part of spent-budget accounting. Ordinary resume never upgrades a
+saved v1 policy. The new-main and all other untouched-release conditions above
+still apply; a policy change alone is not sufficient. See the
+[compatibility tests](./testing/additive-browser-boundaries-2026-10-11.md).
 
 Repeating the flag with the same old release ID follows its saved fresh
 preparation, without superseding a newer execution or allocating another round.

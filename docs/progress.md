@@ -1,5 +1,27 @@
 # Progress and next steps
 
+## October 11 — safe additive browser-pack locations (local)
+
+The Coordinator now accepts paired browser-pack additions at verified safe
+boundaries within the existing planning and browser-job sections, rather than
+only immediately before Wave creation. The inspected PDF tests stay where they
+are; every baseline byte and all routing, setup, failure and release protections
+remain required. Historical v1 policies retain their original semantics. The
+new v2 policy has a distinct hash, and only the exact reviewed transition can
+use guarded unpublished preparation refresh or explicit untouched-release
+refresh. Old checkpoints, retry authorization, archives and spent budgets stay
+intact; fresh admission and Git/CI remain mandatory.
+
+Full non-fixing Node 22.16.0 gates passed with all 54 test files run serially:
+**1206 passed**, three optional Docker skips (1209 total), plus lint, formatting,
+docs, workflow policy and isolated offline packed-CLI checks. Source contents
+stayed unchanged during verification; the final evidence-only documentation
+update was checked separately. See the
+[scope and compatibility record](./testing/additive-browser-boundaries-2026-10-11.md).
+No frontend file, live journal, release request, deployment or automation was
+changed. Deployment and both scheduled watches remain paused. This is local
+implementation, not a PR, merge, publication or live recovery acceptance.
+
 ## October 9 — explicit refresh before any staging effect (source update)
 
 The approved release invocation stopped during workflow serialization before

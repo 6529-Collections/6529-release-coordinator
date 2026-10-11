@@ -1,8 +1,11 @@
 import { selectedPreparation } from "./release-plan.mjs";
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
 import { realProfile } from "./profiles.mjs";
+import { isBrowserPolicyUpgrade } from "./batch-plan.mjs";
 
 export const untouchedRefreshMarker = "untouched-release-refresh-v1";
+export const untouchedPolicyRefreshMarker =
+  "untouched-release-policy-refresh-v2";
 
 const uuid = (value) =>
   /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/u.test(value ?? "");
@@ -140,7 +143,9 @@ export function validateUntouchedSupersession(execution, batch) {
   serviceAssert(
     execution.status === "superseded" &&
       batch.stop?.status === "stale" &&
-      refresh.version === 1 &&
+      ((refresh.version === 1 && refresh.target_policy === undefined) ||
+        (refresh.version === 2 &&
+          isBrowserPolicyUpgrade(batch.policy, refresh.target_policy))) &&
       uuid(refresh.run_id) &&
       serviceHash(refresh.actor) === serviceHash(previous.actor) &&
       refresh.previous_batch_hash === serviceHash(original) &&

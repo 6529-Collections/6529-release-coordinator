@@ -18,6 +18,7 @@ import { isReleaseRequestTarget } from "./release-target.mjs";
 import { realProductWorkflowRuntime } from "./product-workflow-runtime-config.mjs";
 import {
   additiveBrowserContract,
+  fixedPositionBrowserContract,
   reviewedFrontendPrWorkflow
 } from "./additive-browser-workflow.mjs";
 
@@ -192,7 +193,7 @@ export const waveCreationRealBatchPolicy = Object.freeze({
 
 // Existing Wave feature-usage coverage is part of the reviewed baseline. Only
 // paired new sandbox browser packs may extend its otherwise byte-exact workflow.
-export const realBatchPolicy = Object.freeze({
+export const fixedPositionRealBatchPolicy = Object.freeze({
   ...waveCreationRealBatchPolicy,
   workflow_blobs: Object.freeze({
     ...waveCreationRealBatchPolicy.workflow_blobs,
@@ -203,10 +204,26 @@ export const realBatchPolicy = Object.freeze({
   }),
   workflow_extensions: Object.freeze({
     frontend: Object.freeze({
+      ".github/workflows/app-pr-ci.yml": fixedPositionBrowserContract
+    })
+  })
+});
+
+// Version the changed admission semantics; saved v1 policies never inherit v2.
+export const realBatchPolicy = Object.freeze({
+  ...fixedPositionRealBatchPolicy,
+  workflow_extensions: Object.freeze({
+    frontend: Object.freeze({
       ".github/workflows/app-pr-ci.yml": additiveBrowserContract
     })
   })
 });
+
+export const isBrowserPolicyUpgrade = (previous, current) =>
+  previous &&
+  current &&
+  serviceHash(previous) === serviceHash(fixedPositionRealBatchPolicy) &&
+  serviceHash(current) === serviceHash(realBatchPolicy);
 
 // Only these explicitly reviewed transitions can replace an unpublished
 // preparation. Never migrate copied-history work, owned resources or releases.
@@ -216,11 +233,13 @@ export function canRefreshBatchPreparationPolicy(batch, currentPolicy) {
     !batch.execution &&
     (batch.status === "searching" || batch.stop?.status === "stale") &&
     batch.selected?.length === 0 &&
-    [
+    ([
       priorRealBatchPolicy,
       sessionRecoveryRealBatchPolicy,
       waveCreationRealBatchPolicy
-    ].some((policy) => serviceHash(batch.policy) === serviceHash(policy)) &&
+    ].some((policy) => serviceHash(batch.policy) === serviceHash(policy)) ||
+      (!batch?.retry_of &&
+        isBrowserPolicyUpgrade(batch?.policy, currentPolicy))) &&
     serviceHash(currentPolicy) === serviceHash(realBatchPolicy) &&
     Array.isArray(batch.attempts) &&
     batch.attempts.every(
@@ -288,6 +307,7 @@ export function trustedBatchPolicy(policy) {
     nativeCompetitionRealBatchPolicy,
     sessionRecoveryRealBatchPolicy,
     waveCreationRealBatchPolicy,
+    fixedPositionRealBatchPolicy,
     realBatchPolicy
   ].find(
     (candidate) =>

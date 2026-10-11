@@ -20,6 +20,13 @@ import { runInboxRunCli } from "../src/inbox-run-cli.mjs";
 import { createReleaseGitHub } from "../src/release-github.mjs";
 import { realProductWorkflowRuntime } from "../src/product-workflow-runtime-config.mjs";
 import { batchFingerprint } from "../src/batch-retry-history.mjs";
+import { retryHistory } from "../src/batch-retry-history.mjs";
+import {
+  fixedPositionRealBatchPolicy,
+  realBatchPolicy,
+  batchMergePlan
+} from "../src/batch-plan.mjs";
+import { makeReleasePlan } from "../src/release-plan.mjs";
 
 const evidence = (batch) => ({
   repository_id: realProfile.repositories.frontend.id,
@@ -101,6 +108,285 @@ async function admission(h) {
     save: (message) => journal.save(state, run, message)
   };
 }
+
+// Seed an independently validated historical v1 journal in the fake GitHub
+// object store. No live journal or old production evidence is modified.
+async function stoppedV1() {
+  const h = await stopped(),
+    o = await admission(h);
+  const convert = (original) => {
+    const batch = structuredClone(original);
+    batch.policy = structuredClone(fixedPositionRealBatchPolicy);
+    const prepared = batch.attempts.find(
+      (attempt) => attempt.phase === "git"
+    ).result;
+    const plan = batchMergePlan(
+      [
+        {
+          number: 1,
+          input: batch.inputs[0].input,
+          entry: o.entries.get(1)
+        }
+      ],
+      realProfile,
+      batch.policy
+    );
+    prepared.input_hash = plan.input_hash;
+    prepared.service_plan.rehearsal_input_hash = plan.input_hash;
+    const { fingerprint: _fingerprint, ...contents } = prepared.service_plan;
+    prepared.service_plan.fingerprint = serviceHash(contents);
+    batch.attempts.find(
+      (attempt) => attempt.phase === "checks"
+    ).progress.prepared_hash = serviceHash(prepared);
+    return batch;
+  };
+  const parent = convert(h.parent);
+  parent.fingerprint = batchFingerprint(parent);
+  const old = convert(h.original);
+  old.retry_of = {
+    fingerprint: parent.fingerprint,
+    record_hash: serviceHash(parent),
+    attempt_id: h.attemptId,
+    history: [
+      { fingerprint: parent.fingerprint, record_hash: serviceHash(parent) }
+    ]
+  };
+  old.fingerprint = batchFingerprint(old);
+  old.execution.plan = makeReleasePlan(old, { uuid: () => h.releaseId });
+  validateReleaseExecution(old.execution, old);
+  delete o.state.batches[h.original.fingerprint];
+  o.state.batches[parent.fingerprint] = parent;
+  o.state.batches[old.fingerprint] = old;
+  o.run.batch_fingerprint = o.state.lock.batch_fingerprint = old.fingerprint;
+  o.run.check_retry.batch_fingerprint =
+    o.state.lock.check_retry.batch_fingerprint = old.fingerprint;
+  await o.save("fixture historical fixed-position policy");
+  h.original = old;
+  h.parent = parent;
+  return h;
+}
+
+test("explicit saved v1 refresh records a versioned upgrade and immutable retry link, preserves old policy/history and spends fresh checks", async () => {
+  const h = await stoppedV1(),
+    before = h.f.state();
+  const old = structuredClone(h.original);
+  await assert.rejects(
+    processInbox(h.refresh),
+    /fixture stop before deployment/
+  );
+  const state = h.f.state(),
+    retired = state.batches[old.fingerprint];
+  const next = state.batches[state.lock.batch_fingerprint];
+  validateJournal(state, realProfile);
+  assert.equal(
+    state.untouched_release_refresh,
+    "untouched-release-policy-refresh-v2"
+  );
+  assert.equal(retired.execution.refresh.version, 2);
+  assert.deepEqual(retired.execution.refresh.target_policy, realBatchPolicy);
+  assert.equal(retired.execution.refresh.previous_batch_hash, serviceHash(old));
+  assert.deepEqual(retired.execution.refresh.previous_execution, old.execution);
+  assert.deepEqual(retired.policy, fixedPositionRealBatchPolicy);
+  assert.deepEqual(retired.attempts, old.attempts);
+  assert.deepEqual(retired.inputs, old.inputs);
+  assert.deepEqual(state.history, before.history);
+  assert.deepEqual(next.policy, realBatchPolicy);
+  assert.deepEqual(next.retry_of.policy_refresh, {
+    fingerprint: old.fingerprint,
+    record_hash: serviceHash(retired)
+  });
+  assert.deepEqual(next.retry_authorization, old.retry_authorization);
+  assert.deepEqual(h.budgets.at(-1), { git: 2, checks: 2 });
+  assert.equal(next.attempts[1].result.status, "passed");
+  assert.notEqual(next.attempts[1].id, old.attempts[1].id);
+  const attempts = structuredClone(next.attempts);
+  await assert.rejects(
+    processInbox(h.refresh),
+    /fixture stop before deployment/
+  );
+  assert.deepEqual(h.f.state().batches[next.fingerprint].attempts, attempts);
+  const archive = makeArchive(
+    "batches",
+    retired.fingerprint,
+    retired,
+    realProfile
+  );
+  assert.deepEqual(
+    verifyArchive(
+      archive.archive,
+      "batches",
+      retired.fingerprint,
+      archive.ref,
+      realProfile
+    ),
+    retired
+  );
+});
+
+test("ordinary resume of saved v1 never upgrades its execution or reuses v2 admission", async () => {
+  const h = await stoppedV1();
+  const before = h.f.state(),
+    opens = h.events.filter((event) => event.startsWith("open:")).length;
+  await assert.rejects(
+    processInbox(h.resume),
+    /fixture stop before deployment/
+  );
+  assert.deepEqual(h.f.state().batches[h.original.fingerprint], h.original);
+  assert.equal(
+    h.f.state().untouched_release_refresh,
+    before.untouched_release_refresh
+  );
+  assert.equal(
+    h.events.filter((event) => event.startsWith("open:")).length,
+    opens
+  );
+});
+
+test("an upgraded lost-save response resumes the same fresh v2 round and does not reset its budgets", async () => {
+  const h = await stoppedV1(),
+    o = await admission(h);
+  const save = o.save;
+  o.save = async (message) => {
+    await save(message);
+    throw new Error("saved upgrade response lost");
+  };
+  await assert.rejects(refreshUntouchedRelease(o), /response lost/);
+  assert.equal(h.f.state().lock.batch_fingerprint, undefined);
+  await assert.rejects(
+    processInbox(h.resume),
+    /fixture stop before deployment/
+  );
+  const state = h.f.state(),
+    next = state.batches[state.lock.batch_fingerprint];
+  assert.deepEqual(next.policy, realBatchPolicy);
+  assert.deepEqual(h.budgets.at(-1), { git: 2, checks: 2 });
+  assert.equal(
+    next.retry_of.policy_refresh.fingerprint,
+    h.original.fingerprint
+  );
+  validateJournal(state, realProfile);
+});
+
+test("an existing historical refresh writer marker advances only with the explicit verified policy upgrade", async () => {
+  const h = await stoppedV1(),
+    o = await admission(h);
+  o.state.untouched_release_refresh = "untouched-release-refresh-v1";
+  await o.save("fixture historical refresh writer marker");
+  await assert.rejects(
+    processInbox(h.refresh),
+    /fixture stop before deployment/
+  );
+  const state = h.f.state();
+  assert.equal(
+    state.untouched_release_refresh,
+    "untouched-release-policy-refresh-v2"
+  );
+  validateJournal(state, realProfile);
+});
+
+test("saved-policy upgrade rejects unknown policies and effectful checkpoints before admission or saves", async () => {
+  const h = await stoppedV1();
+  for (const change of [
+    (batch) => {
+      batch.policy.max_check_attempts++;
+    },
+    (batch) => {
+      batch.policy.workflow_extensions.frontend[
+        ".github/workflows/app-pr-ci.yml"
+      ] = "unknown";
+    },
+    (batch) => {
+      batch.execution.operations["staging:integrate:frontend"].branch =
+        "possibly-written";
+    },
+    (batch) => {
+      batch.execution.step_index = 1;
+    },
+    (batch) => {
+      batch.attempts[1].progress.cleanup = "pending";
+    }
+  ]) {
+    const o = await admission(h),
+      batch = o.state.batches[o.run.batch_fingerprint];
+    change(batch);
+    const before = structuredClone(o.state);
+    o.verifyUntouched = async () => assert.fail("no remote admission");
+    o.save = async () => assert.fail("no upgrade save");
+    await assert.rejects(refreshUntouchedRelease(o));
+    assert.deepEqual(o.state, before);
+  }
+});
+
+test("policy-refresh records and retry links cannot waive scope, absence, identity, archive or policy checks", async () => {
+  const h = await stoppedV1();
+  await assert.rejects(
+    processInbox(h.refresh),
+    /fixture stop before deployment/
+  );
+  const state = h.f.state(),
+    retired = state.batches[h.original.fingerprint];
+  const next = state.batches[state.lock.batch_fingerprint];
+  for (const mutate of [
+    (batch) => {
+      delete batch.retry_of.policy_refresh;
+    },
+    (batch) => {
+      batch.retry_of.policy_refresh.record_hash = "f".repeat(64);
+    },
+    (batch) => {
+      batch.retry_authorization.run_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    },
+    (batch) => {
+      batch.inputs[0].input.repositories[0].pull_requests[0].commit =
+        "7".repeat(40);
+    },
+    (batch) => {
+      batch.policy.max_check_attempts++;
+    }
+  ]) {
+    const forged = structuredClone(next);
+    mutate(forged);
+    await assert.rejects(
+      retryHistory(
+        forged,
+        async (hash) =>
+          state.batches[hash] ??
+          h.f.file(state.history.batches[hash]?.path)?.record
+      )
+    );
+  }
+  for (const mutate of [
+    (batch) => {
+      batch.execution.refresh.target_policy.max_check_attempts++;
+    },
+    (batch) => {
+      batch.execution.refresh.version = 1;
+    },
+    (batch) => {
+      delete batch.execution.refresh.target_policy;
+    },
+    (batch) => {
+      batch.execution.refresh.evidence.prs_absent = false;
+    },
+    (batch) => {
+      batch.execution.refresh.previous_execution.operations[
+        "staging:integrate:frontend"
+      ].branch = "written";
+    }
+  ]) {
+    const forged = structuredClone(retired);
+    mutate(forged);
+    assert.throws(() => validateReleaseExecution(forged.execution, forged));
+  }
+  for (const marker of [undefined, "untouched-release-refresh-v1"]) {
+    const forged = structuredClone(state);
+    forged.untouched_release_refresh = marker;
+    assert.throws(() => validateJournal(forged, realProfile), /marker/);
+  }
+  const o = await admission(h);
+  o.state.untouched_release_refresh = "untouched-release-refresh-v1";
+  await assert.rejects(o.save("no marker downgrade"), /marker.*preserved/);
+});
 
 test("explicit untouched refresh preserves the whole old checkpoint and retry archive, retests the same request and charges all budgets", async () => {
   const h = await stopped();
@@ -426,20 +712,24 @@ test("a supersession cannot forge successful release proof, alter old operations
   );
 });
 
-test("failed fresh candidate CI cannot reuse the superseded pass or start a release", async () => {
-  const h = await stopped();
-  h.setPass(false);
-  const report = await processInbox(h.refresh);
-  assert.deepEqual(report.batch.selected, []);
-  assert.equal(report.release_executed, false);
-  assert.equal(h.events.includes("release"), false);
-  const state = h.f.state();
-  const retired =
-    state.batches[h.original.fingerprint] ??
-    h.f.file(state.history.batches[h.original.fingerprint].path).record;
-  assert.equal(retired.execution.status, "superseded");
-  assert.deepEqual(retired.attempts, h.original.attempts);
-});
+for (const [name, setup] of [
+  ["unchanged policy", stopped],
+  ["v1-to-v2 policy", stoppedV1]
+])
+  test(`failed fresh candidate CI after ${name} refresh cannot reuse the superseded pass or start a release`, async () => {
+    const h = await setup();
+    h.setPass(false);
+    const report = await processInbox(h.refresh);
+    assert.deepEqual(report.batch.selected, []);
+    assert.equal(report.release_executed, false);
+    assert.equal(h.events.includes("release"), false);
+    const state = h.f.state();
+    const retired =
+      state.batches[h.original.fingerprint] ??
+      h.f.file(state.history.batches[h.original.fingerprint].path).record;
+    assert.equal(retired.execution.status, "superseded");
+    assert.deepEqual(retired.attempts, h.original.attempts);
+  });
 
 test("prior refreshed and retry rounds exhaust the original budget without any new allocation", async () => {
   const h = await stopped(),

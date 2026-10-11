@@ -477,11 +477,56 @@ export async function coordinateInboxBatch({
       : {}),
     input: item.input
   }));
+  const refreshedHistory = await Promise.all(
+    (run.reprepared_batches ?? []).map((hash) => loadBatch(hash))
+  );
+  serviceAssert(
+    refreshedHistory.every(preparationHistory),
+    "batch-state",
+    "Missing or unsafe prior preparation history."
+  );
+  let retryOf = retryRound?.retry_of;
+  if (retryOf && serviceHash(retryRound.policy) !== serviceHash(policy)) {
+    const retired = refreshedHistory.find(
+      (batch) =>
+        batch.execution?.refresh?.version === 2 &&
+        serviceHash(batch.execution.refresh.target_policy) ===
+          serviceHash(policy) &&
+        serviceHash(batch.retry_of) === serviceHash(retryOf)
+    );
+    serviceAssert(
+      retired,
+      "batch-retry",
+      "Retry policy requires its explicit untouched-refresh checkpoint."
+    );
+    retryOf = {
+      ...structuredClone(retryOf),
+      policy_refresh: {
+        fingerprint: retired.fingerprint,
+        record_hash: serviceHash(retired)
+      }
+    };
+  }
   const freshFingerprint = batchFingerprint({
     inputs,
     policy,
-    retry_of: retryRound?.retry_of
+    retry_of: retryOf
   });
+  // The exact real-batch-v1 upgrade retains database/operational input fields.
+  // retryHistory checks those fields and frontend-only scope BEFORE any save;
+  // an incomplete or future incompatible policy cannot silently pass here.
+  if (retryOf?.policy_refresh)
+    await retryHistory(
+      {
+        version: 2,
+        inputs,
+        policy,
+        fingerprint: freshFingerprint,
+        retry_of: retryOf,
+        retry_authorization: retryRound.retry_authorization
+      },
+      (hash) => loadBatch(hash, { immutable: true })
+    );
   const fingerprint = run.batch_fingerprint ?? freshFingerprint;
   const changed = fingerprint !== freshFingerprint;
   const original = await loadBatch(fingerprint);
@@ -500,14 +545,6 @@ export async function coordinateInboxBatch({
   state.lock.batch_fingerprint = fingerprint;
   await save("save batch selection identity");
   state.batches ??= {};
-  const refreshedHistory = await Promise.all(
-    (run.reprepared_batches ?? []).map((hash) => loadBatch(hash))
-  );
-  serviceAssert(
-    refreshedHistory.every(preparationHistory),
-    "batch-state",
-    "Missing or unsafe prior preparation history."
-  );
   const priorHistory = [
     ...new Map(
       [...retryParents, ...refreshedHistory].map((saved) => [
@@ -517,7 +554,7 @@ export async function coordinateInboxBatch({
     ).values()
   ];
   const batch = await select({
-    retryOf: retryRound?.retry_of,
+    retryOf,
     retryAuthorization: retryRound?.retry_authorization,
     items: inputsChanged
       ? original.inputs.map((value) => ({

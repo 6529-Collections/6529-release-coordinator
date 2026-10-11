@@ -12,6 +12,7 @@ import {
   previousBatchPolicy,
   priorRealBatchPolicy,
   realBatchPolicy,
+  fixedPositionRealBatchPolicy,
   sessionRecoveryRealBatchPolicy,
   waveCreationRealBatchPolicy,
   realServicePlan,
@@ -40,6 +41,9 @@ test("reviewed frontend extension policy preserves every historical pin, require
       ".github/workflows/app-pr-ci.yml": "additive-browser-packs-v1"
     }
   };
+  assert.deepEqual(fixedPositionRealBatchPolicy, expected);
+  expected.workflow_extensions.frontend[".github/workflows/app-pr-ci.yml"] =
+    "additive-browser-packs-v2";
   assert.deepEqual(realBatchPolicy, expected);
   assert.equal(
     new Set(
@@ -48,17 +52,19 @@ test("reviewed frontend extension policy preserves every historical pin, require
         nativeCompetitionRealBatchPolicy,
         sessionRecoveryRealBatchPolicy,
         waveCreationRealBatchPolicy,
+        fixedPositionRealBatchPolicy,
         realBatchPolicy
       ].map(serviceHash)
     ).size,
-    5
+    6
   );
   for (const historical of [
     copiedRealBatchPolicy,
     priorRealBatchPolicy,
     nativeCompetitionRealBatchPolicy,
     sessionRecoveryRealBatchPolicy,
-    waveCreationRealBatchPolicy
+    waveCreationRealBatchPolicy,
+    fixedPositionRealBatchPolicy
   ]) {
     assert.equal(trustedBatchPolicy(structuredClone(historical)), historical);
     assert.notEqual(serviceHash(historical), serviceHash(realBatchPolicy));
@@ -82,7 +88,8 @@ test("reviewed frontend extension policy preserves every historical pin, require
 for (const policy of [
   priorRealBatchPolicy,
   sessionRecoveryRealBatchPolicy,
-  waveCreationRealBatchPolicy
+  waveCreationRealBatchPolicy,
+  fixedPositionRealBatchPolicy
 ]) {
   test(`policy refresh from ${policy.workflow_blobs.frontend[".github/workflows/app-pr-ci.yml"]} is limited to unpublished preparation, not owned work or release history`, () => {
     const batch = {
@@ -110,6 +117,7 @@ for (const policy of [
       { execution: { status: "completed" } },
       { status: "finished" },
       { selected: [1] },
+      ...(policy === fixedPositionRealBatchPolicy ? [{ retry_of: {} }] : []),
       {
         attempts: [
           { progress: { prs: [{ cleanup: "removed" }], service_attempts: {} } }

@@ -1,11 +1,12 @@
 import { blobHash, serviceAssert } from "./service-contract.mjs";
 
-export const additiveBrowserContract = "additive-browser-packs-v1";
+export const fixedPositionBrowserContract = "additive-browser-packs-v1";
+export const additiveBrowserContract = "additive-browser-packs-v2";
 export const reviewedFrontendPrWorkflow =
   "9209601a51023b4a17609fb7cdacb360a2e34977";
 
-// These are insertion points, not replaceable sections. Every reviewed byte,
-// including all existing browser packs, remains protected by the baseline hash.
+// Historical v1 insertion points, not replaceable sections. Both contracts
+// protect every reviewed byte, including all existing browser packs.
 const registrationMarker = "          const waveCreationBrowserRequired =";
 const stepMarker = "      - name: Run wave creation browser regression pack\n";
 const checkName = "playwright_[a-z0-9]+(?:_[a-z0-9]+)*";
@@ -48,7 +49,15 @@ function parseAdditions(text, pattern) {
 }
 
 /** Accept paired additive sandbox packs, never replacement workflow behavior. */
-export function validateAdditiveBrowserWorkflow(baseline, current) {
+export function validateAdditiveBrowserWorkflow(
+  baseline,
+  current,
+  contract = additiveBrowserContract
+) {
+  requireContract(
+    [fixedPositionBrowserContract, additiveBrowserContract].includes(contract),
+    "Unknown browser-pack extension contract."
+  );
   requireContract(
     Buffer.isBuffer(baseline) &&
       Buffer.isBuffer(current) &&
@@ -61,6 +70,39 @@ export function validateAdditiveBrowserWorkflow(baseline, current) {
     Buffer.from(actual, "utf8").equals(current),
     "The product PR workflow is not canonical UTF-8."
   );
+  const additions =
+    contract === fixedPositionBrowserContract
+      ? fixedPositionAdditions(reviewed, actual)
+      : boundaryAdditions(reviewed, actual);
+  const { addedRegistrations, addedSteps } = additions;
+  requireContract(
+    addedRegistrations.length === addedSteps.length,
+    "Each new browser lane needs exactly one matching sandbox test step."
+  );
+  const existing = new Set(
+    [...reviewed.matchAll(/lane: "([^"]+)"/gu)].map((match) => match[1])
+  );
+  const lanes = [];
+  for (const [index, [check, lane]] of addedRegistrations.entries()) {
+    const [, stepLane, output, report, command] = addedSteps[index];
+    const expectedSlug = lane.slice("playwright-".length);
+    requireContract(
+      lane === check.replaceAll("_", "-") &&
+        stepLane === lane &&
+        output === expectedSlug &&
+        report === expectedSlug &&
+        command === expectedSlug &&
+        !existing.has(lane),
+      "A browser-pack addition is duplicated, unpaired or changes test routing."
+    );
+    existing.add(lane);
+    lanes.push(lane);
+  }
+  return { baseline_blob: reviewedFrontendPrWorkflow, lanes };
+}
+
+// Historical v1 keeps its exact original admission semantics.
+function fixedPositionAdditions(reviewed, actual) {
   const registrationOffset = reviewed.indexOf(registrationMarker);
   const stepOffset = reviewed.indexOf(stepMarker);
   requireContract(
@@ -90,30 +132,92 @@ export function validateAdditiveBrowserWorkflow(baseline, current) {
     actual.slice(middleOffset + middle.length, suffixOffset),
     steps
   );
+  return { addedRegistrations, addedSteps };
+}
+
+function uniqueOffset(text, marker) {
+  const offset = text.indexOf(marker);
   requireContract(
-    addedRegistrations.length === addedSteps.length,
-    "Each new browser lane needs exactly one matching sandbox test step."
+    offset >= 0 && text.indexOf(marker, offset + 1) === -1,
+    "The reviewed browser-pack boundaries are ambiguous."
   );
-  const existing = new Set(
-    [...reviewed.matchAll(/lane: "([^"]+)"/gu)].map((match) => match[1])
+  return offset;
+}
+
+function boundaryAdditions(reviewed, actual) {
+  // Derive insertion boundaries ONLY from the hash-verified baseline, never
+  // from candidate indentation. Do not admit code inside conditions/callbacks,
+  // before setup, after matrix outputs, in another job, or after artifacts.
+  const registrationStart = uniqueOffset(
+    reviewed,
+    "          const corePlaywrightLanes = [];\n"
   );
-  const lanes = [];
-  for (const [index, [check, lane]] of addedRegistrations.entries()) {
-    const [, stepLane, output, report, command] = addedSteps[index];
-    const expectedSlug = lane.slice("playwright-".length);
+  const registrationEnd = uniqueOffset(
+    reviewed,
+    '          write("app_check_matrix", JSON.stringify({ include: appCheckLanes }));'
+  );
+  const stepStart = uniqueOffset(
+    reviewed,
+    "      - name: Run small Playwright smoke pack\n"
+  );
+  const stepEnd = reviewed.indexOf(
+    "      - name: Upload app check artifacts\n",
+    stepStart
+  );
+  requireContract(
+    registrationStart < registrationEnd &&
+      registrationEnd < stepStart &&
+      stepEnd > stepStart,
+    "The reviewed browser-pack sections are invalid."
+  );
+  const boundaries = [
+    ...[
+      ...reviewed.matchAll(
+        /^ {10}(?:if \(|const waveCreationBrowserRequired =)/gmu
+      )
+    ]
+      .filter(
+        ({ index }) => index > registrationStart && index < registrationEnd
+      )
+      .map(({ index }) => ({ offset: index, pattern: registrations })),
+    { offset: registrationEnd, pattern: registrations },
+    ...[...reviewed.matchAll(/^ {6}- name: /gmu)]
+      .filter(({ index }) => index >= stepStart && index <= stepEnd)
+      .map(({ index }) => ({ offset: index, pattern: steps }))
+  ];
+  const addedRegistrations = [],
+    addedSteps = [];
+  let position = 0,
+    previous = 0;
+  for (const [index, boundary] of boundaries.entries()) {
+    const protectedText = reviewed.slice(previous, boundary.offset);
     requireContract(
-      lane === check.replaceAll("_", "-") &&
-        stepLane === lane &&
-        output === expectedSlug &&
-        report === expectedSlug &&
-        command === expectedSlug &&
-        !existing.has(lane),
-      "A browser-pack addition is duplicated, unpaired or changes test routing."
+      actual.startsWith(protectedText, position),
+      "A protected part of the product PR workflow changed."
     );
-    existing.add(lane);
-    lanes.push(lane);
+    position += protectedText.length;
+    const nextOffset = boundaries[index + 1]?.offset ?? reviewed.length;
+    const nextProtected = reviewed.slice(boundary.offset, nextOffset);
+    while (!actual.startsWith(nextProtected, position)) {
+      boundary.pattern.lastIndex = position;
+      const match = boundary.pattern.exec(actual);
+      requireContract(
+        match && boundary.pattern.lastIndex > position,
+        "A browser-pack addition differs from the reviewed literal template or safe boundary."
+      );
+      (boundary.pattern === registrations
+        ? addedRegistrations
+        : addedSteps
+      ).push(match.slice(1));
+      position = boundary.pattern.lastIndex;
+    }
+    previous = boundary.offset;
   }
-  return { baseline_blob: reviewedFrontendPrWorkflow, lanes };
+  requireContract(
+    actual.slice(position) === reviewed.slice(previous),
+    "A protected part of the product PR workflow changed."
+  );
+  return { addedRegistrations, addedSteps };
 }
 
 /** Decode complete GitHub bytes and verify the Git identity before parsing. */
