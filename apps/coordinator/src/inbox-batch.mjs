@@ -512,6 +512,9 @@ export async function coordinateInboxBatch({
     policy,
     retry_of: retryOf
   });
+  // The exact real-batch-v1 upgrade retains database/operational input fields.
+  // retryHistory checks those fields and frontend-only scope BEFORE any save;
+  // an incomplete or future incompatible policy cannot silently pass here.
   if (retryOf?.policy_refresh)
     await retryHistory(
       {

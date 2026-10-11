@@ -135,14 +135,22 @@ for (const registrationBefore of [
 ]) {
   test(`refuse registration outside a safe statement boundary: ${registrationBefore.trim()}`, () => {
     assert.ok(reviewedWorkflow.toString().includes(registrationBefore));
+    const pack = browserPack("future-example");
+    const actual = extendWorkflow([pack], { registrationBefore });
+    if (registrationBefore === "          const collectBrowserRequired =")
+      // This fixture marker immediately follows the array declaration: prove
+      // this rejection covers insertion AFTER initialization, not before it.
+      assert.ok(
+        actual
+          .toString()
+          .includes(
+            "          const corePlaywrightLanes = [];\n" +
+              pack.registration +
+              registrationBefore
+          )
+      );
     assert.throws(
-      () =>
-        validateAdditiveBrowserWorkflow(
-          reviewedWorkflow,
-          extendWorkflow([browserPack("future-example")], {
-            registrationBefore
-          })
-        ),
+      () => validateAdditiveBrowserWorkflow(reviewedWorkflow, actual),
       { code: "batch-runtime" }
     );
   });

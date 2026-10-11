@@ -54,6 +54,10 @@ locations, cover 81 safe registration/step combinations, compile planning
 JavaScript without executing it, and reject unsafe positions, baseline edits,
 test movement/deletion, mismatched pairs, duplicate lanes and injected behavior.
 Adapter tests distinguish current v2 admission from historical v1 refusal.
+Review follow-up makes the existing post-array/pre-first-condition negative
+case explicit by asserting the candidate's exact inserted bytes. The retry
+pre-save validation comment also documents its unchanged real-policy input
+fields and fail-closed scope check; no admission behavior is widened.
 
 Fake-store recovery tests cover the explicit policy transition, unchanged old
 records and archives, fresh checks, spent budgets, repeated flags, interrupted
