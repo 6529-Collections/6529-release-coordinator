@@ -212,12 +212,14 @@ function fixture(profile = realProfile) {
       const run = (lists.get(`${role}:${key}`) ?? [])[0];
       return { id: run.workflow_id, path: run.path, name: run.name };
     },
-    file: async (role, path) => {
+    file: async (role, path, commit) => {
       const expected = runtime.repositories[role].files[path];
+      const environment =
+        commit === hash(role === "frontend" ? "b" : "d") ? "prod" : "staging";
       return {
         type: "file",
         path,
-        sha: typeof expected === "string" ? expected : expected.staging
+        sha: typeof expected === "string" ? expected : expected[environment]
       };
     },
     jobs: async (role, run) => {
@@ -488,6 +490,33 @@ for (const [name, change, check] of [
       "unknown",
       JSON.stringify(result.checks)
     );
+  });
+
+for (const path of [
+  ".github/workflows/staging-e2e.yml",
+  ".github/workflows/production-e2e.yml"
+])
+  test(`staging-only ${path} approval cannot settle a main-runner cleanup check`, async () => {
+    const f = fixture(),
+      original = clone(f.batch),
+      read = f.github.file,
+      runtime = productWorkflowRuntimeForProfile(realProfile);
+    f.github.file = async (role, filePath, commit) => {
+      const file = await read(role, filePath, commit);
+      if (filePath === path && commit === hash("b"))
+        file.sha = runtime.repositories.frontend.files[path].staging;
+      return file;
+    };
+    const result = await f.inspect();
+    assert.equal(result.status, "unknown");
+    const check = path.includes("staging-e2e")
+      ? "staging_followup"
+      : "production_delivery";
+    assert.equal(
+      result.checks.find(({ id }) => id === check)?.status,
+      "unknown"
+    );
+    assert.deepEqual(f.batch, original);
   });
 
 test("changed workflow pins, skipped jobs, missing ancestry and late environment movement refuse closure", async () => {

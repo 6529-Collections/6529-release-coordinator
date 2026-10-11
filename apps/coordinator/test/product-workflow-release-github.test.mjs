@@ -1346,9 +1346,17 @@ for (const environment of ["staging", "prod"]) {
       ".github/workflows/staging-e2e.yml":
         "63ace61b4d7b8f38605838435649ba47cec0ad25"
     })) {
-      // Both branches legitimately have the same staging-workflow blob now.
-      // Refuse stale and unknown blobs, not an otherwise approved other-branch pin.
-      for (const unapproved of [superseded, "e".repeat(40)]) {
+      const pinned =
+        realProductWorkflowRuntime.repositories.frontend.files[path];
+      const otherEnvironment = staging ? "prod" : "staging";
+      // Environment-specific approvals must not cross the staging/main boundary.
+      const unapprovedPins = [superseded, "e".repeat(40)];
+      if (
+        typeof pinned === "object" &&
+        pinned[otherEnvironment] !== pinned[environment]
+      )
+        unapprovedPins.push(pinned[otherEnvironment]);
+      for (const unapproved of unapprovedPins) {
         const rejected = directHarness(descriptor, operation, {
           profile: realProfile,
           returnRunDetails: true,
@@ -1783,6 +1791,7 @@ function automaticHarness({
   missingWrapper = false,
   missingE2e = false,
   missingKnownRun,
+  mutateRuntimeFile,
   observeRun,
   signal,
   wait = async () => {},
@@ -1913,8 +1922,14 @@ function automaticHarness({
     const endpoint = args[args.indexOf("--method") + 2];
     calls.push({ method, endpoint });
     assert.equal(method, "GET", "E2E must only adopt the automatic chain");
-    if (endpoint.includes("/contents/"))
-      return apiResponse("200 OK", runtimeFile(endpoint, runtime, environment));
+    if (endpoint.includes("/contents/")) {
+      // Automatic wrappers and E2E run from main, even for a staging deploy.
+      const ref = endpoint.match(/\?ref=(.+)$/u)?.[1];
+      const fileEnvironment = ref === wrapper.head_sha ? "prod" : environment;
+      const file = runtimeFile(endpoint, runtime, fileEnvironment);
+      mutateRuntimeFile?.(file, ref);
+      return apiResponse("200 OK", file);
+    }
     if (endpoint.includes("/git/ref/heads/")) {
       const role = repositoryRole(endpoint);
       return apiResponse("200 OK", { object: { sha: commits[role] } });
@@ -2086,6 +2101,30 @@ function automaticHarness({
     automaticQueries,
     calls
   };
+}
+
+for (const path of [
+  ".github/workflows/staging-e2e.yml",
+  ".github/workflows/production-e2e.yml"
+]) {
+  test(`real staging automatic E2E refuses the staging ${path} blob on its main runner`, async () => {
+    const harness = automaticHarness({
+      profile: realProfile,
+      environment: "staging",
+      mutateRuntimeFile: (file, ref) => {
+        if (file.path === path && ref === "c".repeat(40))
+          file.sha =
+            realProductWorkflowRuntime.repositories.frontend.files[
+              path
+            ].staging;
+      }
+    });
+    await assert.rejects(
+      harness.run(),
+      /pinned product workflow or evidence file changed/u
+    );
+    assert.ok(harness.calls.every(({ method }) => method === "GET"));
+  });
 }
 
 for (const profile of [sandboxProfile, realProfile]) {

@@ -1,5 +1,28 @@
 # Progress and next steps
 
+## October 11 — independently reviewed staging Museum E2E pins (local)
+
+The frontend staging workflows now recognize the affected-page
+`museum-network-ia` browser pack. Only those two staging blob approvals change;
+production retains its current versions through independent environment pins.
+All workflow behavior outside the reviewed selection-list additions is
+unchanged. Automatic staging E2E still verifies its main-based runner against
+main pins, not the deployed staging source's approvals.
+
+All 170 focused offline runtime, adapter, shared-release and recovery tests and
+34 cleanup-follow-up tests passed, including wrong-environment refusal before
+dispatch and main-runner pin verification. Complete product identity passed
+65 guarded GET-only requests, and an independent 24-file audit matched the
+reviewed configuration. Full non-fixing Node 22.16.0 gates passed with all 54
+test files run serially: **1214 passed**, three optional Docker skips (1217 total),
+plus lint, formatting, docs/workflow policy and isolated offline packed-CLI
+checks. Source contents stayed unchanged; the exact-lock dependency audit
+found zero vulnerabilities. Hosted checks/reviews and merge remain pending. See the
+[review and verification record](./testing/product-runtime-refresh-2026-10-11.md).
+No release request, journal, deployment or automation is changed by this work.
+Deployment and both scheduled watches remain paused; request #334 is not
+restarted. This is local implementation, not merge or live release proof.
+
 ## October 11 — safe additive browser-pack locations (local)
 
 The Coordinator now accepts paired browser-pack additions at verified safe
