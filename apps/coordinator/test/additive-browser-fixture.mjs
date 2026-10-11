@@ -22,21 +22,41 @@ export function browserPack(name) {
   };
 }
 
-export function extendWorkflow(packs) {
+export function extendWorkflow(
+  packs,
+  {
+    registrationBefore = "          const waveCreationBrowserRequired =",
+    stepBefore = "      - name: Run wave creation browser regression pack\n"
+  } = {}
+) {
   return Buffer.from(
     reviewedWorkflow
       .toString("utf8")
       .replace(
-        "          const waveCreationBrowserRequired =",
-        packs.map((pack) => pack.registration).join("") +
-          "          const waveCreationBrowserRequired ="
+        registrationBefore,
+        packs.map((pack) => pack.registration).join("") + registrationBefore
       )
-      .replace(
-        "      - name: Run wave creation browser regression pack\n",
-        packs.map((pack) => pack.step).join("") +
-          "      - name: Run wave creation browser regression pack\n"
-      )
+      .replace(stepBefore, packs.map((pack) => pack.step).join("") + stepBefore)
   );
+}
+
+// Reconstruct the independently inspected PDF workflow WITHOUT relocating it.
+export function pdfWorkflow() {
+  const pack = browserPack("pdf-attachments");
+  pack.registration = pack.registration.replace(
+    "Example desktop and mobile",
+    "PDF attachments in WebKit"
+  );
+  pack.step = pack.step.replace(
+    "Run isolated example browser pack",
+    "Run PDF attachment browser regression pack"
+  );
+  return extendWorkflow([pack], {
+    registrationBefore:
+      "          if (plan.checks.playwright_wave_feature_usage?.required)",
+    stepBefore:
+      "      - name: Run isolated Wave feature tracking browser pack\n"
+  });
 }
 
 export const gitWorkflow = (bytes) => ({

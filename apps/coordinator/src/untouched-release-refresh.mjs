@@ -1,5 +1,8 @@
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
-import { batchPolicyForProfile } from "./batch-plan.mjs";
+import {
+  batchPolicyForProfile,
+  isBrowserPolicyUpgrade
+} from "./batch-plan.mjs";
 import { validateReleaseExecution } from "./release-state.mjs";
 import { retryHistory } from "./batch-retry-history.mjs";
 import { verifyRetryTrials } from "./batch-retry.mjs";
@@ -8,6 +11,7 @@ import {
   assertUntouchedRelease,
   preparationHistory,
   untouchedRefreshMarker,
+  untouchedPolicyRefreshMarker,
   validateUntouchedEvidence
 } from "./untouched-release-state.mjs";
 import { releaseRequestChecksum } from "../../../packages/release-request/src/inbox-issue.mjs";
@@ -76,10 +80,12 @@ export async function refreshUntouchedRelease({
   assertUntouchedRelease(parent);
   const input = parent.inputs[0],
     entry = entries.get(input.number);
+  const targetPolicy = batchPolicyForProfile(profile);
+  const policyUpgrade = isBrowserPolicyUpgrade(parent.policy, targetPolicy);
   serviceAssert(
     parent.execution.plan.release_id === releaseId &&
-      serviceHash(parent.policy) ===
-        serviceHash(batchPolicyForProfile(profile)) &&
+      (serviceHash(parent.policy) === serviceHash(targetPolicy) ||
+        policyUpgrade) &&
       input.number === selection.issue_numbers[0] &&
       entry?.status === "valid" &&
       entry.github_actor?.id === run.actor.id &&
@@ -92,7 +98,7 @@ export async function refreshUntouchedRelease({
       prior.every(preparationHistory) &&
       typeof verifyUntouched === "function",
     "release-refresh",
-    "Untouched refresh cannot change the release identity, request, actor, scope, policy or prior history."
+    "Untouched refresh cannot change the release identity, request, actor, scope or prior history, or use an unreviewed policy transition."
   );
   const ancestors = await retryHistory(parent, (hash) =>
     loadBatch(hash, { immutable: true })
@@ -164,7 +170,8 @@ export async function refreshUntouchedRelease({
   const retired = structuredClone(parent),
     at = now().toISOString();
   retired.execution.refresh = {
-    version: 1,
+    version: policyUpgrade ? 2 : 1,
+    ...(policyUpgrade ? { target_policy: structuredClone(targetPolicy) } : {}),
     run_id: run.run_id,
     actor: structuredClone(run.actor),
     at,
@@ -180,7 +187,11 @@ export async function refreshUntouchedRelease({
   retired.stop = { status: "stale", message: retired.execution.message };
   validateReleaseExecution(retired.execution, retired);
   state.batches[parent.fingerprint] = retired;
-  state.untouched_release_refresh = untouchedRefreshMarker;
+  state.untouched_release_refresh =
+    policyUpgrade ||
+    state.untouched_release_refresh === untouchedPolicyRefreshMarker
+      ? untouchedPolicyRefreshMarker
+      : untouchedRefreshMarker;
   run.reprepared_batches = [
     ...(run.reprepared_batches ?? []),
     parent.fingerprint

@@ -1,4 +1,6 @@
 import { serviceAssert, serviceHash } from "./service-contract.mjs";
+import { isBrowserPolicyUpgrade } from "./batch-plan.mjs";
+import { validateUntouchedSupersession } from "./untouched-release-state.mjs";
 
 export const checkRetryHistoryMarker = "explicit-check-retry-v1";
 const hash = (value) => /^[0-9a-f]{64}$/u.test(value ?? "");
@@ -43,6 +45,10 @@ export function validateRetryLink(batch) {
               ref.fingerprint === link.fingerprint &&
               ref.record_hash === link.record_hash
           ) &&
+          (link.policy_refresh === undefined ||
+            (hash(link.policy_refresh.fingerprint) &&
+              link.policy_refresh.fingerprint !== batch.fingerprint &&
+              hash(link.policy_refresh.record_hash))) &&
           uuid(batch.retry_authorization?.run_id) &&
           typeof batch.retry_authorization.actor?.id === "string" &&
           Boolean(batch.retry_authorization.actor.id) &&
@@ -84,12 +90,48 @@ export async function retryHistory(batch, loadBatch) {
     const attempt = parent.attempts.find(
       (record) => record.id === batch.retry_of.attempt_id
     );
+    let upgraded = false;
+    const ref = batch.retry_of.policy_refresh;
+    if (ref) {
+      const retired = await loadBatch(ref.fingerprint);
+      serviceAssert(
+        retired &&
+          serviceHash(retired) === ref.record_hash &&
+          retired.execution?.status === "superseded" &&
+          retired.execution.refresh?.version === 2,
+        "batch-retry",
+        "The explicit policy-refresh checkpoint changed or is unavailable."
+      );
+      validateUntouchedSupersession(retired.execution, retired);
+      const { policy_refresh: _refresh, ...originalLink } = batch.retry_of;
+      upgraded = Boolean(
+        retired.execution.status === "superseded" &&
+        retired.execution.refresh.version === 2 &&
+        isBrowserPolicyUpgrade(parent.policy, batch.policy) &&
+        serviceHash(retired.policy) === serviceHash(parent.policy) &&
+        serviceHash(retired.execution.refresh.target_policy) ===
+          serviceHash(batch.policy) &&
+        serviceHash(retired.retry_of) === serviceHash(originalLink) &&
+        serviceHash(retired.retry_authorization) ===
+          serviceHash(batch.retry_authorization) &&
+        retired.execution.refresh.run_id === batch.retry_authorization.run_id &&
+        serviceHash(retired.execution.refresh.actor) ===
+          serviceHash(batch.retry_authorization.actor)
+      );
+      serviceAssert(
+        upgraded,
+        "batch-retry",
+        "Retry policy changed without its matching explicit untouched refresh."
+      );
+      records.push(retired);
+    }
     serviceAssert(
       attempt?.phase === "checks" &&
         attempt.result?.status === "unknown" &&
         attempt.result.kind === "evidence" &&
         attempt.progress?.cleanup === "removed" &&
-        serviceHash(parent.policy) === serviceHash(batch.policy) &&
+        (serviceHash(parent.policy) === serviceHash(batch.policy) ||
+          upgraded) &&
         serviceHash(withoutBases(parent.inputs)) ===
           serviceHash(withoutBases(batch.inputs)) &&
         parent.inputs.length === batch.inputs.length &&

@@ -9,7 +9,10 @@ import { realProfile } from "./profiles.mjs";
 import { stateBranch, stateFile } from "./coordinator-github.mjs";
 import { validateBatchHistory } from "./batch-state.mjs";
 import { checkRetryHistoryMarker } from "./batch-retry-history.mjs";
-import { untouchedRefreshMarker } from "./untouched-release-state.mjs";
+import {
+  untouchedRefreshMarker,
+  untouchedPolicyRefreshMarker
+} from "./untouched-release-state.mjs";
 import { serviceStatuses } from "./service-contract.mjs";
 import {
   response,
@@ -101,7 +104,9 @@ export function validateJournal(
       (state.check_retry_history !== checkRetryHistoryMarker ||
         state.workflow !== inboxWorkflow)) ||
     (state.untouched_release_refresh !== undefined &&
-      (state.untouched_release_refresh !== untouchedRefreshMarker ||
+      (![untouchedRefreshMarker, untouchedPolicyRefreshMarker].includes(
+        state.untouched_release_refresh
+      ) ||
         state.workflow !== inboxWorkflow ||
         profile.name !== "real"))
   )
@@ -178,9 +183,20 @@ export function validateJournal(
       Object.values(state.batches).some(
         (batch) => batch.execution?.status === "superseded"
       ) &&
-      state.untouched_release_refresh !== untouchedRefreshMarker
+      ![untouchedRefreshMarker, untouchedPolicyRefreshMarker].includes(
+        state.untouched_release_refresh
+      )
     )
       throw new Error("Untouched refresh requires its current writer marker.");
+    if (
+      Object.values(state.batches).some(
+        (batch) =>
+          batch.execution?.refresh?.version === 2 ||
+          batch.retry_of?.policy_refresh
+      ) &&
+      state.untouched_release_refresh !== untouchedPolicyRefreshMarker
+    )
+      throw new Error("Policy refresh requires its current writer marker.");
   }
   if (state.history !== undefined) {
     if (
@@ -454,7 +470,15 @@ export function createJournal(
         throw new Error("Journal check-retry marker must be preserved.");
       if (
         base.state.untouched_release_refresh &&
-        state.untouched_release_refresh !== base.state.untouched_release_refresh
+        state.untouched_release_refresh !==
+          base.state.untouched_release_refresh &&
+        !(
+          base.state.untouched_release_refresh === untouchedRefreshMarker &&
+          state.untouched_release_refresh === untouchedPolicyRefreshMarker &&
+          Object.values(state.batches ?? {}).some(
+            (batch) => batch.execution?.refresh?.version === 2
+          )
+        )
       )
         throw new Error("Journal untouched-refresh marker must be preserved.");
       const prior = current.sha;

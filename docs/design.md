@@ -246,17 +246,21 @@ native-competition-to-current migration, relabel older CI as current proof,
 or resume a stopped release automatically. The October 7 paragraphs below
 describe the current approved preparation-refresh sources.
 
-The October 7 frontend PR-CI policy uses the reviewed Wave feature-usage workflow
-as a byte-exact baseline, with the narrow `additive-browser-packs-v1` extension
-contract. At two fixed insertion points it accepts only paired literal browser
-lane registrations and `./bin/6529 run test:e2e:<pack>-sandbox` steps. Their
+The frontend PR-CI policy uses the reviewed Wave feature-usage workflow as a
+byte-exact baseline. The October 11 `additive-browser-packs-v2` extension accepts
+paired literal browser lane registrations at reviewed statement boundaries
+after lane initialization and before matrix output, with matching
+`./bin/6529 run test:e2e:<pack>-sandbox` steps at reviewed browser-step boundaries
+after shared setup and before artifact upload. These boundaries come only from
+the hash-verified baseline, never from candidate indentation. Their
 check/lane names, output directories and commands must agree; duplicates and
 baseline lane collisions are refused. Complete current and baseline Git bytes
 are rehashed before validation. No workflow code is evaluated by the validator.
 Every baseline byte remains required, including existing coverage, triggers,
 permissions, jobs, actions, runner selection, failure aggregation and build
 commands. Other workflow files and all deployment/E2E pins remain exact.
-See the [contract and offline verification record](./testing/additive-browser-workflow-2026-10-07.md).
+See the [original contract record](./testing/additive-browser-workflow-2026-10-07.md)
+and [safe-boundary and compatibility record](./testing/additive-browser-boundaries-2026-10-11.md).
 
 Future supplemental packs following that literal template do not need another
 Coordinator hash approval. This is not a claim that a pack's test implementation
@@ -269,8 +273,22 @@ pins and do not inherit this extension approval. The previous Wave-creation
 snapshot joins the existing original/session-recovery unpublished-preparation
 refresh sources only under the same no-resource/no-selection/no-execution guard,
 with fresh same-source checks and preserved attempts and spent budgets. Native,
-copy-based, unknown, published and selected/release histories are not migrated.
-This implementation does not resume a release or authorize deployment.
+copy-based, unknown, published and selected/release histories are not migrated
+by that preparation path.
+
+The historical `additive-browser-packs-v1` policy still enforces its two original
+insertion points; saved policies and old CI do not silently acquire v2 semantics.
+An unselected, unpublished, non-retry v1 preparation may refresh to the distinct
+v2 policy under the same no-resource/no-execution guard. A selected untouched
+release instead needs the separately approved explicit untouched-release refresh
+described in [inbox processing](./inbox-processing.md#explicit-refresh-of-an-untouched-release).
+Only the exact reviewed v1-to-v2 policy pair is eligible. The complete old
+checkpoint and policy remain immutable history; a versioned refresh records the
+target policy, and any retry lineage gains a hash-bound reference to that
+checkpoint. Fresh source admission, Git and candidate CI are mandatory, and
+all old attempts still spend the same budgets. Other policy changes, ordinary
+resume and possibly-effectful releases cannot use this upgrade. This source
+change does not resume a release or authorize deployment.
 
 <a id="proposed-batch-testing-and-selection"></a>
 

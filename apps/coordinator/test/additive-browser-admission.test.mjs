@@ -4,7 +4,8 @@ import {
   priorRealBatchPolicy,
   nativeCompetitionRealBatchPolicy,
   sessionRecoveryRealBatchPolicy,
-  waveCreationRealBatchPolicy
+  waveCreationRealBatchPolicy,
+  fixedPositionRealBatchPolicy
 } from "../src/batch-plan.mjs";
 import { realProfile } from "../src/profiles.mjs";
 import { reviewedFrontendPrWorkflow } from "../src/additive-browser-workflow.mjs";
@@ -13,10 +14,29 @@ import {
   browserPack,
   extendWorkflow,
   gitWorkflow,
-  reviewedWorkflow
+  reviewedWorkflow,
+  pdfWorkflow
 } from "./additive-browser-fixture.mjs";
 
 const workflowPath = ".github/workflows/app-pr-ci.yml";
+
+test("current policy admits the actual PDF workflow unchanged; saved v1 still rejects its placement with GETs only", async () => {
+  const current = admission(pdfWorkflow());
+  await current.client.identity("frontend", current.record.base);
+  const historical = admission(pdfWorkflow(), {
+    policy: fixedPositionRealBatchPolicy
+  });
+  await assert.rejects(
+    historical.client.identity("frontend", historical.record.base),
+    { code: "batch-runtime" }
+  );
+  for (const f of [current, historical])
+    assert.ok(f.calls.every(({ method }) => method === "GET"));
+  const oldValid = admission(undefined, {
+    policy: fixedPositionRealBatchPolicy
+  });
+  await oldValid.client.identity("frontend", oldValid.record.base);
+});
 
 function admission(
   bytes = extendWorkflow([browserPack("future-example")]),

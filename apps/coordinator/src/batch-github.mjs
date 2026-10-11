@@ -26,6 +26,7 @@ import {
 } from "./product-commit-signoff.mjs";
 import {
   additiveBrowserContract,
+  fixedPositionBrowserContract,
   validateAdditiveBrowserWorkflow,
   verifiedWorkflowBytes
 } from "./additive-browser-workflow.mjs";
@@ -311,8 +312,10 @@ export function createBatchGitHub({
             serviceAssert(
               role === "frontend" &&
                 path === ".github/workflows/app-pr-ci.yml" &&
-                policy.workflow_extensions?.[role]?.[path] ===
-                  additiveBrowserContract,
+                [
+                  fixedPositionBrowserContract,
+                  additiveBrowserContract
+                ].includes(policy.workflow_extensions?.[role]?.[path]),
               "batch-runtime",
               "A pinned product PR workflow changed."
             );
@@ -321,7 +324,8 @@ export function createBatchGitHub({
               .data;
             validateAdditiveBrowserWorkflow(
               verifiedWorkflowBytes(baseline, blob),
-              current
+              current,
+              policy.workflow_extensions[role][path]
             );
           }
         }
